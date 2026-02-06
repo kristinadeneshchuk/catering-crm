@@ -58,3 +58,25 @@ Route::prefix('client')->group(function () {
     });
 });
 
+// Маршрут для закриття старих замовлень
+Route::get('/update-statuses', function () {
+    // Шукаємо замовлення, де дата закінчення вже пройшла (менше сьогодні)
+    // І які ще НЕ завершені
+    $expiredOrders = \App\Models\Order::whereDate('end_date', '<', now())
+        ->whereNotIn('status', ['finished', 'completed']) // Не чіпаємо вже закриті
+        ->get();
+
+    $count = 0;
+    foreach ($expiredOrders as $order) {
+        // ВАЖЛИВО: Якщо замовлення на ПАУЗІ, ми його не чіпаємо (як ви і просили)
+        if ($order->status === 'paused') {
+            continue;
+        }
+
+        // Всі інші (new, active) переводимо в finished
+        $order->update(['status' => 'finished']);
+        $count++;
+    }
+
+    return "Готово! Автоматично завершено замовлень: {$count}";
+});

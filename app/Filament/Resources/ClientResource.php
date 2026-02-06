@@ -15,7 +15,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\CheckboxList;
-use Carbon\Carbon; // Додали для роботи з датами
+use Carbon\Carbon;
 
 class ClientResource extends Resource
 {
@@ -142,6 +142,7 @@ class ClientResource extends Resource
                         TextInput::make('target_kcal')
                             ->label('Цільові калорії')
                             ->numeric()
+                            ->default(0) // ✅ ВИПРАВЛЕНО: Додали значення за замовчуванням
                             ->suffix('ккал'),
                             
                         Textarea::make('address')
@@ -172,13 +173,11 @@ class ClientResource extends Resource
                     ->searchable()
                     ->sortable(),
 
-                // 🔥🔥🔥 НОВА КОЛОНКА: ДЕНЬ ЗАМОВЛЕННЯ 🔥🔥🔥
                 Tables\Columns\TextColumn::make('active_order_progress')
                     ->label('День')
                     ->badge()
                     ->color('info')
                     ->getStateUsing(function ($record) {
-                        // 1. Шукаємо активне замовлення
                         $order = $record->orders()
                             ->where('status', 'active')
                             ->whereDate('start_date', '<=', now())
@@ -189,7 +188,6 @@ class ClientResource extends Resource
                             return null;
                         }
 
-                        // 2. Рахуємо дні
                         $start = Carbon::parse($order->start_date)->startOfDay();
                         $end = Carbon::parse($order->end_date)->startOfDay();
                         $today = now()->startOfDay();
@@ -199,7 +197,6 @@ class ClientResource extends Resource
 
                         return "{$current} / {$total}";
                     }),
-                // 🔥🔥🔥 КІНЕЦЬ НОВОЇ КОЛОНКИ 🔥🔥🔥
 
                 Tables\Columns\TextColumn::make('phone')
                     ->label('Телефон')

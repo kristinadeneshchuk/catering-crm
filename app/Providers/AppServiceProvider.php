@@ -4,7 +4,9 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use App\Models\Transaction;          
+use App\Models\Order;                // 1. Додали модель Order
 use App\Observers\PaymentObserver;
+use App\Observers\OrderObserver;     // 2. Додали OrderObserver
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -21,7 +23,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Кажемо Laravel: "Слідкуй за ТРАНЗАКЦІЯМИ через цей клас"
+        // Слідкуємо за фінансами
         Transaction::observe(PaymentObserver::class); 
+
+        // 3. ДОДАЄМО: Слідкуємо за замовленнями (статуси new/active)
+        Order::observe(OrderObserver::class);
     }
 }
