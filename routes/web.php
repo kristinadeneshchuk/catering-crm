@@ -58,11 +58,3 @@ Route::prefix('client')->group(function () {
     });
 });
 
-
-Route::get('/make-it-short', function () {
-    // Міняємо і "ПФ", і "Напівфабрикати" на коротке "НФ"
-    $updates1 = \App\Models\Dish::where('group', 'Напівфабрикати')->update(['group' => 'НФ']);
-    $updates2 = \App\Models\Dish::where('group', 'ПФ')->update(['group' => 'НФ']);
-    
-    return "Готово! Оновлено записів: " . ($updates1 + $updates2) . ". Тепер скрізь 'НФ'.";
-});
