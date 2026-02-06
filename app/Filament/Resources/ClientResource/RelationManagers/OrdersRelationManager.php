@@ -31,7 +31,6 @@ class OrdersRelationManager extends RelationManager
                         ' (' . \Carbon\Carbon::parse($record->start_date)->diffInDays(\Carbon\Carbon::parse($record->end_date)) . ' дн.)'
                     ),
 
-                // === ОСЬ ТУТ БУЛА ПРОБЛЕМА ===
                 Tables\Columns\TextColumn::make('status')
                     ->label('Статус')
                     ->badge()
@@ -39,14 +38,14 @@ class OrdersRelationManager extends RelationManager
                         'new' => 'gray',
                         'active' => 'success',
                         'paused' => 'warning',
-                        'completed', 'finished' => 'info', // Додали обидва варіанти
+                        'completed', 'finished' => 'info',
                         default => 'gray',
                     })
                     ->formatStateUsing(fn (string $state): string => match ($state) {
                         'new' => 'Новий',
                         'active' => 'Активний',
                         'paused' => 'На паузі',
-                        'completed', 'finished' => 'Завершений', // Перекладаємо обидва
+                        'completed', 'finished' => 'Завершений',
                         default => $state,
                     }),
 
@@ -64,9 +63,10 @@ class OrdersRelationManager extends RelationManager
                     ->falseColor('danger'),
             ])
             ->headerActions([
-                Tables\Actions\CreateAction::make()
-                    ->label('Нове замовлення')
-                    ->slideOver(),
+                // ❌ Я приховав кнопку створення замовлення тут
+                // Tables\Actions\CreateAction::make()
+                //    ->label('Нове замовлення')
+                //    ->slideOver(),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make()
