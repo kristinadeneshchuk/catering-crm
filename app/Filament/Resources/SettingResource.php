@@ -9,6 +9,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder; // Додав імпорт для Query Builder
 
 class SettingResource extends Resource
 {
@@ -16,11 +17,14 @@ class SettingResource extends Resource
     protected static ?string $navigationGroup = 'Система';
     protected static ?int $navigationSort = 1;
     protected static ?string $navigationLabel = 'Налаштування бізнесу';
-    protected static ?string $modelLabel = 'Налаштування';
+    
+    // === ВИПРАВЛЕННЯ 1: Забираємо зайву "s" ===
+    protected static ?string $modelLabel = 'Налаштування';       // Однина
+    protected static ?string $pluralModelLabel = 'Налаштування'; // Множина (тепер однакові)
 
     public static function canViewAny(): bool
     {
-        return auth()->user()->role === 'admin'; // Доступ тільки для тебе
+        return auth()->user()->role === 'admin';
     }
 
     public static function form(Form $form): Form
@@ -31,7 +35,7 @@ class SettingResource extends Resource
                     ->schema([
                         Forms\Components\TextInput::make('key')
                             ->label('Параметр (Ключ)')
-                            ->disabled() // Забороняємо змінювати ключ, щоб не зламати логіку в коді
+                            ->disabled() 
                             ->dehydrated(), 
 
                         Forms\Components\TextInput::make('value')
@@ -45,12 +49,17 @@ class SettingResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            // === ВИПРАВЛЕННЯ 2: Приховуємо технічні рядки ===
+            ->modifyQueryUsing(function (Builder $query) {
+                // Показуємо тільки ті рядки, які НЕ починаються на "stock_debited"
+                return $query->where('key', 'not like', 'stock_debited_%');
+            })
             ->columns([
                 Tables\Columns\TextColumn::make('key')
                     ->label('Назва налаштування')
                     ->formatStateUsing(fn (string $state): string => match ($state) {
                         'menu_cycle_days' => 'Тривалість циклу меню (днів)',
-                        default => $state,
+                        default => $state, // Інші ключі показуємо як є
                     }),
                 Tables\Columns\TextColumn::make('value')
                     ->label('Поточне значення')
@@ -59,7 +68,11 @@ class SettingResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-            ]);
+            ])
+            // Забороняємо створювати та видаляти налаштування, щоб нічого не зламати
+            // (Ви можете це розкоментувати, якщо хочете додати кнопку "Створити")
+            // ->bulkActions([]) 
+            ; 
     }
 
     public static function getPages(): array
