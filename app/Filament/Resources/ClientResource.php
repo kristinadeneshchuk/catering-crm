@@ -3,7 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ClientResource\Pages;
-use App\Filament\Resources\ClientResource\RelationManagers\OrdersRelationManager; // <--- ІМПОРТ МЕНЕДЖЕРА
+use App\Filament\Resources\ClientResource\RelationManagers\OrdersRelationManager;
 use App\Models\Client;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -15,6 +15,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\CheckboxList;
+use Carbon\Carbon; // Додали для роботи з датами
 
 class ClientResource extends Resource
 {
@@ -34,7 +35,7 @@ class ClientResource extends Resource
     {
         return $form
             ->schema([
-                // === НОВА СЕКЦІЯ: ФІНАНСИ ===
+                // === СЕКЦІЯ: ФІНАНСИ ===
                 Section::make('Фінанси')
                     ->schema([
                         TextInput::make('balance')
@@ -42,9 +43,8 @@ class ClientResource extends Resource
                             ->default(0)
                             ->numeric()
                             ->prefix('₴')
-                            ->readOnly() // Менеджер не може міняти руками
+                            ->readOnly()
                             ->extraInputAttributes(fn ($state) => [
-                                // Червоний якщо мінус, Зелений якщо плюс
                                 'style' => 'font-weight: bold; font-size: 1.5rem; color: ' . ($state < 0 ? '#dc2626' : '#16a34a'),
                             ]),
                     ])
@@ -172,11 +172,39 @@ class ClientResource extends Resource
                     ->searchable()
                     ->sortable(),
 
+                // 🔥🔥🔥 НОВА КОЛОНКА: ДЕНЬ ЗАМОВЛЕННЯ 🔥🔥🔥
+                Tables\Columns\TextColumn::make('active_order_progress')
+                    ->label('День')
+                    ->badge()
+                    ->color('info')
+                    ->getStateUsing(function ($record) {
+                        // 1. Шукаємо активне замовлення
+                        $order = $record->orders()
+                            ->where('status', 'active')
+                            ->whereDate('start_date', '<=', now())
+                            ->whereDate('end_date', '>=', now())
+                            ->first();
+
+                        if (!$order) {
+                            return null;
+                        }
+
+                        // 2. Рахуємо дні
+                        $start = Carbon::parse($order->start_date)->startOfDay();
+                        $end = Carbon::parse($order->end_date)->startOfDay();
+                        $today = now()->startOfDay();
+
+                        $current = $start->diffInDays($today) + 1;
+                        $total = $start->diffInDays($end) + 1;
+
+                        return "{$current} / {$total}";
+                    }),
+                // 🔥🔥🔥 КІНЕЦЬ НОВОЇ КОЛОНКИ 🔥🔥🔥
+
                 Tables\Columns\TextColumn::make('phone')
                     ->label('Телефон')
                     ->copyable(),
                 
-                // Можна додати баланс і в таблицю, щоб бачити боржників одразу
                 Tables\Columns\TextColumn::make('balance')
                     ->label('Баланс')
                     ->money('UAH')
@@ -224,7 +252,6 @@ class ClientResource extends Resource
             ]);
     }
 
-    // === ПІДКЛЮЧЕННЯ ВКЛАДКИ ІСТОРІЇ ЗАМОВЛЕНЬ ===
     public static function getRelations(): array
     {
         return [
