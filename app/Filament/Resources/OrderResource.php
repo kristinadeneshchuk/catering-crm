@@ -1,0 +1,291 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\OrderResource\Pages;
+// Імпортуємо обидва менеджери
+use App\Filament\Resources\OrderResource\RelationManagers\TransactionsRelationManager;
+use App\Filament\Resources\OrderResource\RelationManagers\CalendarRelationManager; // <--- ДОДАВ ЦЕЙ РЯДОК
+use App\Models\Order;
+use App\Models\Client;
+use App\Models\Tariff;
+use App\Models\CalorieRange;
+use App\Models\TariffPrice;
+use App\Services\ScheduleService;
+use Filament\Forms;
+use Filament\Forms\Form;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Grid;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Forms\Get;
+use Filament\Forms\Set;
+use Carbon\Carbon;
+
+class OrderResource extends Resource
+{
+    protected static ?string $model = Order::class;
+    protected static ?int $navigationSort = 1;
+    protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
+    protected static ?string $navigationLabel = 'Замовлення';
+    protected static ?string $pluralModelLabel = 'Замовлення';
+    protected static ?string $modelLabel = 'Замовлення';
+
+    public static function canViewAny(): bool
+    {
+        return auth()->user()->role === 'admin' || auth()->user()->role === 'manager';
+    }
+
+    public static function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                // === СЕКЦІЯ 1: Основні дані (Клієнт, Тариф, Ціна) ===
+                Section::make('Основна інформація')
+                    ->schema([
+                        Grid::make(2)->schema([
+                            Select::make('client_id')
+                                ->relationship('client', 'name')
+                                ->searchable()
+                                ->required()
+                                ->preload()
+                                ->live()
+                                ->label('Клієнт')
+                                ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                    $client = Client::find($state);
+                                    if ($client) {
+                                        $set('calories', $client->target_kcal);
+                                        static::updateOrderTotals($set, $get);
+                                    }
+                                }),
+
+                            TextInput::make('total_price')
+                                ->label('Сума замовлення')
+                                ->prefix('₴')
+                                ->numeric()
+                                ->readOnly()
+                                ->dehydrated()
+                                ->helperText('Розраховується: Тариф × Днів'),
+                        ]),
+
+                        Grid::make(3)->schema([
+                            Select::make('tariff_id')
+                                ->label('Тариф')
+                                ->relationship('tariff', 'name', fn ($query) => $query->where('is_active', true))
+                                ->getOptionLabelFromRecordUsing(fn ($record) => 
+                                    "{$record->name} (" . ($record->project === 'u_fit' ? 'U-FIT' : 'Avocado') . ")"
+                                )
+                                ->required()
+                                ->live()
+                                ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                    $tariff = Tariff::find($state);
+                                    if ($tariff) {
+                                        $set('project', $tariff->project);
+                                        static::updateOrderTotals($set, $get);
+                                    }
+                                })
+                                ->searchable()
+                                ->preload(),
+
+                            TextInput::make('calories')
+                                ->numeric()
+                                ->required()
+                                ->label('Калорії (Ккал)')
+                                ->live(onBlur: true)
+                                ->afterStateUpdated(fn (Set $set, Get $get) => static::updateOrderTotals($set, $get)),
+
+                            Select::make('status')
+                                ->options([
+                                    'new' => 'Новий',
+                                    'active' => 'Активний',
+                                    'paused' => 'На паузі',
+                                    'completed' => 'Завершений',
+                                ])
+                                ->default('new')
+                                ->required()
+                                ->label('Статус'),
+                        ]),
+
+                        Hidden::make('project'),
+                    ]),
+
+                // === СЕКЦІЯ 2: Дати та Логістика ===
+                Section::make('Період та Логістика')
+                    ->schema([
+                        Grid::make(3)->schema([
+                            DatePicker::make('start_date')
+                                ->required()
+                                ->label('Дата початку')
+                                ->live()
+                                ->default(now())
+                                ->afterStateUpdated(fn (Set $set, Get $get) => static::updateOrderTotals($set, $get)),
+
+                            TextInput::make('duration')
+                                ->label('Кількість днів')
+                                ->numeric()
+                                ->default(1)
+                                ->minValue(1)
+                                ->required()
+                                ->live(onBlur: true)
+                                ->afterStateUpdated(fn (Set $set, Get $get) => static::updateOrderTotals($set, $get)),
+
+                            DatePicker::make('end_date')
+                                ->label('Дата закінчення')
+                                ->readOnly(),
+                        ]),
+
+                        Grid::make(2)->schema([
+                            Select::make('schedule_type')
+                                ->label('Графік доставки')
+                                ->options(ScheduleService::getScheduleTypes())
+                                ->required()
+                                ->live()
+                                ->afterStateUpdated(fn (Set $set) => $set('delivery_time', null)),
+
+                            Select::make('delivery_time')
+                                ->label('Час доставки')
+                                ->options(fn (Get $get) => ScheduleService::getTimeSlots($get('schedule_type')))
+                                ->required()
+                                ->disabled(fn (Get $get) => empty($get('schedule_type'))),
+                        ]),
+
+                        Textarea::make('comment')
+                            ->label('Коментар / Адреса доставки')
+                            ->rows(2)
+                            ->columnSpanFull(),
+                    ]),
+            ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                TextColumn::make('id')->label('ID')->sortable(),
+
+                TextColumn::make('project')
+                    ->label('Проєкт')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'avocado_food' => 'success',
+                        'u_fit' => 'info',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'avocado_food' => 'AvocadoFood',
+                        'u_fit' => 'U-FIT',
+                        default => $state,
+                    }),
+
+                TextColumn::make('client.name')
+                    ->label('Клієнт')
+                    ->searchable()
+                    ->sortable(),
+
+                IconColumn::make('is_paid')
+                    ->label('Оплата')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->trueColor('success')
+                    ->falseColor('danger')
+                    ->alignCenter(),
+
+                TextColumn::make('total_price')
+                    ->label('Сума')
+                    ->money('UAH')
+                    ->sortable(),
+
+                TextColumn::make('duration')
+                    ->label('Днів')
+                    ->alignCenter(),
+
+                TextColumn::make('start_date')
+                    ->label('Початок')
+                    ->date()
+                    ->sortable(),
+
+                TextColumn::make('status')
+                    ->label('Статус')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'new' => 'gray',
+                        'active' => 'success',
+                        'paused' => 'warning',
+                        'completed', 'finished' => 'info',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'new' => 'Новий',
+                        'active' => 'Активний',
+                        'paused' => 'На паузі',
+                        'completed', 'finished' => 'Завершений',
+                        default => $state,
+                    }),
+            ])
+            ->defaultSort('id', 'desc')
+            ->actions([
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
+            ]);
+    }
+
+    // === ПІДКЛЮЧЕННЯ ВКЛАДОК (RELATION MANAGERS) ===
+    public static function getRelations(): array
+    {
+        return [
+            // Тепер, коли ми додали імпорт зверху, пишемо просто назву класу
+            CalendarRelationManager::class,
+            TransactionsRelationManager::class,
+        ];
+    }
+
+    protected static function updateOrderTotals(Set $set, Get $get)
+    {
+        $calories = (int) $get('calories');
+        $tariffId = $get('tariff_id');
+        $duration = (int) $get('duration') ?: 1;
+        $startDate = $get('start_date');
+
+        if ($startDate) {
+            $end = Carbon::parse($startDate)->addDays($duration - 1);
+            $set('end_date', $end->format('Y-m-d'));
+        }
+
+        if ($calories && $tariffId) {
+            $range = CalorieRange::where('min_kcal', '<=', $calories)
+                ->where('max_kcal', '>=', $calories)
+                ->first();
+
+            if ($range) {
+                $priceEntry = TariffPrice::where('tariff_id', $tariffId)
+                    ->where('calorie_range_id', $range->id)
+                    ->first();
+
+                if ($priceEntry) {
+                    $set('total_price', $priceEntry->price_per_day * $duration);
+                    return;
+                }
+            }
+        }
+
+        $set('total_price', 0);
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => Pages\ListOrders::route('/'),
+            'create' => Pages\CreateOrder::route('/create'),
+            'edit' => Pages\EditOrder::route('/{record}/edit'),
+        ];
+    }
+}
