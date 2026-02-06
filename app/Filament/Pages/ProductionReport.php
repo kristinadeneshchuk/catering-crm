@@ -49,78 +49,76 @@ class ProductionReport extends Page implements HasForms
     /**
      * Кнопки у верхній панелі сторінки
      */
- protected function getHeaderActions(): array
-{
-    $dateParam = $this->data['date'] ?? now()->format('Y-m-d');
-    $settingKey = "stock_debited_{$dateParam}";
+    protected function getHeaderActions(): array
+    {
+        $dateParam = $this->data['date'] ?? now()->format('Y-m-d');
+        $settingKey = "stock_debited_{$dateParam}";
 
-    // Перевіряємо статус для візуального оформлення кнопки
-    $isAlreadyDebited = \App\Models\Setting::where('key', $settingKey)->where('value', '1')->exists();
+        // Перевіряємо статус для візуального оформлення кнопки
+        $isAlreadyDebited = \App\Models\Setting::where('key', $settingKey)->where('value', '1')->exists();
 
-    return [
-        \Filament\Actions\Action::make('debit_stock')
-            ->label($isAlreadyDebited ? "Зміну за {$dateParam} вже закрито" : 'Закрити зміну та списати склад')
-            ->icon($isAlreadyDebited ? 'heroicon-o-lock-closed' : 'heroicon-o-archive-box-arrow-down')
-            ->color($isAlreadyDebited ? 'warning' : 'danger')
-            
-            // 1. Блокуємо кнопку візуально (сіра/неактивна)
-            ->disabled($isAlreadyDebited) 
-            
-            // 2. Запитуємо підтвердження тільки якщо зміна ще ВІДКРИТА
-            ->requiresConfirmation(fn() => !$isAlreadyDebited)
-            ->modalHeading('Підтвердити списання залишків?')
-            ->modalDescription('Система автоматично відніме вагу БРУТТО всіх інгредієнтів. Цю дію неможливо скасувати.')
-
-            ->action(function () use ($settingKey, $dateParam) {
-                // --- 🛑 ГОЛОВНИЙ ЗАПОБІЖНИК (BACKEND GUARD) ---
-                // Перевіряємо базу ще раз прямо перед виконанням.
-                // Якщо зміна вже закрита — ми негайно зупиняємось.
-                $checkAgain = \App\Models\Setting::where('key', $settingKey)->where('value', '1')->exists();
-
-                if ($checkAgain) {
-                    \Filament\Notifications\Notification::make()
-                        ->title('Операцію скасовано')
-                        ->body("Зміну за {$dateParam} вже закрито. Списання не відбулося.")
-                        ->warning()
-                        ->send();
-                    
-                    return; // <--- ВАЖЛИВО: Цей return зупиняє виконання коду тут!
-                }
-                // --- КІНЕЦЬ ЗАПОБІЖНИКА ---
-
-                // Тільки якщо перевірка пройдена — виконуємо списання
-                $this->processStockDebiting();
+        return [
+            \Filament\Actions\Action::make('debit_stock')
+                ->label($isAlreadyDebited ? "Зміну за {$dateParam} вже закрито" : 'Закрити зміну та списати склад')
+                ->icon($isAlreadyDebited ? 'heroicon-o-lock-closed' : 'heroicon-o-archive-box-arrow-down')
+                ->color($isAlreadyDebited ? 'warning' : 'danger')
                 
-                // Фіксуємо статус у базі
-                \App\Models\Setting::updateOrCreate(
-                    ['key' => $settingKey],
-                    ['value' => '1']
-                );
+                // 1. Блокуємо кнопку візуально (сіра/неактивна)
+                ->disabled($isAlreadyDebited) 
+                
+                // 2. Запитуємо підтвердження тільки якщо зміна ще ВІДКРИТА
+                ->requiresConfirmation(fn() => !$isAlreadyDebited)
+                ->modalHeading('Підтвердити списання залишків?')
+                ->modalDescription('Система автоматично відніме вагу БРУТТО всіх інгредієнтів. Цю дію неможливо скасувати.')
 
-                \Filament\Notifications\Notification::make()
-                    ->title('Успішно')
-                    ->body('Склад списано, зміну закрито.')
-                    ->success()
-                    ->send();
+                ->action(function () use ($settingKey, $dateParam) {
+                    // --- 🛑 ГОЛОВНИЙ ЗАПОБІЖНИК (BACKEND GUARD) ---
+                    $checkAgain = \App\Models\Setting::where('key', $settingKey)->where('value', '1')->exists();
 
-                return redirect(static::getUrl(['date' => $dateParam]));
-            }),
+                    if ($checkAgain) {
+                        \Filament\Notifications\Notification::make()
+                            ->title('Операцію скасовано')
+                            ->body("Зміну за {$dateParam} вже закрито. Списання не відбулося.")
+                            ->warning()
+                            ->send();
+                        
+                        return; 
+                    }
+                    // --- КІНЕЦЬ ЗАПОБІЖНИКА ---
 
-        \Filament\Actions\Action::make('print_stickers')
-            ->label('1. Стікери')
-            ->icon('heroicon-o-tag')
-            ->color('gray')
-            ->url(fn () => route('print.stickers', ['date' => $dateParam]))
-            ->openUrlInNewTab(),
+                    // Тільки якщо перевірка пройдена — виконуємо списання
+                    $this->processStockDebiting();
+                    
+                    // Фіксуємо статус у базі
+                    \App\Models\Setting::updateOrCreate(
+                        ['key' => $settingKey],
+                        ['value' => '1']
+                    );
 
-        \Filament\Actions\Action::make('print_manifest')
-            ->label('2. На пакет')
-            ->icon('heroicon-o-shopping-bag')
-            ->color('warning')
-            ->url(fn () => route('print.manifest', ['date' => $dateParam]))
-            ->openUrlInNewTab(),
-    ];
-}
+                    \Filament\Notifications\Notification::make()
+                        ->title('Успішно')
+                        ->body('Склад списано, зміну закрито.')
+                        ->success()
+                        ->send();
+
+                    return redirect(static::getUrl(['date' => $dateParam]));
+                }),
+
+            \Filament\Actions\Action::make('print_stickers')
+                ->label('1. Стікери')
+                ->icon('heroicon-o-tag')
+                ->color('gray')
+                ->url(fn () => route('print.stickers', ['date' => $dateParam]))
+                ->openUrlInNewTab(),
+
+            \Filament\Actions\Action::make('print_manifest')
+                ->label('2. На пакет')
+                ->icon('heroicon-o-shopping-bag')
+                ->color('warning')
+                ->url(fn () => route('print.manifest', ['date' => $dateParam]))
+                ->openUrlInNewTab(),
+        ];
+    }
 
     public function form(Form $form): Form
     {
@@ -540,8 +538,15 @@ class ProductionReport extends Page implements HasForms
                 $pfBase = (float)$di->childDish->base_weight_g ?: 100;
                 $pfRatio = $di->net_weight_g / $pfBase;
                 $subIngredients = $this->getHierarchicalIngredients($di->childDish, $scale, $pfRatio * $subRatio, $rootDishId, $checkConflicts, $specificOrder);
+                
                 $sumNetto = 0; $sumBrutto = 0;
-                foreach($subIngredients as $s) { $sumNetto += $s['weight_netto']; $sumBrutto += $s['weight_brutto']; }
+                
+                // === ВИПРАВЛЕННЯ: Додано перевірку ключів для ПФ (weight_output замість weight_netto) ===
+                foreach($subIngredients as $s) { 
+                    $sumNetto += $s['weight_netto'] ?? $s['weight_output'] ?? 0; 
+                    $sumBrutto += $s['weight_brutto'] ?? $s['weight_brutto_sum'] ?? 0; 
+                }
+                // ======================================================================================
 
                 $components[] = [
                     'type' => 'pf',
