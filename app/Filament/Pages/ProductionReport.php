@@ -54,7 +54,6 @@ class ProductionReport extends Page implements HasForms
         $dateParam = $this->data['date'] ?? now()->format('Y-m-d');
         $settingKey = "stock_debited_{$dateParam}";
 
-        // Перевіряємо статус для візуального оформлення кнопки
         $isAlreadyDebited = \App\Models\Setting::where('key', $settingKey)->where('value', '1')->exists();
 
         return [
@@ -62,17 +61,11 @@ class ProductionReport extends Page implements HasForms
                 ->label($isAlreadyDebited ? "Зміну за {$dateParam} вже закрито" : 'Закрити зміну та списати склад')
                 ->icon($isAlreadyDebited ? 'heroicon-o-lock-closed' : 'heroicon-o-archive-box-arrow-down')
                 ->color($isAlreadyDebited ? 'warning' : 'danger')
-                
-                // 1. Блокуємо кнопку візуально (сіра/неактивна)
                 ->disabled($isAlreadyDebited) 
-                
-                // 2. Запитуємо підтвердження тільки якщо зміна ще ВІДКРИТА
                 ->requiresConfirmation(fn() => !$isAlreadyDebited)
                 ->modalHeading('Підтвердити списання залишків?')
                 ->modalDescription('Система автоматично відніме вагу БРУТТО всіх інгредієнтів. Цю дію неможливо скасувати.')
-
                 ->action(function () use ($settingKey, $dateParam) {
-                    // --- 🛑 ГОЛОВНИЙ ЗАПОБІЖНИК (BACKEND GUARD) ---
                     $checkAgain = \App\Models\Setting::where('key', $settingKey)->where('value', '1')->exists();
 
                     if ($checkAgain) {
@@ -81,15 +74,11 @@ class ProductionReport extends Page implements HasForms
                             ->body("Зміну за {$dateParam} вже закрито. Списання не відбулося.")
                             ->warning()
                             ->send();
-                        
                         return; 
                     }
-                    // --- КІНЕЦЬ ЗАПОБІЖНИКА ---
 
-                    // Тільки якщо перевірка пройдена — виконуємо списання
                     $this->processStockDebiting();
                     
-                    // Фіксуємо статус у базі
                     \App\Models\Setting::updateOrCreate(
                         ['key' => $settingKey],
                         ['value' => '1']
@@ -324,18 +313,18 @@ class ProductionReport extends Page implements HasForms
                         if ($order->replacements->where('dish_id', $dish->id)->first()) $isCustom = true;
                         if ($order->client->dishExclusions->contains('id', $dish->id)) $isCustom = true;
                         
+                        // 🔥🔥🔥 ВИПРАВЛЕНА ЛОГІКА ТУТ 🔥🔥🔥
                         if (!$isCustom) {
-                             $hasRealConflict = false;
                              $clientExclusions = $order->client->ingredientExclusions;
+                             
                              if ($clientExclusions->isNotEmpty()) {
-                                foreach ($dish->dishIngredients as $di) {
-                                    if ($di->ingredient_id && $clientExclusions->contains('id', $di->ingredient_id)) {
-                                        $hasRealConflict = true; break;
-                                    }
-                                }
+                                 // Використовуємо нову функцію глибокого пошуку (Recursive Check)
+                                 if ($this->checkRecursiveConflict($dish, $clientExclusions)) {
+                                     $isCustom = true;
+                                 }
                              }
-                             if ($hasRealConflict) $isCustom = true;
                         }
+                        // 🔥🔥🔥 КІНЕЦЬ ВИПРАВЛЕННЯ 🔥🔥🔥
 
                         if ($isCustom) {
                             $customOrders[] = $order;
@@ -374,16 +363,14 @@ class ProductionReport extends Page implements HasForms
      */
     public function processStockDebiting(): void
     {
-        $this->calculate(); // Актуалізуємо дані
+        $this->calculate();
         $ingredientsToDebit = [];
 
         foreach ($this->report as $mealDishes) {
             foreach ($mealDishes as $dishData) {
-                // 1. Списання зі стандартних порцій
                 foreach ($dishData['standard_structure'] as $comp) {
                     $this->collectIngredientsRecursive($comp, $ingredientsToDebit);
                 }
-                // 2. Списання з індивідуальних порцій
                 foreach ($dishData['custom_cards'] as $card) {
                     if ($card['dish_excluded'] && !isset($card['dish_replacement'])) {
                         continue;
@@ -402,7 +389,6 @@ class ProductionReport extends Page implements HasForms
 
         DB::transaction(function () use ($ingredientsToDebit) {
             foreach ($ingredientsToDebit as $id => $totalWeight) {
-                // Списуємо БРУТТО (вага у грамах)
                 Ingredient::where('id', $id)->decrement('stock', $totalWeight);
             }
         });
@@ -414,9 +400,6 @@ class ProductionReport extends Page implements HasForms
             ->send();
     }
 
-    /**
-     * Рекурсивний збір інгредієнтів (включаючи ПФ всередині ПФ)
-     */
     private function collectIngredientsRecursive(array $component, array &$accumulator): void
     {
         if ($component['type'] === 'product' && isset($component['product_id'])) {
@@ -541,12 +524,10 @@ class ProductionReport extends Page implements HasForms
                 
                 $sumNetto = 0; $sumBrutto = 0;
                 
-                // === ВИПРАВЛЕННЯ: Додано перевірку ключів для ПФ (weight_output замість weight_netto) ===
                 foreach($subIngredients as $s) { 
                     $sumNetto += $s['weight_netto'] ?? $s['weight_output'] ?? 0; 
                     $sumBrutto += $s['weight_brutto'] ?? $s['weight_brutto_sum'] ?? 0; 
                 }
-                // ======================================================================================
 
                 $components[] = [
                     'type' => 'pf',
@@ -559,5 +540,29 @@ class ProductionReport extends Page implements HasForms
             }
         }
         return $components;
+    }
+
+    /**
+     * 🔥🔥🔥 НОВА ФУНКЦІЯ: Глибока перевірка конфліктів (рекурсія) 🔥🔥🔥
+     * Дозволяє знайти шпинат навіть якщо він захований у "Зеленому маслі"
+     */
+    private function checkRecursiveConflict($dish, $exclusions): bool
+    {
+        if (!$dish || !$dish->dishIngredients) return false;
+
+        foreach ($dish->dishIngredients as $di) {
+            // 1. Перевіряємо прямий інгредієнт
+            if ($di->ingredient_id && $exclusions->contains('id', $di->ingredient_id)) {
+                return true;
+            }
+            
+            // 2. Якщо це ПФ — пірнаємо всередину
+            if ($di->child_dish_id && $di->childDish) {
+                if ($this->checkRecursiveConflict($di->childDish, $exclusions)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

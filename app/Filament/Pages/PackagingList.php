@@ -81,7 +81,7 @@ class PackagingList extends Page implements HasForms
         $globalDay = (abs(Carbon::parse($date)->diffInDays($anchorDate)) % $cycleDays) + 1;
 
         $menu = DailyMenu::where('day_number', $globalDay)
-            ->with(['menuItems.dish.dishIngredients.ingredient', 'menuItems.dish.dishIngredients.childDish', 'menuItems.mealType'])
+            ->with(['menuItems.dish.dishIngredients.ingredient', 'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient', 'menuItems.mealType'])
             ->first();
 
         if (!$menu) {
@@ -110,6 +110,7 @@ class PackagingList extends Page implements HasForms
             ];
 
             foreach ($orders as $order) {
+                // Якщо клієнт прибрав цей прийом їжі, він просто не потрапляє в цей цикл
                 $clientMealTypeIds = $order->client->mealTypes->pluck('id')->toArray();
                 if (!in_array($mItem->meal_type_id, $clientMealTypeIds)) continue;
 
@@ -117,39 +118,39 @@ class PackagingList extends Page implements HasForms
                 $factor = ($activePercentSum > 0) ? (100 / $activePercentSum) : 1.0;
                 $scale = (float)($order->scale_factor ?: 1.0) * $factor;
 
+                // --- 1. ЗБИРАЄМО НОТАТКИ ПРО ЗАМІНИ (Але ще не вирішуємо про колонку) ---
                 $replacements = $order->replacements->where('dish_id', $dish->id)->whereNotNull('original_product_id');
-
-                $isIndivScale = $factor > 1.01;
                 
-                if ($isIndivScale) {
-                    $colKey = "ID:{$order->client->id} {$order->client->name} ({$order->calories})";
-                } else {
-                    $colKey = (int)$order->calories;
+                $conflicts = [];
+                if ($order->client->ingredientExclusions->isNotEmpty()) {
+                    $conflicts = $this->getConflictingIngredients($dish, $order->client->ingredientExclusions);
                 }
 
+                $noteParts = [];
+                // Заміни
                 foreach($replacements as $r) {
-                    $gramAmount = 0;
-                    foreach ($dish->dishIngredients as $di) {
-                        // Якщо інгредієнт на верхньому рівні
-                        if ($di->ingredient_id == $r->original_product_id) {
-                            $gramAmount = round($di->net_weight_g * $scale);
-                            break;
-                        }
-                        // Якщо інгредієнт всередині напівфабрикату
-                        if ($di->child_dish_id && $di->childDish) {
-                            $subIng = $di->childDish->dishIngredients->where('ingredient_id', $r->original_product_id)->first();
-                            if ($subIng) {
-                                $pfBaseWeight = (float)($di->childDish->base_weight_g ?: 100);
-                                // Пропорція
-                                $gramAmount = round(($subIng->net_weight_g * $di->net_weight_g / $pfBaseWeight) * $scale);
-                                break;
-                            }
-                        }
-                    }
-                    
-                    $tableData['individual_notes'][] = "• (#{$order->client->id}) {$order->client->name}: " . 
-                        ($r->originalProduct->name ?? '???') . " ➡ " . 
-                        ($r->replacementProduct->name ?? '???') . " ({$gramAmount} г)";
+                    $noteParts[] = "🔄 " . ($r->originalProduct->name ?? '?') . " ➡ " . ($r->replacementProduct->name ?? '?');
+                }
+                // Конфлікти (виключення)
+                foreach($conflicts as $conflictName) {
+                    $noteParts[] = "⛔ Без: {$conflictName}";
+                }
+
+                // Якщо є зауваження — додаємо в список внизу
+                if (!empty($noteParts)) {
+                    $tableData['individual_notes'][] = "• (#{$order->client->id}) {$order->client->name}: " . implode(', ', $noteParts);
+                }
+
+                // --- 2. ВИЗНАЧАЄМО КОЛОНКУ ---
+                // Окрема колонка ТІЛЬКИ якщо нестандартний розмір порції (Factor > 1.01)
+                // (Наприклад, клієнт прибрав обід, і його сніданок став більшим, або у нього кастомні калорії)
+                $isCustomColumn = ($factor > 1.01); 
+
+                if ($isCustomColumn) {
+                    $colKey = "ID:{$order->client->id} {$order->client->name} (" . (int)$order->calories . ")";
+                } else {
+                    // Якщо просто заміни — падає в загальну колонку
+                    $colKey = (int)$order->calories;
                 }
 
                 if (!isset($tableData['columns'][$colKey])) {
@@ -158,15 +159,18 @@ class PackagingList extends Page implements HasForms
                 $tableData['columns'][$colKey]['count']++;
             }
 
-            // === 🔥 СОРТУВАННЯ КОЛОНОК (1200, 1500, 2000...) 🔥 ===
             ksort($tableData['columns']);
-            // =======================================================
 
             foreach ($dish->dishIngredients as $di) {
-                $originalName = $di->ingredient ? $di->ingredient->name : ($di->childDish ? "📦 " . $di->childDish->name : '???');
-                $cells = [];
+                if ($di->ingredient) {
+                    $originalName = $di->ingredient->name;
+                } elseif ($di->childDish) {
+                    $originalName = "📦 " . $di->childDish->name;
+                } else {
+                    $originalName = '???';
+                }
 
-                // Тепер цей цикл проходить по вже відсортованих колонках
+                $cells = [];
                 foreach ($tableData['columns'] as $key => $col) {
                     $cells[$key] = ['val' => round($di->net_weight_g * $col['scale'])];
                 }
@@ -175,5 +179,23 @@ class PackagingList extends Page implements HasForms
 
             if (!empty($tableData['columns'])) $this->report[] = $tableData;
         }
+    }
+
+    private function getConflictingIngredients($dish, $exclusions, $prefix = ''): array
+    {
+        $found = [];
+        if (!$dish || !$dish->dishIngredients) return [];
+
+        foreach ($dish->dishIngredients as $di) {
+            if ($di->ingredient_id && $exclusions->contains('id', $di->ingredient_id)) {
+                $name = $di->ingredient->name . ($prefix ? " (у {$prefix})" : "");
+                $found[] = $name;
+            }
+            if ($di->child_dish_id && $di->childDish) {
+                $subFound = $this->getConflictingIngredients($di->childDish, $exclusions, $di->childDish->name);
+                $found = array_merge($found, $subFound);
+            }
+        }
+        return $found;
     }
 }

@@ -171,126 +171,129 @@ class PrintController extends Controller
         return view('print.manifest', compact('manifests', 'date'));
     }
 
-    /**
-     * 3. ФАСУВАЛЬНИЙ ЛИСТ (Packaging List) - Новий метод
-     */
-    public function packagingList(Request $request)
+ public function packagingList(Request $request)
     {
         $date = $request->input('date', now()->format('Y-m-d'));
         
-        // --- ТУТ ЛОГІКА РОЗРАХУНКУ МАТРИЦІ ---
-        // (Скопійована і адаптована з Livewire компонента PackagingList)
-        
         $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-        $anchorDate = Carbon::parse('2025-01-01'); 
+        $anchorDate = Carbon::parse('2025-01-01');
         $carbonDate = Carbon::parse($date);
         $globalDay = (abs($carbonDate->diffInDays($anchorDate)) % $cycleDays) + 1;
 
         $menu = DailyMenu::where('day_number', $globalDay)
-            ->with(['menuItems.dish.dishIngredients.ingredient', 'menuItems.mealType'])
+            ->with(['menuItems.dish.dishIngredients.ingredient', 'menuItems.dish.dishIngredients.childDish', 'menuItems.mealType'])
             ->first();
         
         if (!$menu) {
-             // Можна повернути просту сторінку помилки або пустий звіт
-             return view('print.packaging-list', ['report' => [], 'date' => $date]);
+             return "Меню не знайдено на {$date}";
         }
 
         $orders = Order::where('start_date', '<=', $date)
                        ->where('end_date', '>=', $date)
                        ->whereIn('status', ['new', 'active', 'completed'])
-                       ->with(['client.mealTypes', 'client.ingredientExclusions', 'client.dishExclusions', 'replacements'])
+                       ->with(['client.mealTypes', 'client.ingredientExclusions', 'replacements.replacementProduct', 'replacements.originalProduct'])
                        ->get();
 
         $report = [];
-        // Групуємо унікальні програми (калорійність)
-        $caloriesList = $orders->pluck('calories')->unique()->sort()->values();
 
-        foreach ($menu->menuItems as $menuItem) {
-            $dish = $menuItem->dish;
+        $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType->sort_order ?? 99);
+
+        foreach ($sortedMenuItems as $mItem) {
+            $dish = $mItem->dish;
             if (!$dish) continue;
 
-            $columns = [];
-            $totalCount = 0;
-            $individualNotes = [];
-
-            // Розрахунок по кожній групі калорій
-            foreach ($caloriesList as $cal) {
-                // Фільтруємо замовлення з цією калорійністю, які їдять цей прийом їжі
-                $groupOrders = $orders->filter(function($o) use ($cal, $menuItem) {
-                    return $o->calories == $cal && 
-                           $o->client->mealTypes->contains('id', $menuItem->meal_type_id);
-                });
-
-                $count = $groupOrders->count();
-                if ($count > 0) {
-                    $totalCount += $count;
-                    
-                    // Збираємо імена клієнтів (для підказки)
-                    $clientNames = $groupOrders->map(fn($o) => "ID:{$o->client_id} {$o->client->name} ({$o->calories})")->implode(', ');
-                    
-                    $columns[$cal] = [
-                        'count' => $count,
-                        'clients_hint' => $clientNames
-                    ];
-                }
-            }
-
-            if ($totalCount === 0) continue;
-
-            // Збір інгредієнтів
-            $rows = [];
-            foreach ($dish->dishIngredients as $ingItem) {
-                if (!$ingItem->ingredient) continue;
-                
-                $rowCells = [];
-                foreach ($columns as $cal => $colInfo) {
-                    // Знаходимо масштаб для цієї калорійності
-                    // (Тут спрощено беремо масштаб першого замовлення з цієї групи, бо вони однакові)
-                    $sampleOrder = $orders->where('calories', $cal)->first();
-                    $scale = (float)($sampleOrder->scale_factor ?? 1.0);
-                    
-                    $val = round($ingItem->net_weight_g * $scale);
-                    $rowCells[$cal] = ['val' => $val];
-                }
-                
-                $rows[] = [
-                    'original_name' => $ingItem->ingredient->name,
-                    'cells' => $rowCells
-                ];
-            }
-
-            // Перевірка індивідуальних замін для цього прийому
-            foreach ($orders as $order) {
-                if (!$order->client->mealTypes->contains('id', $menuItem->meal_type_id)) continue;
-
-                // Заміни інгредієнтів
-                foreach ($dish->dishIngredients as $di) {
-                    if ($order->client->ingredientExclusions->contains('id', $di->ingredient_id)) {
-                        $rep = $order->replacements
-                            ->where('dish_id', $dish->id)
-                            ->where('original_product_id', $di->ingredient_id)
-                            ->first();
-
-                        $note = "• (#{$order->client->id}) Клієнт {$order->client->id}: ";
-                        if ($rep && $rep->replacementProduct) {
-                            $note .= "{$di->ingredient->name} ➡️ {$rep->replacementProduct->name}";
-                        } else {
-                            $note .= "❌ Без: {$di->ingredient->name}";
-                        }
-                        $individualNotes[] = $note;
-                    }
-                }
-            }
-
-            $report[] = [
-                'meal' => $menuItem->mealType->name,
+            $tableData = [
+                'meal' => $mItem->mealType->name ?? 'Інше',
                 'dish_name' => $dish->name,
-                'columns' => $columns,
-                'rows' => $rows,
-                'individual_notes' => $individualNotes
+                'columns' => [], 
+                'rows' => [],
+                'individual_notes' => [] 
             ];
+
+            foreach ($orders as $order) {
+                $clientMealTypeIds = $order->client->mealTypes->pluck('id')->toArray();
+                if (!in_array($mItem->meal_type_id, $clientMealTypeIds)) continue;
+
+                $activePercentSum = $order->client->mealTypes->sum('energy_percent');
+                $factor = ($activePercentSum > 0) ? (100 / $activePercentSum) : 1.0;
+                $scale = (float)($order->scale_factor ?: 1.0) * $factor;
+
+                // --- 1. ЗБИРАЄМО НОТАТКИ (ЗАМІНИ) ---
+                $replacements = $order->replacements->where('dish_id', $dish->id)->whereNotNull('original_product_id');
+                
+                $conflicts = [];
+                if ($order->client->ingredientExclusions->isNotEmpty()) {
+                    $conflicts = $this->getConflictingIngredients($dish, $order->client->ingredientExclusions);
+                }
+
+                $noteParts = [];
+                foreach($replacements as $r) {
+                    $noteParts[] = "🔄 " . ($r->originalProduct->name ?? '?') . " ➡ " . ($r->replacementProduct->name ?? '?');
+                }
+                foreach($conflicts as $cName) {
+                    $noteParts[] = "⛔ Без: {$cName}";
+                }
+
+                if (!empty($noteParts)) {
+                     // Додаємо в список нотаток з ID клієнта
+                     $tableData['individual_notes'][] = "• (#{$order->client->id}) {$order->client->name}: " . implode(', ', $noteParts);
+                }
+
+                // --- 2. ВИЗНАЧАЄМО КОЛОНКУ ---
+                // Окрема колонка ТІЛЬКИ якщо змінено масштаб порції
+                $isCustomColumn = ($factor > 1.01); 
+
+                if ($isCustomColumn) {
+                    $colKey = "ID:{$order->client->id} {$order->client->name} (" . (int)$order->calories . ")";
+                } else {
+                    $colKey = (int)$order->calories;
+                }
+
+                if (!isset($tableData['columns'][$colKey])) {
+                    $tableData['columns'][$colKey] = ['count' => 0, 'scale' => $scale];
+                }
+                $tableData['columns'][$colKey]['count']++;
+            }
+
+            ksort($tableData['columns']);
+
+            foreach ($dish->dishIngredients as $di) {
+                if ($di->ingredient) {
+                    $originalName = $di->ingredient->name;
+                } elseif ($di->childDish) {
+                    $originalName = "📦 " . $di->childDish->name;
+                } else {
+                    $originalName = '???';
+                }
+
+                $cells = [];
+                foreach ($tableData['columns'] as $key => $col) {
+                    $cells[$key] = ['val' => round($di->net_weight_g * $col['scale'])];
+                }
+                $tableData['rows'][] = ['original_name' => $originalName, 'cells' => $cells];
+            }
+
+            if (!empty($tableData['columns'])) $report[] = $tableData;
         }
 
         return view('print.packaging-list', compact('report', 'date'));
+    }
+
+    private function getConflictingIngredients($dish, $exclusions, $prefix = ''): array
+    {
+        $found = [];
+        if (!$dish || !$dish->dishIngredients) return [];
+
+        foreach ($dish->dishIngredients as $di) {
+            if ($di->ingredient_id && $exclusions->contains('id', $di->ingredient_id)) {
+                $name = $di->ingredient->name . ($prefix ? " (у {$prefix})" : "");
+                $found[] = $name;
+            }
+            if ($di->child_dish_id && $di->childDish) {
+                $subFound = $this->getConflictingIngredients($di->childDish, $exclusions, $di->childDish->name);
+                $found = array_merge($found, $subFound);
+            }
+        }
+        return $found;
     }
 }
