@@ -51,13 +51,10 @@ class PackagingList extends Page implements HasForms
                 ->url(fn () => route('print.manifest', ['date' => $dateParam]))
                 ->openUrlInNewTab(),
 
-            // === ОНОВЛЕНА КНОПКА ЗАВАНТАЖЕННЯ ===
-            Action::make('download_logistics') // Унікальна назва дії
-                ->label('Завантажити логістику (Excel)') // Текст кнопки
-                ->icon('heroicon-o-arrow-down-tray') // Іконка "скачати"
-                ->color('success') // Зелений колір
-                // Ми залишаємо direct download, бо це стандарт для файлів. 
-                // Браузер сам зрозуміє, що це файл, і не буде переходити на білу сторінку.
+            Action::make('download_logistics')
+                ->label('Завантажити логістику (Excel)')
+                ->icon('heroicon-o-arrow-down-tray')
+                ->color('success')
                 ->url(fn () => route('print.logistics', ['date' => $dateParam])),
         ];
     }
@@ -131,7 +128,6 @@ class PackagingList extends Page implements HasForms
                 }
 
                 foreach($replacements as $r) {
-                    // === ВИПРАВЛЕНИЙ ПОШУК ВАГИ (ВРАХОВУЄ ПФ) ===
                     $gramAmount = 0;
                     foreach ($dish->dishIngredients as $di) {
                         // Якщо інгредієнт на верхньому рівні
@@ -144,7 +140,7 @@ class PackagingList extends Page implements HasForms
                             $subIng = $di->childDish->dishIngredients->where('ingredient_id', $r->original_product_id)->first();
                             if ($subIng) {
                                 $pfBaseWeight = (float)($di->childDish->base_weight_g ?: 100);
-                                // Пропорція: (вага інгредієнта в ПФ * вага ПФ у страві) / база ПФ * загальний масштаб
+                                // Пропорція
                                 $gramAmount = round(($subIng->net_weight_g * $di->net_weight_g / $pfBaseWeight) * $scale);
                                 break;
                             }
@@ -162,10 +158,15 @@ class PackagingList extends Page implements HasForms
                 $tableData['columns'][$colKey]['count']++;
             }
 
+            // === 🔥 СОРТУВАННЯ КОЛОНОК (1200, 1500, 2000...) 🔥 ===
+            ksort($tableData['columns']);
+            // =======================================================
+
             foreach ($dish->dishIngredients as $di) {
                 $originalName = $di->ingredient ? $di->ingredient->name : ($di->childDish ? "📦 " . $di->childDish->name : '???');
                 $cells = [];
 
+                // Тепер цей цикл проходить по вже відсортованих колонках
                 foreach ($tableData['columns'] as $key => $col) {
                     $cells[$key] = ['val' => round($di->net_weight_g * $col['scale'])];
                 }
