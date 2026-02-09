@@ -26,6 +26,7 @@ class Client extends Authenticatable
         'delivery_comment',
         'production_comment',
         'balance',
+        'manager_comment',
     ];
 
     protected $hidden = [

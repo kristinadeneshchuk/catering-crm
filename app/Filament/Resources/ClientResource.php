@@ -142,7 +142,7 @@ class ClientResource extends Resource
                         TextInput::make('target_kcal')
                             ->label('Цільові калорії')
                             ->numeric()
-                            ->default(0) // ✅ ВИПРАВЛЕНО: Додали значення за замовчуванням
+                            ->default(0)
                             ->suffix('ккал'),
                             
                         Textarea::make('address')
@@ -155,6 +155,16 @@ class ClientResource extends Resource
                             ->rows(2)
                             ->columnSpanFull(),
                     ])->columns(1),
+
+                // 🔥 НОВА СЕКЦІЯ: Коментар менеджера
+                Section::make('Для менеджера')
+                    ->schema([
+                        Textarea::make('manager_comment')
+                            ->label('Коментар менеджера')
+                            ->placeholder('Наприклад: Передзвонити клієнту')
+                            ->rows(3)
+                            ->columnSpanFull(),
+                    ]),
             ]);
     }
 
@@ -208,6 +218,13 @@ class ClientResource extends Resource
                     ->sortable()
                     ->color(fn ($state) => $state < 0 ? 'danger' : 'success'),
 
+                // 🔥 ДОДАНО: Коментар менеджера замість соцмереж
+                Tables\Columns\TextColumn::make('manager_comment')
+                    ->label('Коментар')
+                    ->limit(50) // Обрізаємо довгий текст
+                    ->tooltip(fn ($state) => $state) // Повний текст при наведенні
+                    ->wrap(), // Дозволяємо перенос тексту на новий рядок
+
                 Tables\Columns\TextColumn::make('sales_source')
                     ->label('Джерело')
                     ->badge()
@@ -219,24 +236,6 @@ class ClientResource extends Resource
                         default => 'gray',
                     })
                     ->toggleable(isToggledHiddenByDefault: true),
-
-                Tables\Columns\IconColumn::make('instagram_url')
-                    ->label('Inst')
-                    ->icon('heroicon-o-camera')
-                    ->color('info')
-                    ->url(fn ($record) => $record->instagram_url)
-                    ->openUrlInNewTab()
-                    ->icon(fn ($state) => $state ? 'heroicon-o-camera' : null),
-
-                Tables\Columns\IconColumn::make('telegram_username')
-                    ->label('TG')
-                    ->icon('heroicon-o-paper-airplane')
-                    ->color('primary')
-                    ->url(fn ($record) => $record->telegram_username 
-                        ? "https://t.me/" . str_replace('@', '', $record->telegram_username) 
-                        : null)
-                    ->openUrlInNewTab()
-                    ->icon(fn ($state) => $state ? 'heroicon-o-paper-airplane' : null),
 
                 Tables\Columns\TextColumn::make('address')
                     ->label('Адреса')

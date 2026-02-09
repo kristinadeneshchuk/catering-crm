@@ -193,4 +193,9 @@ class Order extends Model
     {
         return $this->hasOne(self::class, 'id', 'id');
     }
+
+    public function orderDays()
+    {
+        return $this->hasMany(OrderDay::class);
+    }
 }

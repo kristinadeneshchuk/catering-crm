@@ -8,6 +8,9 @@ use App\Http\Controllers\ClientPaymentController;
 // !!! ОСЬ ЦІ ДВА РЯДКИ КРИТИЧНО ВАЖЛИВІ !!!
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\LogisticsExport;
+use App\Models\Order;
+use App\Models\OrderDay;
+use Carbon\Carbon;
 
 /*
 |--------------------------------------------------------------------------
@@ -58,25 +61,27 @@ Route::prefix('client')->group(function () {
     });
 });
 
-// Маршрут для закриття старих замовлень
-Route::get('/update-statuses', function () {
-    // Шукаємо замовлення, де дата закінчення вже пройшла (менше сьогодні)
-    // І які ще НЕ завершені
-    $expiredOrders = \App\Models\Order::whereDate('end_date', '<', now())
-        ->whereNotIn('status', ['finished', 'completed']) // Не чіпаємо вже закриті
-        ->get();
-
+Route::get('/migrate-orders-to-days', function () {
+    $orders = Order::whereNotIn('status', ['completed', 'finished'])->get(); // Беремо тільки активні/нові
     $count = 0;
-    foreach ($expiredOrders as $order) {
-        // ВАЖЛИВО: Якщо замовлення на ПАУЗІ, ми його не чіпаємо (як ви і просили)
-        if ($order->status === 'paused') {
-            continue;
-        }
 
-        // Всі інші (new, active) переводимо в finished
-        $order->update(['status' => 'finished']);
-        $count++;
+    foreach ($orders as $order) {
+        if (!$order->start_date || !$order->end_date) continue;
+
+        $current = Carbon::parse($order->start_date);
+        $end = Carbon::parse($order->end_date);
+
+        while ($current->lte($end)) {
+            // Створюємо день, якщо його ще немає
+            OrderDay::firstOrCreate([
+                'order_id' => $order->id,
+                'date' => $current->format('Y-m-d')
+            ]);
+            
+            $current->addDay();
+            $count++;
+        }
     }
 
-    return "Готово! Автоматично завершено замовлень: {$count}";
+    return "Успішно! Ми перетворили старі дати на {$count} окремих записів у календарі.";
 });
