@@ -26,6 +26,7 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Carbon\Carbon;
+use Filament\Forms\Components\Hidden;
 
 class OrderResource extends Resource
 {
@@ -100,25 +101,11 @@ class OrderResource extends Resource
                             ->live(onBlur: true)
                             ->afterStateUpdated(fn (Set $set, Get $get) => static::updateOrderTotals($set, $get)),
 
-                        Select::make('status')
-                            ->options([
-                                'new' => 'Новий',
-                                'active' => 'Активний',
-                                'paused' => 'На паузі',
-                                'completed' => 'Завершений',
-                                'finished' => 'Завершений',
-                            ])
-                            ->default('new')
-                            ->required()
-                            ->label('Статус'),
-                            
-                        // 🔥 ВИПРАВЛЕННЯ:
-                        // Використовуємо extraAttributes(['class' => 'hidden']) замість ->hidden()
-                        // Це гарантує, що поле існує в формі і JS може записати туди значення.
-                        TextInput::make('project')
-                            ->default('avocado_food') // Можна задати дефолт, якщо треба
-                            ->extraAttributes(['class' => 'hidden']) 
-                            ->dehydrated(),
+                        Hidden::make('status')
+                            ->default('new'),
+
+                        Hidden::make('project')
+                            ->default('avocado_food'),
                     ]),
 
                 // === СЕКЦІЯ 2: Дати та Логістика ===
@@ -205,6 +192,35 @@ class OrderResource extends Resource
                     ->label('Клієнт')
                     ->searchable()
                     ->sortable(),
+
+
+                TextColumn::make('current_day')
+                    ->label('День')
+                    ->getStateUsing(function ($record) {
+                        // Отримуємо всі вибрані дні з бази, відсортовані за часом
+                        $allDays = $record->orderDays()
+                            ->orderBy('date', 'asc')
+                            ->pluck('date')
+                            ->map(fn($date) => Carbon::parse($date)->format('Y-m-d'))
+                            ->toArray();
+
+                        $total = count($allDays);
+                        if ($total === 0) return '0 / 0';
+
+                        $today = Carbon::now()->format('Y-m-d');
+                        $currentDayNumber = 0;
+
+                        // Якщо сьогоднішня дата є в масиві або вже пройшла
+                        foreach ($allDays as $index => $date) {
+                            if ($date <= $today) {
+                                $currentDayNumber = $index + 1;
+                            }
+                        }
+
+                        return "{$currentDayNumber} / {$total}";
+                    })
+                    ->badge()
+                    ->color(fn ($state) => str_starts_with($state, '0 /') ? 'gray' : 'primary'),
 
                 IconColumn::make('is_paid')
                     ->label('Оплата')

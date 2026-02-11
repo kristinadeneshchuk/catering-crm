@@ -188,24 +188,37 @@ class ClientResource extends Resource
                     ->badge()
                     ->color('info')
                     ->getStateUsing(function ($record) {
+                        // Шукаємо останнє актуальне замовлення (Активне або Нове)
                         $order = $record->orders()
-                            ->where('status', 'active')
-                            ->whereDate('start_date', '<=', now())
-                            ->whereDate('end_date', '>=', now())
+                            ->whereIn('status', ['active', 'new'])
+                            ->latest('id')
                             ->first();
 
                         if (!$order) {
                             return null;
                         }
 
-                        $start = Carbon::parse($order->start_date)->startOfDay();
-                        $end = Carbon::parse($order->end_date)->startOfDay();
-                        $today = now()->startOfDay();
+                        // Отримуємо всі вибрані дні з календаря цього замовлення
+                        $allDays = $order->orderDays()
+                            ->orderBy('date', 'asc')
+                            ->pluck('date')
+                            ->map(fn($date) => \Carbon\Carbon::parse($date)->format('Y-m-d'))
+                            ->toArray();
 
-                        $current = $start->diffInDays($today) + 1;
-                        $total = $start->diffInDays($end) + 1;
+                        $total = count($allDays);
+                        if ($total === 0) return null;
 
-                        return "{$current} / {$total}";
+                        $today = now()->format('Y-m-d');
+                        $currentDayIndex = 0;
+
+                        // Рахуємо порядковий номер дня відносно сьогодні
+                        foreach ($allDays as $index => $date) {
+                            if ($date <= $today) {
+                                $currentDayIndex = $index + 1;
+                            }
+                        }
+
+                        return "{$currentDayIndex} / {$total}";
                     }),
 
                 Tables\Columns\TextColumn::make('phone')

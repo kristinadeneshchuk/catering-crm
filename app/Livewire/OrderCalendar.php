@@ -73,6 +73,14 @@ class OrderCalendar extends Component
 
     public function toggleDay($dateStr)
     {
+        if (\Carbon\Carbon::parse($dateStr)->lt(now()->startOfDay())) {
+            \Filament\Notifications\Notification::make()
+                ->title('Минуле не змінити')
+                ->body('Ви не можете редагувати дні, що вже минули.')
+                ->warning()
+                ->send();
+            return;
+        }
         // === ВАРІАНТ 1: ВІРТУАЛЬНИЙ РЕЖИМ (Створення) ===
         if (!$this->order || !$this->order->exists) {
             if (in_array($dateStr, $this->virtualDays)) {
@@ -80,9 +88,11 @@ class OrderCalendar extends Component
             } else {
                 $this->virtualDays[] = $dateStr;
             }
-
-            // Оновлюємо масив і відправляємо у форму Filament для оновлення дат/ціни
             $this->virtualDays = array_values($this->virtualDays);
+            
+            // Тут дати вже приходять як рядки, тому просто сортуємо їх
+            sort($this->virtualDays);
+            
             $this->dispatch('update-selected-days', days: $this->virtualDays);
             return;
         }
@@ -124,6 +134,21 @@ class OrderCalendar extends Component
         }
         
         $this->updateOrderStatus();
+
+        // 🔥 ВИПРАВЛЕННЯ ТУТ:
+        // Ми беремо дні, сортуємо їх і ПЕРЕТВОРЮЄМО в чистий формат 'Y-m-d' (без часу)
+        // Це вирішить проблему "dd.mm.yyyy"
+        $updatedDays = OrderDay::where('order_id', $this->order->id)
+            ->orderBy('date') // Сортуємо в базі
+            ->get()
+            ->map(function ($day) {
+                // Жорстко форматуємо дату, щоб прибрати час
+                return \Carbon\Carbon::parse($day->date)->format('Y-m-d');
+            })
+            ->values() // Скидаємо ключі масиву
+            ->toArray();
+            
+        $this->dispatch('update-selected-days', days: $updatedDays);
     }
 
     private function calculatePricePerDay(): float

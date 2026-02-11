@@ -5,9 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes; // 🔥 1. Імпорт трейту
 
 class Tariff extends Model
 {
+    // 🔥 2. Підключення м'якого видалення
+    use SoftDeletes;
+
     // Дозволяємо масове заповнення всіх полів
     protected $guarded = [];
 

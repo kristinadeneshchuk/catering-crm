@@ -9,6 +9,8 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope; // 🔥 1. Імпорт для роботи з видаленими
 
 class TariffResource extends Resource
 {
@@ -43,13 +45,12 @@ class TariffResource extends Resource
                             ->default('avocado_food')
                             ->prefixIcon('heroicon-o-building-storefront'),
 
-                        // Назва тарифу (наприклад: "Базовий від 7 днів")
+                        // Назва тарифу
                         Forms\Components\TextInput::make('name')
                             ->label('Назва тарифу')
                             ->placeholder('Наприклад: Від 7 днів')
                             ->required(),
 
-                        // ПОЛЕ "КІЛЬКІСТЬ ДНІВ" ВИДАЛЕНО, БО ВОНО ТЕПЕР У ЗАМОВЛЕННЯХ
                     ])->columns(2),
 
                 Forms\Components\Section::make('Статус')
@@ -86,16 +87,38 @@ class TariffResource extends Resource
                     ->sortable()
                     ->searchable(),
 
-                // КОЛОНКУ "ДНІВ" ВИДАЛЕНО З ТАБЛИЦІ
-
                 Tables\Columns\IconColumn::make('is_active')
                     ->label('Активний')
                     ->boolean(),
             ])
             ->defaultSort('project')
+            ->filters([
+                // 🔥 2. Фільтр для перегляду видалених записів (Кошик)
+                Tables\Filters\TrashedFilter::make(),
+            ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make(), // Звичайне (м'яке) видалення
+                
+                // 🔥 3. Додаткові дії для видалених записів
+                Tables\Actions\ForceDeleteAction::make(), // Видалити назавжди
+                Tables\Actions\RestoreAction::make(),     // Відновити з кошика
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\ForceDeleteBulkAction::make(), // Масове видалення назавжди
+                    Tables\Actions\RestoreBulkAction::make(),     // Масове відновлення
+                ]),
+            ]);
+    }
+
+    // 🔥 4. Додаємо цей метод, щоб адмінка бачила видалені записи
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->withoutGlobalScopes([
+                SoftDeletingScope::class,
             ]);
     }
 
