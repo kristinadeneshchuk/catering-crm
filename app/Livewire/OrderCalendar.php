@@ -74,13 +74,14 @@ class OrderCalendar extends Component
     public function toggleDay($dateStr)
     {
         if (\Carbon\Carbon::parse($dateStr)->lt(now()->startOfDay())) {
-            \Filament\Notifications\Notification::make()
+            Notification::make()
                 ->title('Минуле не змінити')
                 ->body('Ви не можете редагувати дні, що вже минули.')
                 ->warning()
                 ->send();
             return;
         }
+
         // === ВАРІАНТ 1: ВІРТУАЛЬНИЙ РЕЖИМ (Створення) ===
         if (!$this->order || !$this->order->exists) {
             if (in_array($dateStr, $this->virtualDays)) {
@@ -89,10 +90,7 @@ class OrderCalendar extends Component
                 $this->virtualDays[] = $dateStr;
             }
             $this->virtualDays = array_values($this->virtualDays);
-            
-            // Тут дати вже приходять як рядки, тому просто сортуємо їх
             sort($this->virtualDays);
-            
             $this->dispatch('update-selected-days', days: $this->virtualDays);
             return;
         }
@@ -105,28 +103,22 @@ class OrderCalendar extends Component
             ->first();
 
         if ($existingDay) {
+            // 🔥 ВИДАЛЯЄМО: Тільки видаляємо запис. 
+            // Гроші повернуться автоматично через Observer моделі OrderDay
             $existingDay->delete();
-            
-            if ($pricePerDay > 0) {
-                $this->order->client->increment('balance', $pricePerDay);
-                $this->order->decrement('total_price', $pricePerDay);
-            }
             
             Notification::make()
                 ->title('День скасовано')
                 ->body("Повернуто на баланс: {$pricePerDay} грн")
                 ->success()->send();
         } else {
+            // 🔥 ВИДАЛЯЄМО: Тільки створюємо запис.
+            // Гроші спишуться автоматично через Observer моделі OrderDay
             OrderDay::create([
                 'order_id' => $this->order->id,
                 'date' => $dateStr
             ]);
 
-            if ($pricePerDay > 0) {
-                $this->order->client->decrement('balance', $pricePerDay);
-                $this->order->increment('total_price', $pricePerDay);
-            }
-            
             Notification::make()
                 ->title('День додано')
                 ->body("Списано з балансу: {$pricePerDay} грн")
@@ -135,17 +127,12 @@ class OrderCalendar extends Component
         
         $this->updateOrderStatus();
 
-        // 🔥 ВИПРАВЛЕННЯ ТУТ:
-        // Ми беремо дні, сортуємо їх і ПЕРЕТВОРЮЄМО в чистий формат 'Y-m-d' (без часу)
-        // Це вирішить проблему "dd.mm.yyyy"
+        // Оновлюємо список днів для форми
         $updatedDays = OrderDay::where('order_id', $this->order->id)
-            ->orderBy('date') // Сортуємо в базі
+            ->orderBy('date')
             ->get()
-            ->map(function ($day) {
-                // Жорстко форматуємо дату, щоб прибрати час
-                return \Carbon\Carbon::parse($day->date)->format('Y-m-d');
-            })
-            ->values() // Скидаємо ключі масиву
+            ->map(fn ($day) => Carbon::parse($day->date)->format('Y-m-d'))
+            ->values()
             ->toArray();
             
         $this->dispatch('update-selected-days', days: $updatedDays);

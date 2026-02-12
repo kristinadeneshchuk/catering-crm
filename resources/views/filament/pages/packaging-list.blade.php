@@ -25,17 +25,17 @@
                     ГОЛОВНА ЗМІНА: 
                     Кнопка тепер веде на маршрут 'print.packaging-list' у новій вкладці 
                 --}}
-                <x-filament::button 
-                    tag="a"
-                    :href="route('print.packaging-list', ['date' => $data['date']])"
-                    target="_blank"
-                    icon="heroicon-m-printer"
-                    color="warning"
-                    size="lg"
-                >
-                    Відкрити версію для друку
-                </x-filament::button>
-            </div>
+            <x-filament::button 
+                tag="a"
+                {{-- 🔥 Додаємо +1 день до дати в посиланні --}}
+                :href="route('print.packaging-list', ['date' => \Carbon\Carbon::parse($data['date'])->addDay()->format('Y-m-d')])"
+                target="_blank"
+                icon="heroicon-m-printer"
+                color="warning"
+                size="lg"
+            >
+                Відкрити версію для друку
+            </x-filament::button>
 
             @if($this->debugMessage)
                 <div style="color: #fbbf24; margin-top: 10px; font-weight: bold; font-size: 12px;">{{ $this->debugMessage }}</div>

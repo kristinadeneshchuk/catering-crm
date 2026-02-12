@@ -49,65 +49,56 @@ class ProductionReport extends Page implements HasForms
     /**
      * Кнопки у верхній панелі сторінки
      */
-    protected function getHeaderActions(): array
-    {
-        $dateParam = $this->data['date'] ?? now()->format('Y-m-d');
-        $settingKey = "stock_debited_{$dateParam}";
+  protected function getHeaderActions(): array
+{
+    // 1. Поточна дата з форми (день роботи)
+    $dateParam = $this->data['date'] ?? now()->format('Y-m-d');
+    
+    // 2. 🔥 Цільова дата (день споживання = завтра)
+    // Використовуємо $dateParam замість неіснуючої $selectedDate
+    $targetDate = \Carbon\Carbon::parse($dateParam)->addDay()->format('Y-m-d');
+    
+    $settingKey = "stock_debited_{$dateParam}";
+    $isAlreadyDebited = \App\Models\Setting::where('key', $settingKey)->where('value', '1')->exists();
 
-        $isAlreadyDebited = \App\Models\Setting::where('key', $settingKey)->where('value', '1')->exists();
+    return [
+        \Filament\Actions\Action::make('debit_stock')
+            ->label($isAlreadyDebited ? "Зміну за {$dateParam} вже закрито" : 'Закрити зміну та списати склад')
+            ->icon($isAlreadyDebited ? 'heroicon-o-lock-closed' : 'heroicon-o-archive-box-arrow-down')
+            ->color($isAlreadyDebited ? 'warning' : 'danger')
+            ->disabled($isAlreadyDebited) 
+            ->requiresConfirmation(fn() => !$isAlreadyDebited)
+            ->modalHeading('Підтвердити списання залишків?')
+            ->modalDescription('Система автоматично відніме вагу БРУТТО всіх інгредієнтів. Цю дію неможливо скасувати.')
+            ->action(function () use ($settingKey, $dateParam) {
+                $checkAgain = \App\Models\Setting::where('key', $settingKey)->where('value', '1')->exists();
 
-        return [
-            \Filament\Actions\Action::make('debit_stock')
-                ->label($isAlreadyDebited ? "Зміну за {$dateParam} вже закрито" : 'Закрити зміну та списати склад')
-                ->icon($isAlreadyDebited ? 'heroicon-o-lock-closed' : 'heroicon-o-archive-box-arrow-down')
-                ->color($isAlreadyDebited ? 'warning' : 'danger')
-                ->disabled($isAlreadyDebited) 
-                ->requiresConfirmation(fn() => !$isAlreadyDebited)
-                ->modalHeading('Підтвердити списання залишків?')
-                ->modalDescription('Система автоматично відніме вагу БРУТТО всіх інгредієнтів. Цю дію неможливо скасувати.')
-                ->action(function () use ($settingKey, $dateParam) {
-                    $checkAgain = \App\Models\Setting::where('key', $settingKey)->where('value', '1')->exists();
-
-                    if ($checkAgain) {
-                        \Filament\Notifications\Notification::make()
-                            ->title('Операцію скасовано')
-                            ->body("Зміну за {$dateParam} вже закрито. Списання не відбулося.")
-                            ->warning()
-                            ->send();
-                        return; 
-                    }
-
-                    $this->processStockDebiting();
-                    
-                    \App\Models\Setting::updateOrCreate(
-                        ['key' => $settingKey],
-                        ['value' => '1']
-                    );
-
+                if ($checkAgain) {
                     \Filament\Notifications\Notification::make()
-                        ->title('Успішно')
-                        ->body('Склад списано, зміну закрито.')
-                        ->success()
+                        ->title('Операцію скасовано')
+                        ->body("Зміну за {$dateParam} вже закрито.")
+                        ->warning()
                         ->send();
+                    return; 
+                }
 
-                    return redirect(static::getUrl(['date' => $dateParam]));
-                }),
+                $this->processStockDebiting();
+                
+                \App\Models\Setting::updateOrCreate(
+                    ['key' => $settingKey],
+                    ['value' => '1']
+                );
 
-            \Filament\Actions\Action::make('print_stickers')
-                ->label('1. Стікери')
-                ->icon('heroicon-o-tag')
-                ->color('gray')
-                ->url(fn () => route('print.stickers', ['date' => $dateParam]))
-                ->openUrlInNewTab(),
+                \Filament\Notifications\Notification::make()
+                    ->title('Успішно')
+                    ->body('Склад списано, зміну закрито.')
+                    ->success()
+                    ->send();
 
-            \Filament\Actions\Action::make('print_manifest')
-                ->label('2. На пакет')
-                ->icon('heroicon-o-shopping-bag')
-                ->color('warning')
-                ->url(fn () => route('print.manifest', ['date' => $dateParam]))
-                ->openUrlInNewTab(),
-        ];
-    }
+                return redirect(static::getUrl(['date' => $dateParam]));
+            }),
+    ];
+}
 
     public function form(Form $form): Form
     {
@@ -254,22 +245,31 @@ class ProductionReport extends Page implements HasForms
     /**
      * Розрахунок звіту
      */
-    public function calculate(): void
+public function calculate(): void
     {
-        $date = $this->data['date'] ?? now()->format('Y-m-d');
+        // 1. Отримуємо вибрану дату приготування (наприклад, 11.02)
+        $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
+        
+        // 2. 🔥 ГОЛОВНА ЛОГІКА: Кухня готує сьогодні на ЗАВТРА
+        // Встановлюємо цільову дату споживання (targetDate = 12.02)
+        $targetDate = \Carbon\Carbon::parse($selectedDate)->addDay()->format('Y-m-d');
+        
         $this->report = [];
 
         $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
         $anchorDate = Carbon::parse('2025-01-01');
-        $this->currentDayNumber = (abs(Carbon::parse($date)->diffInDays($anchorDate)) % $cycleDays) + 1;
+        
+        // 3. Розраховуємо номер дня меню для дати СПОЖИВАННЯ (завтрашньої)
+        $this->currentDayNumber = (abs(Carbon::parse($targetDate)->diffInDays($anchorDate)) % $cycleDays) + 1;
 
         $menu = DailyMenu::where('day_number', $this->currentDayNumber)
             ->with(['menuItems.dish.dishIngredients.ingredient', 'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient', 'menuItems.mealType'])
             ->first();
 
         if ($menu) {
-            $this->activeOrders = Order::whereDate('start_date', '<=', $date)
-                ->whereDate('end_date', '>=', $date)
+            // 4. Шукаємо активні замовлення, які припадають на дату СПОЖИВАННЯ
+            $this->activeOrders = Order::whereDate('start_date', '<=', $targetDate)
+                ->whereDate('end_date', '>=', $targetDate)
                 ->whereIn('status', ['new', 'active'])
                 ->with([
                     'client.mealTypes',
@@ -313,18 +313,15 @@ class ProductionReport extends Page implements HasForms
                         if ($order->replacements->where('dish_id', $dish->id)->first()) $isCustom = true;
                         if ($order->client->dishExclusions->contains('id', $dish->id)) $isCustom = true;
                         
-                        // 🔥🔥🔥 ВИПРАВЛЕНА ЛОГІКА ТУТ 🔥🔥🔥
                         if (!$isCustom) {
                              $clientExclusions = $order->client->ingredientExclusions;
                              
                              if ($clientExclusions->isNotEmpty()) {
-                                 // Використовуємо нову функцію глибокого пошуку (Recursive Check)
                                  if ($this->checkRecursiveConflict($dish, $clientExclusions)) {
                                      $isCustom = true;
                                  }
                              }
                         }
-                        // 🔥🔥🔥 КІНЕЦЬ ВИПРАВЛЕННЯ 🔥🔥🔥
 
                         if ($isCustom) {
                             $customOrders[] = $order;
