@@ -3,143 +3,113 @@
 namespace App\Exports;
 
 use App\Models\Order;
-use App\Services\ScheduleService;
 use Carbon\Carbon;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
-use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 
-class LogisticsExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithColumnWidths
+class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithColumnWidths
 {
     protected $date;
 
     public function __construct($date)
     {
-        $this->date = Carbon::parse($date);
+        // Дата вже приходить "завтрашня" з контролера
+        $this->date = Carbon::parse($date)->format('Y-m-d');
     }
 
-    /**
-     * 1. ВИБІРКА ТА "РОЗУМНЕ" ГРУПУВАННЯ
-     */
     public function collection()
     {
-        $selectedDate = $this->date;
-        $nextDay = $selectedDate->copy()->addDay();
+        $targetDate = $this->date;
 
-        // 1. Отримуємо список замовлень
+        // 1. Шукаємо замовлення, які мають запис у календарі на цей день
         $orders = Order::query()
-            ->with('client')
-            ->where('status', 'active')
-            ->get()
-            ->filter(function ($order) use ($selectedDate, $nextDay) {
-                $isEvening = ScheduleService::isEvening($order->schedule_type);
-                
-                if (!$isEvening) {
-                    return $selectedDate->between(Carbon::parse($order->start_date), Carbon::parse($order->end_date));
-                } else {
-                    return $nextDay->between(Carbon::parse($order->start_date), Carbon::parse($order->end_date));
-                }
-            });
+            ->with(['client', 'orderDays'])
+            ->whereIn('status', ['active', 'new'])
+            ->whereHas('orderDays', function ($query) use ($targetDate) {
+                $query->where('date', $targetDate);
+            })
+            ->get();
 
-        // 2. ГРУПУЄМО З НОРМАЛІЗАЦІЄЮ АДРЕСИ
+        // 2. Групуємо за "чистою" адресою
         $groupedOrders = $orders->groupBy(function($order) {
-            // Беремо оригінальну адресу
-            $address = mb_strtolower($order->client->address);
-
-            // Список слів, які ми ігноруємо при порівнянні
-            $garbageWords = [
-                'вулиця', 'вул.', 'вул', 
-                'проспект', 'просп.', 'просп', 
-                'провулок', 'пров.', 
-                'будинок', 'буд.', 'буд', 
-                'квартира', 'кв.', 'кв', 
-                'місто', 'м.', 'м ', // 'м ' з пробілом, щоб не видалити літеру м з імен
-                'під\'їзд', 'під.', 
-                'код', 'домофон'
-            ];
-
-            // Видаляємо сміттєві слова
+            $address = mb_strtolower($order->client->address ?? '');
+            
+            $garbageWords = ['вулиця', 'вул.', 'вул', 'проспект', 'просп.', 'просп', 'провулок', 'пров.', 'будинок', 'буд.', 'буд', 'квартира', 'кв.', 'кв', 'місто', 'м.', 'під\'їзд', 'під.', 'код', 'домофон'];
             $cleanAddress = str_replace($garbageWords, '', $address);
-
-            // Видаляємо ВСЕ, крім букв і цифр (коми, крапки, дужки, пробіли - геть)
-            // Залишаємо тільки a-z, а-я, 0-9
             $cleanAddress = preg_replace('/[^a-zа-яіїєґ0-9]/u', '', $cleanAddress);
 
-            // Тепер адреса виглядає як "шевченка105"
-            // Групуємо за: ОчищенаАдреса + Час + Тип
-            return $cleanAddress . '_' . $order->delivery_time . '_' . $order->schedule_type;
+            // Групуємо: Адреса + Час
+            return $cleanAddress . '_' . ($order->delivery_time ?? 'no_time');
         });
 
-        // 3. Сортуємо
-        return $groupedOrders->sort(function($groupA, $groupB) {
-            $orderA = $groupA->first();
-            $orderB = $groupB->first();
-            $isEveningA = ScheduleService::isEvening($orderA->schedule_type);
-            $isEveningB = ScheduleService::isEvening($orderB->schedule_type);
-            $keyA = ($isEveningA ? 1 : 0) . '-' . $orderA->delivery_time;
-            $keyB = ($isEveningB ? 1 : 0) . '-' . $orderB->delivery_time;
-            return strcmp($keyA, $keyB);
+        // 3. Формуємо рядки для Excel
+        $rows = $groupedOrders->map(function ($group) {
+            $mainOrder = $group->first();
+            $client = $mainOrder->client;
+            
+            // Імена всіх клієнтів у групі
+            $names = $group->map(fn($o) => $o->client->name)->unique()->join(' + ');
+            
+            // ID замовлень або клієнтів
+            $ids = $group->map(fn($o) => $o->client->id)->unique()->join(', ');
+
+            // Інформація
+            $infoParts = [];
+            
+            // Проекти і калорії
+            $projects = $group->map(fn($o) => 
+                ($o->project === 'u_fit' ? 'U-FIT' : 'Avocado') . " (" . (int)$o->calories . ")"
+            )->join(' | ');
+            $infoParts[] = $projects;
+
+            // Найдовший коментар по доставці (щоб не втратити код домофону)
+            $bestDeliveryComment = $group
+                ->map(fn($o) => $o->client->delivery_comment)
+                ->filter()
+                ->sortByDesc(fn($s) => mb_strlen($s))
+                ->first();
+            
+            if ($bestDeliveryComment) {
+                $infoParts[] = "Інфо: " . $bestDeliveryComment;
+            }
+
+            // Коментарі до замовлення
+            foreach ($group as $o) {
+                if (!empty($o->comment)) {
+                    $infoParts[] = "Комент ({$o->client->name}): {$o->comment}";
+                }
+                // Перевірка боргу (якщо потрібно)
+                if (!$o->is_paid && $o->total_price > 0) {
+                   // $infoParts[] = "💰 БОРГ: {$o->total_price} грн";
+                }
+            }
+            
+            $additionalInfo = implode("\n", $infoParts);
+
+            return [
+                'Comp_Id' => $ids,
+                'Comp_Name' => $names,
+                'Phone' => $client->phone,
+                'Address' => $client->address,
+                'Additional_Info' => $additionalInfo,
+                'TimeWork_Info' => $mainOrder->delivery_time, // Час доставки
+                'Unload_Time' => 7,
+                'Qty' => $group->count()
+            ];
         });
+
+        // 4. Сортуємо по часу доставки
+        return $rows->sortBy('TimeWork_Info')->values();
     }
 
     public function headings(): array
     {
         return ['Comp_Id', 'Comp_Name', 'Phone', 'Address', 'Additional_Info', 'TimeWork_Info', 'Unload_Time', 'Qty'];
-    }
-
-    public function map($group): array
-    {
-        $mainOrder = $group->first();
-        $quantity = $group->count();
-
-        // Імена через "+"
-        $names = $group->map(fn($o) => $o->client->name)->join(' + ');
-        // ID через кому
-        $ids = $group->map(fn($o) => $o->id)->join(', ');
-
-        $infoParts = [];
-        
-        // Проекти
-        $projects = $group->map(fn($o) => ($o->project === 'u_fit' ? 'U-FIT' : 'Avocado') . " ({$o->calories})")->unique()->join(' | ');
-        $infoParts[] = $projects;
-
-        // Коментар доставки (домофон) - беремо найдовший (найповніший) з групи
-        $bestDeliveryComment = $group
-            ->map(fn($o) => $o->client->delivery_comment)
-            ->filter()
-            ->sortByDesc(fn($comment) => strlen($comment))
-            ->first();
-
-        if ($bestDeliveryComment) {
-            $infoParts[] = "Інфо: " . $bestDeliveryComment;
-        }
-
-        foreach ($group as $order) {
-            if ($order->comment) {
-                $infoParts[] = "Комент ({$order->client->name}): " . $order->comment;
-            }
-            if (!$order->is_paid) {
-                $infoParts[] = "!!! БОРГ ({$order->client->name}): " . $order->total_price . " грн";
-            }
-        }
-
-        $additionalInfoString = implode("; \n", $infoParts);
-
-        return [
-            $ids,
-            $names,
-            $mainOrder->client->phone,
-            $mainOrder->client->address, // Залишаємо оригінальну адресу першого клієнта (для читабельності кур'єром)
-            $additionalInfoString,
-            $mainOrder->delivery_time,
-            7,
-            $quantity
-        ];
     }
 
     public function columnWidths(): array
@@ -152,10 +122,17 @@ class LogisticsExport implements FromCollection, WithHeadings, WithMapping, With
     public function styles(Worksheet $sheet)
     {
         $lastRow = $sheet->getHighestRow();
+        // Якщо даних немає, lastRow буде 1. Щоб не було помилки, перевіряємо.
+        if ($lastRow < 2) return [];
+
         $range = 'A1:H' . $lastRow;
+        
         $sheet->getStyle($range)->getAlignment()->setWrapText(true);
         $sheet->getStyle($range)->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
         $sheet->getStyle($range)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-        return [1 => ['font' => ['bold' => true, 'size' => 11]]];
+        
+        return [
+            1 => ['font' => ['bold' => true, 'size' => 11, 'color' => ['rgb' => 'FFFFFF']], 'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '4472C4']]]
+        ];
     }
 }
