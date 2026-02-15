@@ -27,6 +27,8 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
+            ->brandName(env('APP_NAME', 'Afood Delivery'))
+            ->favicon(asset('images/favicon.svg'))
             ->login()
             ->colors([
                 'primary' => Color::Amber,
