@@ -34,33 +34,33 @@ class PackagingList extends Page implements HasForms
         $this->calculate();
     }
 
-    protected function getHeaderActions(): array
-    {
-        $dateParam = $this->data['date'] ?? now()->format('Y-m-d');
-        $targetDate = \Carbon\Carbon::parse($dateParam)->addDay()->format('Y-m-d');
-        
-        return [
-            Action::make('print_stickers')
-                ->label('1. Стікери')
-                ->icon('heroicon-o-tag')
-                ->color('gray')
-                ->url(fn () => route('print.stickers', ['date' => $targetDate]))
-                ->openUrlInNewTab(),
+protected function getHeaderActions(): array
+{
+    // Беремо дату, яка зараз обрана в календарі сторінки (наприклад, 16.02)
+    $dateParam = $this->data['date'] ?? now()->format('Y-m-d');
+    
+    return [
+        Action::make('print_stickers')
+            ->label('1. Стікери')
+            ->icon('heroicon-o-tag')
+            ->color('gray')
+            ->url(fn () => route('print.stickers', ['date' => $dateParam])) // Передаємо 16.02
+            ->openUrlInNewTab(),
 
-            Action::make('print_manifest')
-                ->label('2. На пакет')
-                ->icon('heroicon-o-shopping-bag')
-                ->color('warning')
-                ->url(fn () => route('print.manifest', ['date' => $targetDate]))
-                ->openUrlInNewTab(),
+        Action::make('print_manifest')
+            ->label('2. На пакет')
+            ->icon('heroicon-o-shopping-bag')
+            ->color('warning')
+            ->url(fn () => route('print.manifest', ['date' => $dateParam])) // Передаємо 16.02
+            ->openUrlInNewTab(),
 
-            Action::make('download_logistics')
-                ->label('Завантажити логістику (Excel)')
-                ->icon('heroicon-o-arrow-down-tray')
-                ->color('success')
-                ->url(fn () => route('print.logistics', ['date' => $targetDate])),
-        ];
-    }
+        Action::make('download_logistics')
+            ->label('Завантажити логістику (Excel)')
+            ->icon('heroicon-o-arrow-down-tray')
+            ->color('success')
+            ->url(fn () => route('print.logistics', ['date' => $dateParam])),
+    ];
+}
 
     public function form(Form $form): Form
     {

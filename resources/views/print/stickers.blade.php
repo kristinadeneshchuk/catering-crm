@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <title>Друк стікерів — {{ \Carbon\Carbon::parse($date)->format('d.m.Y') }}</title>
+    <title>Друк стікерів — {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y') }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* ГАРАНТІЯ КОЛЬОРУ ПРИ ДРУКУ */
@@ -58,7 +58,9 @@
     <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-900 text-white px-10 py-4 rounded-2xl font-black shadow-xl transition-all uppercase tracking-widest text-lg">
         🖨️ РОЗДРУКУВАТИ ВСІ СТІКЕРИ ({{ count($stickers) }} шт.)
     </button>
-    <p class="text-gray-500 mt-3 font-medium text-sm">Тільки індивідуальні замовлення. Дата: {{ \Carbon\Carbon::parse($date)->format('d.m.Y') }}</p>
+    <p class="text-gray-500 mt-3 font-medium text-sm">
+        Тільки індивідуальні замовлення. Дата споживання: {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y') }}
+    </p>
 </div>
 
 <div class="sticker-container">
@@ -91,8 +93,9 @@
                         <span class="text-[11px] font-black uppercase" style="color: {{ $brandColor }};">
                             {{ $sticker['meal'] }}
                         </span>
+                        {{-- Дата споживання на стікері (завтра) --}}
                         <span class="text-[10px] font-bold bg-yellow-300 px-1.5 py-0.5 rounded text-black">
-                            {{ \Carbon\Carbon::parse($date)->format('d.m') }}
+                            {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m') }}
                         </span>
                     </div>
 
