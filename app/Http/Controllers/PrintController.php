@@ -60,6 +60,7 @@ class PrintController extends Controller
 
             $manifests[] = [
                 'client_id' => $order->client?->id ?? '---', // Додаємо ID
+                'has_cutlery' => (bool) ($order->client?->has_cutlery ?? true), 
                 'project'   => $order->project,
                 'client'    => $order->client?->name ?? 'Без імені',
                 'address'   => $order->client?->address ?? 'Самовивіз',

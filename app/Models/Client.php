@@ -26,6 +26,7 @@ class Client extends Authenticatable
         'delivery_comment',
         'production_comment',
         'balance',
+        'has_cutlery',
         'manager_comment',
     ];
 
@@ -36,6 +37,7 @@ class Client extends Authenticatable
 
     protected $casts = [
         'balance' => 'decimal:2',
+        'has_cutlery' => 'boolean',
     ];
 
     // === ВІДНОШЕННЯ ===

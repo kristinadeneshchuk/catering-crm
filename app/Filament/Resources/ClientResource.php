@@ -16,6 +16,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\CheckboxList;
 use Carbon\Carbon;
+use Filament\Forms\Components\Toggle;
 
 class ClientResource extends Resource
 {
@@ -84,6 +85,14 @@ class ClientResource extends Resource
                 Section::make('Налаштування раціону')
                     ->description('Виберіть, які прийоми їжі отримує клієнт. Система автоматично перерахує вагу порцій.')
                     ->schema([
+                        Toggle::make('has_cutlery')
+                            ->label('Чи додавати прибори?')
+                            ->helperText('Якщо увімкнено, до замовлення будуть додані одноразові прибори')
+                            ->default(true)
+                            ->inline(false)
+                            ->onIcon('heroicon-m-check')
+                            ->offIcon('heroicon-m-x-mark')
+                            ->onColor('success'),
                         CheckboxList::make('mealTypes')
                             ->label('Активні прийоми їжі')
                             ->relationship('mealTypes', 'name')
@@ -254,6 +263,11 @@ class ClientResource extends Resource
                     ->label('Адреса')
                     ->limit(20)
                     ->tooltip(fn ($record) => $record->address),
+                Tables\Columns\IconColumn::make('has_cutlery')
+                ->label('Прибори')
+                ->boolean()
+                ->sortable()
+                ->toggleable(),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

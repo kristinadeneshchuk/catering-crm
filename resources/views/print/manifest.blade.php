@@ -23,7 +23,6 @@
                 height: auto !important; 
                 border: 2px solid #000 !important; 
             }
-            /* Зелена рамка для Afood при друку */
             .border-avocado { border-color: #22c55e !important; } 
         }
 
@@ -43,14 +42,12 @@
             flex-direction: column;
             padding: 15px;
         }
-        /* Клас для зеленої обводки */
         .border-avocado { border-color: #22c55e; } 
     </style>
 </head>
 <body class="bg-gray-100">
 
 @php
-    // Використовуємо favicon.svg або avocado-logo.png
     $avocadoPath = public_path('images/favicon.svg'); 
     $ufitPath = public_path('images/u-fit-logo.png');
 
@@ -73,9 +70,7 @@
     @foreach($manifests as $man)
         @php 
             $isUfit = str_contains(strtolower($man['project'] ?? ''), 'fit');
-            // Зелений колір замість оранжевого
             $brandColor = $isUfit ? '#000' : '#22c55e'; 
-            // Оновлений текст футера
             $footerName = $isUfit ? 'U-FIT' : 'Afood';
         @endphp
         
@@ -89,7 +84,6 @@
                             {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y') }}
                         </span>
                     </div>
-                    {{-- Збільшений розмір логотипу --}}
                     <div class="w-28 min-h-[45px] flex items-center justify-end">
                         @if($isUfit && $ufitLogo) 
                             <img src="{{ $ufitLogo }}" class="w-full object-contain"> 
@@ -121,6 +115,19 @@
                             </div>
                         @endforeach
                     </div>
+                </div>
+
+                {{-- ПРИБОРИ (Обидва варіанти тепер в одному стилі) --}}
+                <div class="flex items-center gap-2">
+                    @if(isset($man['has_cutlery']) && $man['has_cutlery'])
+                        <div class="flex items-center gap-1 text-[11px] font-bold text-slate-400 uppercase">
+                            <span>🍴 З приборами</span>
+                        </div>
+                    @else
+                        <div class="flex items-center gap-1 text-[11px] font-bold text-slate-400 uppercase">
+                            <span>🚫 Без приборів</span>
+                        </div>
+                    @endif
                 </div>
 
                 @if(!empty($man['comment']))
