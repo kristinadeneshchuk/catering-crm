@@ -9,7 +9,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder; // Додав імпорт для Query Builder
+use Illuminate\Database\Eloquent\Builder;
 
 class SettingResource extends Resource
 {
@@ -17,62 +17,95 @@ class SettingResource extends Resource
     protected static ?string $navigationGroup = 'Система';
     protected static ?int $navigationSort = 1;
     protected static ?string $navigationLabel = 'Налаштування бізнесу';
-    
-    // === ВИПРАВЛЕННЯ 1: Забираємо зайву "s" ===
-    protected static ?string $modelLabel = 'Налаштування';       // Однина
-    protected static ?string $pluralModelLabel = 'Налаштування'; // Множина (тепер однакові)
+    protected static ?string $modelLabel = 'Налаштування';
+    protected static ?string $pluralModelLabel = 'Налаштування';
 
     public static function canViewAny(): bool
     {
         return auth()->user()->role === 'admin';
     }
 
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return false;
+    }
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Глобальні параметри')
+                Forms\Components\Section::make('Редагування параметра')
                     ->schema([
+                        // 1. НАЗВА (Тільки для читання)
                         Forms\Components\TextInput::make('key')
-                            ->label('Параметр (Ключ)')
-                            ->disabled() 
-                            ->dehydrated(), 
+                            ->label('Параметр')
+                            ->formatStateUsing(fn (?string $state): string => match ($state) {
+                                'menu_cycle_days' => 'Тривалість циклу (днів)',
+                                'menu_cycle_start_date' => 'Дата початку циклу',
+                                default => (string)$state,
+                            })
+                            ->disabled()
+                            // 🔥 ВАЖЛИВО: false означає "Не зберігати це поле в базу".
+                            // Це захистить від помилки Duplicate entry.
+                            ->dehydrated(false),
 
-                        Forms\Components\TextInput::make('value')
-                            ->label('Значення')
+                        // 2. ЗНАЧЕННЯ (Число)
+                        Forms\Components\TextInput::make('value_days')
+                            ->label('Кількість днів')
+                            ->statePath('value')
                             ->required()
-                            ->helperText('Для параметра "menu_cycle_days" вкажіть кількість днів циклу (напр. 24 або 30).'),
-                    ])->columns(2),
+                            ->numeric()
+                            ->visible(fn ($record) => $record && $record->key === 'menu_cycle_days'),
+
+                        // 3. ЗНАЧЕННЯ (Дата)
+                        Forms\Components\DatePicker::make('value_date')
+                            ->label('Дата початку')
+                            ->statePath('value')
+                            ->required()
+                            ->displayFormat('d.m.Y')
+                            ->format('Y-m-d')
+                            ->visible(fn ($record) => $record && $record->key === 'menu_cycle_start_date'),
+                    ])->columns(1),
             ]);
     }
 
     public static function table(Table $table): Table
     {
         return $table
-            // === ВИПРАВЛЕННЯ 2: Приховуємо технічні рядки ===
             ->modifyQueryUsing(function (Builder $query) {
-                // Показуємо тільки ті рядки, які НЕ починаються на "stock_debited"
-                return $query->where('key', 'not like', 'stock_debited_%');
+                // Показуємо тільки наші два налаштування
+                return $query->whereIn('key', ['menu_cycle_days', 'menu_cycle_start_date']);
             })
             ->columns([
                 Tables\Columns\TextColumn::make('key')
-                    ->label('Назва налаштування')
+                    ->label('Налаштування')
                     ->formatStateUsing(fn (string $state): string => match ($state) {
                         'menu_cycle_days' => 'Тривалість циклу меню (днів)',
-                        default => $state, // Інші ключі показуємо як є
-                    }),
+                        'menu_cycle_start_date' => 'Дата початку відліку циклу',
+                        default => $state,
+                    })
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('value')
-                    ->label('Поточне значення')
+                    ->label('Значення')
                     ->badge()
-                    ->color('success'),
+                    ->color('info')
+                    ->formatStateUsing(function ($state, $record) {
+                        if ($record->key === 'menu_cycle_start_date') {
+                            return \Carbon\Carbon::parse($state)->format('d.m.Y');
+                        }
+                        return $state;
+                    }),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()->modalHeading('Змінити'),
             ])
-            // Забороняємо створювати та видаляти налаштування, щоб нічого не зламати
-            // (Ви можете це розкоментувати, якщо хочете додати кнопку "Створити")
-            // ->bulkActions([]) 
-            ; 
+            ->bulkActions([]);
     }
 
     public static function getPages(): array

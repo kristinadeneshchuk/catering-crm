@@ -19,6 +19,8 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Form;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Filament\Forms\Components\Grid;
+use Filament\Forms\Components\Placeholder;
 
 class ProductionReport extends Page implements HasForms
 {
@@ -100,12 +102,13 @@ class ProductionReport extends Page implements HasForms
     ];
 }
 
-    public function form(Form $form): Form
-    {
-        return $form
-            ->schema([
+public function form(Form $form): Form
+{
+    return $form
+        ->schema([
+            Grid::make(2)->schema([
                 DatePicker::make('date')
-                    ->label('Дата приготування')
+                    ->label('Дата приготування (сьогодні)')
                     ->displayFormat('d.m.Y')
                     ->required()
                     ->live()
@@ -113,9 +116,34 @@ class ProductionReport extends Page implements HasForms
                         $this->calculate();
                         $this->js("window.history.replaceState(null, null, '?date=' + '{$state}')");
                     }),
+                
+                Placeholder::make('info_text')
+                    ->label('Цільова дата')
+                    ->content(function() {
+                        // 1. Отримуємо вибрану дату
+                        $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
+                        $targetDateObj = \Carbon\Carbon::parse($selectedDate)->addDay();
+                        
+                        // 2. Отримуємо налаштування циклу для розрахунку дня
+                        $cycleDays = (int) \App\Models\Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
+                        $startDateStr = \App\Models\Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
+                        $anchorDate = \Carbon\Carbon::parse($startDateStr);
+                        
+                        // 3. Рахуємо номер дня (використовуємо abs, щоб не було дня 0)
+                        $diff = abs($targetDateObj->diffInDays($anchorDate));
+                        $dayNum = ($diff % $cycleDays) + 1;
+
+                        return new \Illuminate\Support\HtmlString(
+                            "<div class='p-2 bg-primary-500/10 border border-primary-500 rounded-lg text-primary-600'>
+                                👨‍🍳 Кухня готує сьогодні на <strong>завтра (" . $targetDateObj->format('d.m.Y') . ")</strong>. 
+                                <br> Це буде <strong>" . $dayNum . "-й день</strong> циклу меню.
+                            </div>"
+                        );
+                    }),
             ])
-            ->statePath('data');
-    }
+        ])
+        ->statePath('data');
+}
 
     protected function getViewData(): array
     {
@@ -247,42 +275,47 @@ class ProductionReport extends Page implements HasForms
      */
 public function calculate(): void
     {
-        // 1. Отримуємо вибрану дату приготування (наприклад, 11.02)
+        // 1. Отримуємо вибрану дату приготування (наприклад, сьогодні 16.02)
         $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
         
-        // 2. 🔥 ГОЛОВНА ЛОГІКА: Кухня готує сьогодні на ЗАВТРА
-        // Встановлюємо цільову дату споживання (targetDate = 12.02)
-        $targetDate = \Carbon\Carbon::parse($selectedDate)->addDay()->format('Y-m-d');
+        // 2. 🔥 ГОЛОВНА ЛОГІКА: Кухня готує сьогодні на ЗАВТРА (17.02)
+        $targetDateObj = \Carbon\Carbon::parse($selectedDate)->addDay();
+        $targetDate = $targetDateObj->format('Y-m-d');
         
         $this->report = [];
 
+        // Отримуємо налаштування циклу
         $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-        $anchorDate = Carbon::parse('2025-01-01');
+        $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
+        $anchorDate = Carbon::parse($startDateStr);
         
-        // 3. Розраховуємо номер дня меню для дати СПОЖИВАННЯ (завтрашньої)
-        $this->currentDayNumber = (abs(Carbon::parse($targetDate)->diffInDays($anchorDate)) % $cycleDays) + 1;
+        // 3. Розраховуємо номер дня меню для дати споживання (завтра)
+        $diff = abs($targetDateObj->diffInDays($anchorDate));
+        $this->currentDayNumber = ($diff % $cycleDays) + 1;
+
+        // Встановлюємо пояснювальний текст для інтерфейсу
+        $this->debugMessage = "🍳 Готуємо сьогодні на завтра: " . $targetDateObj->format('d.m.Y') . " (День циклу №{$this->currentDayNumber})";
 
         $menu = DailyMenu::where('day_number', $this->currentDayNumber)
             ->with(['menuItems.dish.dishIngredients.ingredient', 'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient', 'menuItems.mealType'])
             ->first();
 
         if ($menu) {
-            // 4. Шукаємо активні замовлення, які припадають на дату СПОЖИВАННЯ
-            $this->activeOrders = Order::whereDate('start_date', '<=', $targetDate)
-                ->whereDate('end_date', '>=', $targetDate)
-                ->whereIn('status', ['new', 'active'])
+            // Шукаємо замовлення саме на завтрашню дату через календар (паузи враховано)
+            $this->activeOrders = Order::whereIn('status', ['new', 'active'])
+                ->whereHas('orderDays', function ($query) use ($targetDate) {
+                    $query->where('date', $targetDate);
+                })
                 ->with([
                     'client.mealTypes',
                     'client.ingredientExclusions', 
                     'client.dishExclusions',
                     'replacements.replacementProduct',
                     'replacements.replacementDish.dishIngredients.ingredient',
-                    'replacements.replacementDish.dishIngredients.childDish.dishIngredients.ingredient',
                 ])
                 ->get();
 
             if ($this->activeOrders->isNotEmpty()) {
-                
                 $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType->sort_order ?? 99);
 
                 foreach ($sortedMenuItems as $item) {
@@ -295,66 +328,37 @@ public function calculate(): void
 
                     foreach ($this->activeOrders as $order) {
                         $clientMealTypeIds = $order->client->mealTypes->pluck('id')->toArray();
-                        if ($item->meal_type_id && !in_array($item->meal_type_id, $clientMealTypeIds)) {
-                            continue;
-                        }
+                        if ($item->meal_type_id && !in_array($item->meal_type_id, $clientMealTypeIds)) continue;
 
-                        if (!isset($order->base_scale_factor)) {
-                            $order->base_scale_factor = (float)($order->scale_factor ?: 1.0);
-                        }
-                        
                         $activePercentSum = $order->client->mealTypes->sum('energy_percent');
                         $redistributionFactor = ($activePercentSum > 0 && $activePercentSum < 100) ? (100 / $activePercentSum) : 1.0;
-                        $order->scale_factor = $order->base_scale_factor * $redistributionFactor;
+                        $order->scale_factor = (float)($order->scale_factor ?: 1.0) * $redistributionFactor;
 
-                        $isCustom = false;
-                        $clientComment = $order->client->production_comment ?? $order->client->comment ?? null;
-                        if ($order->comment || !empty($clientComment)) $isCustom = true;
-                        if ($order->replacements->where('dish_id', $dish->id)->first()) $isCustom = true;
-                        if ($order->client->dishExclusions->contains('id', $dish->id)) $isCustom = true;
-                        
-                        if (!$isCustom) {
-                             $clientExclusions = $order->client->ingredientExclusions;
-                             
-                             if ($clientExclusions->isNotEmpty()) {
-                                 if ($this->checkRecursiveConflict($dish, $clientExclusions)) {
-                                     $isCustom = true;
-                                 }
-                             }
-                        }
+                        $isCustom = ($order->comment || !empty($order->client->production_comment)) 
+                                    || $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
+                                    || $order->client->dishExclusions->contains('id', $dish->id)
+                                    || $this->checkRecursiveConflict($dish, $order->client->ingredientExclusions);
 
-                        if ($isCustom) {
-                            $customOrders[] = $order;
-                        } else {
-                            $standardOrders[] = $order;
-                        }
+                        if ($isCustom) $customOrders[] = $order;
+                        else $standardOrders[] = $order;
                     }
 
                     if (empty($standardOrders) && empty($customOrders)) continue;
-
-                    $standardStructure = $this->calculateIngredientsStructure($dish, $standardOrders);
-                    $stdTotals = $this->calculateTotals($standardStructure);
-
-                    $customCards = [];
-                    foreach ($customOrders as $order) {
-                        $customCards[] = $this->buildCustomCard($dish, $order);
-                    }
 
                     $this->report[$mealName][] = [
                         'meal_name' => $mealName,
                         'dish_id' => $dish->id,
                         'dish_name' => $dish->name,
                         'standard_count' => count($standardOrders),
-                        'standard_structure' => $standardStructure,
-                        'standard_total_netto' => $stdTotals['netto'],
-                        'standard_total_brutto' => $stdTotals['brutto'],
-                        'custom_cards' => $customCards, 
+                        'standard_structure' => $this->calculateIngredientsStructure($dish, $standardOrders),
+                        'standard_total_netto' => $this->calculateTotals($this->calculateIngredientsStructure($dish, $standardOrders))['netto'],
+                        'standard_total_brutto' => $this->calculateTotals($this->calculateIngredientsStructure($dish, $standardOrders))['brutto'],
+                        'custom_cards' => collect($customOrders)->map(fn($o) => $this->buildCustomCard($dish, $o))->toArray(),
                     ];
                 }
             }
         }
     }
-
     /**
      * Основний метод списання складських залишків
      */
