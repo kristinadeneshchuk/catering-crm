@@ -208,7 +208,7 @@ class ClientResource extends Resource
             ]);
     }
 
-    public static function table(Table $table): Table
+public static function table(Table $table): Table
     {
         return $table
             ->columns([
@@ -226,16 +226,50 @@ class ClientResource extends Resource
                 Tables\Columns\TextColumn::make('active_order_progress')
                     ->label('День')
                     ->badge()
-                    ->color('info')
+                    // 🔥 1. БЕЗПЕЧНЕ СОРТУВАННЯ (Знизу вгору: спочатку ті, у кого закінчується замовлення)
+                    ->sortable(query: function ($query, string $direction) {
+                        return $query
+                            ->select('clients.*')
+                            // Використовуємо closure в join, щоб це був справжній LEFT JOIN
+                            // і клієнти без замовлень не зникали з таблиці
+                            ->leftJoin('orders', function ($join) {
+                                $join->on('clients.id', '=', 'orders.client_id')
+                                     ->whereIn('orders.status', ['active', 'new']);
+                            })
+                            ->orderBy('orders.end_date', $direction);
+                    })
+                    // 🔥 2. ВИПРАВЛЕНА ЛОГІКА КОЛЬОРІВ
+                    ->color(function ($state) {
+                        if (!$state) return 'gray'; // Якщо немає замовлення - сірий
+                        
+                        $parts = explode(' / ', $state);
+                        if (count($parts) !== 2) return 'gray';
+
+                        $current = (int)$parts[0];
+                        $total = (int)$parts[1];
+
+                        // Якщо ще не почали (0 / 5) - сірий
+                        if ($current === 0) return 'gray';
+
+                        $diff = $total - $current; // Скільки днів залишилось ПІСЛЯ сьогодні
+
+                        // Якщо 10/10 (різниця 0) -> Червоний (Це останній день!)
+                        if ($diff === 0) return 'danger';
+                        
+                        // Якщо 9/10 (різниця 1) -> Жовтий (Завтра останній день)
+                        if ($diff === 1) return 'warning';
+                        
+                        // Всі інші (8/10 і раніше) -> Зелений
+                        return 'success'; 
+                    })
+                    // 🔥 3. РОЗРАХУНОК ДНІВ (Старий, правильний)
                     ->getStateUsing(function ($record) {
                         $order = $record->orders()
                             ->whereIn('status', ['active', 'new'])
                             ->latest('id')
                             ->first();
 
-                        if (!$order) {
-                            return null;
-                        }
+                        if (!$order) return null;
 
                         $allDays = $order->orderDays()
                             ->orderBy('date', 'asc')
@@ -290,12 +324,14 @@ class ClientResource extends Resource
                     ->label('Адреса')
                     ->limit(20)
                     ->tooltip(fn ($record) => $record->address),
+                
                 Tables\Columns\IconColumn::make('has_cutlery')
-                ->label('Прибори')
-                ->boolean()
-                ->sortable()
-                ->toggleable(),
+                    ->label('Прибори')
+                    ->boolean()
+                    ->sortable()
+                    ->toggleable(),
             ])
+            ->defaultSort('active_order_progress', 'asc') 
             ->actions([
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
