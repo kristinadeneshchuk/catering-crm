@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\ClientResource\Pages;
 use App\Filament\Resources\ClientResource\RelationManagers\OrdersRelationManager;
 use App\Models\Client;
+use App\Models\MealType; // 🔥 Додано для логіки
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -17,6 +18,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\CheckboxList;
 use Carbon\Carbon;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Set; // 🔥 Додано для оновлення стану форми
 
 class ClientResource extends Resource
 {
@@ -83,8 +85,41 @@ class ClientResource extends Resource
                     ])->columns(2),
 
                 Section::make('Налаштування раціону')
-                    ->description('Виберіть, які прийоми їжі отримує клієнт. Система автоматично перерахує вагу порцій.')
+                    ->description('Введіть калораж, і система автоматично підбере кількість страв.')
                     ->schema([
+                        // 🔥 АВТОМАТИЗАЦІЯ ВИБОРУ СТРАВ
+                        TextInput::make('target_kcal')
+                            ->label('Цільові калорії')
+                            ->numeric()
+                            ->default(0)
+                            ->suffix('ккал')
+                            ->live(onBlur: true) // Оновлює дані, коли ви перемикаєтесь на інше поле
+                            ->afterStateUpdated(function ($state, Set $set) {
+                                if (!$state) return;
+
+                                $kcal = (int) $state;
+                                $limit = 5; // Стандарт (1500+)
+
+                                // Логіка:
+                                // < 1200 -> 3 страви
+                                // 1200 - 1499 -> 4 страви
+                                // 1500+ -> 5 страв
+                                if ($kcal < 1200) {
+                                    $limit = 3;
+                                } elseif ($kcal < 1500) {
+                                    $limit = 4;
+                                }
+
+                                // Вибираємо перші N страв за порядком сортування
+                                $mealTypeIds = MealType::orderBy('sort_order', 'asc')
+                                    ->orderBy('id', 'asc')
+                                    ->take($limit)
+                                    ->pluck('id')
+                                    ->toArray();
+
+                                $set('mealTypes', $mealTypeIds);
+                            }),
+
                         Toggle::make('has_cutlery')
                             ->label('Чи додавати прибори?')
                             ->helperText('Якщо увімкнено, до замовлення будуть додані одноразові прибори')
@@ -93,13 +128,14 @@ class ClientResource extends Resource
                             ->onIcon('heroicon-m-check')
                             ->offIcon('heroicon-m-x-mark')
                             ->onColor('success'),
+                        
                         CheckboxList::make('mealTypes')
                             ->label('Активні прийоми їжі')
                             ->relationship('mealTypes', 'name')
                             ->bulkToggleable()
                             ->columns(3)
                             ->gridDirection('row')
-                            ->default(fn () => \App\Models\MealType::pluck('id')->toArray())
+                            ->default(fn () => MealType::pluck('id')->toArray())
                             ->required(),
                     ]),
 
@@ -146,14 +182,10 @@ class ClientResource extends Resource
                             ->prefixIcon('heroicon-o-user-circle'),
                     ])->columns(3),
 
-                Section::make('Параметри раціону та логістика')
+                Section::make('Логістика')
                     ->schema([
-                        TextInput::make('target_kcal')
-                            ->label('Цільові калорії')
-                            ->numeric()
-                            ->default(0)
-                            ->suffix('ккал'),
-                            
+                        // target_kcal перенесено вище
+                        
                         Textarea::make('address')
                             ->label('Адреса доставки')
                             ->columnSpanFull(),
@@ -165,7 +197,6 @@ class ClientResource extends Resource
                             ->columnSpanFull(),
                     ])->columns(1),
 
-                // 🔥 НОВА СЕКЦІЯ: Коментар менеджера
                 Section::make('Для менеджера')
                     ->schema([
                         Textarea::make('manager_comment')
@@ -197,7 +228,6 @@ class ClientResource extends Resource
                     ->badge()
                     ->color('info')
                     ->getStateUsing(function ($record) {
-                        // Шукаємо останнє актуальне замовлення (Активне або Нове)
                         $order = $record->orders()
                             ->whereIn('status', ['active', 'new'])
                             ->latest('id')
@@ -207,7 +237,6 @@ class ClientResource extends Resource
                             return null;
                         }
 
-                        // Отримуємо всі вибрані дні з календаря цього замовлення
                         $allDays = $order->orderDays()
                             ->orderBy('date', 'asc')
                             ->pluck('date')
@@ -220,7 +249,6 @@ class ClientResource extends Resource
                         $today = now()->format('Y-m-d');
                         $currentDayIndex = 0;
 
-                        // Рахуємо порядковий номер дня відносно сьогодні
                         foreach ($allDays as $index => $date) {
                             if ($date <= $today) {
                                 $currentDayIndex = $index + 1;
@@ -240,12 +268,11 @@ class ClientResource extends Resource
                     ->sortable()
                     ->color(fn ($state) => $state < 0 ? 'danger' : 'success'),
 
-                // 🔥 ДОДАНО: Коментар менеджера замість соцмереж
                 Tables\Columns\TextColumn::make('manager_comment')
                     ->label('Коментар')
-                    ->limit(50) // Обрізаємо довгий текст
-                    ->tooltip(fn ($state) => $state) // Повний текст при наведенні
-                    ->wrap(), // Дозволяємо перенос тексту на новий рядок
+                    ->limit(50)
+                    ->tooltip(fn ($state) => $state)
+                    ->wrap(),
 
                 Tables\Columns\TextColumn::make('sales_source')
                     ->label('Джерело')
