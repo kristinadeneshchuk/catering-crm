@@ -41,38 +41,13 @@ class Order extends Model
 
     protected static function booted()
     {
+        // 1. Розрахунок ціни перед збереженням
         static::saving(function ($order) {
-            // === 1. ДИНАМІЧНИЙ РОЗРАХУНОК КОЕФІЦІЄНТА (SCALE FACTOR) ===
-            // Замість фіксованих 2000 ккал, рахуємо реальну вагу меню на день початку замовлення
-            $cycleDays = (int) DB::table('settings')->where('key', 'menu_cycle_days')->value('value') ?: 24;
-            $anchorDate = Carbon::parse('2025-01-01');
-            $startDate = Carbon::parse($order->start_date);
-            
-            $diff = abs($startDate->diffInDays($anchorDate));
-            $globalDay = ($diff % $cycleDays) + 1;
+            $baseKcal = 2000.0; 
+            $order->scale_factor = (float)$order->calories > 0 
+                ? (float)$order->calories / $baseKcal 
+                : 1.0;
 
-            // Знаходимо меню на цей день циклу
-            $dailyMenu = DailyMenu::where('day_number', $globalDay)->first();
-
-            if ($dailyMenu) {
-                $menuTotalKcal = 0;
-                foreach ($dailyMenu->menuItems as $item) {
-                    if ($item->dish) {
-                        // Використовуємо наш виправлений метод розрахунку (Б*4 + Ж*9 + В*4)
-                        $menuTotalKcal += $item->dish->calculated_totals['kcal'];
-                    }
-                }
-
-                // Встановлюємо точний коефіцієнт під ціль клієнта
-                if ($menuTotalKcal > 0) {
-                    $order->scale_factor = (float)$order->calories / $menuTotalKcal;
-                }
-            } else {
-                // Якщо меню не знайдено, ставимо 1.0 як безпечне значення
-                $order->scale_factor = 1.0;
-            }
-
-            // === 2. РОЗРАХУНОК ЦІНИ ===
             $range = CalorieRange::where('min_kcal', '<=', $order->calories)
                 ->where('max_kcal', '>=', $order->calories)
                 ->first();
@@ -90,32 +65,45 @@ class Order extends Model
             }
         });
 
-        // Решта методів (created, updated, deleted) залишаються без змін
+        // === 2. НОВА ЛОГІКА: Вплив на баланс та Статус Оплати ===
+
+        // Коли замовлення СТВОРЕНО
         static::created(function ($order) {
             if ($order->client_id && $order->total_price > 0) {
+                // 1. Списуємо гроші з балансу
                 $order->client->decrement('balance', $order->total_price);
             }
+            // 2. ВАЖЛИВО: Перераховуємо статуси "Оплачено" для всіх замовлень клієнта
             if ($order->client) {
                 $order->client->recalculateOrderPaymentStatus();
             }
         });
 
+        // Коли замовлення ЗМІНЕНО
         static::updated(function ($order) {
             if ($order->client_id && $order->isDirty('total_price')) {
                 $newPrice = $order->total_price;
                 $oldPrice = $order->getOriginal('total_price');
                 $difference = $newPrice - $oldPrice;
+
+                // 1. Коригуємо баланс на різницю ціни
                 $order->client->decrement('balance', $difference);
             }
+            
+            // 2. ВАЖЛИВО: Перераховуємо статуси (ціна змінилась - може щось стало неоплаченим)
             if ($order->client) {
                 $order->client->recalculateOrderPaymentStatus();
             }
         });
 
+        // Коли замовлення ВИДАЛЕНО
         static::deleted(function ($order) {
             if ($order->client_id && $order->total_price > 0) {
+                // 1. Повертаємо гроші на баланс
                 $order->client->increment('balance', $order->total_price);
             }
+
+            // 2. ВАЖЛИВО: Перераховуємо статуси (гроші повернулись, може вистачить на інше замовлення)
             if ($order->client) {
                 $order->client->recalculateOrderPaymentStatus();
             }
