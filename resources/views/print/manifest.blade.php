@@ -103,10 +103,26 @@
                 </div>
 
                 <div>
-                    <div class="flex justify-between items-center mb-1">
+                    {{-- 🔥 ОНОВЛЕНО: БЛОК КАЛОРІЙ ТА БЖВ --}}
+                    <div class="flex justify-between items-end mb-1">
                         <span class="text-[9px] font-black uppercase text-slate-400 italic">Склад раціону:</span>
-                        <span class="text-[13px] font-black {{ $isUfit ? 'text-black' : 'text-green-600' }}">{{ $man['calories'] }} ккал</span>
+                        
+                        <div class="flex items-baseline gap-3">
+                            {{-- БЖВ (сірим кольором, менший шрифт) --}}
+                            <span class="text-[11px] font-bold text-slate-500">
+                                Б:{{ $man['nutrition']['b'] ?? 0 }} 
+                                Ж:{{ $man['nutrition']['j'] ?? 0 }} 
+                                В:{{ $man['nutrition']['u'] ?? 0 }}
+                            </span>
+                            
+                            {{-- Калорії (великий шрифт) --}}
+                            <span class="text-[14px] font-black {{ $isUfit ? 'text-black' : 'text-green-600' }}">
+                                {{ $man['calories'] }} ккал
+                            </span>
+                        </div>
                     </div>
+                    {{-- КІНЕЦЬ ОНОВЛЕНОГО БЛОКУ --}}
+
                     <div class="border border-slate-100 rounded-lg overflow-hidden bg-slate-50/50">
                         @foreach($man['items'] as $item)
                             <div class="flex justify-between py-1 px-3 border-b border-white last:border-0 text-[12px] leading-tight">
@@ -117,7 +133,7 @@
                     </div>
                 </div>
 
-                {{-- ПРИБОРИ (Обидва варіанти тепер в одному стилі) --}}
+                {{-- ПРИБОРИ --}}
                 <div class="flex items-center gap-2">
                     @if(isset($man['has_cutlery']) && $man['has_cutlery'])
                         <div class="flex items-center gap-1 text-[11px] font-bold text-slate-400 uppercase">

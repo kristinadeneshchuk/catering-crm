@@ -10,10 +10,6 @@ use Carbon\Carbon;
 
 class PrintController extends Controller
 {
-    // ... (методи manifest та stickers можна залишити без змін, якщо вони працюють)
-    // Я продублюю manifest та stickers, щоб був повний файл, 
-    // але основні зміни у методі packagingList внизу.
-
     public function manifest(Request $request)
     {
         $inputDate = $request->input('date', now()->format('Y-m-d'));
@@ -24,8 +20,13 @@ class PrintController extends Controller
         $anchorDate = Carbon::parse($startDateStr);
         $globalDay = (abs(Carbon::parse($targetDate)->diffInDays($anchorDate)) % $cycleDays) + 1;
 
+        // 🔥 ВАЖЛИВО: Додаємо dishIngredients, щоб розрахунок БЖУ працював швидко
         $menu = DailyMenu::where('day_number', $globalDay)
-            ->with(['menuItems.dish', 'menuItems.mealType'])
+            ->with([
+                'menuItems.dish.dishIngredients.ingredient', 
+                'menuItems.dish.dishIngredients.childDish', // Якщо є напівфабрикати
+                'menuItems.mealType'
+            ])
             ->first();
 
         if (!$menu) return "❌ На День циклу №{$globalDay} меню ще не створено.";
@@ -41,16 +42,34 @@ class PrintController extends Controller
         foreach ($orders as $order) {
             $scale = (float)($order->scale_factor ?: 1.0);
             $items = [];
+            
+            // Ініціалізуємо лічильники
+            $totalProt = 0;
+            $totalFat = 0;
+            $totalCarb = 0;
+            
             $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType?->sort_order ?? 99);
 
             foreach ($sortedMenuItems as $item) {
                 $clientMealTypes = $order->client->mealTypes->pluck('id')->toArray();
                 if (!in_array($item->meal_type_id, $clientMealTypes)) continue;
 
+                $dish = $item->dish;
+
+                // 🔥 ВИПРАВЛЕННЯ: Беремо розраховані значення з моделі Dish
+                // Використовуємо аксесори total_prot, total_fat, total_carb
+                $p = $dish->total_prot ?? 0;
+                $f = $dish->total_fat ?? 0;
+                $c = $dish->total_carb ?? 0;
+
+                $totalProt += $p * $scale;
+                $totalFat += $f * $scale;
+                $totalCarb += $c * $scale;
+
                 $items[] = [
                     'meal' => $item->mealType?->name ?? '-',
-                    'dish' => $item->dish->name,
-                    'weight' => round(($item->dish->base_weight_g ?? 0) * $scale),
+                    'dish' => $dish->name,
+                    'weight' => round(($dish->base_weight_g ?? 0) * $scale),
                 ];
             }
 
@@ -66,6 +85,11 @@ class PrintController extends Controller
                 'comment'   => $order->comment ?? $order->client?->production_comment,
                 'items'     => $items,
                 'date'      => $targetDate,
+                'nutrition' => [
+                    'b' => round($totalProt),
+                    'j' => round($totalFat),
+                    'u' => round($totalCarb),
+                ]
             ];
         }
 
@@ -90,8 +114,13 @@ class PrintController extends Controller
         $anchorDate = Carbon::parse($startDateStr);
         $globalDay = (abs(Carbon::parse($targetDate)->diffInDays($anchorDate)) % $cycleDays) + 1;
 
+        // 🔥 ВАЖЛИВО: Підвантажуємо childDish для рекурсивної перевірки
         $menu = DailyMenu::where('day_number', $globalDay)
-            ->with(['menuItems.dish.dishIngredients.ingredient', 'menuItems.mealType'])
+            ->with([
+                'menuItems.dish.dishIngredients.ingredient', 
+                'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient', // Вкладені інгредієнти
+                'menuItems.mealType'
+            ])
             ->first();
 
         if (!$menu) return "❌ Меню не створено на завтра ({$targetDate}).";
@@ -106,8 +135,11 @@ class PrintController extends Controller
         $stickers = [];
         foreach ($orders as $order) {
             $scale = (float)($order->scale_factor ?: 1.0);
-            $clientComment = $order->client->production_comment ?? $order->client->comment ?? null;
-            $globalNote = trim(($clientComment ?? '') . ' ' . ($order->comment ?? ''));
+            
+            $clientComment = $order->client->production_comment ?? null;
+            $orderComment = $order->comment ?? null;
+            $globalNote = trim(($clientComment ? "Клієнт: $clientComment. " : "") . ($orderComment ? "Зам: $orderComment" : ""));
+
             $clientMealTypeIds = $order->client->mealTypes->pluck('id')->toArray();
 
             foreach ($menu->menuItems as $item) {
@@ -119,38 +151,80 @@ class PrintController extends Controller
 
                 if (!empty($globalNote)) $changes[] = "⚠️ " . $globalNote;
 
+                // 1. Заміна цілої страви
                 $dishRep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
                 if ($dishRep && $dishRep->replacementDish) {
                     $changes[] = "🔄 ЗАМІНА СТРАВИ: " . $dishRep->replacementDish->name;
                 } elseif ($order->client->dishExclusions->contains('id', $dish->id)) {
                     $changes[] = "⛔ КЛІЄНТ НЕ ЇСТЬ ЦЮ СТРАВУ!";
+                } else {
+                    // 2. Перевірка інгредієнтів (РЕКУРСИВНО)
+                    // Викликаємо функцію для пошуку змін у всіх рівнях вкладеності
+                    $ingredientChanges = $this->findIngredientChanges($dish, $order, $dish->id);
+                    $changes = array_merge($changes, $ingredientChanges);
                 }
 
-                foreach ($dish->dishIngredients as $di) {
-                    if (!$di->ingredient) continue;
-                    if ($order->client->ingredientExclusions->contains('id', $di->ingredient->id)) {
-                        $ingRep = $order->replacements->where('dish_id', $dish->id)->where('original_product_id', $di->ingredient->id)->first();
-                        $changes[] = $ingRep ? "🔄 " . $di->ingredient->name . " -> " . $ingRep->replacementProduct->name : "❌ БЕЗ: " . $di->ingredient->name;
-                    }
+                if (!empty($changes)) {
+                    $stickers[] = [
+                        'client'    => $order->client?->name ?? 'Без імені',
+                        'client_id' => $order->client?->id ?? '---',
+                        'meal'      => $item->mealType?->name ?? 'Прийом',
+                        'dish'      => $dish->name,
+                        'weight'    => round(($dish->base_weight_g ?? 0) * $scale),
+                        'time'      => $item->mealType?->sort_order ?? 99,
+                        'calories'  => $order->calories,
+                        'project'   => $order->project,
+                        'changes'   => $changes, 
+                        'date'      => $targetDate,
+                    ];
                 }
-
-                $stickers[] = [
-                    'client'    => $order->client?->name ?? 'Без імені',
-                    'client_id' => $order->client?->id ?? '---',
-                    'meal'      => $item->mealType?->name ?? 'Прийом',
-                    'dish'      => $dish->name,
-                    'weight'    => round(($dish->base_weight_g ?? 0) * $scale),
-                    'time'      => $item->mealType?->sort_order ?? 99,
-                    'calories'  => $order->calories,
-                    'project'   => $order->project,
-                    'changes'   => $changes, 
-                    'date'      => $targetDate,
-                ];
             }
         }
+
         usort($stickers, fn($a, $b) => strcmp($a['client'], $b['client']) ?: $a['time'] <=> $b['time']);
+
         $date = $inputDate;
         return view('print.stickers', compact('stickers', 'date'));
+    }
+
+    /**
+     * 🔥 Допоміжний метод для рекурсивного пошуку замін в інгредієнтах
+     */
+    private function findIngredientChanges($dishOrChildDish, $order, $rootDishId)
+    {
+        $changes = [];
+
+        if (!$dishOrChildDish || !$dishOrChildDish->dishIngredients) {
+            return $changes;
+        }
+
+        foreach ($dishOrChildDish->dishIngredients as $di) {
+            // А. Якщо це звичайний інгредієнт
+            if ($di->ingredient) {
+                // Перевіряємо виключення
+                if ($order->client->ingredientExclusions->contains('id', $di->ingredient->id)) {
+                    // Шукаємо, чи була заміна для цього інгредієнта в рамках ЦІЄЇ головної страви ($rootDishId)
+                    $ingRep = $order->replacements
+                        ->where('dish_id', $rootDishId)
+                        ->where('original_product_id', $di->ingredient->id)
+                        ->first();
+
+                    if ($ingRep) {
+                        $changes[] = "🔄 " . $di->ingredient->name . " ➡ " . $ingRep->replacementProduct->name;
+                    } else {
+                        $changes[] = "❌ БЕЗ: " . $di->ingredient->name;
+                    }
+                }
+            }
+
+            // Б. Якщо це напівфабрикат (Child Dish) -> пірнаємо всередину
+            if ($di->childDish) {
+                $subChanges = $this->findIngredientChanges($di->childDish, $order, $rootDishId);
+                $changes = array_merge($changes, $subChanges);
+            }
+        }
+
+        return $changes;
     }
 
     /**
