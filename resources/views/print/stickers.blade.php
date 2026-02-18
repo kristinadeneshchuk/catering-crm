@@ -68,7 +68,8 @@
         @php
             $projName = strtolower($sticker['project'] ?? '');
             $isUfit = str_contains($projName, 'fit');
-            $brandColor = $isUfit ? '#000000' : '#ea580c';
+            // 🔥 ЗМІНА 1: Зелений колір замість помаранчевого
+            $brandColor = $isUfit ? '#000000' : '#22c55e';
         @endphp
 
         <div class="sticker-page p-3">
@@ -125,7 +126,8 @@
             
             {{-- Бренд --}}
             <div class="absolute bottom-1 left-4 opacity-10 text-[8px] font-bold uppercase tracking-tighter">
-                {{ $isUfit ? 'U-FIT PREMIUM' : 'AVOCADO FOOD DELIVERY' }}
+                {{-- 🔥 ЗМІНА 2: Новий текст бренду --}}
+                {{ $isUfit ? 'U-FIT PREMIUM' : 'AFOOD DELIVERY' }}
             </div>
         </div>
     @endforeach

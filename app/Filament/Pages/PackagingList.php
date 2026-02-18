@@ -14,6 +14,7 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Form;
 use Filament\Actions\Action;
 use Carbon\Carbon;
+use Illuminate\Support\HtmlString;
 
 class PackagingList extends Page implements HasForms
 {
@@ -28,6 +29,9 @@ class PackagingList extends Page implements HasForms
     public array $report = [];
     public ?string $debugMessage = null;
 
+    /** @var array<int, array{items: array, totals?: array}> */
+    private array $orderPlans = [];
+
     public function mount(): void
     {
         $this->form->fill(['date' => request()->query('date', now()->format('Y-m-d'))]);
@@ -36,22 +40,21 @@ class PackagingList extends Page implements HasForms
 
     protected function getHeaderActions(): array
     {
-        // 🔥 ВАЖЛИВО: Беремо дату фасування (17.02)
         $dateParam = $this->data['date'] ?? now()->format('Y-m-d');
-        
+
         return [
             Action::make('print_stickers')
                 ->label('1. Стікери')
                 ->icon('heroicon-o-tag')
                 ->color('gray')
-                ->url(fn () => route('print.stickers', ['date' => $dateParam])) 
+                ->url(fn () => route('print.stickers', ['date' => $dateParam]))
                 ->openUrlInNewTab(),
 
             Action::make('print_manifest')
                 ->label('2. На пакет')
                 ->icon('heroicon-o-shopping-bag')
                 ->color('warning')
-                ->url(fn () => route('print.manifest', ['date' => $dateParam])) 
+                ->url(fn () => route('print.manifest', ['date' => $dateParam]))
                 ->openUrlInNewTab(),
 
             Action::make('download_logistics')
@@ -62,92 +65,90 @@ class PackagingList extends Page implements HasForms
         ];
     }
 
-public function form(Form $form): Form
+    public function form(Form $form): Form
     {
         return $form->schema([
             Grid::make(2)->schema([
-                // Ліва колонка: Вибір дати
                 DatePicker::make('date')
                     ->label('Дата фасування (сьогодні)')
                     ->required()
                     ->live()
-                    ->afterStateUpdated(fn() => $this->calculate()),
+                    ->afterStateUpdated(fn () => $this->calculate()),
 
-                // Права колонка: Інфо-блок + Кнопка під ним
-                \Filament\Forms\Components\Group::make()->schema([
-                    
-                    // 1. Сірий інформаційний блок (Тільки текст)
-                    Placeholder::make('info_text')
-                        ->label('Цільова дата')
-                        ->content(function() {
-                            $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
-                            $targetDateObj = \Carbon\Carbon::parse($selectedDate)->addDay();
-                            
-                            $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-                            $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
-                            $anchorDate = Carbon::parse($startDateStr);
-                            
-                            $diff = abs($targetDateObj->diffInDays($anchorDate));
-                            $dayNum = ($diff % $cycleDays) + 1;
+                Placeholder::make('info_text')
+                    ->label('Цільова дата')
+                    ->content(function () {
+                        $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
+                        $targetDateObj = Carbon::parse($selectedDate)->addDay();
 
-                            // Тільки HTML з текстом, без кнопки всередині
-                            return new \Illuminate\Support\HtmlString(
-                                "<div class='p-4 bg-gray-900 border border-gray-700 rounded-lg text-white'>
-                                    📦 Фасування на <strong class='text-primary-400'>завтра (" . $targetDateObj->format('d.m.Y') . ")</strong>. 
-                                    <br> Це буде <strong class='text-primary-400'>" . $dayNum . "-й день</strong> циклу меню.
-                                </div>"
-                            );
-                        }),
+                        $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
+                        $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
+                        $anchorDate = Carbon::parse($startDateStr);
 
-                    // 2. Жовта кнопка (Окремим компонентом)
-                    \Filament\Forms\Components\Actions::make([
-                        \Filament\Forms\Components\Actions\Action::make('print_view')
-                            ->label('🖨 Відкрити версію для друку')
-                            ->color('warning')
-                            ->url(fn () => route('print.packaging-list', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
-                            ->openUrlInNewTab()
-                    ])->alignRight(), // Вирівнювання праворуч
-                ])
+                        $diff = abs($targetDateObj->diffInDays($anchorDate));
+                        $dayNum = ($diff % $cycleDays) + 1;
+
+                        return new HtmlString(
+                            "<div class='p-4 bg-gray-900 border border-gray-700 rounded-lg text-white'>
+                                📦 Фасування на <strong class='text-primary-400'>завтра (" . $targetDateObj->format('d.m.Y') . ")</strong>.
+                                <br> Це буде <strong class='text-primary-400'>" . $dayNum . "-й день</strong> циклу меню.
+                            </div>"
+                        );
+                    }),
             ])
         ])->statePath('data');
     }
 
-    public function calculate()
+    // =========================================================
+    // ✅ ОСНОВНИЙ РОЗРАХУНОК ФАСУВАННЯ (ПРАВИЛЬНИЙ)
+    // =========================================================
+    public function calculate(): void
     {
-        // Використовуйте метод calculate з мого попереднього повідомлення,
-        // де ми вже виправили логіку 950/1200 ккал.
-        // (Можу продублювати сюди, якщо потрібно)
-        $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
-        $targetDate = \Carbon\Carbon::parse($selectedDate)->addDay();
-        
+        $selectedDate  = $this->data['date'] ?? now()->format('Y-m-d');
+        $targetDateObj = Carbon::parse($selectedDate)->addDay();
+        $targetDate    = $targetDateObj->format('Y-m-d');
+
         $this->report = [];
-        
-        $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
+        $this->orderPlans = [];
+        $this->debugMessage = null;
+
+        $cycleDays    = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
         $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
-        $anchorDate = Carbon::parse($startDateStr);
-        
-        $diff = abs($targetDate->diffInDays($anchorDate));
+        $anchorDate   = Carbon::parse($startDateStr);
+
+        $diff = abs($targetDateObj->diffInDays($anchorDate));
         $globalDay = ($diff % $cycleDays) + 1;
 
         $menu = DailyMenu::where('day_number', $globalDay)
-            ->with(['menuItems.dish.dishIngredients.ingredient', 'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient', 'menuItems.mealType'])
+            ->with([
+                'menuItems.dish.dishIngredients.ingredient',
+                'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
+                'menuItems.mealType'
+            ])
             ->first();
 
         if (!$menu) {
-            $this->debugMessage = "⚠️ Меню на {$targetDate->format('d.m.Y')} (день циклу: {$globalDay}) не знайдено"; 
+            $this->debugMessage = "⚠️ Меню на {$targetDateObj->format('d.m.Y')} (день циклу {$globalDay}) не знайдено";
             return;
         }
-        $this->debugMessage = null;
 
         $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', function ($query) use ($targetDate) {
-                $query->where('date', $targetDate->format('Y-m-d'));
-            })
-            ->with(['client.mealTypes', 'client.ingredientExclusions', 'replacements.replacementProduct', 'replacements.originalProduct'])
+            ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
+            ->with(['client.mealTypes'])
             ->get();
 
-        $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType->sort_order ?? 99);
+        if ($orders->isEmpty()) {
+            return;
+        }
 
+        // ✅ 1) Строим ПРАВИЛЬНЫЙ план (как в ProductionReport / PrintController)
+        foreach ($orders as $order) {
+            $this->orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
+        }
+
+        $sortedMenuItems = $menu->menuItems->sortBy(fn ($i) => $i->mealType?->sort_order ?? 99);
+
+        // ✅ 2) Фасування по кожній страві меню
         foreach ($sortedMenuItems as $mItem) {
             $dish = $mItem->dish;
             if (!$dish) continue;
@@ -155,90 +156,164 @@ public function form(Form $form): Form
             $tableData = [
                 'meal' => $mItem->mealType->name ?? 'Інше',
                 'dish_name' => $dish->name,
+
+                // columns: [kcal => ['count'=>int, 'sum_scale'=>float]]
                 'columns' => [],
                 'rows' => [],
-                'individual_notes' => []
             ];
 
             foreach ($orders as $order) {
-                $clientMealTypeIds = $order->client->mealTypes->pluck('id')->toArray();
-                if (!in_array($mItem->meal_type_id, $clientMealTypeIds)) continue;
+                $plan = $this->orderPlans[$order->id] ?? null;
+                if (!$plan) continue;
 
-                $kcal = (int)$order->calories;
-                $mealsCount = $order->client->mealTypes->count();
-                $expectedMeals = 5; 
-                if ($kcal < 1200) $expectedMeals = 3;
-                elseif ($kcal < 1500) $expectedMeals = 4;
+                $plannedWeight = $this->plannedDishWeight(
+                    $plan['items'] ?? [],
+                    (int)$dish->id,
+                    (int)$mItem->meal_type_id
+                );
 
-                if ($mealsCount === $expectedMeals) {
-                    $factor = 1.0;
-                } else {
-                    $activePercentSum = $order->client->mealTypes->sum('energy_percent');
-                    $factor = ($activePercentSum > 0) ? (100 / $activePercentSum) : 1.0;
-                }
+                if ($plannedWeight === null) continue;
 
-                $scale = (float)($order->scale_factor ?: 1.0) * $factor;
-                
-                $replacements = $order->replacements->where('dish_id', $dish->id)->whereNotNull('original_product_id');
-                $conflicts = [];
-                if ($order->client->ingredientExclusions->isNotEmpty()) {
-                    $conflicts = $this->getConflictingIngredients($dish, $order->client->ingredientExclusions);
-                }
+                $baseW = (float)($dish->base_weight_g ?? 0);
+                $dishScale = $baseW > 0 ? ((float)$plannedWeight / $baseW) : 0.0;
 
-                $noteParts = [];
-                foreach($replacements as $r) {
-                    $noteParts[] = "🔄 " . ($r->originalProduct->name ?? '?') . " ➡ " . ($r->replacementProduct->name ?? '?');
-                }
-                foreach($conflicts as $conflictName) {
-                    $noteParts[] = "⛔ Без: {$conflictName}";
-                }
-
-                if (!empty($noteParts)) {
-                    $tableData['individual_notes'][] = "• (#{$order->client->id}) {$order->client->name}: " . implode(', ', $noteParts);
-                }
-
-                if ($factor >= 0.99 && $factor <= 1.01) {
-                    $colKey = (string)(int)$order->calories;
-                } else {
-                    $colKey = (int)$order->calories . ' (Інд. x' . round($factor, 2) . ')';
-                }
+                $colKey = (string)(int)($order->calories ?? 0);
 
                 if (!isset($tableData['columns'][$colKey])) {
-                    $tableData['columns'][$colKey] = ['count' => 0, 'scale' => $scale];
+                    $tableData['columns'][$colKey] = [
+                        'count' => 0,
+                        'sum_scale' => 0.0,
+                    ];
                 }
+
                 $tableData['columns'][$colKey]['count']++;
+                $tableData['columns'][$colKey]['sum_scale'] += $dishScale;
             }
+
+            if (empty($tableData['columns'])) continue;
 
             ksort($tableData['columns']);
 
+            // ✅ 3) Масштабуємо інгредієнти (правильно: net_weight_g * sum_scale)
             foreach ($dish->dishIngredients as $di) {
-                $originalName = $di->ingredient ? $di->ingredient->name : ($di->childDish ? "📦 " . $di->childDish->name : '???');
+                $name = $di->ingredient
+                    ? $di->ingredient->name
+                    : ($di->childDish ? "📦 " . $di->childDish->name : '???');
+
                 $cells = [];
                 foreach ($tableData['columns'] as $key => $col) {
-                    $cells[$key] = ['val' => round($di->net_weight_g * $col['scale'])];
+                    $sumScale = (float)($col['sum_scale'] ?? 0.0);
+                    $cells[$key] = [
+                        'val' => round(((float)($di->net_weight_g ?? 0)) * $sumScale),
+                    ];
                 }
-                $tableData['rows'][] = ['original_name' => $originalName, 'cells' => $cells];
+
+                $tableData['rows'][] = [
+                    'original_name' => $name,
+                    'cells' => $cells,
+                ];
             }
 
-            if (!empty($tableData['columns'])) $this->report[] = $tableData;
+            $this->report[] = $tableData;
         }
     }
 
-    private function getConflictingIngredients($dish, $exclusions, $prefix = ''): array
-    {
-        $found = [];
-        if (!$dish || !$dish->dishIngredients) return [];
+    // =========================================================
+    // 🔧 ДОПОМІЖНІ МЕТОДИ
+    // =========================================================
 
-        foreach ($dish->dishIngredients as $di) {
-            if ($di->ingredient_id && $exclusions->contains('id', $di->ingredient_id)) {
-                $name = $di->ingredient->name . ($prefix ? " (у {$prefix})" : "");
-                $found[] = $name;
-            }
-            if ($di->child_dish_id && $di->childDish) {
-                $subFound = $this->getConflictingIngredients($di->childDish, $exclusions, $di->childDish->name);
-                $found = array_merge($found, $subFound);
+    private function plannedDishWeight(array $items, int $dishId, int $mealTypeId): ?int
+    {
+        foreach ($items as $it) {
+            if ((int)($it['dish_id'] ?? 0) === $dishId && (int)($it['meal_type_id'] ?? 0) === $mealTypeId) {
+                return (int)($it['weight'] ?? 0);
             }
         }
-        return $found;
+        return null;
+    }
+
+    /**
+     * ✅ ТА Ж ЛОГІКА, ЩО В ProductionReport/PrintController:
+     * - отбираем mealTypes клиента
+     * - выбираем первые N блюд по sort_order
+     * - распределяем ккал по energy_percent (нормализуем по использованным mealTypes)
+     * - считаем вес блюда по kcalPerDish и kcalPer100
+     */
+    private function calculateOrderPlan(Order $order, DailyMenu $menu): array
+    {
+        $targetKcal = (float)($order->calories ?? 0);
+        if ($targetKcal <= 0) return ['items' => []];
+
+        $clientMealTypeIds = $order->client?->mealTypes?->pluck('id')->toArray() ?? [];
+
+        $availableItems = $menu->menuItems
+            ->filter(fn ($item) => $item->dish && in_array($item->meal_type_id, $clientMealTypeIds, true))
+            ->sortBy(fn ($item) => $item->mealType?->sort_order ?? 99)
+            ->values();
+
+        if ($availableItems->isEmpty()) return ['items' => []];
+
+        $expectedDishes = $this->expectedDishCount((int)$targetKcal);
+
+        $selected = $availableItems->take($expectedDishes);
+        if ($selected->isEmpty()) return ['items' => []];
+
+        $byMeal = $selected->groupBy('meal_type_id');
+
+        // нормализация процентов
+        $percentSum = 0.0;
+        foreach ($byMeal as $mealTypeId => $items) {
+            $percentSum += (float)($items->first()->mealType?->energy_percent ?? 0);
+        }
+        if ($percentSum <= 0) $percentSum = 100.0;
+
+        $itemsOut = [];
+
+        foreach ($byMeal as $mealTypeId => $items) {
+            $mealType = $items->first()->mealType;
+            $p = (float)($mealType?->energy_percent ?? 0);
+
+            $mealKcal = ($p > 0)
+                ? $targetKcal * ($p / $percentSum)
+                : $targetKcal * (1.0 / max(1, $byMeal->count()));
+
+            $countInMeal = max(1, $items->count());
+            $kcalPerDish = $mealKcal / $countInMeal;
+
+            foreach ($items as $mi) {
+                $dish = $mi->dish;
+                if (!$dish) continue;
+
+                $kcalPer100 = $this->dishKcalPer100g($dish);
+                $weight = ($kcalPer100 > 0)
+                    ? (int) round(($kcalPerDish / $kcalPer100) * 100.0)
+                    : 0;
+
+                $itemsOut[] = [
+                    'dish_id' => (int)$dish->id,
+                    'meal_type_id' => (int)$mealTypeId,
+                    'weight' => $weight,
+                ];
+            }
+        }
+
+        return ['items' => $itemsOut];
+    }
+
+    private function expectedDishCount(int $kcal): int
+    {
+        if ($kcal < 1200) return 3;
+        if ($kcal < 1500) return 4;
+        return 5;
+    }
+
+    private function dishKcalPer100g($dish): float
+    {
+        $baseW = (float)($dish->base_weight_g ?? 0);
+        $totalKcal = (float)($dish->total_kcal ?? 0);
+
+        if ($baseW <= 0 || $totalKcal <= 0) return 0.0;
+
+        return ($totalKcal / $baseW) * 100.0;
     }
 }

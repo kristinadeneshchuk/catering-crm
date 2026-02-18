@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
@@ -14,20 +15,10 @@ class Order extends Model
     use HasFactory;
 
     protected $fillable = [
-        'client_id', 
-        'tariff_id', 
-        'project',
-        'is_paid',
-        'start_date', 
-        'end_date',
-        'duration',
-        'status', 
-        'calories', 
-        'scale_factor', 
-        'total_price', 
-        'comment',
-        'schedule_type',
-        'delivery_time'
+        'client_id', 'tariff_id', 'project', 'is_paid',
+        'start_date', 'end_date', 'duration', 'status',
+        'calories', 'scale_factor', 'total_price',
+        'comment', 'schedule_type', 'delivery_time'
     ];
 
     protected $casts = [
@@ -41,13 +32,21 @@ class Order extends Model
 
     protected static function booted()
     {
-        // 1. Розрахунок ціни перед збереженням
+        /**
+         * ✅ ВАЖНО:
+         * Більше НЕ рахуємо scale_factor тут.
+         * Бо меню різне по днях — фактор має бути денний і рахуватися "на льоту".
+         *
+         * Тут залишаємо тільки розрахунок ціни (як у тебе було).
+         */
         static::saving(function ($order) {
-            $baseKcal = 2000.0; 
-            $order->scale_factor = (float)$order->calories > 0 
-                ? (float)$order->calories / $baseKcal 
-                : 1.0;
 
+            // Якщо scale_factor не заданий — тримаємо 1.0 як дефолт (для сумісності)
+            if ($order->scale_factor === null) {
+                $order->scale_factor = 1.0;
+            }
+
+            // --- Розрахунок ціни (Стандарт) ---
             $range = CalorieRange::where('min_kcal', '<=', $order->calories)
                 ->where('max_kcal', '>=', $order->calories)
                 ->first();
@@ -65,137 +64,186 @@ class Order extends Model
             }
         });
 
-        // === 2. НОВА ЛОГІКА: Вплив на баланс та Статус Оплати ===
-
-        // Коли замовлення СТВОРЕНО
-        static::created(function ($order) {
-            if ($order->client_id && $order->total_price > 0) {
-                // 1. Списуємо гроші з балансу
-                $order->client->decrement('balance', $order->total_price);
-            }
-            // 2. ВАЖЛИВО: Перераховуємо статуси "Оплачено" для всіх замовлень клієнта
-            if ($order->client) {
-                $order->client->recalculateOrderPaymentStatus();
-            }
-        });
-
-        // Коли замовлення ЗМІНЕНО
-        static::updated(function ($order) {
-            if ($order->client_id && $order->isDirty('total_price')) {
-                $newPrice = $order->total_price;
-                $oldPrice = $order->getOriginal('total_price');
-                $difference = $newPrice - $oldPrice;
-
-                // 1. Коригуємо баланс на різницю ціни
-                $order->client->decrement('balance', $difference);
-            }
-            
-            // 2. ВАЖЛИВО: Перераховуємо статуси (ціна змінилась - може щось стало неоплаченим)
-            if ($order->client) {
-                $order->client->recalculateOrderPaymentStatus();
-            }
-        });
-
-        // Коли замовлення ВИДАЛЕНО
-        static::deleted(function ($order) {
-            if ($order->client_id && $order->total_price > 0) {
-                // 1. Повертаємо гроші на баланс
-                $order->client->increment('balance', $order->total_price);
-            }
-
-            // 2. ВАЖЛИВО: Перераховуємо статуси (гроші повернулись, може вистачить на інше замовлення)
-            if ($order->client) {
-                $order->client->recalculateOrderPaymentStatus();
-            }
-        });
+        // Інші події (як у тебе)
+        static::created(fn ($o) => self::handleBalance($o, 'sub'));
+        static::updated(fn ($o) => self::handleBalanceUpdate($o));
+        static::deleted(fn ($o) => self::handleBalance($o, 'add'));
     }
 
+    // =========================
+    // Баланс / оплата
+    // =========================
+    private static function handleBalance($order, $op)
+    {
+        if ($order->client_id && $order->total_price > 0) {
+            $op === 'sub'
+                ? $order->client->decrement('balance', $order->total_price)
+                : $order->client->increment('balance', $order->total_price);
+        }
+        if ($order->client) $order->client->recalculateOrderPaymentStatus();
+    }
+
+    private static function handleBalanceUpdate($order)
+    {
+        if ($order->client_id && $order->isDirty('total_price')) {
+            $diff = $order->total_price - $order->getOriginal('total_price');
+            $order->client->decrement('balance', $diff);
+        }
+        if ($order->client) $order->client->recalculateOrderPaymentStatus();
+    }
+
+    // =========================
+    // Relations
+    // =========================
     public function client(): BelongsTo { return $this->belongsTo(Client::class); }
     public function tariff(): BelongsTo { return $this->belongsTo(Tariff::class); }
+    public function replacements(): HasMany { return $this->hasMany(OrderReplacement::class); }
+    public function transactions(): HasMany { return $this->hasMany(Transaction::class); }
+    public function orderDays(): HasMany { return $this->hasMany(OrderDay::class); }
 
+    // =========================================================
+    // ✅ ГОЛОВНА ФУНКЦІЯ: ДЕННИЙ scale_factor (а не “раз і назавжди”)
+    // =========================================================
+    public function getScaleFactorForDate(Carbon $date): float
+    {
+        $cycleDays = (int) DB::table('settings')->where('key', 'menu_cycle_days')->value('value') ?: 24;
+
+        // бажано теж тягнути з settings, але залишаю як у тебе, щоб не ламати логіку
+        $anchorDate = Carbon::parse('2025-01-01');
+
+        $diff = abs($date->diffInDays($anchorDate));
+        $globalDay = ($diff % $cycleDays) + 1;
+
+        $dailyMenu = DailyMenu::where('day_number', $globalDay)
+            ->with(['menuItems.dish', 'menuItems.mealType'])
+            ->first();
+
+        if (!$dailyMenu) return 1.0;
+
+        $clientMealTypeIds = $this->client?->mealTypes->pluck('id')->toArray() ?? [];
+        if (empty($clientMealTypeIds)) return 1.0;
+
+        // Рахуємо базу: суму "базових" ккал страв, які клієнт реально їсть (по прийомах їжі)
+        $menuKcal = 0.0;
+        $processedMeals = [];
+
+        foreach ($dailyMenu->menuItems as $item) {
+            if (!$item->dish) continue;
+            if (!in_array($item->meal_type_id, $clientMealTypeIds, true)) continue;
+
+            // Захист від дублю одного прийому їжі
+            if (isset($processedMeals[$item->meal_type_id])) continue;
+            $processedMeals[$item->meal_type_id] = true;
+
+            $menuKcal += (float)($item->dish->total_kcal ?? 0);
+        }
+
+        if ($menuKcal <= 0) return 1.0;
+
+        return round(((float)$this->calories) / $menuKcal, 4);
+    }
+
+    // =========================================================
+    // Меню з масштабуванням (по дням)
+    // =========================================================
     public function getScaledMenu(): array
     {
-        $k = (float)($this->scale_factor ?: 1.0);
         $period = CarbonPeriod::create($this->start_date, $this->end_date);
         $finalMenu = [];
 
         $cycleDays = (int) DB::table('settings')->where('key', 'menu_cycle_days')->value('value') ?: 24;
         $anchorDate = Carbon::parse('2025-01-01');
 
+        // Які прийоми їжі клієнт активні
+        $clientMealTypeIds = $this->client?->mealTypes->pluck('id')->toArray() ?? [];
+
         foreach ($period as $date) {
             $dateStr = $date->format('Y-m-d');
+
             $diffInDays = abs($date->diffInDays($anchorDate));
             $globalDay = ($diffInDays % $cycleDays) + 1;
 
             $dailyMenu = DailyMenu::where('day_number', $globalDay)
-                ->with(['menuItems.dish.dishIngredients.ingredient', 'menuItems.dish.dishIngredients.childDish'])
+                ->with([
+                    'menuItems.mealType',
+                    'menuItems.dish.dishIngredients.ingredient',
+                    'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
+                    'menuItems.dish.dishIngredients.childDish.dishIngredients.childDish',
+                ])
                 ->first();
 
-            if ($dailyMenu) {
-                foreach ($dailyMenu->menuItems as $item) {
-                    $dish = $item->dish;
-                    if ($dish) {
-                        $finalMenu[$dateStr][] = [
-                            'day_of_cycle' => $globalDay,
-                            'dish_name' => $dish->name,
-                            'meal_type' => $item->mealType?->name ?? 'Прийом їжі',
-                            'target_kcal' => round($dish->total_kcal * $k, 1),
-                            'ingredients' => $this->getScaledIngredients($dish, $k),
-                        ];
-                    }
+            if (!$dailyMenu) continue;
+
+            // ✅ Денний коефіцієнт
+            $k = $this->getScaleFactorForDate($date);
+
+            foreach ($dailyMenu->menuItems as $item) {
+                $dish = $item->dish;
+                if (!$dish) continue;
+
+                if (!empty($clientMealTypeIds) && $item->meal_type_id && !in_array($item->meal_type_id, $clientMealTypeIds, true)) {
+                    continue;
                 }
+
+                $finalMenu[$dateStr][] = [
+                    'day_of_cycle' => $globalDay,
+                    'dish_name' => $dish->name,
+                    'meal_type' => $item->mealType?->name ?? 'Прийом їжі',
+                    'target_kcal' => round(((float)$dish->total_kcal) * $k, 1),
+                    'ingredients' => $this->getScaledIngredients($dish, $k),
+                ];
             }
         }
 
         return $finalMenu;
     }
- 
-    private function getScaledIngredients($dish, $k, $subDishRatio = 1): array
+
+    // =========================================================
+    // ✅ Масштаб інгредієнтів з правильною ПФ-логікою
+    // =========================================================
+    private function getScaledIngredients($dish, float $k, float $subDishRatio = 1.0): array
     {
         $list = [];
         if (!$dish || !$dish->dishIngredients) return $list;
 
         foreach ($dish->dishIngredients as $item) {
             $currentK = $k * $subDishRatio;
-            $type = mb_strtolower(trim($item->type));
+            $type = mb_strtolower(trim((string)($item->type ?? '')));
 
-            if (in_array($type, ['product', 'продукт']) && $item->ingredient) {
-                $net = (float)$item->net_weight_g * $currentK;
+            // 1) Продукт
+            if (in_array($type, ['product', 'продукт'], true) && $item->ingredient) {
+                $net = (float)($item->net_weight_g ?? 0) * $currentK;
+
                 $yield = (float)($item->ingredient->yield_percent ?: 100);
-                
+                if ($yield <= 0) $yield = 100;
+
                 $list[] = [
                     'name' => $item->ingredient->name,
                     'net_weight' => round($net, 1),
-                    'gross_weight' => round(($net * 100) / $yield, 1),
+                    'gross_weight' => round(($net * 100.0) / $yield, 1),
                 ];
-            } 
-            elseif (in_array($type, ['pf', 'пф', 'напівфабрикат']) && $item->childDish) {
-                $pfBaseWeight = (float)$item->childDish->base_weight_g ?: 100;
-                $pfRatio = (float)$item->net_weight_g / $pfBaseWeight;
-                
-                $list = array_merge($list, $this->getScaledIngredients($item->childDish, $k, $pfRatio));
+            }
+
+            // 2) Напівфабрикат
+            elseif (in_array($type, ['pf', 'пф', 'напівфабрикат', 'п/ф', 'н/ф'], true) && $item->childDish) {
+
+                // ✅ net_weight_g тут = СКІЛЬКИ ГОТОВОГО ПФ ми кладемо у страву (вихід)
+                $pfTotals = $item->childDish->calculated_totals;
+                $pfOutput = (float)($pfTotals['output_weight'] ?? 0);
+
+                if ($pfOutput <= 0) {
+                    // якщо ПФ некоректний — пропускаємо, щоб не псувати математику
+                    continue;
+                }
+
+                // Частка від повного виходу ПФ
+                $pfRatio = ((float)($item->net_weight_g ?? 0) * $currentK) / $pfOutput;
+
+                // Рекурсивно масштабуємо закладку всередині ПФ
+                $list = array_merge($list, $this->getScaledIngredients($item->childDish, 1.0, $pfRatio));
             }
         }
+
         return $list;
-    }
-
-    public function replacements()
-    {
-        return $this->hasMany(OrderReplacement::class);
-    }
-
-    public function transactions()
-    {
-        return $this->hasMany(Transaction::class);
-    }
-
-    public function calendar()
-    {
-        return $this->hasOne(self::class, 'id', 'id');
-    }
-
-    public function orderDays()
-    {
-        return $this->hasMany(OrderDay::class);
     }
 }

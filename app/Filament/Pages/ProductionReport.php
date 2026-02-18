@@ -9,7 +9,7 @@ use App\Models\DailyMenu;
 use App\Models\Order;
 use App\Models\Setting;
 use App\Models\Ingredient;
-use App\Models\Dish; 
+use App\Models\Dish;
 use App\Models\OrderReplacement;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -21,6 +21,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Placeholder;
+use Illuminate\Support\HtmlString;
 
 class ProductionReport extends Page implements HasForms
 {
@@ -36,9 +37,14 @@ class ProductionReport extends Page implements HasForms
     public float $currentDayNumber = 0;
     protected $activeOrders = null;
 
+    public ?string $debugMessage = null;
+
+    /** @var array<int, array{items: array, totals: array}> */
+    private array $orderPlans = [];
+
     public static function canAccess(): bool
     {
-        return in_array(auth()->user()->role, ['admin', 'manager', 'cook']);
+        return in_array(auth()->user()->role, ['admin', 'manager', 'cook'], true);
     }
 
     public function mount(): void
@@ -48,102 +54,91 @@ class ProductionReport extends Page implements HasForms
         $this->calculate();
     }
 
-    /**
-     * Кнопки у верхній панелі сторінки
-     */
-  protected function getHeaderActions(): array
-{
-    // 1. Поточна дата з форми (день роботи)
-    $dateParam = $this->data['date'] ?? now()->format('Y-m-d');
-    
-    // 2. 🔥 Цільова дата (день споживання = завтра)
-    // Використовуємо $dateParam замість неіснуючої $selectedDate
-    $targetDate = \Carbon\Carbon::parse($dateParam)->addDay()->format('Y-m-d');
-    
-    $settingKey = "stock_debited_{$dateParam}";
-    $isAlreadyDebited = \App\Models\Setting::where('key', $settingKey)->where('value', '1')->exists();
+    protected function getHeaderActions(): array
+    {
+        $dateParam = $this->data['date'] ?? now()->format('Y-m-d');
 
-    return [
-        \Filament\Actions\Action::make('debit_stock')
-            ->label($isAlreadyDebited ? "Зміну за {$dateParam} вже закрито" : 'Закрити зміну та списати склад')
-            ->icon($isAlreadyDebited ? 'heroicon-o-lock-closed' : 'heroicon-o-archive-box-arrow-down')
-            ->color($isAlreadyDebited ? 'warning' : 'danger')
-            ->disabled($isAlreadyDebited) 
-            ->requiresConfirmation(fn() => !$isAlreadyDebited)
-            ->modalHeading('Підтвердити списання залишків?')
-            ->modalDescription('Система автоматично відніме вагу БРУТТО всіх інгредієнтів. Цю дію неможливо скасувати.')
-            ->action(function () use ($settingKey, $dateParam) {
-                $checkAgain = \App\Models\Setting::where('key', $settingKey)->where('value', '1')->exists();
+        $settingKey = "stock_debited_{$dateParam}";
+        $isAlreadyDebited = Setting::where('key', $settingKey)->where('value', '1')->exists();
 
-                if ($checkAgain) {
-                    \Filament\Notifications\Notification::make()
-                        ->title('Операцію скасовано')
-                        ->body("Зміну за {$dateParam} вже закрито.")
-                        ->warning()
+        return [
+            Action::make('debit_stock')
+                ->label($isAlreadyDebited ? "Зміну за {$dateParam} вже закрито" : 'Закрити зміну та списати склад')
+                ->icon($isAlreadyDebited ? 'heroicon-o-lock-closed' : 'heroicon-o-archive-box-arrow-down')
+                ->color($isAlreadyDebited ? 'warning' : 'danger')
+                ->disabled($isAlreadyDebited)
+                ->requiresConfirmation(fn () => !$isAlreadyDebited)
+                ->modalHeading('Підтвердити списання залишків?')
+                ->modalDescription('Система автоматично відніме вагу БРУТТО всіх інгредієнтів. Цю дію неможливо скасувати.')
+                ->action(function () use ($settingKey, $dateParam) {
+                    $checkAgain = Setting::where('key', $settingKey)->where('value', '1')->exists();
+
+                    if ($checkAgain) {
+                        Notification::make()
+                            ->title('Операцію скасовано')
+                            ->body("Зміну за {$dateParam} вже закрито.")
+                            ->warning()
+                            ->send();
+                        return;
+                    }
+
+                    $this->processStockDebiting();
+
+                    Setting::updateOrCreate(
+                        ['key' => $settingKey],
+                        ['value' => '1']
+                    );
+
+                    Notification::make()
+                        ->title('Успішно')
+                        ->body('Склад списано, зміну закрито.')
+                        ->success()
                         ->send();
-                    return; 
-                }
 
-                $this->processStockDebiting();
-                
-                \App\Models\Setting::updateOrCreate(
-                    ['key' => $settingKey],
-                    ['value' => '1']
-                );
+                    return redirect(static::getUrl(['date' => $dateParam]));
+                }),
+        ];
+    }
 
-                \Filament\Notifications\Notification::make()
-                    ->title('Успішно')
-                    ->body('Склад списано, зміну закрито.')
-                    ->success()
-                    ->send();
+    public function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Grid::make(2)->schema([
+                    DatePicker::make('date')
+                        ->label('Дата приготування (сьогодні)')
+                        ->displayFormat('d.m.Y')
+                        ->required()
+                        ->live()
+                        ->afterStateUpdated(function ($state) {
+                            $this->calculate();
+                            $this->js("window.history.replaceState(null, null, '?date=' + '{$state}')");
+                        }),
 
-                return redirect(static::getUrl(['date' => $dateParam]));
-            }),
-    ];
-}
+                    Placeholder::make('info_text')
+                        ->label('Цільова дата')
+                        ->content(function () {
+                            $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
+                            $targetDateObj = Carbon::parse($selectedDate)->addDay();
 
-public function form(Form $form): Form
-{
-    return $form
-        ->schema([
-            Grid::make(2)->schema([
-                DatePicker::make('date')
-                    ->label('Дата приготування (сьогодні)')
-                    ->displayFormat('d.m.Y')
-                    ->required()
-                    ->live()
-                    ->afterStateUpdated(function ($state) {
-                        $this->calculate();
-                        $this->js("window.history.replaceState(null, null, '?date=' + '{$state}')");
-                    }),
-                
-                Placeholder::make('info_text')
-                    ->label('Цільова дата')
-                    ->content(function() {
-                        // 1. Отримуємо вибрану дату
-                        $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
-                        $targetDateObj = \Carbon\Carbon::parse($selectedDate)->addDay();
-                        
-                        // 2. Отримуємо налаштування циклу для розрахунку дня
-                        $cycleDays = (int) \App\Models\Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-                        $startDateStr = \App\Models\Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
-                        $anchorDate = \Carbon\Carbon::parse($startDateStr);
-                        
-                        // 3. Рахуємо номер дня (використовуємо abs, щоб не було дня 0)
-                        $diff = abs($targetDateObj->diffInDays($anchorDate));
-                        $dayNum = ($diff % $cycleDays) + 1;
+                            $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
+                            $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
+                            $anchorDate = Carbon::parse($startDateStr);
 
-                        return new \Illuminate\Support\HtmlString(
-                            "<div class='p-2 bg-primary-500/10 border border-primary-500 rounded-lg text-primary-600'>
-                                👨‍🍳 Кухня готує сьогодні на <strong>завтра (" . $targetDateObj->format('d.m.Y') . ")</strong>. 
-                                <br> Це буде <strong>" . $dayNum . "-й день</strong> циклу меню.
-                            </div>"
-                        );
-                    }),
+                            $diff = abs($targetDateObj->diffInDays($anchorDate));
+                            $dayNum = ($diff % $cycleDays) + 1;
+
+                            return new HtmlString(
+                                "<div class='p-2 bg-primary-500/10 border border-primary-500 rounded-lg text-primary-600'>
+                                    👨‍🍳 Кухня готує сьогодні на <strong>завтра (" . $targetDateObj->format('d.m.Y') . ")</strong>.
+                                    <br> Це буде <strong>" . $dayNum . "-й день</strong> циклу меню.
+                                </div>"
+                            );
+                        }),
+                ])
             ])
-        ])
-        ->statePath('data');
-}
+            ->statePath('data');
+    }
 
     protected function getViewData(): array
     {
@@ -199,7 +194,12 @@ public function form(Form $form): Form
                             return Ingredient::whereNotIn('id', $excludedIds)->limit(50)->pluck('name', 'id');
                         })
                         ->searchable()
-                        ->getSearchResultsUsing(fn (string $search) => Ingredient::whereNotIn('id', $excludedIds)->where('name', 'like', "%{$search}%")->limit(50)->pluck('name', 'id'))
+                        ->getSearchResultsUsing(fn (string $search) =>
+                            Ingredient::whereNotIn('id', $excludedIds)
+                                ->where('name', 'like', "%{$search}%")
+                                ->limit(50)
+                                ->pluck('name', 'id')
+                        )
                         ->required(),
                     Textarea::make('comment')->label('Коментар'),
                 ];
@@ -213,7 +213,7 @@ public function form(Form $form): Form
                     ],
                     [
                         'replacement_product_id' => $data['replacement_product_id'],
-                        'replacement_dish_id' => null, 
+                        'replacement_dish_id' => null,
                         'comment' => $data['comment'] ?? null,
                     ]
                 );
@@ -228,18 +228,20 @@ public function form(Form $form): Form
         return Action::make('replaceDish')
             ->label('Зам. страву')
             ->icon('heroicon-m-arrow-path-rounded-square')
-            ->color('danger') 
+            ->color('danger')
             ->size('sm')
             ->modalHeading('Заміна цілої страви')
             ->form(function (array $arguments) {
                 $currentDish = Dish::find($arguments['dish_id']);
                 $order = Order::find($arguments['order_id']);
-                
+
                 $excludedDishIds = [];
                 if ($order && $order->client) {
                     $excludedDishIds = $order->client->dishExclusions->pluck('id')->toArray();
                 }
-                $excludedDishIds[] = $currentDish->id; 
+                if ($currentDish) {
+                    $excludedDishIds[] = $currentDish->id;
+                }
 
                 return [
                     Select::make('replacement_dish_id')
@@ -257,7 +259,7 @@ public function form(Form $form): Form
                     [
                         'order_id' => $arguments['order_id'],
                         'dish_id' => $arguments['dish_id'],
-                        'original_product_id' => null, 
+                        'original_product_id' => null,
                     ],
                     [
                         'replacement_dish_id' => $data['replacement_dish_id'],
@@ -271,97 +273,119 @@ public function form(Form $form): Form
     }
 
     /**
-     * Розрахунок звіту
+     * ✅ Розрахунок звіту:
+     * - Будуємо план по кожному order (які страви + яка вага)
+     * - По кожній страві меню збираємо тільки ті orders, де вона входить у план
+     * - Масштаб інгредієнтів = sum(scales)
      */
-public function calculate(): void
+    public function calculate(): void
     {
-        // 1. Отримуємо вибрану дату приготування (наприклад, сьогодні 16.02)
         $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
-        
-        // 2. 🔥 ГОЛОВНА ЛОГІКА: Кухня готує сьогодні на ЗАВТРА (17.02)
-        $targetDateObj = \Carbon\Carbon::parse($selectedDate)->addDay();
-        $targetDate = $targetDateObj->format('Y-m-d');
-        
-        $this->report = [];
 
-        // Отримуємо налаштування циклу
+        $targetDateObj = Carbon::parse($selectedDate)->addDay();
+        $targetDate = $targetDateObj->format('Y-m-d');
+
+        $this->report = [];
+        $this->orderPlans = [];
+
         $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
         $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
         $anchorDate = Carbon::parse($startDateStr);
-        
-        // 3. Розраховуємо номер дня меню для дати споживання (завтра)
+
         $diff = abs($targetDateObj->diffInDays($anchorDate));
         $this->currentDayNumber = ($diff % $cycleDays) + 1;
 
-        // Встановлюємо пояснювальний текст для інтерфейсу
         $this->debugMessage = "🍳 Готуємо сьогодні на завтра: " . $targetDateObj->format('d.m.Y') . " (День циклу №{$this->currentDayNumber})";
 
         $menu = DailyMenu::where('day_number', $this->currentDayNumber)
-            ->with(['menuItems.dish.dishIngredients.ingredient', 'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient', 'menuItems.mealType'])
+            ->with([
+                'menuItems.dish.dishIngredients.ingredient',
+                'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
+                'menuItems.mealType'
+            ])
             ->first();
 
-        if ($menu) {
-            // Шукаємо замовлення саме на завтрашню дату через календар (паузи враховано)
-            $this->activeOrders = Order::whereIn('status', ['new', 'active'])
-                ->whereHas('orderDays', function ($query) use ($targetDate) {
-                    $query->where('date', $targetDate);
-                })
-                ->with([
-                    'client.mealTypes',
-                    'client.ingredientExclusions', 
-                    'client.dishExclusions',
-                    'replacements.replacementProduct',
-                    'replacements.replacementDish.dishIngredients.ingredient',
-                ])
-                ->get();
+        if (!$menu) return;
 
-            if ($this->activeOrders->isNotEmpty()) {
-                $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType->sort_order ?? 99);
+        $this->activeOrders = Order::whereIn('status', ['new', 'active'])
+            ->whereHas('orderDays', function ($query) use ($targetDate) {
+                $query->where('date', $targetDate);
+            })
+            ->with([
+                'client.mealTypes',
+                'client.ingredientExclusions',
+                'client.dishExclusions',
+                'replacements.replacementProduct',
+                'replacements.replacementDish.dishIngredients.ingredient',
+            ])
+            ->get();
 
-                foreach ($sortedMenuItems as $item) {
-                    if (!$item->dish) continue;
-                    $mealName = $item->mealType->name ?? 'Інше';
-                    $dish = $item->dish;
+        if ($this->activeOrders->isEmpty()) return;
 
-                    $standardOrders = [];
-                    $customOrders = [];
+        foreach ($this->activeOrders as $order) {
+            $this->orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
+        }
 
-                    foreach ($this->activeOrders as $order) {
-                        $clientMealTypeIds = $order->client->mealTypes->pluck('id')->toArray();
-                        if ($item->meal_type_id && !in_array($item->meal_type_id, $clientMealTypeIds)) continue;
+        $sortedMenuItems = $menu->menuItems->sortBy(fn ($item) => $item->mealType?->sort_order ?? 99);
 
-                        $activePercentSum = $order->client->mealTypes->sum('energy_percent');
-                        $redistributionFactor = ($activePercentSum > 0 && $activePercentSum < 100) ? (100 / $activePercentSum) : 1.0;
-                        $order->scale_factor = (float)($order->scale_factor ?: 1.0) * $redistributionFactor;
+        foreach ($sortedMenuItems as $item) {
+            if (!$item->dish) continue;
 
-                        $isCustom = ($order->comment || !empty($order->client->production_comment)) 
-                                    || $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
-                                    || $order->client->dishExclusions->contains('id', $dish->id)
-                                    || $this->checkRecursiveConflict($dish, $order->client->ingredientExclusions);
+            $mealName = $item->mealType->name ?? 'Інше';
+            $dish = $item->dish;
 
-                        if ($isCustom) $customOrders[] = $order;
-                        else $standardOrders[] = $order;
-                    }
+            $standard = []; // ['order'=>Order,'scale'=>float]
+            $custom = [];   // ['order'=>Order,'scale'=>float]
 
-                    if (empty($standardOrders) && empty($customOrders)) continue;
+            foreach ($this->activeOrders as $order) {
+                $plan = $this->orderPlans[$order->id] ?? null;
+                if (!$plan) continue;
 
-                    $this->report[$mealName][] = [
-                        'meal_name' => $mealName,
-                        'dish_id' => $dish->id,
-                        'dish_name' => $dish->name,
-                        'standard_count' => count($standardOrders),
-                        'standard_structure' => $this->calculateIngredientsStructure($dish, $standardOrders),
-                        'standard_total_netto' => $this->calculateTotals($this->calculateIngredientsStructure($dish, $standardOrders))['netto'],
-                        'standard_total_brutto' => $this->calculateTotals($this->calculateIngredientsStructure($dish, $standardOrders))['brutto'],
-                        'custom_cards' => collect($customOrders)->map(fn($o) => $this->buildCustomCard($dish, $o))->toArray(),
-                    ];
+                $plannedWeight = $this->plannedDishWeight($plan['items'], (int)$dish->id, (int)$item->meal_type_id);
+                if ($plannedWeight === null) continue;
+
+                $baseW = (float)($dish->base_weight_g ?? 0);
+                $dishScale = ($baseW > 0) ? ((float)$plannedWeight / $baseW) : 0.0;
+
+                $isCustom =
+                    ($order->comment || !empty($order->client->production_comment))
+                    || $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
+                    || $order->client->dishExclusions->contains('id', $dish->id)
+                    || $this->checkRecursiveConflict($dish, $order->client->ingredientExclusions);
+
+                if ($isCustom) {
+                    $custom[] = ['order' => $order, 'scale' => $dishScale];
+                } else {
+                    $standard[] = ['order' => $order, 'scale' => $dishScale];
                 }
             }
+
+            if (empty($standard) && empty($custom)) continue;
+
+            $standardScales = array_map(fn ($x) => (float)$x['scale'], $standard);
+
+            $standardStructure = $this->calculateIngredientsStructureByScales($dish, $standardScales);
+            $standardTotals = $this->calculateTotals($standardStructure);
+
+            $customCards = collect($custom)->map(function ($entry) use ($dish) {
+                return $this->buildCustomCard($dish, $entry['order'], (float)$entry['scale']);
+            })->toArray();
+
+            $this->report[$mealName][] = [
+                'meal_name' => $mealName,
+                'dish_id' => $dish->id,
+                'dish_name' => $dish->name,
+
+                'standard_count' => count($standard),
+                'standard_structure' => $standardStructure,
+                'standard_total_netto' => $standardTotals['netto'],
+                'standard_total_brutto' => $standardTotals['brutto'],
+
+                'custom_cards' => $customCards,
+            ];
         }
     }
-    /**
-     * Основний метод списання складських залишків
-     */
+
     public function processStockDebiting(): void
     {
         $this->calculate();
@@ -403,45 +427,58 @@ public function calculate(): void
 
     private function collectIngredientsRecursive(array $component, array &$accumulator): void
     {
-        if ($component['type'] === 'product' && isset($component['product_id'])) {
-            $id = $component['product_id'];
-            $weight = (float)$component['weight_brutto'];
-            
-            if (!isset($accumulator[$id])) {
-                $accumulator[$id] = 0;
-            }
+        if (($component['type'] ?? null) === 'product' && isset($component['product_id'])) {
+            $id = (int)$component['product_id'];
+            $weight = (float)($component['weight_brutto'] ?? 0);
+
+            if (!isset($accumulator[$id])) $accumulator[$id] = 0;
             $accumulator[$id] += $weight;
-        } 
-        elseif ($component['type'] === 'pf' && isset($component['sub_ingredients'])) {
+            return;
+        }
+
+        if (($component['type'] ?? null) === 'pf' && isset($component['sub_ingredients']) && is_array($component['sub_ingredients'])) {
             foreach ($component['sub_ingredients'] as $sub) {
                 $this->collectIngredientsRecursive($sub, $accumulator);
             }
         }
     }
 
-    private function calculateIngredientsStructure($dish, $orders): array
+    private function calculateIngredientsStructureByScales($dish, array $scales): array
     {
-        if (empty($orders)) return [];
-        $totalScale = collect($orders)->sum(fn($o) => (float)($o->scale_factor ?: 1.0));
-        return $this->getHierarchicalIngredients($dish, $totalScale, 1, null, false); 
+        if (empty($scales)) return [];
+        $totalScale = array_sum(array_map(fn ($s) => (float)$s, $scales));
+        return $this->getHierarchicalIngredients($dish, $totalScale, 1.0, null, false, null);
     }
 
-    private function buildCustomCard($dish, $order)
+    private function buildCustomCard($dish, $order, float $scale): array
     {
-        $scale = (float)($order->scale_factor ?: 1.0);
         $dishExclusion = $order->client->dishExclusions->contains('id', $dish->id);
         $dishReplacement = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
 
-        $components = [];
         $replacementDishName = null;
         $replacementDishId = null;
 
         if ($dishReplacement && $dishReplacement->replacementDish) {
             $replacementDishName = $dishReplacement->replacementDish->name;
             $replacementDishId = $dishReplacement->replacementDish->id;
-            $components = $this->getHierarchicalIngredients($dishReplacement->replacementDish, $scale, 1, $dishReplacement->replacementDish->id, true, $order);
+
+            $components = $this->getHierarchicalIngredients(
+                $dishReplacement->replacementDish,
+                $scale,
+                1.0,
+                $dishReplacement->replacementDish->id,
+                true,
+                $order
+            );
         } else {
-            $components = $this->getHierarchicalIngredients($dish, $scale, 1, $dish->id, true, $order);
+            $components = $this->getHierarchicalIngredients(
+                $dish,
+                $scale,
+                1.0,
+                $dish->id,
+                true,
+                $order
+            );
         }
 
         $totals = $this->calculateTotals($components);
@@ -451,10 +488,10 @@ public function calculate(): void
         return [
             'client_name' => $order->client->name,
             'order_id' => $order->id,
-            'comment' => $finalComment, 
+            'comment' => $finalComment,
             'dish_excluded' => $dishExclusion,
             'dish_replacement' => $replacementDishName,
-            'replacement_dish_id' => $replacementDishId, 
+            'replacement_dish_id' => $replacementDishId,
             'components' => $components,
             'total_netto' => $totals['netto'],
             'total_brutto' => $totals['brutto'],
@@ -463,20 +500,28 @@ public function calculate(): void
 
     private function calculateTotals(array $components): array
     {
-        $netto = 0; $brutto = 0;
+        $netto = 0.0;
+        $brutto = 0.0;
+
         foreach ($components as $comp) {
-            if ($comp['type'] === 'pf') {
-                $netto += $comp['weight_output'] ?? 0;
-                $brutto += $comp['weight_brutto_sum'] ?? 0;
+            if (($comp['type'] ?? null) === 'pf') {
+                $netto += (float)($comp['weight_output'] ?? 0);
+                $brutto += (float)($comp['weight_brutto_sum'] ?? 0);
             } else {
-                $netto += $comp['weight_netto'] ?? 0;
-                $brutto += $comp['weight_brutto'] ?? 0;
+                $netto += (float)($comp['weight_netto'] ?? 0);
+                $brutto += (float)($comp['weight_brutto'] ?? 0);
             }
         }
+
         return ['netto' => round($netto), 'brutto' => round($brutto)];
     }
 
-    private function getHierarchicalIngredients($dish, $scale, $subRatio = 1, $rootDishId = null, $checkConflicts = true, $specificOrder = null): array
+    /**
+     * ✅ ВАЖНО: PF масштабируем по выходу (output_weight), а не по сумме закладки.
+     * - Для продукта: netto -> brutto через yield%
+     * - Для PF: берём долю = (вес_готового_ПФ_в_блюде) / (выход_ПФ)
+     */
+    private function getHierarchicalIngredients($dish, float $scale, float $subRatio = 1.0, $rootDishId = null, bool $checkConflicts = true, $specificOrder = null): array
     {
         $components = [];
         if (!$dish || !$dish->dishIngredients) return $components;
@@ -484,86 +529,233 @@ public function calculate(): void
 
         foreach ($dish->dishIngredients as $di) {
             $currentK = $scale * $subRatio;
-            $type = mb_strtolower(trim($di->type));
-            $nettoTotalRaw = (float)$di->net_weight_g * $currentK;
+            $type = mb_strtolower(trim((string)($di->type ?? '')));
+            $nettoTotalRaw = (float)($di->net_weight_g ?? 0) * $currentK;
 
             $conflictData = null;
             $replacementInfo = null;
 
-            if ($checkConflicts && $specificOrder && in_array($type, ['product', 'продукт']) && $di->ingredient) {
-                $ingId = $di->ingredient->id;
+            $isProduct = in_array($type, ['product', 'продукт'], true);
+            $isPf = in_array($type, ['pf', 'напівфабрикат', 'п/ф', 'н/ф'], true);
+
+            if ($checkConflicts && $specificOrder && $isProduct && $di->ingredient) {
+                $ingId = (int)$di->ingredient->id;
                 if ($specificOrder->client->ingredientExclusions->contains('id', $ingId)) {
-                    $rep = $specificOrder->replacements->where('dish_id', $rootDishId)->where('original_product_id', $ingId)->first();
+                    $rep = $specificOrder->replacements
+                        ->where('dish_id', $rootDishId)
+                        ->where('original_product_id', $ingId)
+                        ->first();
+
                     if ($rep && $rep->replacementProduct) {
                         $newYield = (float)($rep->replacementProduct->yield_percent ?: 100);
+                        if ($newYield <= 0) $newYield = 100;
+
                         $replacementInfo = [
                             'name' => $rep->replacementProduct->name,
                             'netto' => round($nettoTotalRaw, 1),
-                            'brutto' => round(($nettoTotalRaw * 100) / ($newYield ?: 100), 1),
+                            'brutto' => round(($nettoTotalRaw * 100) / $newYield, 1),
                             'unit' => $rep->replacementProduct->unit ?? 'г'
                         ];
                     }
-                    $conflictData = ['is_resolved' => !!$replacementInfo, 'replacement' => $replacementInfo, 'original_ing_id' => $ingId];
+
+                    $conflictData = [
+                        'is_resolved' => (bool)$replacementInfo,
+                        'replacement' => $replacementInfo,
+                        'original_ing_id' => $ingId
+                    ];
                 }
             }
 
-            if (in_array($type, ['product', 'продукт']) && $di->ingredient) {
+            // 1) PRODUCT
+            if ($isProduct && $di->ingredient) {
                 $yield = (float)($di->ingredient->yield_percent ?: 100);
+                if ($yield <= 0) $yield = 100;
+
                 $components[] = [
                     'type' => 'product',
                     'name' => $di->ingredient->name,
                     'weight_netto' => round($nettoTotalRaw, 1),
-                    'weight_brutto' => round(($nettoTotalRaw * 100) / ($yield ?: 100), 1),
+                    'weight_brutto' => round(($nettoTotalRaw * 100) / $yield, 1),
                     'unit' => $di->ingredient->unit ?? 'г',
-                    'conflict' => $conflictData, 
-                    'product_id' => $di->ingredient->id,
+                    'conflict' => $conflictData,
+                    'product_id' => (int)$di->ingredient->id,
                 ];
-            } elseif (in_array($type, ['pf', 'напівфабрикат']) && $di->childDish) {
-                $pfBase = (float)$di->childDish->base_weight_g ?: 100;
-                $pfRatio = $di->net_weight_g / $pfBase;
-                $subIngredients = $this->getHierarchicalIngredients($di->childDish, $scale, $pfRatio * $subRatio, $rootDishId, $checkConflicts, $specificOrder);
-                
-                $sumNetto = 0; $sumBrutto = 0;
-                
-                foreach($subIngredients as $s) { 
-                    $sumNetto += $s['weight_netto'] ?? $s['weight_output'] ?? 0; 
-                    $sumBrutto += $s['weight_brutto'] ?? $s['weight_brutto_sum'] ?? 0; 
+
+                continue;
+            }
+
+            // 2) PF / CHILD DISH
+            if ($isPf && $di->childDish) {
+                // ✅ ВАЖНО: доля ПФ считается от ВЫХОДА ПФ (output_weight),
+                // потому что net_weight_g в блюде — это "сколько ГОТОВОГО ПФ кладем".
+                $pfTotals = $di->childDish->calculated_totals;
+                $pfOutput = (float)($pfTotals['output_weight'] ?? 0);
+
+                if ($pfOutput <= 0) {
+                    // если ПФ некорректный — пропускаем, чтобы не ломать математику
+                    continue;
+                }
+
+                $pfRatio = ((float)($di->net_weight_g ?? 0)) / $pfOutput;
+
+                $subIngredients = $this->getHierarchicalIngredients(
+                    $di->childDish,
+                    $scale,
+                    ($pfRatio * $subRatio),
+                    $rootDishId,
+                    $checkConflicts,
+                    $specificOrder
+                );
+
+                $sumNetto = 0.0;
+                $sumBrutto = 0.0;
+
+                foreach ($subIngredients as $s) {
+                    $sumNetto += (float)($s['weight_netto'] ?? ($s['weight_output'] ?? 0));
+                    $sumBrutto += (float)($s['weight_brutto'] ?? ($s['weight_brutto_sum'] ?? 0));
                 }
 
                 $components[] = [
                     'type' => 'pf',
                     'name' => $di->childDish->name,
-                    'weight_output' => round($nettoTotalRaw),
-                    'weight_netto_sum' => round($sumNetto),
-                    'weight_brutto_sum' => round($sumBrutto),
+                    // в отчёте для ПФ показываем "сколько готового ПФ нужно"
+                    'weight_output' => round($nettoTotalRaw, 1),
+                    'weight_netto_sum' => round($sumNetto, 1),
+                    'weight_brutto_sum' => round($sumBrutto, 1),
                     'sub_ingredients' => $subIngredients
                 ];
             }
         }
+
         return $components;
     }
 
-    /**
-     * 🔥🔥🔥 НОВА ФУНКЦІЯ: Глибока перевірка конфліктів (рекурсія) 🔥🔥🔥
-     * Дозволяє знайти шпинат навіть якщо він захований у "Зеленому маслі"
-     */
     private function checkRecursiveConflict($dish, $exclusions): bool
     {
         if (!$dish || !$dish->dishIngredients) return false;
 
         foreach ($dish->dishIngredients as $di) {
-            // 1. Перевіряємо прямий інгредієнт
             if ($di->ingredient_id && $exclusions->contains('id', $di->ingredient_id)) {
                 return true;
             }
-            
-            // 2. Якщо це ПФ — пірнаємо всередину
             if ($di->child_dish_id && $di->childDish) {
-                if ($this->checkRecursiveConflict($di->childDish, $exclusions)) {
-                    return true;
-                }
+                if ($this->checkRecursiveConflict($di->childDish, $exclusions)) return true;
             }
         }
         return false;
+    }
+
+    // =========================================================
+    // ✅ ПЛАН РАЦИОНА
+    // =========================================================
+
+    private function calculateOrderPlan(Order $order, DailyMenu $menu): array
+    {
+        $targetKcal = (float)($order->calories ?? 0);
+        if ($targetKcal <= 0) {
+            return ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
+        }
+
+        $clientMealTypeIds = $order->client?->mealTypes?->pluck('id')->toArray() ?? [];
+
+        $availableItems = $menu->menuItems
+            ->filter(fn ($item) => $item->dish && in_array($item->meal_type_id, $clientMealTypeIds, true))
+            ->sortBy(fn ($item) => $item->mealType?->sort_order ?? 99)
+            ->values();
+
+        if ($availableItems->isEmpty()) {
+            return ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
+        }
+
+        $expectedDishes = $this->expectedDishCount((int)$targetKcal);
+        $selected = $availableItems->take($expectedDishes);
+        if ($selected->isEmpty()) {
+            return ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
+        }
+
+        $byMeal = $selected->groupBy('meal_type_id');
+
+        // нормализация процентов по фактически использованным mealTypes
+        $percentSum = 0.0;
+        foreach ($byMeal as $mealTypeId => $items) {
+            $percentSum += (float)($items->first()->mealType?->energy_percent ?? 0);
+        }
+        if ($percentSum <= 0) $percentSum = 100.0;
+
+        $totals = ['kcal' => 0.0, 'prot' => 0.0, 'fat' => 0.0, 'carb' => 0.0];
+        $itemsOut = [];
+
+        foreach ($byMeal as $mealTypeId => $items) {
+            $mealType = $items->first()->mealType;
+            $p = (float)($mealType?->energy_percent ?? 0);
+
+            $mealKcal = ($p > 0)
+                ? $targetKcal * ($p / $percentSum)
+                : $targetKcal * (1.0 / max(1, $byMeal->count()));
+
+            $countInMeal = max(1, $items->count());
+            $kcalPerDish = $mealKcal / $countInMeal;
+
+            foreach ($items as $mi) {
+                $dish = $mi->dish;
+                if (!$dish) continue;
+
+                $kcalPer100 = $this->dishKcalPer100g($dish);
+
+                $weight = ($kcalPer100 > 0)
+                    ? (int) round(($kcalPerDish / $kcalPer100) * 100.0)
+                    : 0;
+
+                // ✅ БЖУ берем из calculated_totals (один источник правды)
+                $dt = $dish->calculated_totals;
+                $outW = (float)($dt['output_weight'] ?? ($dish->base_weight_g ?? 0));
+                $outW = $outW > 0 ? $outW : 1;
+
+                $protPerG = (float)($dt['prot'] ?? 0) / $outW;
+                $fatPerG  = (float)($dt['fat'] ?? 0) / $outW;
+                $carbPerG = (float)($dt['carb'] ?? 0) / $outW;
+
+                $totals['kcal'] += ($weight * $kcalPer100 / 100.0);
+                $totals['prot'] += ($weight * $protPerG);
+                $totals['fat']  += ($weight * $fatPerG);
+                $totals['carb'] += ($weight * $carbPerG);
+
+                $itemsOut[] = [
+                    'dish_id' => (int)$dish->id,
+                    'meal_type_id' => (int)$mealTypeId,
+                    'weight' => (int)$weight,
+                ];
+            }
+        }
+
+        return ['items' => $itemsOut, 'totals' => $totals];
+    }
+
+    private function expectedDishCount(int $kcal): int
+    {
+        if ($kcal < 1200) return 3;
+        if ($kcal < 1500) return 4;
+        return 5;
+    }
+
+    private function dishKcalPer100g($dish): float
+    {
+        $baseW = (float)($dish->base_weight_g ?? 0);
+        // total_kcal у тебя аксесор из Dish->calculated_totals, это ок
+        $totalKcal = (float)($dish->total_kcal ?? 0);
+
+        if ($baseW <= 0 || $totalKcal <= 0) return 0.0;
+
+        return ($totalKcal / $baseW) * 100.0;
+    }
+
+    private function plannedDishWeight(array $items, int $dishId, int $mealTypeId): ?int
+    {
+        foreach ($items as $it) {
+            if ((int)$it['dish_id'] === $dishId && (int)$it['meal_type_id'] === $mealTypeId) {
+                return (int)$it['weight'];
+            }
+        }
+        return null;
     }
 }
