@@ -75,26 +75,36 @@ class PackagingList extends Page implements HasForms
                     ->live()
                     ->afterStateUpdated(fn () => $this->calculate()),
 
-                Placeholder::make('info_text')
-                    ->label('Цільова дата')
-                    ->content(function () {
-                        $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
-                        $targetDateObj = Carbon::parse($selectedDate)->addDay();
+                \Filament\Forms\Components\Group::make()->schema([
+                    Placeholder::make('info_text')
+                        ->label('Цільова дата')
+                        ->content(function () {
+                            $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
+                            $targetDateObj = Carbon::parse($selectedDate)->addDay();
 
-                        $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-                        $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
-                        $anchorDate = Carbon::parse($startDateStr);
+                            $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
+                            $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
+                            $anchorDate = Carbon::parse($startDateStr);
 
-                        $diff = abs($targetDateObj->diffInDays($anchorDate));
-                        $dayNum = ($diff % $cycleDays) + 1;
+                            $diff = abs($targetDateObj->diffInDays($anchorDate));
+                            $dayNum = ($diff % $cycleDays) + 1;
 
-                        return new HtmlString(
-                            "<div class='p-4 bg-gray-900 border border-gray-700 rounded-lg text-white'>
-                                📦 Фасування на <strong class='text-primary-400'>завтра (" . $targetDateObj->format('d.m.Y') . ")</strong>.
-                                <br> Це буде <strong class='text-primary-400'>" . $dayNum . "-й день</strong> циклу меню.
-                            </div>"
-                        );
-                    }),
+                            return new HtmlString(
+                                "<div class='p-4 bg-gray-900 border border-gray-700 rounded-lg text-white'>
+                                    📦 Фасування на <strong class='text-primary-400'>завтра (" . $targetDateObj->format('d.m.Y') . ")</strong>.
+                                    <br> Це буде <strong class='text-primary-400'>" . $dayNum . "-й день</strong> циклу меню.
+                                </div>"
+                            );
+                        }),
+                        
+                    \Filament\Forms\Components\Actions::make([
+                        \Filament\Forms\Components\Actions\Action::make('print_view')
+                            ->label('🖨 Відкрити версію для друку')
+                            ->color('warning')
+                            ->url(fn () => route('print.packaging-list', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
+                            ->openUrlInNewTab()
+                    ])->alignRight(),
+                ])
             ])
         ])->statePath('data');
     }

@@ -100,7 +100,7 @@ class ProductionReport extends Page implements HasForms
         ];
     }
 
-    public function form(Form $form): Form
+public function form(Form $form): Form
     {
         return $form
             ->schema([
@@ -115,26 +115,37 @@ class ProductionReport extends Page implements HasForms
                             $this->js("window.history.replaceState(null, null, '?date=' + '{$state}')");
                         }),
 
-                    Placeholder::make('info_text')
-                        ->label('Цільова дата')
-                        ->content(function () {
-                            $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
-                            $targetDateObj = Carbon::parse($selectedDate)->addDay();
+                    // 🔥 Обернули Placeholder у Group і додали Action-кнопку
+                    \Filament\Forms\Components\Group::make()->schema([
+                        Placeholder::make('info_text')
+                            ->label('Цільова дата')
+                            ->content(function () {
+                                $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
+                                $targetDateObj = Carbon::parse($selectedDate)->addDay();
 
-                            $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-                            $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
-                            $anchorDate = Carbon::parse($startDateStr);
+                                $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
+                                $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
+                                $anchorDate = Carbon::parse($startDateStr);
 
-                            $diff = abs($targetDateObj->diffInDays($anchorDate));
-                            $dayNum = ($diff % $cycleDays) + 1;
+                                $diff = abs($targetDateObj->diffInDays($anchorDate));
+                                $dayNum = ($diff % $cycleDays) + 1;
 
-                            return new HtmlString(
-                                "<div class='p-2 bg-primary-500/10 border border-primary-500 rounded-lg text-primary-600'>
-                                    👨‍🍳 Кухня готує сьогодні на <strong>завтра (" . $targetDateObj->format('d.m.Y') . ")</strong>.
-                                    <br> Це буде <strong>" . $dayNum . "-й день</strong> циклу меню.
-                                </div>"
-                            );
-                        }),
+                                return new HtmlString(
+                                    "<div class='p-2 bg-primary-500/10 border border-primary-500 rounded-lg text-primary-600'>
+                                        👨‍🍳 Кухня готує сьогодні на <strong>завтра (" . $targetDateObj->format('d.m.Y') . ")</strong>.
+                                        <br> Це буде <strong>" . $dayNum . "-й день</strong> циклу меню.
+                                    </div>"
+                                );
+                            }),
+
+                        \Filament\Forms\Components\Actions::make([
+                            \Filament\Forms\Components\Actions\Action::make('print_view')
+                                ->label('🖨 Відкрити версію для друку')
+                                ->color('warning')
+                                ->url(fn () => route('print.production-report', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
+                                ->openUrlInNewTab()
+                        ])->alignRight(),
+                    ])
                 ])
             ])
             ->statePath('data');

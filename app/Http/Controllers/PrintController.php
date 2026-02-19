@@ -456,4 +456,238 @@ class PrintController extends Controller
 
         return $found;
     }
+
+    // =========================================================================
+    // ✅ ДРУК ПЛАНУ ВИРОБНИЦТВА (PRODUCTION REPORT)
+    // =========================================================================
+    public function productionReport(Request $request)
+    {
+        $inputDate = $request->input('date', now()->format('Y-m-d'));
+        $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
+
+        [$menu, $globalDay] = $this->getMenuForTargetDate($targetDate);
+
+        if (!$menu) {
+            return "❌ Меню не знайдено на завтра ({$targetDate})";
+        }
+
+        $orders = Order::whereIn('status', ['new', 'active'])
+            ->whereHas('orderDays', function ($query) use ($targetDate) {
+                $query->where('date', $targetDate);
+            })
+            ->with([
+                'client.mealTypes',
+                'client.ingredientExclusions',
+                'client.dishExclusions',
+                'replacements.replacementProduct',
+                'replacements.replacementDish.dishIngredients.ingredient',
+            ])
+            ->get();
+
+        if ($orders->isEmpty()) {
+            return "Немає активних замовлень на {$targetDate}.";
+        }
+
+        // 1. Рахуємо плани (як у Filament)
+        $orderPlans = [];
+        foreach ($orders as $order) {
+            $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
+        }
+
+        $report = [];
+        $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType?->sort_order ?? 99);
+
+        // 2. Групуємо по стравах
+        foreach ($sortedMenuItems as $item) {
+            if (!$item->dish) continue;
+
+            $mealName = $item->mealType->name ?? 'Інше';
+            $dish = $item->dish;
+
+            $standard = []; // ['order' => Order, 'scale' => float]
+            $custom = [];   // ['order' => Order, 'scale' => float]
+
+            foreach ($orders as $order) {
+                $plan = $orderPlans[$order->id] ?? null;
+                if (!$plan) continue;
+
+                // Перевіряємо, чи входить ця страва у план клієнта
+                $plannedWeight = collect($plan['items'])->first(function ($it) use ($dish, $item) {
+                    return (int)$it['dish_id'] === (int)$dish->id && (int)$it['meal_type_id'] === (int)$item->meal_type_id;
+                })['weight'] ?? null;
+
+                if ($plannedWeight === null) continue;
+
+                $baseW = (float)($dish->base_weight_g ?? 0);
+                $dishScale = ($baseW > 0) ? ((float)$plannedWeight / $baseW) : 0.0;
+
+                $isCustom =
+                    ($order->comment || !empty($order->client->production_comment))
+                    || $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
+                    || $order->client->dishExclusions->contains('id', $dish->id)
+                    || !empty($this->getConflictingIngredients($dish, $order->client->ingredientExclusions));
+
+                if ($isCustom) {
+                    $custom[] = ['order' => $order, 'scale' => $dishScale];
+                } else {
+                    $standard[] = ['order' => $order, 'scale' => $dishScale];
+                }
+            }
+
+            if (empty($standard) && empty($custom)) continue;
+
+            // Збираємо структуру
+            $standardScales = array_map(fn($x) => (float)$x['scale'], $standard);
+            $standardStructure = $this->calculateIngredientsStructureByScales($dish, $standardScales);
+            $standardTotals = $this->calculateStructureTotals($standardStructure);
+
+            $customCards = collect($custom)->map(function ($entry) use ($dish) {
+                return $this->buildCustomCard($dish, $entry['order'], (float)$entry['scale']);
+            })->toArray();
+
+            $report[$mealName][] = [
+                'meal_name' => $mealName,
+                'dish_id' => $dish->id,
+                'dish_name' => $dish->name,
+                'standard_count' => count($standard),
+                'standard_structure' => $standardStructure,
+                'standard_total_netto' => $standardTotals['netto'],
+                'standard_total_brutto' => $standardTotals['brutto'],
+                'custom_cards' => $customCards,
+            ];
+        }
+
+        return view('print.production-report', [
+            'report' => $report,
+            'date' => $inputDate,
+            'targetDate' => $targetDate,
+            'dayNumber' => $globalDay
+        ]);
+    }
+
+    // === ДОПОМІЖНІ МЕТОДИ ДЛЯ ПЛАНУ ВИРОБНИЦТВА (КОПІЯ З FILAMENT) ===
+    
+    private function calculateIngredientsStructureByScales($dish, array $scales): array
+    {
+        if (empty($scales)) return [];
+        $totalScale = array_sum($scales);
+        return $this->getHierarchicalIngredients($dish, $totalScale, 1.0, null, false, null);
+    }
+
+    private function calculateStructureTotals(array $components): array
+    {
+        $netto = 0.0; $brutto = 0.0;
+        foreach ($components as $comp) {
+            if (($comp['type'] ?? null) === 'pf') {
+                $netto += (float)($comp['weight_output'] ?? 0);
+                $brutto += (float)($comp['weight_brutto_sum'] ?? 0);
+            } else {
+                $netto += (float)($comp['weight_netto'] ?? 0);
+                $brutto += (float)($comp['weight_brutto'] ?? 0);
+            }
+        }
+        return ['netto' => round($netto), 'brutto' => round($brutto)];
+    }
+
+    private function buildCustomCard($dish, $order, float $scale): array
+    {
+        $dishExclusion = $order->client->dishExclusions->contains('id', $dish->id);
+        $dishReplacement = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
+
+        $replacementDishName = null;
+        if ($dishReplacement && $dishReplacement->replacementDish) {
+            $replacementDishName = $dishReplacement->replacementDish->name;
+            $components = $this->getHierarchicalIngredients($dishReplacement->replacementDish, $scale, 1.0, $dishReplacement->replacementDish->id, true, $order);
+        } else {
+            $components = $this->getHierarchicalIngredients($dish, $scale, 1.0, $dish->id, true, $order);
+        }
+
+        $totals = $this->calculateStructureTotals($components);
+        $clientComment = $order->client->production_comment ?? $order->client->comment ?? null;
+        $finalComment = trim(($clientComment ?? '') . ' ' . ($order->comment ?? ''));
+
+        return [
+            'client_name' => $order->client->name,
+            'order_id' => $order->id,
+            'comment' => $finalComment,
+            'dish_excluded' => $dishExclusion,
+            'dish_replacement' => $replacementDishName,
+            'components' => $components,
+            'total_netto' => $totals['netto'],
+            'total_brutto' => $totals['brutto'],
+        ];
+    }
+
+    private function getHierarchicalIngredients($dish, float $scale, float $subRatio = 1.0, $rootDishId = null, bool $checkConflicts = true, $specificOrder = null): array
+    {
+        $components = [];
+        if (!$dish || !$dish->dishIngredients) return $components;
+        if (!$rootDishId) $rootDishId = $dish->id;
+
+        foreach ($dish->dishIngredients as $di) {
+            $currentK = $scale * $subRatio;
+            $type = mb_strtolower(trim((string)($di->type ?? '')));
+            $nettoTotalRaw = (float)($di->net_weight_g ?? 0) * $currentK;
+
+            $conflictData = null;
+            $isProduct = in_array($type, ['product', 'продукт'], true);
+            $isPf = in_array($type, ['pf', 'напівфабрикат', 'п/ф', 'н/ф'], true);
+
+            if ($checkConflicts && $specificOrder && $isProduct && $di->ingredient) {
+                $ingId = (int)$di->ingredient->id;
+                if ($specificOrder->client->ingredientExclusions->contains('id', $ingId)) {
+                    $rep = $specificOrder->replacements->where('dish_id', $rootDishId)->where('original_product_id', $ingId)->first();
+                    $replacementInfo = null;
+                    if ($rep && $rep->replacementProduct) {
+                        $newYield = (float)($rep->replacementProduct->yield_percent ?: 100);
+                        if ($newYield <= 0) $newYield = 100;
+                        $replacementInfo = [
+                            'name' => $rep->replacementProduct->name,
+                            'netto' => round($nettoTotalRaw, 1),
+                            'brutto' => round(($nettoTotalRaw * 100) / $newYield, 1),
+                        ];
+                    }
+                    $conflictData = ['is_resolved' => (bool)$replacementInfo, 'replacement' => $replacementInfo];
+                }
+            }
+
+            if ($isProduct && $di->ingredient) {
+                $yield = (float)($di->ingredient->yield_percent ?: 100);
+                if ($yield <= 0) $yield = 100;
+                $components[] = [
+                    'type' => 'product',
+                    'name' => $di->ingredient->name,
+                    'weight_netto' => round($nettoTotalRaw, 1),
+                    'weight_brutto' => round(($nettoTotalRaw * 100) / $yield, 1),
+                    'conflict' => $conflictData,
+                ];
+                continue;
+            }
+
+            if ($isPf && $di->childDish) {
+                $pfTotals = $di->childDish->calculated_totals;
+                $pfOutput = (float)($pfTotals['output_weight'] ?? 0);
+                if ($pfOutput <= 0) continue;
+
+                $pfRatio = ((float)($di->net_weight_g ?? 0)) / $pfOutput;
+                $subIngredients = $this->getHierarchicalIngredients($di->childDish, $scale, ($pfRatio * $subRatio), $rootDishId, $checkConflicts, $specificOrder);
+                
+                $sumNetto = 0.0; $sumBrutto = 0.0;
+                foreach ($subIngredients as $s) {
+                    $sumNetto += (float)($s['weight_netto'] ?? ($s['weight_output'] ?? 0));
+                    $sumBrutto += (float)($s['weight_brutto'] ?? ($s['weight_brutto_sum'] ?? 0));
+                }
+
+                $components[] = [
+                    'type' => 'pf',
+                    'name' => $di->childDish->name,
+                    'weight_output' => round($nettoTotalRaw, 1),
+                    'weight_netto_sum' => round($sumNetto, 1),
+                    'weight_brutto_sum' => round($sumBrutto, 1),
+                    'sub_ingredients' => $subIngredients
+                ];
+            }
+        }
+        return $components;
+    }
 }

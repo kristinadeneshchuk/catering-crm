@@ -85,3 +85,5 @@ Route::get('/migrate-orders-to-days', function () {
 
     return "Успішно! Ми перетворили старі дати на {$count} окремих записів у календарі.";
 });
+
+Route::get('/print/production-report', [PrintController::class, 'productionReport'])->name('print.production-report');
