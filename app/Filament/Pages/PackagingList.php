@@ -38,7 +38,7 @@ class PackagingList extends Page implements HasForms
         $this->calculate();
     }
 
-    protected function getHeaderActions(): array
+protected function getHeaderActions(): array
     {
         $dateParam = $this->data['date'] ?? now()->format('Y-m-d');
 
@@ -50,8 +50,17 @@ class PackagingList extends Page implements HasForms
                 ->url(fn () => route('print.stickers', ['date' => $dateParam]))
                 ->openUrlInNewTab(),
 
-            Action::make('print_manifest')
+            // 🔥 ОСЬ НОВА КНОПКА
+            Action::make('print_mini_manifest')
                 ->label('2. На пакет')
+                ->icon('heroicon-o-document-text')
+                ->color('info')
+                ->url(fn () => route('print.mini-manifest', ['date' => $dateParam]))
+                ->openUrlInNewTab(),
+
+            // Стара кнопка перейменована, щоб не плутатись
+            Action::make('print_manifest')
+                ->label('3. В пакет (з меню)')
                 ->icon('heroicon-o-shopping-bag')
                 ->color('warning')
                 ->url(fn () => route('print.manifest', ['date' => $dateParam]))

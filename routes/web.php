@@ -87,3 +87,4 @@ Route::get('/migrate-orders-to-days', function () {
 });
 
 Route::get('/print/production-report', [PrintController::class, 'productionReport'])->name('print.production-report');
+Route::get('/print/mini-manifest', [\App\Http\Controllers\PrintController::class, 'miniManifest'])->name('print.mini-manifest');

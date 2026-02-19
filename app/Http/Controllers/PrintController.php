@@ -66,6 +66,38 @@ class PrintController extends Controller
         return view('print.manifest', compact('manifests', 'date'));
     }
 
+    public function miniManifest(Request $request)
+    {
+        $inputDate  = $request->input('date', now()->format('Y-m-d'));
+        $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
+
+        $orders = Order::whereIn('status', ['new', 'active'])
+            ->whereHas('orderDays', function ($query) use ($targetDate) {
+                $query->where('date', $targetDate);
+            })
+            ->with(['client'])
+            ->get();
+
+        $manifests = [];
+
+        foreach ($orders as $order) {
+            $manifests[] = [
+                'client_id'   => $order->client?->id ?? '---',
+                'project'     => $order->project,
+                'client'      => $order->client?->name ?? 'Без імені',
+                'address'     => $order->client?->address ?? 'Самовивіз',
+            ];
+        }
+
+        // Сортуємо за іменем
+        usort($manifests, function ($a, $b) {
+            return strcmp($a['client'], $b['client']);
+        });
+
+        $date = $inputDate;
+        return view('print.mini-manifest', compact('manifests', 'date'));
+    }
+
     public function stickers(Request $request)
     {
         $inputDate  = $request->input('date', now()->format('Y-m-d'));
