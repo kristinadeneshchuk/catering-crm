@@ -180,11 +180,13 @@ class OrderResource extends Resource
                     ->color(fn (string $state): string => match ($state) {
                         'avocado_food' => 'success',
                         'u_fit' => 'info',
+                        'level_up' => 'warning',
                         default => 'gray',
                     })
                     ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'avocado_food' => 'AvocadoFood',
+                        'avocado_food' => 'AFood',
                         'u_fit' => 'U-FIT',
+                        'level_up' => 'LevelUp',
                         default => $state,
                     }),
 

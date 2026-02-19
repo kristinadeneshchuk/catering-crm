@@ -73,7 +73,12 @@ class CalorieRangeResource extends Resource
                                      * Додаємо назву проєкту в дужках до назви тарифу
                                      */
                                     ->getOptionLabelFromRecordUsing(fn ($record) => 
-                                        "{$record->name} (" . ($record->project === 'u_fit' ? 'U-FIT' : 'AvocadoFood') . ")"
+                                        "{$record->name} (" . match($record->project) {
+                                            'avocado_food' => 'AFood',
+                                            'u_fit' => 'U-FIT',
+                                            'level_up' => 'LevelUp',
+                                            default => $record->project,
+                                        } . ")"
                                     )
                                     ->required()
                                     ->searchable()
