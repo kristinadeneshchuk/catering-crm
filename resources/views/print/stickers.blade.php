@@ -68,7 +68,6 @@
         @php
             $projName = strtolower($sticker['project'] ?? '');
             $isUfit = str_contains($projName, 'fit');
-            // 🔥 ЗМІНА 1: Зелений колір замість помаранчевого
             $brandColor = $isUfit ? '#000000' : '#22c55e';
         @endphp
 
@@ -82,9 +81,18 @@
                 {{-- ВЕРХНЯ ЧАСТИНА --}}
                 <div>
                     <div class="flex justify-between items-start border-b border-gray-100 pb-1 mb-1">
-                        <span class="text-[14px] font-black leading-tight max-w-[75%] text-slate-900 uppercase">
-                            {{ $sticker['client'] }}
-                        </span>
+                        {{-- Блок з ім'ям та ID --}}
+                        <div class="flex flex-col max-w-[75%]">
+                            <span class="text-[14px] font-black leading-tight text-slate-900 uppercase">
+                                {{ $sticker['client'] }}
+                            </span>
+                            <div class="mt-0.5">
+                                <span class="bg-slate-800 text-white text-[9px] px-1.5 py-0.5 rounded font-bold uppercase">
+                                    ID: {{ $sticker['client_id'] }}
+                                </span>
+                            </div>
+                        </div>
+                        
                         <span class="font-bold text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
                             {{ $sticker['calories'] }}
                         </span>
@@ -126,7 +134,6 @@
             
             {{-- Бренд --}}
             <div class="absolute bottom-1 left-4 opacity-10 text-[8px] font-bold uppercase tracking-tighter">
-                {{-- 🔥 ЗМІНА 2: Новий текст бренду --}}
                 {{ $isUfit ? 'U-FIT PREMIUM' : 'AFOOD DELIVERY' }}
             </div>
         </div>
