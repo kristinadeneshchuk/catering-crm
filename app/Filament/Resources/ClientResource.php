@@ -221,13 +221,14 @@ class ClientResource extends Resource
                     ->label('День')
                     ->badge()
                     ->sortable(query: function ($query, string $direction) {
-                        return $query
-                            ->select('clients.*')
-                            ->leftJoin('orders', function ($join) {
-                                $join->on('clients.id', '=', 'orders.client_id')
-                                     ->whereIn('orders.status', ['active', 'new']);
-                            })
-                            ->orderBy('orders.end_date', $direction);
+                        return $query->orderBy(
+                            \App\Models\Order::select('end_date')
+                                ->whereColumn('client_id', 'clients.id')
+                                ->whereIn('status', ['active', 'new'])
+                                ->orderBy('end_date', 'desc') 
+                                ->limit(1),
+                            $direction
+                        );
                     })
                     ->color(function ($state) {
                         if (!$state) return 'gray'; 
