@@ -5,7 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\ClientResource\Pages;
 use App\Filament\Resources\ClientResource\RelationManagers\OrdersRelationManager;
 use App\Models\Client;
-use App\Models\MealType; // 🔥 Додано для логіки
+use App\Models\MealType;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -18,7 +18,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\CheckboxList;
 use Carbon\Carbon;
 use Filament\Forms\Components\Toggle;
-use Filament\Forms\Set; // 🔥 Додано для оновлення стану форми
+use Filament\Forms\Set;
 
 class ClientResource extends Resource
 {
@@ -87,30 +87,24 @@ class ClientResource extends Resource
                 Section::make('Налаштування раціону')
                     ->description('Введіть калораж, і система автоматично підбере кількість страв.')
                     ->schema([
-                        // 🔥 АВТОМАТИЗАЦІЯ ВИБОРУ СТРАВ
                         TextInput::make('target_kcal')
                             ->label('Цільові калорії')
                             ->numeric()
                             ->default(0)
                             ->suffix('ккал')
-                            ->live(onBlur: true) // Оновлює дані, коли ви перемикаєтесь на інше поле
+                            ->live(onBlur: true) 
                             ->afterStateUpdated(function ($state, Set $set) {
                                 if (!$state) return;
 
                                 $kcal = (int) $state;
-                                $limit = 5; // Стандарт (1500+)
+                                $limit = 5; 
 
-                                // Логіка:
-                                // < 1200 -> 3 страви
-                                // 1200 - 1499 -> 4 страви
-                                // 1500+ -> 5 страв
                                 if ($kcal < 1200) {
                                     $limit = 3;
                                 } elseif ($kcal < 1500) {
                                     $limit = 4;
                                 }
 
-                                // Вибираємо перші N страв за порядком сортування
                                 $mealTypeIds = MealType::orderBy('sort_order', 'asc')
                                     ->orderBy('id', 'asc')
                                     ->take($limit)
@@ -184,8 +178,6 @@ class ClientResource extends Resource
 
                 Section::make('Логістика')
                     ->schema([
-                        // target_kcal перенесено вище
-                        
                         Textarea::make('address')
                             ->label('Адреса доставки')
                             ->columnSpanFull(),
@@ -208,39 +200,37 @@ class ClientResource extends Resource
             ]);
     }
 
-public static function table(Table $table): Table
+    public static function table(Table $table): Table
     {
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('id')
                     ->label('ID')
-                    ->sortable()
-                    ->searchable()
+                    // 🔥 ВИПРАВЛЕНО: Явно вказуємо таблицю clients для сортування і пошуку
+                    ->sortable(query: fn ($query, $direction) => $query->orderBy('clients.id', $direction))
+                    ->searchable(query: fn ($query, $search) => $query->where('clients.id', 'like', "%{$search}%"))
                     ->width(50),
 
                 Tables\Columns\TextColumn::make('name')
                     ->label("Ім'я")
-                    ->searchable()
-                    ->sortable(),
+                    // 🔥 ВИПРАВЛЕНО: Явно вказуємо таблицю clients
+                    ->sortable(query: fn ($query, $direction) => $query->orderBy('clients.name', $direction))
+                    ->searchable(query: fn ($query, $search) => $query->where('clients.name', 'like', "%{$search}%")),
 
                 Tables\Columns\TextColumn::make('active_order_progress')
                     ->label('День')
                     ->badge()
-                    // 🔥 1. БЕЗПЕЧНЕ СОРТУВАННЯ (Знизу вгору: спочатку ті, у кого закінчується замовлення)
                     ->sortable(query: function ($query, string $direction) {
                         return $query
                             ->select('clients.*')
-                            // Використовуємо closure в join, щоб це був справжній LEFT JOIN
-                            // і клієнти без замовлень не зникали з таблиці
                             ->leftJoin('orders', function ($join) {
                                 $join->on('clients.id', '=', 'orders.client_id')
                                      ->whereIn('orders.status', ['active', 'new']);
                             })
                             ->orderBy('orders.end_date', $direction);
                     })
-                    // 🔥 2. ВИПРАВЛЕНА ЛОГІКА КОЛЬОРІВ
                     ->color(function ($state) {
-                        if (!$state) return 'gray'; // Якщо немає замовлення - сірий
+                        if (!$state) return 'gray'; 
                         
                         $parts = explode(' / ', $state);
                         if (count($parts) !== 2) return 'gray';
@@ -248,21 +238,15 @@ public static function table(Table $table): Table
                         $current = (int)$parts[0];
                         $total = (int)$parts[1];
 
-                        // Якщо ще не почали (0 / 5) - сірий
                         if ($current === 0) return 'gray';
 
-                        $diff = $total - $current; // Скільки днів залишилось ПІСЛЯ сьогодні
+                        $diff = $total - $current; 
 
-                        // Якщо 10/10 (різниця 0) -> Червоний (Це останній день!)
                         if ($diff === 0) return 'danger';
-                        
-                        // Якщо 9/10 (різниця 1) -> Жовтий (Завтра останній день)
                         if ($diff === 1) return 'warning';
                         
-                        // Всі інші (8/10 і раніше) -> Зелений
                         return 'success'; 
                     })
-                    // 🔥 3. РОЗРАХУНОК ДНІВ (Старий, правильний)
                     ->getStateUsing(function ($record) {
                         $order = $record->orders()
                             ->whereIn('status', ['active', 'new'])
@@ -294,12 +278,15 @@ public static function table(Table $table): Table
 
                 Tables\Columns\TextColumn::make('phone')
                     ->label('Телефон')
+                    // 🔥 ДОДАНО: Можливість безпечно шукати і по номеру телефону
+                    ->searchable(query: fn ($query, $search) => $query->where('clients.phone', 'like', "%{$search}%"))
                     ->copyable(),
                 
                 Tables\Columns\TextColumn::make('balance')
                     ->label('Баланс')
                     ->money('UAH')
-                    ->sortable()
+                    // 🔥 ВИПРАВЛЕНО: Явно вказуємо таблицю
+                    ->sortable(query: fn ($query, $direction) => $query->orderBy('clients.balance', $direction))
                     ->color(fn ($state) => $state < 0 ? 'danger' : 'success'),
 
                 Tables\Columns\TextColumn::make('manager_comment')
