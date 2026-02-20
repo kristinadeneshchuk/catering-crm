@@ -14,17 +14,17 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithColumnWidths
 {
-    protected $date;
+    protected $targetDate;
 
     public function __construct($date)
     {
-        // Дата вже приходить "завтрашня" з контролера
-        $this->date = Carbon::parse($date)->format('Y-m-d');
+        // 🔥 ВИПРАВЛЕНО: Явно додаємо 1 день, щоб логістика завжди була на ЗАВТРА
+        $this->targetDate = Carbon::parse($date)->addDay()->format('Y-m-d');
     }
 
     public function collection()
     {
-        $targetDate = $this->date;
+        $targetDate = $this->targetDate;
 
         // 1. Шукаємо замовлення, які мають запис у календарі на цей день
         $orders = Order::query()
@@ -83,10 +83,6 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
                 if (!empty($o->comment)) {
                     $infoParts[] = "Комент ({$o->client->name}): {$o->comment}";
                 }
-                // Перевірка боргу (якщо потрібно)
-                if (!$o->is_paid && $o->total_price > 0) {
-                   // $infoParts[] = "💰 БОРГ: {$o->total_price} грн";
-                }
             }
             
             $additionalInfo = implode("\n", $infoParts);
@@ -122,7 +118,6 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
     public function styles(Worksheet $sheet)
     {
         $lastRow = $sheet->getHighestRow();
-        // Якщо даних немає, lastRow буде 1. Щоб не було помилки, перевіряємо.
         if ($lastRow < 2) return [];
 
         $range = 'A1:H' . $lastRow;

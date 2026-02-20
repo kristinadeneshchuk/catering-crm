@@ -40,37 +40,37 @@ class PackagingList extends Page implements HasForms
 
 protected function getHeaderActions(): array
     {
-        $dateParam = $this->data['date'] ?? now()->format('Y-m-d');
-
         return [
             Action::make('print_stickers')
                 ->label('1. Стікери')
                 ->icon('heroicon-o-tag')
                 ->color('gray')
-                ->url(fn () => route('print.stickers', ['date' => $dateParam]))
+                // 🔥 БЕРЕМО СВІЖУ ДАТУ ЗІ СТЕЙТУ
+                ->url(fn () => route('print.stickers', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                 ->openUrlInNewTab(),
 
-            // 🔥 ОСЬ НОВА КНОПКА
             Action::make('print_mini_manifest')
                 ->label('2. На пакет')
                 ->icon('heroicon-o-document-text')
                 ->color('info')
-                ->url(fn () => route('print.mini-manifest', ['date' => $dateParam]))
+                // 🔥 БЕРЕМО СВІЖУ ДАТУ ЗІ СТЕЙТУ
+                ->url(fn () => route('print.mini-manifest', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                 ->openUrlInNewTab(),
 
-            // Стара кнопка перейменована, щоб не плутатись
             Action::make('print_manifest')
                 ->label('3. В пакет (з меню)')
                 ->icon('heroicon-o-shopping-bag')
                 ->color('warning')
-                ->url(fn () => route('print.manifest', ['date' => $dateParam]))
+                // 🔥 БЕРЕМО СВІЖУ ДАТУ ЗІ СТЕЙТУ
+                ->url(fn () => route('print.manifest', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                 ->openUrlInNewTab(),
 
             Action::make('download_logistics')
                 ->label('Завантажити логістику (Excel)')
                 ->icon('heroicon-o-arrow-down-tray')
                 ->color('success')
-                ->url(fn () => route('print.logistics', ['date' => $dateParam])),
+                // 🔥 БЕРЕМО СВІЖУ ДАТУ ЗІ СТЕЙТУ
+                ->url(fn () => route('print.logistics', ['date' => $this->data['date'] ?? now()->format('Y-m-d')])),
         ];
     }
 
