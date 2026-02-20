@@ -86,6 +86,7 @@ class PrintController extends Controller
                 'project'     => $order->project,
                 'client'      => $order->client?->name ?? 'Без імені',
                 'address'     => $order->client?->address ?? 'Самовивіз',
+                'calories'    => (int) $order->calories,
             ];
         }
 

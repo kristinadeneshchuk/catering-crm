@@ -5,6 +5,7 @@
     <title>На пакет — {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y') }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* ГАРАНТІЯ КОЛЬОРУ ПРИ ДРУКУ */
         * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
         @media print {
@@ -19,7 +20,10 @@
             }
             .sticker-box { 
                 break-inside: avoid !important; 
+                height: auto !important; 
+                border: 2px solid #000 !important; 
             }
+            .border-avocado { border-color: #22c55e !important; } 
         }
 
         body { background: #f3f4f6; padding: 20px; font-family: sans-serif; }
@@ -32,14 +36,14 @@
         }
         .sticker-box { 
             background: white; 
-            border: 2px solid #22c55e; /* Зелена рамка за замовчуванням */
+            border: 2px solid black; 
             position: relative; 
             display: flex; 
             flex-direction: column;
             padding: 15px;
             min-height: 120px;
         }
-        .ufit-border { border-color: #000 !important; }
+        .border-avocado { border-color: #22c55e; } 
     </style>
 </head>
 <body class="bg-gray-100">
@@ -71,41 +75,47 @@
             $footerName = $isUfit ? 'U-FIT' : 'Afood';
         @endphp
         
-        <div class="sticker-box {{ $isUfit ? 'ufit-border' : '' }}">
+        <div class="sticker-box {{ $isUfit ? 'border-black' : 'border-avocado' }}">
             {{-- Пунктирна лінія зліва --}}
             <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 6px; border-right: 3px dotted {{ $brandColor }};"></div>
             
-            <div class="pl-4 flex flex-col justify-between h-full">
+            <div class="pl-4 flex flex-col justify-between h-full gap-3">
                 
                 {{-- Верхній рядок: Дата + Лого --}}
-                <div class="flex justify-between items-start mb-2">
-                    <span class="text-[14px] font-black bg-yellow-300 px-3 py-1 rounded shadow-sm text-black">
-                        {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y') }}
-                    </span>
-                    
-                    <div class="w-24 h-8 flex items-center justify-end">
+                <div class="flex justify-between items-start">
+                    <div class="flex flex-col gap-1">
+                        <span class="text-xs font-black bg-yellow-300 px-2 py-0.5 rounded shadow-sm inline-block text-black">
+                            {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y') }}
+                        </span>
+                    </div>
+                    <div class="w-28 min-h-[45px] flex items-center justify-end">
                         @if($isUfit && $ufitLogo) 
-                            <img src="{{ $ufitLogo }}" class="h-full object-contain"> 
+                            <img src="{{ $ufitLogo }}" class="w-full object-contain"> 
                         @elseif($avocadoLogo) 
-                            <img src="{{ $avocadoLogo }}" class="h-full object-contain"> 
+                            <img src="{{ $avocadoLogo }}" class="w-full object-contain"> 
                         @endif
                     </div>
                 </div>
 
                 {{-- Основна інформація --}}
-                <div class="border-b-2 border-slate-900 pb-3 mt-2">
-                    <span class="text-[10px] text-gray-400 font-bold uppercase block tracking-tighter mb-1">Отримувач:</span>
-                    <h2 class="text-2xl font-black uppercase leading-none tracking-tighter mb-2">{{ $man['client'] }}</h2>
-                    
-                    <div class="flex justify-between items-center text-[12px] font-bold uppercase mt-2">
-                        <span class="bg-slate-900 text-white px-2 py-0.5 rounded text-[14px] font-black">ID: {{ $man['client_id'] }}</span>
-                        <span class="truncate ml-2 text-slate-600 tracking-tighter">{{ $man['address'] ?? 'Самовивіз' }}</span>
+                <div class="border-b-2 border-slate-900 pb-2">
+                    <span class="text-[9px] text-gray-400 font-bold uppercase block tracking-tighter">Отримувач:</span>
+                    <h2 class="text-xl font-black uppercase leading-none tracking-tighter mb-1">{{ $man['client'] }}</h2>
+                    <div class="flex justify-between items-center text-[11px] font-bold uppercase">
+                        <div class="flex gap-2">
+                            <span class="bg-slate-900 text-white px-2 py-0.5 rounded text-[12px] font-black">ID: {{ $man['client_id'] }}</span>
+                            {{-- Плашка з калоріями --}}
+                            <span class="text-white px-2 py-0.5 rounded text-[12px] font-black" style="background-color: {{ $brandColor }};">
+                                {{ $man['calories'] ?? 0 }} ККАЛ
+                            </span>
+                        </div>
+                        <span class="truncate ml-2 italic text-slate-500">{{ $man['address'] ?? 'Самовивіз' }}</span>
                     </div>
                 </div>
 
                 {{-- Футер --}}
-                <div class="pt-3 text-center mt-auto">
-                    <p class="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">
+                <div class="pt-2 text-center mt-auto">
+                    <p class="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">
                         Смачного від {{ $footerName }}!
                     </p>
                 </div>
