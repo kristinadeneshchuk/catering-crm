@@ -9,45 +9,40 @@ class Dish extends Model
 {
     protected $guarded = [];
 
+    // 🔥 Змінна для кешування результатів розрахунку в пам'яті
+    protected ?array $memoizedTotals = null;
+
     public function dishIngredients(): HasMany
     {
         return $this->hasMany(DishIngredient::class);
     }
 
-    /**
-     * ✅ Повертає:
-     * - input_weight  = сума закладки (Σ net_weight_g інгредієнтів цього рівня)
-     * - output_weight = вихід після приготування (base_weight_g), якщо задано; інакше = input_weight
-     * - prot/fat/carb/cost по інгредієнтах (з урахуванням yield% продуктів)
-     * - kcal по формулі 4-9-4
-     */
     public function getCalculatedTotalsAttribute(): array
     {
+        // ✅ Якщо ми вже рахували цю страву під час поточного запиту — повертаємо результат миттєво
+        if ($this->memoizedTotals !== null) {
+            return $this->memoizedTotals;
+        }
+
         $totals = [
             'kcal' => 0.0,
             'prot' => 0.0,
             'fat'  => 0.0,
             'carb' => 0.0,
             'cost' => 0.0,
-
-            // важливо розрізняти:
-            'input_weight'  => 0.0, // закладка
-            'output_weight' => 0.0, // вихід
+            'input_weight'  => 0.0,
+            'output_weight' => 0.0,
         ];
 
-        // 1) input_weight = сума закладки на цьому рівні (те, що ти реально вносиш у ПФ/страву)
         foreach ($this->dishIngredients as $item) {
             $totals['input_weight'] += (float)($item->net_weight_g ?? 0);
         }
 
-        // 2) output_weight = вихід (після готування). Для ПФ це критично.
         $base = (float)($this->base_weight_g ?? 0);
         $totals['output_weight'] = $base > 0 ? $base : $totals['input_weight'];
 
-        // 3) БЖВ/ціна
         foreach ($this->dishIngredients as $item) {
             $type = mb_strtolower(trim((string)($item->type ?? '')));
-
             $netWeight = (float)($item->net_weight_g ?? 0);
             if ($netWeight <= 0) continue;
 
@@ -56,77 +51,47 @@ class Dish extends Model
 
             if ($isProduct && $item->ingredient) {
                 $ing = $item->ingredient;
-
-                // yield% продукту (очищення/обробка)
                 $yield = (float)($ing->yield_percent ?: 100);
                 if ($yield <= 0) $yield = 100;
 
-                // брутто для ціни
                 $grossWeight = ($netWeight * 100.0) / $yield;
-
-                // ціна
-                $pricePerKg = (float)($ing->price_per_kg ?? 0);
+                
+                $avgPrice = (float)($ing->average_price ?? 0);
+                $basePrice = (float)($ing->price_per_kg ?? 0);
+                $pricePerKg = $avgPrice > 0 ? $avgPrice : $basePrice;
+                
                 $totals['cost'] += ($pricePerKg / 1000.0) * $grossWeight;
 
-                // БЖВ з довідника на 100г нетто
                 $totals['prot'] += ((float)($ing->proteins_100g ?? 0) * $netWeight / 100.0);
                 $totals['fat']  += ((float)($ing->fats_100g ?? 0)     * $netWeight / 100.0);
                 $totals['carb'] += ((float)($ing->carbs_100g ?? 0)    * $netWeight / 100.0);
 
             } elseif ($isPf && $item->childDish) {
-                $pf = $item->childDish;
-
-                // totals ПФ (рекурсивно)
-                $pfTotals = $pf->calculated_totals;
-
-                // ✅ Важливо: net_weight_g у DishIngredient для ПФ — це СКІЛЬКИ ГОТОВОГО ПФ (output) ти кладеш у страву.
-                // Тому частка = netWeight / pf.output_weight
+                $pfTotals = $item->childDish->calculated_totals;
                 $pfOutput = (float)($pfTotals['output_weight'] ?? 0);
 
-                if ($pfOutput <= 0) {
-                    // якщо ПФ некоректний — краще пропустити, ніж "ділити на 1" і ламати математику
-                    continue;
+                if ($pfOutput > 0) {
+                    $ratio = $netWeight / $pfOutput;
+                    $totals['prot'] += ((float)($pfTotals['prot'] ?? 0) * $ratio);
+                    $totals['fat']  += ((float)($pfTotals['fat']  ?? 0) * $ratio);
+                    $totals['carb'] += ((float)($pfTotals['carb'] ?? 0) * $ratio);
+                    $totals['cost'] += ((float)($pfTotals['cost'] ?? 0) * $ratio);
                 }
-
-                $ratio = $netWeight / $pfOutput;
-
-                $totals['prot'] += ((float)($pfTotals['prot'] ?? 0) * $ratio);
-                $totals['fat']  += ((float)($pfTotals['fat']  ?? 0) * $ratio);
-                $totals['carb'] += ((float)($pfTotals['carb'] ?? 0) * $ratio);
-                $totals['cost'] += ((float)($pfTotals['cost'] ?? 0) * $ratio);
-            } else {
-                // якщо тип не розпізнано — можна нічого не робити
-                continue;
             }
         }
 
-        // 4) Калорії строго по 4-9-4 (виходячи з БЖВ)
         $totals['kcal'] = ($totals['prot'] * 4.0) + ($totals['fat'] * 9.0) + ($totals['carb'] * 4.0);
-
-        // 5) Для сумісності зі старим кодом:
-        // weight = ВИХІД (output), бо саме це має сенс як "вага страви"
         $totals['weight'] = $totals['output_weight'];
 
-        return $totals;
+        // ✅ Зберігаємо в кеш перед поверненням
+        return $this->memoizedTotals = $totals;
     }
 
-    // =========================
-    // Аксесори для Filament
-    // =========================
     public function getTotalKcalAttribute(): float { return round((float)($this->calculated_totals['kcal'] ?? 0), 1); }
     public function getTotalProtAttribute(): float { return round((float)($this->calculated_totals['prot'] ?? 0), 1); }
     public function getTotalFatAttribute(): float  { return round((float)($this->calculated_totals['fat']  ?? 0), 1); }
     public function getTotalCarbAttribute(): float { return round((float)($this->calculated_totals['carb'] ?? 0), 1); }
     public function getTotalCostAttribute(): float { return round((float)($this->calculated_totals['cost'] ?? 0), 2); }
-
-    // (опційно) корисно для дебагу / виводу
-    public function getInputWeightAttribute(): float
-    {
-        return round((float)($this->calculated_totals['input_weight'] ?? 0), 1);
-    }
-
-    public function getOutputWeightAttribute(): float
-    {
-        return round((float)($this->calculated_totals['output_weight'] ?? 0), 1);
-    }
+    public function getInputWeightAttribute(): float { return round((float)($this->calculated_totals['input_weight'] ?? 0), 1); }
+    public function getOutputWeightAttribute(): float { return round((float)($this->calculated_totals['output_weight'] ?? 0), 1); }
 }
