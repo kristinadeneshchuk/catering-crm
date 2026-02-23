@@ -101,7 +101,10 @@ class CurrentStock extends Page implements HasTable
 
                         // 📦 ДЛЯ ПАКУВАННЯ
                         if ($this->activeTab === 'packaging') {
-                            return '0.00 ₴'; 
+                            $stock = (float) ($record->stock ?? 0);
+                            $price = (float) ($record->price ?? 0); // Беремо ціну, яку ми додали
+                            
+                            return number_format($stock * $price, 2, '.', '') . ' ₴'; 
                         }
                     })
                     ->color(fn ($state) => (float)$state < 0 ? 'danger' : 'gray')

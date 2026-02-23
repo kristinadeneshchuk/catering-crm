@@ -33,6 +33,13 @@ class PackagingResource extends Resource
                 ->label('Одиниця виміру')
                 ->default('шт')
                 ->required(),
+
+            // 👇 Добавили поле для ввода цены
+            TextInput::make('price')
+                ->label('Ціна за одиницю (₴)')
+                ->numeric()
+                ->default(0)
+                ->step(0.01),
         ]);
     }
 
@@ -47,6 +54,12 @@ class PackagingResource extends Resource
                     ->numeric(decimalPlaces: 0)
                     ->badge()
                     ->color(fn ($state) => $state <= 0 ? 'danger' : 'success'),
+                
+                // 👇 Добавили вывод цены в таблице справочника
+                TextColumn::make('price')
+                    ->label('Ціна (₴)')
+                    ->money('UAH')
+                    ->sortable(),
             ])
             ->actions([
                 Actions\EditAction::make(),
