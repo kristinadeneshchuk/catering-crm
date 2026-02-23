@@ -23,6 +23,7 @@ use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\MorphToSelect;
 use Filament\Forms\Components\Hidden;
+use Illuminate\Support\HtmlString;
 
 use Filament\Tables\Columns\TextColumn;
 
@@ -103,13 +104,6 @@ class StockDocumentResource extends Resource
                                             ->titleAttribute('name')
                                             ->label('🍏 Продукт'),
 
-                                        // 🟡 ЗАКОМЕНТОВАНО: Напівфабрикати прибрані зі складу
-                                        /* MorphToSelect\Type::make(Dish::class)
-                                            ->titleAttribute('name')
-                                            ->label('🥣 Напівфабрикат')
-                                            ->modifyOptionsQueryUsing(fn ($query) => $query->where('is_semi_finished', true)),
-                                        */
-
                                         MorphToSelect\Type::make(Packaging::class)
                                             ->titleAttribute('name')
                                             ->label('📦 Упаковка'),
@@ -140,45 +134,34 @@ class StockDocumentResource extends Resource
                                         $item = $modelClass::find($modelId);
                                         if (!$item) return;
 
-                                        $currentPrice = $get('price');
-                                        $manual       = (bool) ($get('price_manual') ?? false);
-
-                                        $shouldAutofill = blank($currentPrice) || $manual === false;
-
-                                        if (!$shouldAutofill) {
-                                            return;
-                                        }
-
                                         $set('price_manual', false);
 
                                         $defaultPrice = 0.0;
 
                                         if ($item instanceof Ingredient) {
                                             $defaultPrice = (float) ($item->average_price ?? 0);
-                                        } 
-                                        // 🟡 ЗАКОМЕНТОВАНО: Розрахунок ціни для напівфабрикатів
-                                        /*
-                                        elseif ($item instanceof Dish) {
-                                            $recipeCost = (float) ($item->total_cost ?? 0);
-                                            $weightG    = (float) ($item->output_weight ?? 0);
-                                            $defaultPrice = $weightG > 0 ? ($recipeCost / $weightG) * 1000 : 0;
-                                        } 
-                                        */
-                                        elseif ($item instanceof Packaging) {
+                                        } elseif ($item instanceof Packaging) {
                                             $defaultPrice = (float) ($item->price ?? 0);
                                         }
 
                                         $defaultPrice = round($defaultPrice, 2);
-                                        $set('price', $defaultPrice);
 
-                                        $qty = (float) ($get('qty') ?? 0);
-                                        
-                                        if ($get('../../type') === 'inventory') {
-                                            $systemQty = (float) ($get('system_qty') ?? 0);
-                                            $diff = round($qty - $systemQty, 3);
-                                            $set('total_price', round($diff * $defaultPrice, 2));
+                                        // 🔥 Якщо це "Надходження", ми НЕ заповнюємо ціну (залишаємо порожньою)
+                                        if ($get('../../type') === 'receipt') {
+                                            $set('price', null);
+                                            $set('total_price', 0);
                                         } else {
-                                            $set('total_price', round($qty * $defaultPrice, 2));
+                                            // Для Списання або Інвентаризації підставляємо ціну з бази
+                                            $set('price', $defaultPrice);
+                                            
+                                            $qty = (float) ($get('qty') ?? 0);
+                                            if ($get('../../type') === 'inventory') {
+                                                $systemQty = (float) ($get('system_qty') ?? 0);
+                                                $diff = round($qty - $systemQty, 3);
+                                                $set('total_price', round($diff * $defaultPrice, 2));
+                                            } else {
+                                                $set('total_price', round($qty * $defaultPrice, 2));
+                                            }
                                         }
 
                                         if ($get('../../type') === 'inventory') {
@@ -200,7 +183,6 @@ class StockDocumentResource extends Resource
                                             $diff = round((float) $state - $systemQty, 3);
                                             $set('difference_qty', $diff);
 
-                                            // Різниця в грошах = Різниця кількості * Ціну
                                             $set('total_price', round($diff * $price, 2));
 
                                             if ($diff > 0) $set('inventory_status', 'Надлишок');
@@ -216,14 +198,62 @@ class StockDocumentResource extends Resource
                                     ->numeric()
                                     ->prefix('₴')
                                     ->required()
-                                    ->live(onBlur: true)
+                                    ->live(debounce: 500) // 🔥 Реактивне поле: оновлюється під час вводу
                                     ->dehydrated(true)
                                     ->hidden(fn (Forms\Get $get) => $get('../../type') === 'inventory')
                                     ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
                                         $set('price_manual', true);
-
                                         $qty = (float) ($get('qty') ?? 0);
                                         $set('total_price', round($qty * (float) $state, 2));
+                                    })
+                                    // 🔥 ДОДАНО: Контроль закупівельних цін (як у Poster)
+                                    ->helperText(function (Forms\Get $get) {
+                                        // Підказка працює ТІЛЬКИ для "Надходження"
+                                        if ($get('../../type') !== 'receipt') {
+                                            return null;
+                                        }
+
+                                        $modelClass = $get('itemable_type');
+                                        $modelId    = $get('itemable_id');
+
+                                        if (!$modelClass || !class_exists($modelClass) || !$modelId) {
+                                            return null;
+                                        }
+
+                                        $item = $modelClass::find($modelId);
+                                        if (!$item) return null;
+
+                                        // Отримуємо останню/середню ціну з бази
+                                        $lastPrice = 0.0;
+                                        if ($item instanceof Ingredient) {
+                                            $lastPrice = (float) ($item->average_price ?? 0);
+                                        } elseif ($item instanceof Packaging) {
+                                            $lastPrice = (float) ($item->price ?? 0);
+                                        }
+
+                                        if ($lastPrice <= 0) {
+                                            return new HtmlString('<span class="text-[11px] text-gray-500">Перша закупівля (немає історії цін)</span>');
+                                        }
+
+                                        $currentPrice = (float) $get('price');
+                                        $message = "<span class='text-[11px] text-gray-500'>Попередня ціна: <b>" . number_format($lastPrice, 2) . " ₴</b></span>";
+
+                                        // Якщо юзер ввів нову ціну - рахуємо різницю
+                                        if ($currentPrice > 0) {
+                                            $diff = $currentPrice - $lastPrice;
+                                            $percent = ($diff / $lastPrice) * 100;
+
+                                            // Якщо ціна змінилася хоча б на 0.1%
+                                            if (round($percent, 1) > 0) {
+                                                $message .= "<br><span style='color: #dc2626; font-weight: bold; font-size: 11px;'>Поточна ціна більша на " . round(abs($percent), 1) . "% 📈</span>";
+                                            } elseif (round($percent, 1) < 0) {
+                                                $message .= "<br><span style='color: #16a34a; font-weight: bold; font-size: 11px;'>Поточна ціна менша на " . round(abs($percent), 1) . "% 📉</span>";
+                                            } else {
+                                                $message .= "<br><span style='color: #6b7280; font-size: 11px;'>Ціна не змінилася</span>";
+                                            }
+                                        }
+
+                                        return new HtmlString("<div style='line-height: 1.2; margin-top: 4px;'>{$message}</div>");
                                     }),
 
                                 TextInput::make('total_price')
@@ -236,20 +266,20 @@ class StockDocumentResource extends Resource
                                     ->label('В прогр.')
                                     ->numeric()
                                     ->readOnly()
-                                    ->dehydrated(false) // ✅ Тільки для розрахунків
+                                    ->dehydrated(false)
                                     ->visible(fn (Forms\Get $get) => $get('../../type') === 'inventory'),
 
                                 TextInput::make('difference_qty')
                                     ->label('Різниця (кількість)')
                                     ->numeric()
                                     ->readOnly()
-                                    ->dehydrated(false) // ✅ Тільки для розрахунків
+                                    ->dehydrated(false)
                                     ->visible(fn (Forms\Get $get) => $get('../../type') === 'inventory'),
 
                                 TextInput::make('inventory_status')
                                     ->label('Статус')
                                     ->readOnly()
-                                    ->dehydrated(false) // ✅ Тільки для розрахунків
+                                    ->dehydrated(false)
                                     ->extraInputAttributes(fn ($state) => [
                                         'style' => 'font-weight: bold; color: ' . match ($state) {
                                             'Надлишок' => '#22c55e',
