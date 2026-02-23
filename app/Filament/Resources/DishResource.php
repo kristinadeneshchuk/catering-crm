@@ -76,7 +76,7 @@ class DishResource extends Resource
                                     ->numeric()
                                     ->required()
                                     ->label('Вага виходу (г)')
-                                    ->helperText('Вкажіть вагу готової страви (після уварки).') 
+                                    ->helperText('Вкажіть вагу готової страви (після уварки).')
                                     ->extraInputAttributes(['autocomplete' => 'off']),
 
                                 Toggle::make('is_semi_finished')
@@ -85,14 +85,14 @@ class DishResource extends Resource
                                     ->default(false),
                             ])->columnSpan(2),
                     ])->columns(3),
-                
+
                 Section::make('Склад страви (Рецептура)')
                     ->description('Додавайте продукти або інші напівфабрикати.')
                     ->schema([
                         Repeater::make('dishIngredients')
                             ->relationship()
                             ->label('Складові')
-                            ->live() 
+                            ->live()
                             ->schema([
                                 Select::make('type')
                                     ->label('Тип')
@@ -118,9 +118,10 @@ class DishResource extends Resource
 
                                 Select::make('child_dish_id')
                                     ->label('Оберіть НФ')
-                                    ->options(Dish::where('is_semi_finished', true)->pluck('name', 'id'))
+                                    ->options(fn () => Dish::where('is_semi_finished', true)->pluck('name', 'id'))
                                     ->searchable()
                                     ->preload()
+                                    ->getOptionLabelUsing(fn ($value): ?string => Dish::find($value)?->name)
                                     ->visible(fn (Forms\Get $get) => $get('type') === 'pf')
                                     ->required(fn (Forms\Get $get) => $get('type') === 'pf'),
 
@@ -132,8 +133,8 @@ class DishResource extends Resource
                                     ->extraInputAttributes(['autocomplete' => 'off']),
                             ])
                             ->columns(3)
-                            ->itemLabel(fn (array $state): ?string => 
-                                ($state['type'] === 'pf' ? '📦 НФ: ' : '🍎 Прод: ') . 
+                            ->itemLabel(fn (array $state): ?string =>
+                                ($state['type'] === 'pf' ? '📦 НФ: ' : '🍎 Прод: ') .
                                 ($state['net_weight_g'] ?? 0) . 'г'
                             )
                     ]),
@@ -262,9 +263,9 @@ class DishResource extends Resource
                             ->toArray();
                     })
                     ->searchable(),
-            ]) 
+            ])
                 ->actions([
-                    Tables\Actions\EditAction::make(), 
+                    Tables\Actions\EditAction::make(),
                     Tables\Actions\DeleteAction::make(),
                 ])
                 ->bulkActions([

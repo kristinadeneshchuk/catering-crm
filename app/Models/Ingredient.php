@@ -21,8 +21,9 @@ class Ingredient extends Model
         'calories_100g', 'proteins_100g', 'fats_100g', 'carbs_100g',
         'stock', 'group', 'photo'
     ];
+
     protected $casts = [
-        'stock' => 'decimal:3', // Гарантує, що 0.999 не округлиться
+        'stock' => 'decimal:3', 
         'price_per_kg' => 'decimal:2',
         'yield_percent' => 'integer',
         'calories_100g' => 'integer',
@@ -30,6 +31,36 @@ class Ingredient extends Model
         'fats_100g' => 'float',
         'carbs_100g' => 'float',
     ];
+
+    /**
+     * 🔥 АКСЕСОР: Середньозважена ціна закупівлі
+     * Рахується на основі всіх документів "Надходження" (receipt)
+     */
+    public function getAveragePriceAttribute(): float
+    {
+        $avgData = \App\Models\StockDocumentItem::query()
+            ->where('itemable_id', $this->id)
+            ->where('itemable_type', self::class)
+            ->whereHas('stockDocument', fn($q) => $q->where('type', 'receipt'))
+            ->selectRaw('SUM(qty * price) as total_cost, SUM(qty) as total_qty')
+            ->first();
+
+        // Якщо закупівлі були — повертаємо середню. Якщо ні — повертаємо фіксовану ціну з картки.
+        if ($avgData && $avgData->total_qty > 0) {
+            return (float) ($avgData->total_cost / $avgData->total_qty);
+        }
+
+        return (float) $this->price_per_kg;
+    }
+
+    public function getTotalSpentAttribute(): float
+{
+    return (float) \App\Models\StockDocumentItem::query()
+        ->whereIn('itemable_type', [self::class, 'App\Models\Ingredient'])
+        ->where('itemable_id', $this->id)
+        ->whereHas('stockDocument', fn($q) => $q->where('type', 'receipt'))
+        ->sum(\Illuminate\Support\Facades\DB::raw('qty * price'));
+}
 
     /**
      * Зв'язок зі стравами через таблицю-посередник.

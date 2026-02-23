@@ -404,11 +404,15 @@ public function form(Form $form): Form
 
         foreach ($this->report as $mealDishes) {
             foreach ($mealDishes as $dishData) {
+                // 1. Стандартные порции (уже просуммированы внутри структуры)
                 foreach ($dishData['standard_structure'] as $comp) {
                     $this->collectIngredientsRecursive($comp, $ingredientsToDebit);
                 }
+                
+                // 2. Индивидуальные кастомные карточки
                 foreach ($dishData['custom_cards'] as $card) {
-                    if ($card['dish_excluded'] && !isset($card['dish_replacement'])) {
+                    // Пропускаем, если от блюда отказались и нет замены
+                    if ($card['dish_excluded'] && empty($card['replacement_dish_id'])) {
                         continue;
                     }
                     foreach ($card['components'] as $comp) {
@@ -424,8 +428,22 @@ public function form(Form $form): Form
         }
 
         DB::transaction(function () use ($ingredientsToDebit) {
-            foreach ($ingredientsToDebit as $id => $totalWeight) {
-                Ingredient::where('id', $id)->decrement('stock', $totalWeight);
+            // Оптимизация: берем все нужные ингредиенты одним запросом
+            $ingredients = Ingredient::whereIn('id', array_keys($ingredientsToDebit))->get()->keyBy('id');
+
+            foreach ($ingredientsToDebit as $id => $totalWeightGrams) {
+                $ingredient = $ingredients->get($id);
+                if (!$ingredient) continue;
+
+                $unit = mb_strtolower(trim((string)$ingredient->unit));
+                $weightToDebit = $totalWeightGrams;
+
+                // Если в рецептах используются граммы, а на складе КГ или Литры — конвертируем
+                if (in_array($unit, ['кг', 'kg', 'л', 'l'], true)) {
+                    $weightToDebit = $totalWeightGrams / 1000.0;
+                }
+
+                $ingredient->decrement('stock', $weightToDebit);
             }
         });
 
@@ -438,12 +456,26 @@ public function form(Form $form): Form
 
     private function collectIngredientsRecursive(array $component, array &$accumulator): void
     {
-        if (($component['type'] ?? null) === 'product' && isset($component['product_id'])) {
-            $id = (int)$component['product_id'];
-            $weight = (float)($component['weight_brutto'] ?? 0);
+        if (($component['type'] ?? null) === 'product') {
+            
+            $conflict = $component['conflict'] ?? null;
+            
+            // Если была успешная замена ингредиента, списываем ТОЛЬКО продукт-заменитель
+            if (is_array($conflict) && ($conflict['is_resolved'] ?? false) && isset($conflict['replacement']['product_id'])) {
+                $id = (int)$conflict['replacement']['product_id'];
+                $weight = (float)($conflict['replacement']['brutto'] ?? 0);
+            } else {
+                // Иначе списываем оригинальный продукт
+                $id = (int)($component['product_id'] ?? 0);
+                $weight = (float)($component['weight_brutto'] ?? 0);
+            }
 
-            if (!isset($accumulator[$id])) $accumulator[$id] = 0;
-            $accumulator[$id] += $weight;
+            if ($id > 0) {
+                if (!isset($accumulator[$id])) {
+                    $accumulator[$id] = 0.0;
+                }
+                $accumulator[$id] += $weight;
+            }
             return;
         }
 
@@ -565,7 +597,8 @@ public function form(Form $form): Form
                             'name' => $rep->replacementProduct->name,
                             'netto' => round($nettoTotalRaw, 1),
                             'brutto' => round(($nettoTotalRaw * 100) / $newYield, 1),
-                            'unit' => $rep->replacementProduct->unit ?? 'г'
+                            'unit' => $rep->replacementProduct->unit ?? 'г',
+                            'product_id' => (int)$rep->replacementProduct->id,
                         ];
                     }
 

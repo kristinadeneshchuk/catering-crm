@@ -67,7 +67,8 @@ class IngredientResource extends Resource
                                     }),
 
                                 TextInput::make('price_per_kg')
-                                    ->label('Ціна за кг (грн)')
+                                    ->label('Базова ціна за кг (грн)')
+                                    ->helperText('Використовується як середня, якщо ще не було закупів')
                                     ->numeric()
                                     ->prefix('₴'),
                                     
@@ -130,25 +131,14 @@ class IngredientResource extends Resource
                     ->color('success')
                     ->weight('bold'),
                 
-                // === ЗМІНЕНО: КОЛЬОРИ ДЛЯ НОВИХ ГРУП ===
                 Tables\Columns\TextColumn::make('group')->label('Група/Тип')->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        // Зелений (Рослинне, свіже)
                         'Фрукти', 'Овочі', 'Зелень', 'Ягоди', 'Гриби', 'Сухофрукти' => 'success',
-                        
-                        // Червоний (Мясо)
                         'М’ясо', 'М’ясні продукти', 'Субпродукти' => 'danger',
-                        
-                        // Синій/Блакитний (Риба, Молочка, Напої)
                         'Риба', 'Морепродукти', 'Молочні продукти', 'Напої', 'Сири' => 'info',
-                        
-                        // Жовтий/Помаранчевий (Бакалія, Хліб, Солодке, Горіхи)
                         'Бакалія', 'Злаки та крупи', 'Борошно та вироби', 'Горіхи', 'Бобові', 
                         'Кондитерські вироби, солодощі', 'Соєві продукти', 'Глютеновмісні' => 'warning',
-                        
-                        // Сірий (Інше)
                         'Спеції та прянощі', 'Соуси', 'Системні', 'Інше' => 'gray',
-                        
                         default => 'gray',
                     }),
 
@@ -157,9 +147,11 @@ class IngredientResource extends Resource
                         ($record->proteins_100g ?? 0) . ' / ' . ($record->fats_100g ?? 0) . ' / ' . ($record->carbs_100g ?? 0) . ' / ' . ($record->calories_100g ?? 0)
                     )->badge()->color('gray')->alignCenter(),
 
-                Tables\Columns\TextColumn::make('price_per_kg')
-                    ->label('Ціна UAH')
+                // 🔥 Залишаємо середню ціну для довідника
+                Tables\Columns\TextColumn::make('average_price')
+                    ->label('Середня ціна UAH')
                     ->money('UAH')
+                    ->description(fn($record) => "Фікс: " . number_format($record->price_per_kg, 2) . " ₴")
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('stock')

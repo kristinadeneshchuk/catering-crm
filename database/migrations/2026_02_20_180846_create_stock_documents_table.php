@@ -1,0 +1,41 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('stock_documents', function (Blueprint $table) {
+            $table->id();
+            $table->string('type'); // receipt (поступлення), write_off (списання), inventory (інвентаризація)
+            $table->foreignId('warehouse_id')->constrained('warehouses')->cascadeOnDelete();
+            $table->foreignId('supplier_id')->nullable()->constrained('suppliers')->nullOnDelete();
+            
+            // 🔥 Точна дата і час операції
+            $table->dateTime('operation_date'); 
+            
+            // Статус (залишаємо для гнучкості, за замовчуванням завжди проведено)
+            $table->string('status')->default('completed'); 
+            
+            $table->text('comment')->nullable();
+            
+            // Загальна сума документа (актуально для поступлення та інвентаризації)
+            $table->decimal('total_sum', 10, 2)->default(0); 
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('stock_documents');
+    }
+};

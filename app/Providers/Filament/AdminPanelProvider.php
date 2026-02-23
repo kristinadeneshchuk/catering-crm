@@ -33,11 +33,16 @@ class AdminPanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Amber,
             ])
-            // НАЛАШТУВАННЯ ГРУП НАВІГАЦІЇ
+// НАЛАШТУВАННЯ ГРУП НАВІГАЦІЇ
             ->navigationGroups([
                 // Група "Виробництво" — завжди відкрита для цеху та пакування
                 NavigationGroup::make('Виробництво')
                     ->icon('heroicon-o-building-office-2'),
+
+                // 🔥 ДОДАЄМО СКЛАД І РОБИМО ЙОГО ЗГОРНУТИМ
+                NavigationGroup::make('Склад')
+                    ->icon('heroicon-o-archive-box') // Можеш змінити іконку на свою
+                    ->collapsed(), 
 
                 // "Довідник" — за замовчуванням згорнутий
                 NavigationGroup::make('Довідник')
