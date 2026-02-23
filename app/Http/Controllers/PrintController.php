@@ -723,6 +723,9 @@ class PrintController extends Controller
                     'weight_output' => round($nettoTotalRaw, 1),
                     'weight_netto_sum' => round($sumNetto, 1),
                     'weight_brutto_sum' => round($sumBrutto, 1),
+                    // 👇 ДОДАНО ДЛЯ ВИРІШЕННЯ "0 грам" У ВЕРСІЇ ДЛЯ ДРУКУ
+                    'weight_netto' => round($sumNetto, 1),
+                    'weight_brutto' => round($sumBrutto, 1),
                     'sub_ingredients' => $subIngredients
                 ];
             }

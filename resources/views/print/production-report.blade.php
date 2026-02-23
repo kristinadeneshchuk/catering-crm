@@ -9,9 +9,7 @@
         table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
         th, td { border: 1px solid #e5e7eb; padding: 4px 8px; text-align: left; }
         th { background-color: #f3f4f6; font-weight: bold; }
-        .pf-row { background-color: #fffbeb; font-weight: 600; }
-        .sub-ingredient { padding-left: 20px; color: #4b5563; }
-
+        
         /* 🔥 СПЕЦІАЛЬНІ СТИЛІ ТІЛЬКИ ДЛЯ ДРУКУ (ЩОБ ЕКОНОМИТИ ПАПІР) 🔥 */
         @media print {
             .no-print { display: none !important; }
@@ -60,7 +58,84 @@
 </head>
 <body class="bg-gray-100 p-4 sm:p-8 text-slate-800 font-sans print:p-0">
 
-    {{-- КНОПКА ДРУКУ (не відображається на папері) --}}
+    @php
+        // 🔄 РЕКУРСИВНА ФУНКЦІЯ ДЛЯ СТАНДАРТНИХ ПОРЦІЙ
+        if (!function_exists('renderStandardIngredients')) {
+            function renderStandardIngredients($ingredients, $level = 0) {
+                $html = '';
+                $padding = $level * 15; // Відступ для вкладеності
+                $prefix = $level > 0 ? '↳ ' : '';
+
+                foreach ($ingredients as $comp) {
+                    if (($comp['type'] ?? '') === 'pf') {
+                        $html .= '<tr class="bg-orange-50/50 print:bg-gray-100 border-b border-orange-100">';
+                        $html .= '<td class="font-bold text-slate-700" style="padding-left: '.($padding + 8).'px;">📦 ' . $prefix . $comp['name'] . '</td>';
+                        // Для ПФ беремо weight_output (вихід) та weight_brutto_sum
+                        $html .= '<td class="font-bold text-slate-700">' . round($comp['weight_output'] ?? 0) . '</td>';
+                        $html .= '<td class="font-bold text-slate-700">' . round($comp['weight_brutto_sum'] ?? 0) . '</td>';
+                        $html .= '</tr>';
+                        
+                        if (!empty($comp['sub_ingredients'])) {
+                            $html .= renderStandardIngredients($comp['sub_ingredients'], $level + 1);
+                        }
+                    } else {
+                        $html .= '<tr class="border-b border-gray-100 text-slate-600">';
+                        $html .= '<td style="padding-left: '.($padding + 8).'px;">🍎 ' . $prefix . $comp['name'] . '</td>';
+                        // Для продуктів беремо netto та brutto
+                        $html .= '<td>' . round($comp['weight_netto'] ?? 0) . '</td>';
+                        $html .= '<td>' . round($comp['weight_brutto'] ?? 0) . '</td>';
+                        $html .= '</tr>';
+                    }
+                }
+                return $html;
+            }
+        }
+
+        // 🔄 РЕКУРСИВНА ФУНКЦІЯ ДЛЯ КАСТОМНИХ КАРТОК (Тільки Брутто)
+        if (!function_exists('renderCustomIngredients')) {
+            function renderCustomIngredients($ingredients, $level = 0) {
+                $html = '';
+                $padding = $level * 10;
+                $prefix = $level > 0 ? '↳ ' : '';
+
+                foreach ($ingredients as $comp) {
+                    if (($comp['type'] ?? '') === 'pf') {
+                        $html .= '<tr class="bg-gray-50 print:bg-gray-100 border-b border-gray-200">';
+                        $html .= '<td class="font-semibold" style="padding-left: '.($padding + 4).'px;">📦 ' . $prefix . $comp['name'] . '</td>';
+                        $html .= '<td class="font-semibold">' . round($comp['weight_brutto_sum'] ?? 0) . '</td>';
+                        $html .= '</tr>';
+                        
+                        if (!empty($comp['sub_ingredients'])) {
+                            $html .= renderCustomIngredients($comp['sub_ingredients'], $level + 1);
+                        }
+                    } else {
+                        $name = $comp['name'];
+                        $brutto = round($comp['weight_brutto'] ?? 0);
+                        $rowClass = '';
+
+                        // Обробка замін
+                        if (isset($comp['conflict']['is_resolved'])) {
+                            if ($comp['conflict']['is_resolved']) {
+                                $rowClass = 'bg-blue-50 text-blue-800 print:bg-gray-100';
+                                $name = '<span class="line-through text-gray-400">'.$name.'</span><br><span class="font-bold text-[9px] text-blue-600">🔄 На: '.$comp['conflict']['replacement']['name'].'</span>';
+                                $brutto = round($comp['conflict']['replacement']['brutto'] ?? $brutto);
+                            } else {
+                                $name .= '<br><span class="font-bold text-[9px] text-red-600">❌ Виключено</span>';
+                            }
+                        }
+
+                        $html .= '<tr class="'.$rowClass.' border-b border-gray-100">';
+                        $html .= '<td style="padding-left: '.($padding + 4).'px;">🍎 ' . $prefix . $name . '</td>';
+                        $html .= '<td>' . $brutto . '</td>';
+                        $html .= '</tr>';
+                    }
+                }
+                return $html;
+            }
+        }
+    @endphp
+
+    {{-- КНОПКА ДРУКУ --}}
     <div class="no-print mb-6 flex justify-between items-center max-w-5xl mx-auto bg-white p-4 rounded-xl shadow">
         <div>
             <h1 class="text-xl font-bold">План виробництва</h1>
@@ -88,7 +163,7 @@
                     </div>
 
                     @foreach($dishes as $dish)
-                        {{-- Блок конкретного рецепту (НЕ розривається на 2 сторінки завдяки .avoid-break) --}}
+                        {{-- Блок конкретного рецепту --}}
                         <div class="recipe-card avoid-break border border-t-0 border-slate-200 p-4 mb-4 rounded-b-lg">
                             <h3 class="text-lg font-bold text-slate-900 mb-2">{{ $dish['dish_name'] }}</h3>
 
@@ -97,39 +172,20 @@
                                 <div class="mb-2">
                                     <div class="flex justify-between items-center bg-green-50 text-green-800 px-2 py-1 font-bold mb-1 border border-green-200 rounded print:border-gray-300 print:bg-white print:text-black">
                                         <span>Стандарт: {{ $dish['standard_count'] }} шт.</span>
-                                        <span class="text-xs">Нетто: {{ $dish['standard_total_netto'] }} г | Брутто: {{ $dish['standard_total_brutto'] }} г</span>
+                                        <span class="text-xs">Вихід/Нетто: {{ $dish['standard_total_netto'] }} г | Брутто: {{ $dish['standard_total_brutto'] }} г</span>
                                     </div>
                                     
                                     <table>
                                         <thead>
                                             <tr>
                                                 <th class="w-1/2">Інгредієнт / ПФ</th>
-                                                <th>Нетто (г)</th>
+                                                <th>Вихід/Нетто (г)</th>
                                                 <th>Брутто (г)</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            @foreach($dish['standard_structure'] as $comp)
-                                                @if($comp['type'] === 'pf')
-                                                    <tr class="pf-row print:bg-gray-100">
-                                                        <td>📦 {{ $comp['name'] }}</td>
-                                                        <td colspan="2" class="text-center text-xs">Вихід ПФ: {{ $comp['weight_output'] }} г</td>
-                                                    </tr>
-                                                    @foreach($comp['sub_ingredients'] as $sub)
-                                                        <tr>
-                                                            <td class="sub-ingredient">↳ {{ $sub['name'] }}</td>
-                                                            <td>{{ $sub['weight_netto'] ?? $sub['weight_output'] ?? 0 }}</td>
-                                                            <td>{{ $sub['weight_brutto'] ?? 0 }}</td>
-                                                        </tr>
-                                                    @endforeach
-                                                @else
-                                                    <tr>
-                                                        <td class="font-medium">🍎 {{ $comp['name'] }}</td>
-                                                        <td>{{ $comp['weight_netto'] }}</td>
-                                                        <td>{{ $comp['weight_brutto'] }}</td>
-                                                    </tr>
-                                                @endif
-                                            @endforeach
+                                            {{-- Вкликаємо рекурсивну функцію для стандарту --}}
+                                            {!! renderStandardIngredients($dish['standard_structure']) !!}
                                         </tbody>
                                     </table>
                                 </div>
@@ -167,27 +223,12 @@
                                                         <thead>
                                                             <tr class="bg-white">
                                                                 <th>Склад</th>
-                                                                <th class="w-12">Брутто</th>
+                                                                <th class="w-12">Брутто (г)</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
-                                                            @foreach($card['components'] as $comp)
-                                                                @if($comp['type'] === 'product')
-                                                                    <tr class="{{ isset($comp['conflict']['is_resolved']) && $comp['conflict']['is_resolved'] ? 'bg-blue-50 text-blue-800 print:bg-gray-100 print:text-black' : '' }}">
-                                                                        <td>
-                                                                            {{ $comp['name'] }}
-                                                                            @if(isset($comp['conflict']['is_resolved']))
-                                                                                @if($comp['conflict']['is_resolved'])
-                                                                                    <br><span class="font-bold text-[8px]">🔄 На: {{ $comp['conflict']['replacement']['name'] }} ({{ $comp['conflict']['replacement']['brutto'] }}г)</span>
-                                                                                @else
-                                                                                    <br><span class="font-bold text-[8px] text-red-600 print:text-black">❌ Виключено</span>
-                                                                                @endif
-                                                                            @endif
-                                                                        </td>
-                                                                        <td>{{ $comp['weight_brutto'] }}</td>
-                                                                    </tr>
-                                                                @endif
-                                                            @endforeach
+                                                            {{-- Вкликаємо рекурсивну функцію для кастому --}}
+                                                            {!! renderCustomIngredients($card['components']) !!}
                                                         </tbody>
                                                     </table>
                                                 @endif

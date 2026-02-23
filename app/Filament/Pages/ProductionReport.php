@@ -115,7 +115,6 @@ public function form(Form $form): Form
                             $this->js("window.history.replaceState(null, null, '?date=' + '{$state}')");
                         }),
 
-                    // 🔥 Обернули Placeholder у Group і додали Action-кнопку
                     \Filament\Forms\Components\Group::make()->schema([
                         Placeholder::make('info_text')
                             ->label('Цільова дата')
@@ -283,12 +282,6 @@ public function form(Form $form): Form
             });
     }
 
-    /**
-     * ✅ Розрахунок звіту:
-     * - Будуємо план по кожному order (які страви + яка вага)
-     * - По кожній страві меню збираємо тільки ті orders, де вона входить у план
-     * - Масштаб інгредієнтів = sum(scales)
-     */
     public function calculate(): void
     {
         $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
@@ -446,12 +439,6 @@ public function form(Form $form): Form
                 $ingredient->decrement('stock', $weightToDebit);
             }
         });
-
-        // Notification::make()
-        //     ->title('Зміну закрито')
-        //     ->body('Залишки на складі успішно оновлено.')
-        //     ->success()
-        //     ->send();
     }
 
     private function collectIngredientsRecursive(array $component, array &$accumulator): void
@@ -666,6 +653,9 @@ public function form(Form $form): Form
                     'weight_output' => round($nettoTotalRaw, 1),
                     'weight_netto_sum' => round($sumNetto, 1),
                     'weight_brutto_sum' => round($sumBrutto, 1),
+                    // 👇 ДОДАНО: Ключі weight_netto та weight_brutto, щоб шаблон бачив вагу!
+                    'weight_netto' => round($sumNetto, 1),
+                    'weight_brutto' => round($sumBrutto, 1),
                     'sub_ingredients' => $subIngredients
                 ];
             }
