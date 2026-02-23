@@ -447,11 +447,11 @@ public function form(Form $form): Form
             }
         });
 
-        Notification::make()
-            ->title('Зміну закрито')
-            ->body('Залишки на складі успішно оновлено.')
-            ->success()
-            ->send();
+        // Notification::make()
+        //     ->title('Зміну закрито')
+        //     ->body('Залишки на складі успішно оновлено.')
+        //     ->success()
+        //     ->send();
     }
 
     private function collectIngredientsRecursive(array $component, array &$accumulator): void

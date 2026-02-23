@@ -241,7 +241,7 @@ class PrintController extends Controller
                 $realW = (float)($plannedDish['weight'] ?? 0);
                 $dishScale = ($baseW > 0) ? ($realW / $baseW) : 0.0;
 
-                // заметки (оставляем твою логику)
+                // заметки
                 $replacements = $order->replacements
                     ->where('dish_id', $dish->id)
                     ->whereNotNull('original_product_id');
@@ -280,6 +280,7 @@ class PrintController extends Controller
 
             ksort($tableData['columns']);
 
+            // 🔥 ТУТ ПРАВКА ДЛЯ ФАСУВАЛЬНОГО ЛИСТА (ГРАМИ НА ОДНУ ПОРЦІЮ)
             foreach ($dish->dishIngredients as $di) {
                 $originalName = $di->ingredient
                     ? $di->ingredient->name
@@ -287,9 +288,14 @@ class PrintController extends Controller
 
                 $cells = [];
                 foreach ($tableData['columns'] as $key => $col) {
+                    $count = (int)($col['count'] ?? 1);
                     $sumScale = (float)($col['sum_scale'] ?? 0.0);
+                    
+                    // Розраховуємо середній масштаб на ОДНУ порцію
+                    $onePortionScale = $count > 0 ? ($sumScale / $count) : 0;
+
                     $cells[$key] = [
-                        'val' => round(((float)($di->net_weight_g ?? 0)) * $sumScale),
+                        'val' => round(((float)($di->net_weight_g ?? 0)) * $onePortionScale),
                     ];
                 }
 
@@ -569,7 +575,7 @@ class PrintController extends Controller
 
             if (empty($standard) && empty($custom)) continue;
 
-            // Збираємо структуру
+            // Збираємо структуру (ТУТ ВСЕ ЗАЛИШИЛОСЯ ЯК БУЛО — ЗАГАЛЬНА СУМА ДЛЯ ВИРОБНИЦТВА)
             $standardScales = array_map(fn($x) => (float)$x['scale'], $standard);
             $standardStructure = $this->calculateIngredientsStructureByScales($dish, $standardScales);
             $standardTotals = $this->calculateStructureTotals($standardStructure);

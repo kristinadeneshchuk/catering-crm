@@ -38,7 +38,7 @@ class PackagingList extends Page implements HasForms
         $this->calculate();
     }
 
-protected function getHeaderActions(): array
+    protected function getHeaderActions(): array
     {
         return [
             Action::make('print_stickers')
@@ -213,7 +213,7 @@ protected function getHeaderActions(): array
 
             ksort($tableData['columns']);
 
-            // ✅ 3) Масштабуємо інгредієнти (правильно: net_weight_g * sum_scale)
+            // ✅ 3) Масштабуємо інгредієнти (ТЕПЕР: на одну особу)
             foreach ($dish->dishIngredients as $di) {
                 $name = $di->ingredient
                     ? $di->ingredient->name
@@ -221,9 +221,15 @@ protected function getHeaderActions(): array
 
                 $cells = [];
                 foreach ($tableData['columns'] as $key => $col) {
+                    $count = (int)($col['count'] ?? 1);
                     $sumScale = (float)($col['sum_scale'] ?? 0.0);
+                    
+                    // Розраховуємо середній масштаб на ОДНУ порцію в цій колонці
+                    $onePortionScale = $count > 0 ? ($sumScale / $count) : 0;
+
                     $cells[$key] = [
-                        'val' => round(((float)($di->net_weight_g ?? 0)) * $sumScale),
+                        // Виводимо вагу інгредієнта для одного лотка
+                        'val' => round(((float)($di->net_weight_g ?? 0)) * $onePortionScale),
                     ];
                 }
 
