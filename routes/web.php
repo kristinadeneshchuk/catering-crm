@@ -5,7 +5,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\PrintController;
 use App\Http\Controllers\ClientAuthController;
 use App\Http\Controllers\ClientPaymentController;
-// !!! ОСЬ ЦІ ДВА РЯДКИ КРИТИЧНО ВАЖЛИВІ !!!
+use App\Http\Controllers\AnalyticsController;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\LogisticsExport;
 use App\Models\Order;
@@ -88,3 +88,6 @@ Route::get('/migrate-orders-to-days', function () {
 
 Route::get('/print/production-report', [PrintController::class, 'productionReport'])->name('print.production-report');
 Route::get('/print/mini-manifest', [\App\Http\Controllers\PrintController::class, 'miniManifest'])->name('print.mini-manifest');
+
+// 🔥 НОВИЙ МАРШРУТ АНАЛІТИКИ (закритий авторизацією)
+Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index')->middleware('auth');

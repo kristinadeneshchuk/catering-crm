@@ -102,10 +102,10 @@ class DailyMenuResource extends Resource
 
                                         $cost = $weightGrams * $costPerGram;
 
-                                        // 🔥 Кольорова індикація: Дорожче 70 - червоне, 45-70 - жовте, дешевше 45 - зелене
-                                        if ($cost > 70) {
+                                        // 🔥 Кольорова індикація: Дорожче 50 - червоне, 30-50 - жовте, дешевше 30 - зелене
+                                        if ($cost > 50) {
                                             $color = '#ef4444'; // червоний
-                                        } elseif ($cost > 45) {
+                                        } elseif ($cost > 30) {
                                             $color = '#f59e0b'; // жовтий
                                         } else {
                                             $color = '#22c55e'; // зелений
@@ -145,11 +145,9 @@ class DailyMenuResource extends Resource
                     ->sortable()
                     ->alignCenter(),
 
+                // Залишаємо лише 3 колонки: 950, 1500 та 2500
                 self::makeCostColumn('cost_950', '950 ккал', 950, [1, 3, 5], 'success', true),
-                self::makeCostColumn('cost_1200', '1200 ккал', 1200, [1, 3, 4, 5], 'success', false),
                 self::makeCostColumn('cost_1500', '1500 ккал', 1500, [1, 2, 3, 4, 5], 'warning', false),
-                self::makeCostColumn('cost_1800', '1800 ккал', 1800, [1, 2, 3, 4, 5], 'warning', false),
-                self::makeCostColumn('cost_2100', '2100 ккал', 2100, [1, 2, 3, 4, 5], 'danger', false),
                 self::makeCostColumn('cost_2500', '2500 ккал', 2500, [1, 2, 3, 4, 5], 'danger', false),
             ])
             ->defaultSort('day_number', 'asc') 
