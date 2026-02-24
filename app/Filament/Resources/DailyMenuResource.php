@@ -13,6 +13,8 @@ use Filament\Tables\Table;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Placeholder;
+use Illuminate\Support\HtmlString;
 
 class DailyMenuResource extends Resource
 {
@@ -23,9 +25,6 @@ class DailyMenuResource extends Resource
     protected static ?string $pluralModelLabel = 'Циклічне меню';
     protected static ?string $modelLabel = 'День меню';
 
-    /**
-     * Обмеження доступу: тільки для Адміністраторів та Менеджерів.
-     */
     public static function canViewAny(): bool
     {
         return auth()->user()->role === 'admin' || auth()->user()->role === 'manager';
@@ -36,21 +35,15 @@ class DailyMenuResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Параметри дня')
-                    ->description('Вкажіть номер дня в циклі. Система автоматично повторюватиме цей раціон згідно з налаштуваннями бізнесу.')
+                    ->description('Вкажіть номер дня в циклі.')
                     ->schema([
                         TextInput::make('day_number')
                             ->label('Номер дня в циклі')
-                            ->placeholder('Наприклад: 1')
                             ->numeric()
                             ->required()
                             ->minValue(1)
                             ->maxValue(fn () => (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24)
-                            ->unique(ignoreRecord: true) 
-                            ->validationMessages([
-                                'max' => 'Ви не можете створити день №:value, оскільки тривалість циклу в налаштуваннях обмежена :max днями.',
-                                'unique' => 'Меню для цього дня вже існує.',
-                            ])
-                            ->helperText(fn () => 'Максимально допустимий день зараз: ' . (Setting::where('key', 'menu_cycle_days')->value('value') ?: 24)),
+                            ->unique(ignoreRecord: true),
                     ]),
                 
                 Forms\Components\Section::make('Склад раціону')
@@ -62,6 +55,7 @@ class DailyMenuResource extends Resource
                                 Select::make('meal_type_id')
                                     ->relationship('mealType', 'name')
                                     ->required()
+                                    ->live() // 🔥 Робить поле реактивним
                                     ->label('Прийом їжі'),
                                     
                                 Select::make('dish_id')
@@ -69,9 +63,63 @@ class DailyMenuResource extends Resource
                                     ->searchable()
                                     ->preload()
                                     ->required()
+                                    ->live() // 🔥 Робить поле реактивним
                                     ->label('Страва'),
+
+                                // 🔥 НОВЕ ПОЛЕ: ДИНАМІЧНИЙ РОЗРАХУНОК ЦІНИ
+                                Placeholder::make('cost_preview')
+                                    ->label('Собівартість (на 1500 ккал)')
+                                    ->content(function (Forms\Get $get) {
+                                        $dishId = $get('dish_id');
+                                        $mealTypeId = $get('meal_type_id');
+
+                                        if (!$dishId || !$mealTypeId) {
+                                            return new HtmlString('<span class="text-gray-400">—</span>');
+                                        }
+
+                                        $dish = \App\Models\Dish::find($dishId);
+                                        $mealType = \App\Models\MealType::find($mealTypeId);
+
+                                        if (!$dish || !$mealType) {
+                                            return new HtmlString('<span class="text-gray-400">—</span>');
+                                        }
+
+                                        // Рахуємо конкретно для 1500 ккал
+                                        $targetKcal = 1500;
+                                        $p = (float)($mealType->energy_percent ?? 0);
+                                        
+                                        $mealKcal = $targetKcal * ($p / 100.0);
+
+                                        $baseW = (float)($dish->base_weight_g ?? 0);
+                                        $dishTotalKcal = (float)($dish->total_kcal ?? 0);
+                                        $kcalPer100 = ($baseW > 0 && $dishTotalKcal > 0) ? ($dishTotalKcal / $baseW) * 100.0 : 0;
+
+                                        $weightGrams = ($kcalPer100 > 0) ? ($mealKcal / $kcalPer100) * 100.0 : 0;
+
+                                        $outW = (float)($dish->output_weight ?? $baseW);
+                                        $recipeCost = (float)($dish->total_cost ?? 0);
+                                        $costPerGram = ($outW > 0) ? ($recipeCost / $outW) : 0;
+
+                                        $cost = $weightGrams * $costPerGram;
+
+                                        // 🔥 Кольорова індикація: Дорожче 70 - червоне, 45-70 - жовте, дешевше 45 - зелене
+                                        if ($cost > 70) {
+                                            $color = '#ef4444'; // червоний
+                                        } elseif ($cost > 45) {
+                                            $color = '#f59e0b'; // жовтий
+                                        } else {
+                                            $color = '#22c55e'; // зелений
+                                        }
+
+                                        return new HtmlString(
+                                            "<div style='display: flex; flex-direction: column; gap: 2px;'>" .
+                                            "<span style='font-size: 16px; font-weight: 800; color: {$color};'>" . number_format($cost, 2) . " ₴</span>" .
+                                            "<span style='font-size: 11px; font-weight: 600; color: #6b7280;'>Вага порції: " . round($weightGrams) . " г</span>" .
+                                            "</div>"
+                                        );
+                                    }),
                             ])
-                            ->columns(2)
+                            ->columns(3) // 🔥 РОБИМО 3 КОЛОНКИ (Прийом, Страва, Ціна)
                             ->itemLabel(fn (array $state): ?string => 
                                 $state['dish_id'] ? \App\Models\Dish::find($state['dish_id'])?->name : null
                             )
@@ -83,7 +131,12 @@ class DailyMenuResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn ($query) => $query->with(['menuItems.dish', 'menuItems.mealType'])) // Оптимізація запитів до БД
+            ->modifyQueryUsing(fn ($query) => $query->with([
+                'menuItems.dish.dishIngredients.ingredient',
+                'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
+                'menuItems.mealType'
+            ]))
+            ->paginated(false)
             ->columns([
                 Tables\Columns\TextColumn::make('day_number')
                     ->label('День')
@@ -92,56 +145,48 @@ class DailyMenuResource extends Resource
                     ->sortable()
                     ->alignCenter(),
 
-                // 🔥 ВАРТІСТЬ: 950 ккал (Сніданок - 1, Обід - 3, Вечеря - 5)
-                Tables\Columns\TextColumn::make('cost_950')
-                    ->label('950 ккал (3 стр)')
-                    ->getStateUsing(fn (DailyMenu $record) => self::calculatePlanCost($record, 950, [1, 3, 5]))
-                    ->money('UAH')
-                    ->color('success')
-                    ->weight('bold'),
-
-                // 🔥 ВАРТІСТЬ: 1200 ккал (Без перекусу 1 - залишаємо 1, 3, 4, 5)
-                Tables\Columns\TextColumn::make('cost_1200')
-                    ->label('1200 ккал (4 стр)')
-                    ->getStateUsing(fn (DailyMenu $record) => self::calculatePlanCost($record, 1200, [1, 3, 4, 5]))
-                    ->money('UAH')
-                    ->color('success')
-                    ->weight('bold'),
-
-                // 🔥 ВАРТІСТЬ: 1800 ккал (Всі 5 страв)
-                Tables\Columns\TextColumn::make('cost_1800')
-                    ->label('1800 ккал (5 стр)')
-                    ->getStateUsing(fn (DailyMenu $record) => self::calculatePlanCost($record, 1800, [1, 2, 3, 4, 5]))
-                    ->money('UAH')
-                    ->color('warning')
-                    ->weight('bold'),
-
-                // 🔥 ВАРТІСТЬ: 2100 ккал (Всі 5 страв)
-                Tables\Columns\TextColumn::make('cost_2100')
-                    ->label('2100 ккал')
-                    ->getStateUsing(fn (DailyMenu $record) => self::calculatePlanCost($record, 2100, [1, 2, 3, 4, 5]))
-                    ->money('UAH')
-                    ->color('danger')
-                    ->weight('bold'),
-
-                // 🔥 ВАРТІСТЬ: 2500 ккал (Всі 5 страв)
-                Tables\Columns\TextColumn::make('cost_2500')
-                    ->label('2500 ккал')
-                    ->getStateUsing(fn (DailyMenu $record) => self::calculatePlanCost($record, 2500, [1, 2, 3, 4, 5]))
-                    ->money('UAH')
-                    ->color('danger')
-                    ->weight('bold'),
+                self::makeCostColumn('cost_950', '950 ккал', 950, [1, 3, 5], 'success', true),
+                self::makeCostColumn('cost_1200', '1200 ккал', 1200, [1, 3, 4, 5], 'success', false),
+                self::makeCostColumn('cost_1500', '1500 ккал', 1500, [1, 2, 3, 4, 5], 'warning', false),
+                self::makeCostColumn('cost_1800', '1800 ккал', 1800, [1, 2, 3, 4, 5], 'warning', false),
+                self::makeCostColumn('cost_2100', '2100 ккал', 2100, [1, 2, 3, 4, 5], 'danger', false),
+                self::makeCostColumn('cost_2500', '2500 ккал', 2500, [1, 2, 3, 4, 5], 'danger', false),
             ])
             ->defaultSort('day_number', 'asc') 
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
-            ])
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
+                Tables\Actions\EditAction::make()->iconButton(),
+                Tables\Actions\DeleteAction::make()->iconButton(),
             ]);
+    }
+
+    private static function makeCostColumn(string $name, string $label, int $kcal, array $meals, string $color, bool $showSummaryLabel)
+    {
+        return Tables\Columns\TextColumn::make($name)
+            ->label($label)
+            ->tooltip(count($meals) . ' страв')
+            ->getStateUsing(fn (DailyMenu $record) => self::calculatePlanCost($record, $kcal, $meals))
+            ->money('UAH')
+            ->color($color)
+            ->weight('bold')
+            ->alignRight()
+            ->summarize(
+                Tables\Columns\Summarizers\Summarizer::make()
+                    ->label($showSummaryLabel ? 'Середня' : '') 
+                    ->using(function ($query) use ($kcal, $meals) {
+                        $ids = $query->pluck('id');
+                        if ($ids->isEmpty()) return 0;
+                        
+                        $records = DailyMenu::with([
+                            'menuItems.dish.dishIngredients.ingredient',
+                            'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
+                            'menuItems.mealType'
+                        ])->whereIn('id', $ids)->get();
+                        
+                        $sum = $records->sum(fn ($record) => self::calculatePlanCost($record, $kcal, $meals));
+                        return $sum / $records->count();
+                    })
+                    ->money('UAH')
+            );
     }
 
     public static function getPages(): array
@@ -153,12 +198,8 @@ class DailyMenuResource extends Resource
         ];
     }
 
-    /**
-     * 🔥 АЛГОРИТМ РОЗРАХУНКУ СОБІВАРТОСТІ ДНЯ ДЛЯ ПЕВНОЇ КАЛОРІЙНОСТІ
-     */
     public static function calculatePlanCost(DailyMenu $record, int $targetKcal, array $allowedSortOrders): float
     {
-        // 1. Відбираємо тільки дозволені прийоми їжі для цієї калорійності
         $menuItems = $record->menuItems->filter(function ($item) use ($allowedSortOrders) {
             return $item->dish && in_array($item->mealType?->sort_order, $allowedSortOrders);
         });
@@ -167,7 +208,6 @@ class DailyMenuResource extends Resource
             return 0.0;
         }
 
-        // 2. Рахуємо суму відсотків енергії тих страв, які залишились
         $percentSum = $menuItems->sum(fn ($item) => (float)($item->mealType?->energy_percent ?? 0));
         if ($percentSum <= 0) {
             $percentSum = 100.0;
@@ -179,25 +219,20 @@ class DailyMenuResource extends Resource
             $dish = $item->dish;
             $p = (float)($item->mealType?->energy_percent ?? 0);
 
-            // Кількість калорій на цей конкретний прийом їжі
             $mealKcal = ($p > 0)
                 ? $targetKcal * ($p / $percentSum)
                 : $targetKcal * (1.0 / $menuItems->count());
 
-            // Кількість калорій у 100г цієї страви
             $baseW = (float)($dish->base_weight_g ?? 0);
             $dishTotalKcal = (float)($dish->total_kcal ?? 0);
             $kcalPer100 = ($baseW > 0 && $dishTotalKcal > 0) ? ($dishTotalKcal / $baseW) * 100.0 : 0;
 
-            // Скільки грамів цієї страви потрібно покласти
             $weightGrams = ($kcalPer100 > 0) ? ($mealKcal / $kcalPer100) * 100.0 : 0;
 
-            // Собівартість 1 граму цієї страви
             $outW = (float)($dish->output_weight ?? $baseW);
             $recipeCost = (float)($dish->total_cost ?? 0);
             $costPerGram = ($outW > 0) ? ($recipeCost / $outW) : 0;
 
-            // Додаємо вартість цієї порції до загальної суми дня
             $totalCost += ($weightGrams * $costPerGram);
         }
 
