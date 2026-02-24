@@ -92,7 +92,7 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
                 'Comp_Name' => $names,
                 'Phone' => $client->phone,
                 'Address' => $client->address,
-                'Additional_Info' => $additionalInfo,
+                'Note' => $additionalInfo,
                 'TimeWork_Info' => $mainOrder->delivery_time, // Час доставки
                 'Unload_Time' => 7,
                 'Qty' => $group->count()
@@ -105,7 +105,7 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
 
     public function headings(): array
     {
-        return ['Comp_Id', 'Comp_Name', 'Phone', 'Address', 'Additional_Info', 'TimeWork_Info', 'Unload_Time', 'Qty'];
+        return ['Comp_Id', 'Comp_Name', 'Phone', 'Address', 'Note', 'TimeWork_Info', 'Unload_Time', 'Qty'];
     }
 
     public function columnWidths(): array
