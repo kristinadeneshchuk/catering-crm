@@ -160,8 +160,10 @@
                         </tr>
                         <tr class="row-hover sub-row">
                             <td>Собівартість продуктів</td>
-                            @foreach($dates as $ymd => $dm) <td>0 ₴</td> @endforeach
-                            <td>0 ₴</td>
+                            @foreach($dates as $ymd => $dm) 
+                                <td>{{ number_format($foodCostCount[$ymd] ?? 0, 0, '.', ' ') }} ₴</td> 
+                            @endforeach
+                            <td>{{ number_format($totalFoodCost ?? 0, 0, '.', ' ') }} ₴</td>
                         </tr>
                         <tr class="row-hover sub-row">
                             <td>Витрати на доставку</td>
