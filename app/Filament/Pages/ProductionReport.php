@@ -4,6 +4,8 @@ namespace App\Filament\Pages;
 
 use Filament\Pages\Page;
 use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Actions\Concerns\InteractsWithActions;
+use Filament\Actions\Contracts\HasActions;
 use Filament\Forms\Contracts\HasForms;
 use App\Models\DailyMenu;
 use App\Models\Order;
@@ -25,7 +27,7 @@ use Illuminate\Support\HtmlString;
 
 class ProductionReport extends Page implements HasForms
 {
-    use InteractsWithForms;
+    use InteractsWithForms, InteractsWithActions;
 
     protected static ?string $navigationIcon = 'heroicon-o-presentation-chart-line';
     protected static ?string $navigationLabel = 'План виробництва';

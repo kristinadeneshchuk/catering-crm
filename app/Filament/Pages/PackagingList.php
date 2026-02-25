@@ -45,7 +45,6 @@ class PackagingList extends Page implements HasForms
                 ->label('1. Стікери')
                 ->icon('heroicon-o-tag')
                 ->color('gray')
-                // 🔥 БЕРЕМО СВІЖУ ДАТУ ЗІ СТЕЙТУ
                 ->url(fn () => route('print.stickers', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                 ->openUrlInNewTab(),
 
@@ -53,7 +52,6 @@ class PackagingList extends Page implements HasForms
                 ->label('2. На пакет')
                 ->icon('heroicon-o-document-text')
                 ->color('info')
-                // 🔥 БЕРЕМО СВІЖУ ДАТУ ЗІ СТЕЙТУ
                 ->url(fn () => route('print.mini-manifest', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                 ->openUrlInNewTab(),
 
@@ -61,7 +59,6 @@ class PackagingList extends Page implements HasForms
                 ->label('3. В пакет (з меню)')
                 ->icon('heroicon-o-shopping-bag')
                 ->color('warning')
-                // 🔥 БЕРЕМО СВІЖУ ДАТУ ЗІ СТЕЙТУ
                 ->url(fn () => route('print.manifest', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                 ->openUrlInNewTab(),
 
@@ -69,7 +66,6 @@ class PackagingList extends Page implements HasForms
                 ->label('Завантажити логістику (Excel)')
                 ->icon('heroicon-o-arrow-down-tray')
                 ->color('success')
-                // 🔥 БЕРЕМО СВІЖУ ДАТУ ЗІ СТЕЙТУ
                 ->url(fn () => route('print.logistics', ['date' => $this->data['date'] ?? now()->format('Y-m-d')])),
         ];
     }
@@ -118,9 +114,6 @@ class PackagingList extends Page implements HasForms
         ])->statePath('data');
     }
 
-    // =========================================================
-    // ✅ ОСНОВНИЙ РОЗРАХУНОК ФАСУВАННЯ (ПРАВИЛЬНИЙ)
-    // =========================================================
     public function calculate(): void
     {
         $selectedDate  = $this->data['date'] ?? now()->format('Y-m-d');
@@ -153,21 +146,25 @@ class PackagingList extends Page implements HasForms
 
         $orders = Order::whereIn('status', ['new', 'active'])
             ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
-            ->with(['client.mealTypes'])
+            ->with([
+                'client.mealTypes',
+                'client.ingredientExclusions',
+                'client.dishExclusions',
+                'replacements.replacementProduct',
+                'replacements.replacementDish'
+            ])
             ->get();
 
         if ($orders->isEmpty()) {
             return;
         }
 
-        // ✅ 1) Строим ПРАВИЛЬНЫЙ план (как в ProductionReport / PrintController)
         foreach ($orders as $order) {
             $this->orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
         }
 
         $sortedMenuItems = $menu->menuItems->sortBy(fn ($i) => $i->mealType?->sort_order ?? 99);
 
-        // ✅ 2) Фасування по кожній страві меню
         foreach ($sortedMenuItems as $mItem) {
             $dish = $mItem->dish;
             if (!$dish) continue;
@@ -175,10 +172,9 @@ class PackagingList extends Page implements HasForms
             $tableData = [
                 'meal' => $mItem->mealType->name ?? 'Інше',
                 'dish_name' => $dish->name,
-
-                // columns: [kcal => ['count'=>int, 'sum_scale'=>float]]
                 'columns' => [],
                 'rows' => [],
+                'individual_notes' => [], 
             ];
 
             foreach ($orders as $order) {
@@ -192,6 +188,15 @@ class PackagingList extends Page implements HasForms
                 );
 
                 if ($plannedWeight === null) continue;
+
+                // 🔥 ЗБИРАЄМО НОТАТКИ (Заміни страв/інгредієнтів)
+                $notes = $this->collectOrderNotes($order, $dish);
+                if (!empty($notes)) {
+                    $tableData['individual_notes'] = array_merge($tableData['individual_notes'], $notes);
+                }
+
+                // ⚠️ ПРИБРАНО ФІЛЬТР: Тепер клієнт рахується в колонці "Кількість порцій", 
+                // навіть якщо йому замінили страву. Залишається лише примітка знизу.
 
                 $baseW = (float)($dish->base_weight_g ?? 0);
                 $dishScale = $baseW > 0 ? ((float)$plannedWeight / $baseW) : 0.0;
@@ -209,11 +214,15 @@ class PackagingList extends Page implements HasForms
                 $tableData['columns'][$colKey]['sum_scale'] += $dishScale;
             }
 
-            if (empty($tableData['columns'])) continue;
+            if (empty($tableData['columns'])) {
+                if (!empty($tableData['individual_notes'])) {
+                    $this->report[] = $tableData;
+                }
+                continue;
+            }
 
             ksort($tableData['columns']);
 
-            // ✅ 3) Масштабуємо інгредієнти (ТЕПЕР: на одну особу)
             foreach ($dish->dishIngredients as $di) {
                 $name = $di->ingredient
                     ? $di->ingredient->name
@@ -224,11 +233,9 @@ class PackagingList extends Page implements HasForms
                     $count = (int)($col['count'] ?? 1);
                     $sumScale = (float)($col['sum_scale'] ?? 0.0);
                     
-                    // Розраховуємо середній масштаб на ОДНУ порцію в цій колонці
                     $onePortionScale = $count > 0 ? ($sumScale / $count) : 0;
 
                     $cells[$key] = [
-                        // Виводимо вагу інгредієнта для одного лотка
                         'val' => round(((float)($di->net_weight_g ?? 0)) * $onePortionScale),
                     ];
                 }
@@ -244,7 +251,63 @@ class PackagingList extends Page implements HasForms
     }
 
     // =========================================================
-    // 🔧 ДОПОМІЖНІ МЕТОДИ
+    // 🔧 ДОПОМІЖНІ МЕТОДИ (ЛОГІКА ЗАМІН)
+    // =========================================================
+
+    private function collectOrderNotes(Order $order, $dish): array
+    {
+        $notes = [];
+        if (!$order->client) return $notes;
+
+        $clientInfo = $order->client->name . ' (' . (int)($order->calories ?? 0) . ' ккал)';
+
+        // 1. Коментарі
+        $comment = trim(($order->client->production_comment ?? '') . ' ' . ($order->comment ?? ''));
+        if (!empty($comment)) {
+            $notes[] = "👤 {$clientInfo}: {$comment}";
+        }
+
+        // 2. Виключення цілої страви
+        if ($order->client->dishExclusions->contains('id', $dish->id)) {
+            $rep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
+            if ($rep && $rep->replacementDish) {
+                $notes[] = "🔄 {$clientInfo}: Страву повністю замінено на «{$rep->replacementDish->name}»";
+            } else {
+                $notes[] = "❌ {$clientInfo}: Страву повністю ВИКЛЮЧЕНО";
+            }
+            // Якщо страва виключена, не перевіряємо інгредієнти
+            return $notes;
+        }
+
+        // 3. Виключення інгредієнтів (рекурсивно)
+        $this->checkIngredientsForNotes($dish, $order, $dish->id, $clientInfo, $notes);
+
+        return $notes;
+    }
+
+    private function checkIngredientsForNotes($dish, $order, $rootDishId, $clientInfo, array &$notes): void
+    {
+        if (!$dish || !$dish->dishIngredients) return;
+
+        foreach ($dish->dishIngredients as $di) {
+            // Звичайний продукт
+            if ($di->ingredient_id && $order->client->ingredientExclusions->contains('id', $di->ingredient_id)) {
+                $rep = $order->replacements->where('dish_id', $rootDishId)->where('original_product_id', $di->ingredient_id)->first();
+                if ($rep && $rep->replacementProduct) {
+                    $notes[] = "🔄 {$clientInfo}: «{$di->ingredient->name}» замінено на «{$rep->replacementProduct->name}»";
+                } else {
+                    $notes[] = "❌ {$clientInfo}: Без «{$di->ingredient->name}»";
+                }
+            }
+            // Якщо це ПФ - йдемо вглиб
+            if ($di->child_dish_id && $di->childDish) {
+                $this->checkIngredientsForNotes($di->childDish, $order, $rootDishId, $clientInfo, $notes);
+            }
+        }
+    }
+
+    // =========================================================
+    // 🔧 ДОПОМІЖНІ МЕТОДИ (РОЗРАХУНКИ)
     // =========================================================
 
     private function plannedDishWeight(array $items, int $dishId, int $mealTypeId): ?int
@@ -257,13 +320,6 @@ class PackagingList extends Page implements HasForms
         return null;
     }
 
-    /**
-     * ✅ ТА Ж ЛОГІКА, ЩО В ProductionReport/PrintController:
-     * - отбираем mealTypes клиента
-     * - выбираем первые N блюд по sort_order
-     * - распределяем ккал по energy_percent (нормализуем по использованным mealTypes)
-     * - считаем вес блюда по kcalPerDish и kcalPer100
-     */
     private function calculateOrderPlan(Order $order, DailyMenu $menu): array
     {
         $targetKcal = (float)($order->calories ?? 0);
@@ -285,7 +341,6 @@ class PackagingList extends Page implements HasForms
 
         $byMeal = $selected->groupBy('meal_type_id');
 
-        // нормализация процентов
         $percentSum = 0.0;
         foreach ($byMeal as $mealTypeId => $items) {
             $percentSum += (float)($items->first()->mealType?->energy_percent ?? 0);

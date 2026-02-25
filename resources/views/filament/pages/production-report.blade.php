@@ -10,34 +10,29 @@
     </style>
 
     @php
-        // 🔄 РЕКУРСИВНА ФУНКЦІЯ ДЛЯ СТАНДАРТНИХ ПОРЦІЙ (ЯК НА СКРІНШОТІ)
+        // 🔄 РЕКУРСИВНА ФУНКЦІЯ ДЛЯ СТАНДАРТНИХ ПОРЦІЙ
         if (!function_exists('renderStandardList')) {
             function renderStandardList($ingredients, $level = 0) {
-                // Сортуємо: спочатку ПФ, потім звичайні продукти
                 $pfs = array_filter($ingredients, fn($c) => ($c['type'] ?? '') === 'pf');
                 $prods = array_filter($ingredients, fn($c) => ($c['type'] ?? '') !== 'pf');
                 $sortedIngredients = array_merge($pfs, $prods);
 
-                // Головний контейнер (Грід на 2 колонки)
                 $html = '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; width: 100%;">';
                 
                 foreach ($sortedIngredients as $comp) {
                     if (($comp['type'] ?? '') === 'pf') {
-                        // ПФ займає обидві колонки (grid-column: span 2) і має білий фон
                         $html .= '<div style="grid-column: span 2; background-color: '.($level==0 ? 'white' : '#f8fafc').'; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-top: 4px; margin-bottom: 4px;">';
                         $html .= '<div style="display: flex; justify-content: space-between; align-items: center; font-weight: 800; color: #475569; font-size: 13px; margin-bottom: 10px;">';
                         $html .= '<span>📦 ПФ: ' . $comp['name'] . ' (Вихід: ' . round($comp['weight_output'] ?? 0) . 'г)</span>';
                         $html .= '</div>';
                         
                         if (!empty($comp['sub_ingredients'])) {
-                            // Викликаємо функцію знову для внутрішніх інгредієнтів
                             $html .= renderStandardList($comp['sub_ingredients'], $level + 1);
                         }
                         $html .= '</div>';
                     } else {
-                        // Звичайні продукти (в 2 колонки)
                         $isRoot = $level === 0;
-                        $nameColor = $isRoot ? '#0f172a' : '#64748b'; // Чорні для кореня, сірі для вкладених
+                        $nameColor = $isRoot ? '#0f172a' : '#64748b'; 
                         $weightColor = $isRoot ? '#0f172a' : '#475569';
                         $fontSize = $isRoot ? '14px' : '12px';
                         $fontWeight = $isRoot ? '700' : '400';
@@ -106,12 +101,13 @@
                         $html .= '<div style="display: flex; align-items: center; gap: 6px;">';
                         $html .= '<span style="font-weight: 700; color: #0f172a;">' . $brutto . ' г</span>';
                         
+                        // 🔥 ВИПРАВЛЕНО: Кнопки екшенів через wire:click="mountAction(...)"
                         if ($level == 0 && $hasConflict) {
                             $html .= '<div class="no-print">';
                             if ($isResolved) {
-                                $html .= $component->resetReplacementAction(['order_id' => $cardOrderId, 'dish_id' => $dishRowId, 'product_id' => $comp['conflict']['original_ing_id']])->toHtml();
+                                $html .= '<button type="button" wire:click="mountAction(\'resetReplacement\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['conflict']['original_ing_id'] . ' })" style="color: #64748b; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">Скасувати</button>';
                             } else {
-                                $html .= $component->replaceIngredientAction(['order_id' => $cardOrderId, 'dish_id' => $dishRowId, 'product_id' => $comp['product_id']])->toHtml();
+                                $html .= '<button type="button" wire:click="mountAction(\'replaceIngredient\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['product_id'] . ' })" style="color: #ea580c; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">Замінити</button>';
                             }
                             $html .= '</div>';
                         }
@@ -205,10 +201,11 @@
                                     <div style="border: 1px solid {{ $card['dish_excluded'] ? '#fecaca' : '#fde68a' }}; background-color: {{ $card['dish_excluded'] ? '#fef2f2' : '#fffbeb' }}; border-radius: 8px; padding: 10px;">
                                         <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.05); padding-bottom: 4px;">
                                             <div style="font-weight: 800; font-size: 13px;">{{ $card['client_name'] }}</div>
-                                            <div class="no-print scale-90">
-                                                @if($card['dish_excluded'] || $card['dish_replacement'])
-                                                    {{ ($this->replaceDishAction)(['order_id' => $card['order_id'], 'dish_id' => $dishRow['dish_id']]) }}
-                                                @endif
+                                            
+                                            <div class="no-print">
+                                                <button type="button" wire:click="mountAction('replaceDish', { order_id: {{ $card['order_id'] }}, dish_id: {{ $dishRow['dish_id'] }} })" style="background: white; border: 1px solid #ef4444; color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; cursor: pointer;">
+                                                    🔄 Замінити
+                                                </button>
                                             </div>
                                         </div>
 
