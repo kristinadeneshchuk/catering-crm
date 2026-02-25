@@ -17,49 +17,65 @@ class AnalyticsController extends Controller
         $start = Carbon::parse($startDate);
         $end = Carbon::parse($endDate);
 
-        // Обмеження діапазону (щоб не покласти сервер, якщо випадково вибрати 10 років)
+        // Захист від занадто великих діапазонів
         if ($start->diffInDays($end) > 60) {
             $end = $start->copy()->addDays(60);
             $endDate = $end->format('Y-m-d');
         }
 
-        // 2. Формуємо масив дат (Ключ = Y-m-d, Значення = d.m)
+        // 2. Формуємо масив дат
         $dates = [];
         for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
             $dates[$date->format('Y-m-d')] = $date->format('d.m');
         }
 
-        // ==========================================
-        // 🔥 ЛОГІКА 1: Кількість доставлених раціонів
-        // ==========================================
-        
-        // ПРИБРАЛИ ФІЛЬТР ЗА СТАТУСОМ!
-        // Якщо день є в базі OrderDay — значить ми його готували і доставляли, рахуємо його 100%.
+        // 3. Отримуємо всі записи OrderDay за період
         $validDays = OrderDay::whereBetween('date', [$startDate, $endDate])
-            ->with('order') // Одразу вантажимо замовлення, це знадобиться нам далі для розрахунку грошей
+            ->with('order') 
             ->get();
 
-        // Групуємо їх по датах і рахуємо кількість
         $groupedDays = $validDays->groupBy(function ($item) {
             return Carbon::parse($item->date)->format('Y-m-d');
-        })->map->count();
+        });
 
-        // Заповнюємо фінальний масив (навіть якщо в якийсь день 0 раціонів)
+        // Масиви для результатів
         $rationsCount = [];
         $totalRations = 0;
+        
+        $revenueCount = [];
+        $totalRevenue = 0;
 
         foreach ($dates as $ymd => $dm) {
-            $count = $groupedDays->get($ymd, 0); // Якщо на цей день немає записів - ставимо 0
+            $days = $groupedDays->get($ymd, collect());
+            
+            // КІЛЬКІСТЬ РАЦІОНІВ
+            $count = $days->count();
             $rationsCount[$ymd] = $count;
             $totalRations += $count;
+
+            // ВИРУЧКА (Метод нарахування: total_price / duration)
+            $dailyRevenue = 0;
+            foreach ($days as $orderDay) {
+                $order = $orderDay->order;
+                if ($order) {
+                    $duration = max(1, (int)$order->duration); 
+                    $pricePerDay = (float)$order->total_price / $duration;
+                    $dailyRevenue += $pricePerDay;
+                }
+            }
+            
+            $revenueCount[$ymd] = round($dailyRevenue);
+            $totalRevenue += round($dailyRevenue);
         }
 
         return view('analytics.index', compact(
             'dates', 
             'startDate', 
             'endDate',
-            'rationsCount', // Передаємо масив кількості по днях
-            'totalRations'  // Передаємо загальну суму
+            'rationsCount',
+            'totalRations',
+            'revenueCount',
+            'totalRevenue'
         ));
     }
 }

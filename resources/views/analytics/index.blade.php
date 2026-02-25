@@ -144,8 +144,10 @@
                         
                         <tr class="row-hover text-white bg-white/[0.02]">
                             <td class="font-semibold text-sm">Вартість раціонів (Виручка)</td>
-                            @foreach($dates as $ymd => $dm) <td class="font-medium">0 ₴</td> @endforeach
-                            <td>0 ₴</td>
+                            @foreach($dates as $ymd => $dm) 
+                                <td class="font-medium">{{ number_format($revenueCount[$ymd] ?? 0, 0, '.', ' ') }} ₴</td> 
+                            @endforeach
+                            <td>{{ number_format($totalRevenue ?? 0, 0, '.', ' ') }} ₴</td>
                         </tr>
 
                         <tr class="row-hover text-rose-400 bg-rose-500/[0.03]">
