@@ -144,8 +144,8 @@ class PackagingList extends Page implements HasForms
             return;
         }
 
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
+        // 🔥 ПРИБРАНО ФІЛЬТР ЗА СТАТУСОМ. Тепер беремо всі замовлення, для яких є день фасування.
+        $orders = Order::whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',
@@ -189,14 +189,11 @@ class PackagingList extends Page implements HasForms
 
                 if ($plannedWeight === null) continue;
 
-                // 🔥 ЗБИРАЄМО НОТАТКИ (Заміни страв/інгредієнтів)
+                // ЗБИРАЄМО НОТАТКИ (Заміни страв/інгредієнтів)
                 $notes = $this->collectOrderNotes($order, $dish);
                 if (!empty($notes)) {
                     $tableData['individual_notes'] = array_merge($tableData['individual_notes'], $notes);
                 }
-
-                // ⚠️ ПРИБРАНО ФІЛЬТР: Тепер клієнт рахується в колонці "Кількість порцій", 
-                // навіть якщо йому замінили страву. Залишається лише примітка знизу.
 
                 $baseW = (float)($dish->base_weight_g ?? 0);
                 $dishScale = $baseW > 0 ? ((float)$plannedWeight / $baseW) : 0.0;

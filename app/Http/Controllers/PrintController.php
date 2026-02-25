@@ -21,8 +21,8 @@ class PrintController extends Controller
             return "❌ На День циклу №{$globalDay} меню ще не створено.";
         }
 
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', function ($query) use ($targetDate) {
+        // 🔥 Прибрано фільтр за статусом
+        $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
             ->with(['client.mealTypes'])
@@ -71,8 +71,8 @@ class PrintController extends Controller
         $inputDate  = $request->input('date', now()->format('Y-m-d'));
         $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
 
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', function ($query) use ($targetDate) {
+        // 🔥 Прибрано фільтр за статусом
+        $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
             ->with(['client'])
@@ -110,8 +110,8 @@ class PrintController extends Controller
             return "❌ Меню не створено на завтра ({$targetDate}).";
         }
 
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', function ($query) use ($targetDate) {
+        // 🔥 Прибрано фільтр за статусом
+        $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
             ->with([
@@ -184,10 +184,6 @@ class PrintController extends Controller
         return view('print.stickers', compact('stickers', 'date'));
     }
 
-    /**
-     * ✅ Фасувальний лист: ингредиенты масштабируются от РЕАЛЬНОГО веса блюда.
-     * ✅ Исправлено: в колонках суммируем scale (sum_scale), а не храним один scale.
-     */
     public function packagingList(Request $request)
     {
         $inputDate  = $request->input('date', now()->format('Y-m-d'));
@@ -199,8 +195,8 @@ class PrintController extends Controller
             return "Меню не знайдено на завтра ({$targetDate})";
         }
 
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', function ($query) use ($targetDate) {
+        // 🔥 Прибрано фільтр за статусом
+        $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
             ->with([
@@ -280,7 +276,6 @@ class PrintController extends Controller
 
             ksort($tableData['columns']);
 
-            // 🔥 ТУТ ПРАВКА ДЛЯ ФАСУВАЛЬНОГО ЛИСТА (ГРАМИ НА ОДНУ ПОРЦІЮ)
             foreach ($dish->dishIngredients as $di) {
                 $originalName = $di->ingredient
                     ? $di->ingredient->name
@@ -312,8 +307,113 @@ class PrintController extends Controller
         return view('print.packaging-list', compact('report', 'date'));
     }
 
+    public function productionReport(Request $request)
+    {
+        $inputDate = $request->input('date', now()->format('Y-m-d'));
+        $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
+
+        [$menu, $globalDay] = $this->getMenuForTargetDate($targetDate);
+
+        if (!$menu) {
+            return "❌ Меню не знайдено на завтра ({$targetDate})";
+        }
+
+        // 🔥 Прибрано фільтр за статусом
+        $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
+                $query->where('date', $targetDate);
+            })
+            ->with([
+                'client.mealTypes',
+                'client.ingredientExclusions',
+                'client.dishExclusions',
+                'replacements.replacementProduct',
+                'replacements.replacementDish.dishIngredients.ingredient',
+            ])
+            ->get();
+
+        if ($orders->isEmpty()) {
+            return "Немає активних замовлень на {$targetDate}.";
+        }
+
+        // 1. Рахуємо плани (як у Filament)
+        $orderPlans = [];
+        foreach ($orders as $order) {
+            $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
+        }
+
+        $report = [];
+        $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType?->sort_order ?? 99);
+
+        // 2. Групуємо по стравах
+        foreach ($sortedMenuItems as $item) {
+            if (!$item->dish) continue;
+
+            $mealName = $item->mealType->name ?? 'Інше';
+            $dish = $item->dish;
+
+            $standard = []; // ['order' => Order, 'scale' => float]
+            $custom = [];   // ['order' => Order, 'scale' => float]
+
+            foreach ($orders as $order) {
+                $plan = $orderPlans[$order->id] ?? null;
+                if (!$plan) continue;
+
+                // Перевіряємо, чи входить ця страва у план клієнта
+                $plannedWeight = collect($plan['items'])->first(function ($it) use ($dish, $item) {
+                    return (int)$it['dish_id'] === (int)$dish->id && (int)$it['meal_type_id'] === (int)$item->meal_type_id;
+                })['weight'] ?? null;
+
+                if ($plannedWeight === null) continue;
+
+                $baseW = (float)($dish->base_weight_g ?? 0);
+                $dishScale = ($baseW > 0) ? ((float)$plannedWeight / $baseW) : 0.0;
+
+                $isCustom =
+                    ($order->comment || !empty($order->client->production_comment))
+                    || $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
+                    || $order->client->dishExclusions->contains('id', $dish->id)
+                    || !empty($this->getConflictingIngredients($dish, $order->client->ingredientExclusions));
+
+                if ($isCustom) {
+                    $custom[] = ['order' => $order, 'scale' => $dishScale];
+                } else {
+                    $standard[] = ['order' => $order, 'scale' => $dishScale];
+                }
+            }
+
+            if (empty($standard) && empty($custom)) continue;
+
+            // Збираємо структуру 
+            $standardScales = array_map(fn($x) => (float)$x['scale'], $standard);
+            $standardStructure = $this->calculateIngredientsStructureByScales($dish, $standardScales);
+            $standardTotals = $this->calculateStructureTotals($standardStructure);
+
+            $customCards = collect($custom)->map(function ($entry) use ($dish) {
+                return $this->buildCustomCard($dish, $entry['order'], (float)$entry['scale']);
+            })->toArray();
+
+            $report[$mealName][] = [
+                'meal_name' => $mealName,
+                'dish_id' => $dish->id,
+                'dish_name' => $dish->name,
+                'standard_count' => count($standard),
+                'standard_structure' => $standardStructure,
+                'standard_total_netto' => $standardTotals['netto'],
+                'standard_total_brutto' => $standardTotals['brutto'],
+                'custom_cards' => $customCards,
+            ];
+        }
+
+        return view('print.production-report', [
+            'report' => $report,
+            'date' => $inputDate,
+            'targetDate' => $targetDate,
+            'dayNumber' => $globalDay
+        ]);
+    }
+
     // =========================
-    // ✅ СЕРДЦЕ РЕШЕНИЯ
+    // ✅ ДОПОМІЖНІ МЕТОДИ
     // =========================
 
     private function calculateOrderPlan(Order $order, DailyMenu $menu): array
@@ -495,116 +595,6 @@ class PrintController extends Controller
 
         return $found;
     }
-
-    // =========================================================================
-    // ✅ ДРУК ПЛАНУ ВИРОБНИЦТВА (PRODUCTION REPORT)
-    // =========================================================================
-    public function productionReport(Request $request)
-    {
-        $inputDate = $request->input('date', now()->format('Y-m-d'));
-        $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
-
-        [$menu, $globalDay] = $this->getMenuForTargetDate($targetDate);
-
-        if (!$menu) {
-            return "❌ Меню не знайдено на завтра ({$targetDate})";
-        }
-
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', function ($query) use ($targetDate) {
-                $query->where('date', $targetDate);
-            })
-            ->with([
-                'client.mealTypes',
-                'client.ingredientExclusions',
-                'client.dishExclusions',
-                'replacements.replacementProduct',
-                'replacements.replacementDish.dishIngredients.ingredient',
-            ])
-            ->get();
-
-        if ($orders->isEmpty()) {
-            return "Немає активних замовлень на {$targetDate}.";
-        }
-
-        // 1. Рахуємо плани (як у Filament)
-        $orderPlans = [];
-        foreach ($orders as $order) {
-            $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
-        }
-
-        $report = [];
-        $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType?->sort_order ?? 99);
-
-        // 2. Групуємо по стравах
-        foreach ($sortedMenuItems as $item) {
-            if (!$item->dish) continue;
-
-            $mealName = $item->mealType->name ?? 'Інше';
-            $dish = $item->dish;
-
-            $standard = []; // ['order' => Order, 'scale' => float]
-            $custom = [];   // ['order' => Order, 'scale' => float]
-
-            foreach ($orders as $order) {
-                $plan = $orderPlans[$order->id] ?? null;
-                if (!$plan) continue;
-
-                // Перевіряємо, чи входить ця страва у план клієнта
-                $plannedWeight = collect($plan['items'])->first(function ($it) use ($dish, $item) {
-                    return (int)$it['dish_id'] === (int)$dish->id && (int)$it['meal_type_id'] === (int)$item->meal_type_id;
-                })['weight'] ?? null;
-
-                if ($plannedWeight === null) continue;
-
-                $baseW = (float)($dish->base_weight_g ?? 0);
-                $dishScale = ($baseW > 0) ? ((float)$plannedWeight / $baseW) : 0.0;
-
-                $isCustom =
-                    ($order->comment || !empty($order->client->production_comment))
-                    || $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
-                    || $order->client->dishExclusions->contains('id', $dish->id)
-                    || !empty($this->getConflictingIngredients($dish, $order->client->ingredientExclusions));
-
-                if ($isCustom) {
-                    $custom[] = ['order' => $order, 'scale' => $dishScale];
-                } else {
-                    $standard[] = ['order' => $order, 'scale' => $dishScale];
-                }
-            }
-
-            if (empty($standard) && empty($custom)) continue;
-
-            // Збираємо структуру (ТУТ ВСЕ ЗАЛИШИЛОСЯ ЯК БУЛО — ЗАГАЛЬНА СУМА ДЛЯ ВИРОБНИЦТВА)
-            $standardScales = array_map(fn($x) => (float)$x['scale'], $standard);
-            $standardStructure = $this->calculateIngredientsStructureByScales($dish, $standardScales);
-            $standardTotals = $this->calculateStructureTotals($standardStructure);
-
-            $customCards = collect($custom)->map(function ($entry) use ($dish) {
-                return $this->buildCustomCard($dish, $entry['order'], (float)$entry['scale']);
-            })->toArray();
-
-            $report[$mealName][] = [
-                'meal_name' => $mealName,
-                'dish_id' => $dish->id,
-                'dish_name' => $dish->name,
-                'standard_count' => count($standard),
-                'standard_structure' => $standardStructure,
-                'standard_total_netto' => $standardTotals['netto'],
-                'standard_total_brutto' => $standardTotals['brutto'],
-                'custom_cards' => $customCards,
-            ];
-        }
-
-        return view('print.production-report', [
-            'report' => $report,
-            'date' => $inputDate,
-            'targetDate' => $targetDate,
-            'dayNumber' => $globalDay
-        ]);
-    }
-
-    // === ДОПОМІЖНІ МЕТОДИ ДЛЯ ПЛАНУ ВИРОБНИЦТВА (КОПІЯ З FILAMENT) ===
     
     private function calculateIngredientsStructureByScales($dish, array $scales): array
     {
@@ -723,7 +713,6 @@ class PrintController extends Controller
                     'weight_output' => round($nettoTotalRaw, 1),
                     'weight_netto_sum' => round($sumNetto, 1),
                     'weight_brutto_sum' => round($sumBrutto, 1),
-                    // 👇 ДОДАНО ДЛЯ ВИРІШЕННЯ "0 грам" У ВЕРСІЇ ДЛЯ ДРУКУ
                     'weight_netto' => round($sumNetto, 1),
                     'weight_brutto' => round($sumBrutto, 1),
                     'sub_ingredients' => $subIngredients
