@@ -97,19 +97,32 @@ class ClientResource extends Resource
                                 if (!$state) return;
 
                                 $kcal = (int) $state;
-                                $limit = 5; 
+                                $allMeals = MealType::all();
+                                $mealTypeIds = [];
 
                                 if ($kcal < 1200) {
-                                    $limit = 3;
+                                    // 3 прийоми: Сніданок, Обід, Вечеря
+                                    $mealTypeIds = $allMeals->filter(function ($meal) {
+                                        $name = mb_strtolower($meal->name);
+                                        return str_contains($name, 'сніданок') || 
+                                               str_contains($name, 'обід') || 
+                                               str_contains($name, 'вечеря');
+                                    })->pluck('id')->toArray();
+                                    
                                 } elseif ($kcal < 1500) {
-                                    $limit = 4;
+                                    // 4 прийоми: Сніданок, Обід, Перекус 2, Вечеря (без Перекусу 1)
+                                    $mealTypeIds = $allMeals->filter(function ($meal) {
+                                        $name = mb_strtolower($meal->name);
+                                        return str_contains($name, 'сніданок') || 
+                                               str_contains($name, 'обід') || 
+                                               str_contains($name, 'перекус 2') || 
+                                               str_contains($name, 'вечеря');
+                                    })->pluck('id')->toArray();
+                                    
+                                } else {
+                                    // 5 прийомів: Усі
+                                    $mealTypeIds = $allMeals->pluck('id')->toArray();
                                 }
-
-                                $mealTypeIds = MealType::orderBy('sort_order', 'asc')
-                                    ->orderBy('id', 'asc')
-                                    ->take($limit)
-                                    ->pluck('id')
-                                    ->toArray();
 
                                 $set('mealTypes', $mealTypeIds);
                             }),

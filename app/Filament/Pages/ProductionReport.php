@@ -354,7 +354,7 @@ public function form(Form $form): Form
                 $dishScale = ($baseW > 0) ? ((float)$plannedWeight / $baseW) : 0.0;
 
                 $isCustom =
-                    ($order->comment || !empty($order->client->production_comment))
+                    (!empty($order->client->production_comment))
                     || $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
                     || $order->client->dishExclusions->contains('id', $dish->id)
                     || $this->checkRecursiveConflict($dish, $order->client->ingredientExclusions);
