@@ -62,7 +62,7 @@ class PrintController extends Controller
             return $a['calories'] <=> $b['calories'];
         });
 
-        $date = $inputDate;
+        $date = Carbon::parse($targetDate)->format('d.m.Y');
         return view('print.manifest', compact('manifests', 'date'));
     }
 
@@ -95,7 +95,7 @@ class PrintController extends Controller
             return strcmp($a['client'], $b['client']);
         });
 
-        $date = $inputDate;
+        $date = Carbon::parse($targetDate)->format('d.m.Y');
         return view('print.mini-manifest', compact('manifests', 'date'));
     }
 
@@ -180,7 +180,7 @@ class PrintController extends Controller
 
         usort($stickers, fn($a, $b) => strcmp($a['client'], $b['client']) ?: $a['time'] <=> $b['time']);
 
-        $date = $inputDate;
+        $date = Carbon::parse($targetDate)->format('d.m.Y');
         return view('print.stickers', compact('stickers', 'date'));
     }
 
@@ -303,7 +303,7 @@ class PrintController extends Controller
             $report[] = $tableData;
         }
 
-        $date = $inputDate;
+        $date = Carbon::parse($targetDate)->format('d.m.Y');
         return view('print.packaging-list', compact('report', 'date'));
     }
 
@@ -405,11 +405,12 @@ class PrintController extends Controller
         }
 
         return view('print.production-report', [
-            'report' => $report,
-            'date' => $inputDate,
-            'targetDate' => $targetDate,
-            'dayNumber' => $globalDay
-        ]);
+        'report' => $report,
+        'date' => Carbon::parse($inputDate)->format('d.m.Y'),       
+        'targetDateFormatted' => Carbon::parse($targetDate)->format('d.m.Y'),
+        'targetDate' => $targetDate,
+        'dayNumber' => $globalDay
+    ]);
     }
 
     // =========================
