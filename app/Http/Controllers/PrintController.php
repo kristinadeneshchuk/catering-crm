@@ -132,32 +132,31 @@ class PrintController extends Controller
                 continue;
             }
 
-            $globalNote = trim($order->client->production_comment ?? '');
 
             foreach ($calc['items'] as $it) {
-                $dishId     = $it['dish_id'] ?? null;
-                $mealTypeId = $it['meal_type_id'] ?? null;
-                if (!$dishId) continue;
+                    $dishId     = $it['dish_id'] ?? null;
+                    $mealTypeId = $it['meal_type_id'] ?? null;
+                    if (!$dishId) continue;
 
-                $menuItem = $menu->menuItems->first(function ($mi) use ($dishId, $mealTypeId) {
-                    return (int)$mi->dish_id === (int)$dishId && (int)$mi->meal_type_id === (int)$mealTypeId;
-                });
-                if (!$menuItem || !$menuItem->dish) continue;
+                    $menuItem = $menu->menuItems->first(function ($mi) use ($dishId, $mealTypeId) {
+                        return (int)$mi->dish_id === (int)$dishId && (int)$mi->meal_type_id === (int)$mealTypeId;
+                    });
+                    if (!$menuItem || !$menuItem->dish) continue;
 
-                $dish = $menuItem->dish;
+                    $dish = $menuItem->dish;
 
-                $changes = [];
-                if (!empty($globalNote)) $changes[] = "⚠️ " . $globalNote;
+                    $changes = []; 
+                    // 🔥 Тут було додавання globalNote — ми його прибрали!
 
-                $dishRep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
-                if ($dishRep && $dishRep->replacementDish) {
-                    $changes[] = "🔄 ЗАМІНА СТРАВИ: " . $dishRep->replacementDish->name;
-                } elseif ($order->client->dishExclusions->contains('id', $dish->id)) {
-                    $changes[] = "⛔ КЛІЄНТ НЕ ЇСТЬ ЦЮ СТРАВУ!";
-                } else {
-                    $ingredientChanges = $this->findIngredientChanges($dish, $order, $dish->id);
-                    $changes = array_merge($changes, $ingredientChanges);
-                }
+                    $dishRep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
+                    if ($dishRep && $dishRep->replacementDish) {
+                        $changes[] = "🔄 ЗАМІНА СТРАВИ: " . $dishRep->replacementDish->name;
+                    } elseif ($order->client->dishExclusions->contains('id', $dish->id)) {
+                        $changes[] = "⛔ КЛІЄНТ НЕ ЇСТЬ ЦЮ СТРАВУ!";
+                    } else {
+                        $ingredientChanges = $this->findIngredientChanges($dish, $order, $dish->id);
+                        $changes = array_merge($changes, $ingredientChanges);
+                    }
 
                 if (!empty($changes)) {
                     $stickers[] = [
