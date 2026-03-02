@@ -101,13 +101,13 @@
                         $html .= '<div style="display: flex; align-items: center; gap: 6px;">';
                         $html .= '<span style="font-weight: 700; color: #0f172a;">' . $brutto . ' г</span>';
                         
-                        // 🔥 ВИПРАВЛЕНО: Кнопки екшенів через wire:click="mountAction(...)"
-                        if ($level == 0 && $hasConflict) {
-                            $html .= '<div class="no-print">';
+                        // 🔥 ВИПРАВЛЕНО: Кнопки екшенів доступні на будь-якому рівні вкладеності
+                        if ($hasConflict) { 
+                            $html .= '<div class="no-print" style="margin-left: 8px;">';
                             if ($isResolved) {
                                 $html .= '<button type="button" wire:click="mountAction(\'resetReplacement\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['conflict']['original_ing_id'] . ' })" style="color: #64748b; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">Скасувати</button>';
                             } else {
-                                $html .= '<button type="button" wire:click="mountAction(\'replaceIngredient\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['product_id'] . ' })" style="color: #ea580c; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">Замінити</button>';
+                                $html .= '<button type="button" wire:click="mountAction(\'replaceIngredient\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['product_id'] . ' })" style="color: #ea580c; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">🔄 Замінити</button>';
                             }
                             $html .= '</div>';
                         }

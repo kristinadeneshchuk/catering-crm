@@ -132,9 +132,7 @@ class PrintController extends Controller
                 continue;
             }
 
-            $clientComment = $order->client->production_comment ?? null;
-            $orderComment  = $order->comment ?? null;
-            $globalNote    = trim(($clientComment ? "Клієнт: $clientComment. " : "") . ($orderComment ? "Зам: $orderComment" : ""));
+            $globalNote = trim($order->client->production_comment ?? '');
 
             foreach ($calc['items'] as $it) {
                 $dishId     = $it['dish_id'] ?? null;

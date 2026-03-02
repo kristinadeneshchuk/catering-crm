@@ -259,7 +259,7 @@ class PackagingList extends Page implements HasForms
         $clientInfo = $order->client->name . ' (' . (int)($order->calories ?? 0) . ' ккал)';
 
         // 1. Коментарі
-        $comment = trim(($order->client->production_comment ?? '') . ' ' . ($order->comment ?? ''));
+        $comment = trim($order->client->production_comment ?? '');
         if (!empty($comment)) {
             $notes[] = "👤 {$clientInfo}: {$comment}";
         }
