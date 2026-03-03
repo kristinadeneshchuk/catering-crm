@@ -316,7 +316,6 @@ class PrintController extends Controller
             return "❌ Меню не знайдено на завтра ({$targetDate})";
         }
 
-        // 🔥 Прибрано фільтр за статусом
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
@@ -333,7 +332,6 @@ class PrintController extends Controller
             return "Немає активних замовлень на {$targetDate}.";
         }
 
-        // 1. Рахуємо плани (як у Filament)
         $orderPlans = [];
         foreach ($orders as $order) {
             $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
@@ -342,21 +340,19 @@ class PrintController extends Controller
         $report = [];
         $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType?->sort_order ?? 99);
 
-        // 2. Групуємо по стравах
         foreach ($sortedMenuItems as $item) {
             if (!$item->dish) continue;
 
             $mealName = $item->mealType->name ?? 'Інше';
             $dish = $item->dish;
 
-            $standard = []; // ['order' => Order, 'scale' => float]
-            $custom = [];   // ['order' => Order, 'scale' => float]
+            $standard = []; 
+            $custom = [];   
 
             foreach ($orders as $order) {
                 $plan = $orderPlans[$order->id] ?? null;
                 if (!$plan) continue;
 
-                // Перевіряємо, чи входить ця страва у план клієнта
                 $plannedWeight = collect($plan['items'])->first(function ($it) use ($dish, $item) {
                     return (int)$it['dish_id'] === (int)$dish->id && (int)$it['meal_type_id'] === (int)$item->meal_type_id;
                 })['weight'] ?? null;
@@ -366,8 +362,9 @@ class PrintController extends Controller
                 $baseW = (float)($dish->base_weight_g ?? 0);
                 $dishScale = ($baseW > 0) ? ((float)$plannedWeight / $baseW) : 0.0;
 
+                // 🔥 ОНОВЛЕНО: Тепер $order->comment (логістичний) НЕ робить замовлення кастомним
                 $isCustom =
-                    ($order->comment || !empty($order->client->production_comment))
+                    (!empty($order->client->production_comment)) // Тільки виробничий коментар клієнта
                     || $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
                     || $order->client->dishExclusions->contains('id', $dish->id)
                     || !empty($this->getConflictingIngredients($dish, $order->client->ingredientExclusions));
@@ -381,7 +378,6 @@ class PrintController extends Controller
 
             if (empty($standard) && empty($custom)) continue;
 
-            // Збираємо структуру 
             $standardScales = array_map(fn($x) => (float)$x['scale'], $standard);
             $standardStructure = $this->calculateIngredientsStructureByScales($dish, $standardScales);
             $standardTotals = $this->calculateStructureTotals($standardStructure);
@@ -403,12 +399,12 @@ class PrintController extends Controller
         }
 
         return view('print.production-report', [
-        'report' => $report,
-        'date' => Carbon::parse($inputDate)->format('d.m.Y'),       
-        'targetDateFormatted' => Carbon::parse($targetDate)->format('d.m.Y'),
-        'targetDate' => $targetDate,
-        'dayNumber' => $globalDay
-    ]);
+            'report' => $report,
+            'date' => Carbon::parse($inputDate)->format('d.m.Y'),       
+            'targetDateFormatted' => Carbon::parse($targetDate)->format('d.m.Y'),
+            'targetDate' => $targetDate,
+            'dayNumber' => $globalDay
+        ]);
     }
 
     // =========================
@@ -631,13 +627,13 @@ class PrintController extends Controller
         }
 
         $totals = $this->calculateStructureTotals($components);
-        $clientComment = $order->client->production_comment ?? $order->client->comment ?? null;
-        $finalComment = trim(($clientComment ?? '') . ' ' . ($order->comment ?? ''));
+        
+        $finalComment = trim($order->client->production_comment ?? '');
 
         return [
             'client_name' => $order->client->name,
             'order_id' => $order->id,
-            'comment' => $finalComment,
+            'comment' => $finalComment, // Тут тепер немає "ср, чт до 8:30"
             'dish_excluded' => $dishExclusion,
             'dish_replacement' => $replacementDishName,
             'components' => $components,

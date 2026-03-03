@@ -514,8 +514,8 @@ public function form(Form $form): Form
         }
 
         $totals = $this->calculateTotals($components);
-        $clientComment = $order->client->production_comment ?? $order->client->comment ?? null;
-        $finalComment = trim(($clientComment ?? '') . ' ' . ($order->comment ?? ''));
+        
+        $finalComment = trim($order->client->production_comment ?? '');
 
         return [
             'client_name' => $order->client->name,
