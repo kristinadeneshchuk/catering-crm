@@ -246,4 +246,9 @@ class Order extends Model
 
         return $list;
     }
+
+    public function calls()
+    {
+        return $this->hasMany(OrderCall::class);
+    }
 }

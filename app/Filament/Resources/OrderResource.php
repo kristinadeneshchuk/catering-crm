@@ -263,9 +263,23 @@ class OrderResource extends Resource
                         'paused' => 'На паузі',
                         'completed', 'finished' => 'Завершений',
                         default => $state,
+                    })
+                    ->sortable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $direction) {
+                        return $query
+                            ->orderByRaw("
+                                CASE 
+                                    WHEN status = 'new' THEN 1 
+                                    WHEN status = 'active' THEN 2 
+                                    WHEN status = 'paused' THEN 3 
+                                    WHEN status = 'completed' THEN 4
+                                    WHEN status = 'finished' THEN 4
+                                    ELSE 5 
+                                END $direction
+                            ")
+                            ->orderBy('id', 'desc'); // Вторинне сортування (щоб новіші замовлення з однаковим статусом були вище)
                     }),
             ])
-            ->defaultSort('id', 'desc')
+            ->defaultSort('status', 'asc')
             ->actions([
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),

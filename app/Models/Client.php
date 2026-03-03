@@ -119,4 +119,9 @@ class Client extends Authenticatable
             }
         }
     }
+
+    public function calls()
+    {
+        return $this->hasMany(OrderCall::class);
+    }
 }
