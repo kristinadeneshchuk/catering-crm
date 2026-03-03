@@ -251,4 +251,10 @@ class Order extends Model
     {
         return $this->hasMany(OrderCall::class);
     }
+
+    public function projectData(): BelongsTo
+    {
+        // Ми пов'язуємо поле 'project' (де лежить slug) з моделлю Project
+        return $this->belongsTo(Project::class, 'project', 'slug');
+    }
 }

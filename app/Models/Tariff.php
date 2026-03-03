@@ -32,4 +32,9 @@ class Tariff extends Model
     {
         return $this->hasMany(TariffPrice::class);
     }
+
+    public function projectData(): BelongsTo
+    {
+        return $this->belongsTo(Project::class, 'project', 'slug');
+    }
 }

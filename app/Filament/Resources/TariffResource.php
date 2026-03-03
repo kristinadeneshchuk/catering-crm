@@ -33,17 +33,13 @@ class TariffResource extends Resource
                 Forms\Components\Section::make('Параметри тарифу')
                     ->description('Визначте назву тарифного плану для розрахунку ціни за день.')
                     ->schema([
-                        // Вибір бренду
+                        // 🔥 Вибір бренду (Тепер тягнеться з бази автоматично)
                         Forms\Components\Select::make('project')
                             ->label('Проєкт')
-                            ->options([
-                                'avocado_food' => 'AFood', // Изменено название
-                                'u_fit' => 'U-FIT',
-                                'level_up' => 'LevelUp',   // Добавлен новый проект
-                            ])
+                            ->options(\App\Models\Project::all()->pluck('name', 'slug'))
                             ->required()
                             ->native(false)
-                            ->default('avocado_food')
+                            ->default('afood') // Оновлено на новий slug
                             ->prefixIcon('heroicon-o-building-storefront'),
 
                         // Назва тарифу
@@ -68,21 +64,11 @@ class TariffResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('project')
+                // 🔥 Динамічна колонка з бази даних (Тягне назву і колір)
+                Tables\Columns\TextColumn::make('projectData.name')
                     ->label('Проєкт')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'avocado_food' => 'success',
-                        'u_fit' => 'info',
-                        'level_up' => 'warning', // Добавлен цвет для нового проекта (желтый/оранжевый)
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'avocado_food' => 'AFood', // Изменено название в таблице
-                        'u_fit' => 'U-FIT',
-                        'level_up' => 'LevelUp',   // Добавлено отображение в таблице
-                        default => $state,
-                    })
+                    ->color(fn ($record): string => $record->projectData?->color ?? 'gray')
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')

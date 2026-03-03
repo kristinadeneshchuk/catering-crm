@@ -69,16 +69,11 @@ class CalorieRangeResource extends Resource
                                     ->label('Тариф')
                                     ->relationship('tariff', 'name') // Залишаємо зв'язок
                                     /**
-                                     * 🏷️ МАГІЯ ВІЗУАЛІЗАЦІЇ: 
-                                     * Додаємо назву проєкту в дужках до назви тарифу
+                                     * 🔥 ОНОВЛЕНО: Тепер назва проєкту тягнеться динамічно з бази даних!
+                                     * Формат буде: "Назва тарифу (Назва проєкту)"
                                      */
                                     ->getOptionLabelFromRecordUsing(fn ($record) => 
-                                        "{$record->name} (" . match($record->project) {
-                                            'avocado_food' => 'AFood',
-                                            'u_fit' => 'U-FIT',
-                                            'level_up' => 'LevelUp',
-                                            default => $record->project,
-                                        } . ")"
+                                        "{$record->name} (" . ($record->projectData?->name ?? $record->project) . ")"
                                     )
                                     ->required()
                                     ->searchable()

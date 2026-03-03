@@ -27,6 +27,7 @@ use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Carbon\Carbon;
 use Filament\Forms\Components\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 
 class OrderResource extends Resource
 {
@@ -77,9 +78,10 @@ class OrderResource extends Resource
 
                         Select::make('tariff_id')
                             ->label('Тариф')
-                            ->relationship('tariff', 'name', fn ($query) => $query->where('is_active', true))
+                            ->relationship('tariff', 'name', fn (Builder $query) => $query->where('is_active', true))
+                            // 🔥 Динамічна назва проєкту з бази (або резервна зі старого поля)
                             ->getOptionLabelFromRecordUsing(fn ($record) => 
-                                "{$record->name} (" . ($record->project === 'u_fit' ? 'U-FIT' : 'Avocado') . ")"
+                                "{$record->name} (" . ($record->projectData?->name ?? $record->project) . ")"
                             )
                             ->required()
                             ->live()
@@ -104,8 +106,9 @@ class OrderResource extends Resource
                         Hidden::make('status')
                             ->default('new'),
 
+                        // 🔥 Оновлено на новий системний slug
                         Hidden::make('project')
-                            ->default('avocado_food'),
+                            ->default('afood'),
                     ]),
 
                 // === СЕКЦІЯ 2: Дати та Логістика ===
@@ -174,21 +177,12 @@ class OrderResource extends Resource
             ->columns([
                 TextColumn::make('id')->label('ID')->sortable(),
 
-                TextColumn::make('project')
+                // 🔥 Динамічна колонка проєкту (тягне назву і колір з БД)
+                TextColumn::make('projectData.name')
                     ->label('Проєкт')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'avocado_food' => 'success',
-                        'u_fit' => 'info',
-                        'level_up' => 'warning',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'avocado_food' => 'AFood',
-                        'u_fit' => 'U-FIT',
-                        'level_up' => 'LevelUp',
-                        default => $state,
-                    }),
+                    ->color(fn ($record): string => $record->projectData?->color ?? 'gray')
+                    ->sortable(),
 
                 TextColumn::make('client.name')
                     ->label('Клієнт')
@@ -264,7 +258,7 @@ class OrderResource extends Resource
                         'completed', 'finished' => 'Завершений',
                         default => $state,
                     })
-                    ->sortable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $direction) {
+                    ->sortable(query: function (Builder $query, string $direction) {
                         return $query
                             ->orderByRaw("
                                 CASE 

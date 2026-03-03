@@ -25,7 +25,7 @@ class PrintController extends Controller
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
-            ->with(['client.mealTypes'])
+            ->with(['client.mealTypes', 'projectData']) // 🔥 Додано projectData
             ->get();
 
         $manifests = [];
@@ -75,7 +75,7 @@ class PrintController extends Controller
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
-            ->with(['client'])
+            ->with(['client', 'projectData']) // 🔥 Додано projectData
             ->get();
 
         $manifests = [];
@@ -118,6 +118,7 @@ class PrintController extends Controller
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
+                'projectData', // 🔥 Додано projectData
                 'replacements.replacementProduct',
                 'replacements.replacementDish',
             ])
