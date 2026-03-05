@@ -21,11 +21,10 @@ class PrintController extends Controller
             return "❌ На День циклу №{$globalDay} меню ще не створено.";
         }
 
-        // 🔥 Прибрано фільтр за статусом
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
-            ->with(['client.mealTypes', 'projectData']) // 🔥 Додано projectData
+            ->with(['client.mealTypes', 'projectData']) 
             ->get();
 
         $manifests = [];
@@ -44,7 +43,7 @@ class PrintController extends Controller
                 'client'      => $order->client?->name ?? 'Без імені',
                 'address'     => $order->client?->address ?? 'Самовивіз',
                 'calories'    => (int) $order->calories,
-                'comment'     => $order->comment ?? $order->client?->production_comment,
+                'comment'     => $order->client?->production_comment,
                 'items'       => $calc['items'],
                 'date'        => $targetDate,
                 'nutrition'   => [
@@ -62,7 +61,8 @@ class PrintController extends Controller
             return $a['calories'] <=> $b['calories'];
         });
 
-        $date = Carbon::parse($targetDate)->format('d.m.Y');
+        // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату, щоб уникнути "+2 дні" в шаблоні
+        $date = $inputDate; 
         return view('print.manifest', compact('manifests', 'date'));
     }
 
@@ -71,11 +71,10 @@ class PrintController extends Controller
         $inputDate  = $request->input('date', now()->format('Y-m-d'));
         $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
 
-        // 🔥 Прибрано фільтр за статусом
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
-            ->with(['client', 'projectData']) // 🔥 Додано projectData
+            ->with(['client', 'projectData']) 
             ->get();
 
         $manifests = [];
@@ -90,12 +89,12 @@ class PrintController extends Controller
             ];
         }
 
-        // Сортуємо за іменем
         usort($manifests, function ($a, $b) {
             return strcmp($a['client'], $b['client']);
         });
 
-        $date = Carbon::parse($targetDate)->format('d.m.Y');
+        // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату
+        $date = $inputDate; 
         return view('print.mini-manifest', compact('manifests', 'date'));
     }
 
@@ -110,7 +109,6 @@ class PrintController extends Controller
             return "❌ Меню не створено на завтра ({$targetDate}).";
         }
 
-        // 🔥 Прибрано фільтр за статусом
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
@@ -118,7 +116,7 @@ class PrintController extends Controller
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
-                'projectData', // 🔥 Додано projectData
+                'projectData', 
                 'replacements.replacementProduct',
                 'replacements.replacementDish',
             ])
@@ -147,7 +145,6 @@ class PrintController extends Controller
                     $dish = $menuItem->dish;
 
                     $changes = []; 
-                    // 🔥 Тут було додавання globalNote — ми його прибрали!
 
                     $dishRep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
                     if ($dishRep && $dishRep->replacementDish) {
@@ -178,7 +175,8 @@ class PrintController extends Controller
 
         usort($stickers, fn($a, $b) => strcmp($a['client'], $b['client']) ?: $a['time'] <=> $b['time']);
 
-        $date = Carbon::parse($targetDate)->format('d.m.Y');
+        // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату
+        $date = $inputDate; 
         return view('print.stickers', compact('stickers', 'date'));
     }
 
@@ -193,7 +191,6 @@ class PrintController extends Controller
             return "Меню не знайдено на завтра ({$targetDate})";
         }
 
-        // 🔥 Прибрано фільтр за статусом
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
@@ -216,7 +213,6 @@ class PrintController extends Controller
             $tableData = [
                 'meal' => $mItem->mealType?->name ?? '-',
                 'dish_name' => $dish->name,
-                // columns: [kcal => ['count'=>int, 'sum_scale'=>float]]
                 'columns' => [],
                 'rows' => [],
                 'individual_notes' => [],
@@ -235,7 +231,6 @@ class PrintController extends Controller
                 $realW = (float)($plannedDish['weight'] ?? 0);
                 $dishScale = ($baseW > 0) ? ($realW / $baseW) : 0.0;
 
-                // заметки
                 $replacements = $order->replacements
                     ->where('dish_id', $dish->id)
                     ->whereNotNull('original_product_id');
@@ -284,7 +279,6 @@ class PrintController extends Controller
                     $count = (int)($col['count'] ?? 1);
                     $sumScale = (float)($col['sum_scale'] ?? 0.0);
                     
-                    // Розраховуємо середній масштаб на ОДНУ порцію
                     $onePortionScale = $count > 0 ? ($sumScale / $count) : 0;
 
                     $cells[$key] = [
@@ -301,7 +295,8 @@ class PrintController extends Controller
             $report[] = $tableData;
         }
 
-        $date = Carbon::parse($targetDate)->format('d.m.Y');
+        // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату
+        $date = $inputDate; 
         return view('print.packaging-list', compact('report', 'date'));
     }
 
@@ -362,9 +357,8 @@ class PrintController extends Controller
                 $baseW = (float)($dish->base_weight_g ?? 0);
                 $dishScale = ($baseW > 0) ? ((float)$plannedWeight / $baseW) : 0.0;
 
-                // 🔥 ОНОВЛЕНО: Тепер $order->comment (логістичний) НЕ робить замовлення кастомним
                 $isCustom =
-                    (!empty($order->client->production_comment)) // Тільки виробничий коментар клієнта
+                    (!empty($order->client->production_comment)) 
                     || $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
                     || $order->client->dishExclusions->contains('id', $dish->id)
                     || !empty($this->getConflictingIngredients($dish, $order->client->ingredientExclusions));
@@ -406,10 +400,6 @@ class PrintController extends Controller
             'dayNumber' => $globalDay
         ]);
     }
-
-    // =========================
-    // ✅ ДОПОМІЖНІ МЕТОДИ
-    // =========================
 
     private function calculateOrderPlan(Order $order, DailyMenu $menu): array
     {
@@ -633,7 +623,7 @@ class PrintController extends Controller
         return [
             'client_name' => $order->client->name,
             'order_id' => $order->id,
-            'comment' => $finalComment, // Тут тепер немає "ср, чт до 8:30"
+            'comment' => $finalComment,
             'dish_excluded' => $dishExclusion,
             'dish_replacement' => $replacementDishName,
             'components' => $components,
