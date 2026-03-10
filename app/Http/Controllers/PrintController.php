@@ -13,6 +13,7 @@ class PrintController extends Controller
     public function manifest(Request $request)
     {
         $inputDate  = $request->input('date', now()->format('Y-m-d'));
+        $layout     = $request->input('layout', 'default');
         $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
 
         [$menu, $globalDay] = $this->getMenuForTargetDate($targetDate);
@@ -63,7 +64,7 @@ class PrintController extends Controller
 
         // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату, щоб уникнути "+2 дні" в шаблоні
         $date = $inputDate; 
-        return view('print.manifest', compact('manifests', 'date'));
+        return view('print.manifest', compact('manifests', 'date', 'layout'));
     }
 
     public function miniManifest(Request $request)
