@@ -711,10 +711,15 @@ public function form(Form $form): Form
 
         $byMeal = $selected->groupBy('meal_type_id');
 
-        // нормализация процентов по фактически использованным mealTypes
+        // 🔥 ЗМІНЕНО: нормализация процентов с учетом кастомных
         $percentSum = 0.0;
         foreach ($byMeal as $mealTypeId => $items) {
-            $percentSum += (float)($items->first()->mealType?->energy_percent ?? 0);
+            $firstItem = $items->first();
+            $p = $firstItem->custom_energy_percent !== null 
+                ? (float) $firstItem->custom_energy_percent 
+                : (float) ($firstItem->mealType?->energy_percent ?? 0);
+            
+            $percentSum += $p;
         }
         if ($percentSum <= 0) $percentSum = 100.0;
 
@@ -722,8 +727,12 @@ public function form(Form $form): Form
         $itemsOut = [];
 
         foreach ($byMeal as $mealTypeId => $items) {
-            $mealType = $items->first()->mealType;
-            $p = (float)($mealType?->energy_percent ?? 0);
+            $firstItem = $items->first();
+            
+            // 🔥 ЗМІНЕНО: Беремо кастомний відсоток, якщо він є
+            $p = $firstItem->custom_energy_percent !== null 
+                ? (float) $firstItem->custom_energy_percent 
+                : (float) ($firstItem->mealType?->energy_percent ?? 0);
 
             $mealKcal = ($p > 0)
                 ? $targetKcal * ($p / $percentSum)

@@ -9,7 +9,8 @@ class DailyMenuDish extends Model
 {
     public $timestamps = false; 
 
-    protected $fillable = ['daily_menu_id', 'dish_id', 'meal_type_id'];
+    // 🔥 Додали 'custom_energy_percent'
+    protected $fillable = ['daily_menu_id', 'dish_id', 'meal_type_id', 'custom_energy_percent'];
 
     public function dailyMenu(): BelongsTo
     {

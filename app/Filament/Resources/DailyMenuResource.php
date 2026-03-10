@@ -55,23 +55,34 @@ class DailyMenuResource extends Resource
                                 Select::make('meal_type_id')
                                     ->relationship('mealType', 'name')
                                     ->required()
-                                    ->live() // 🔥 Робить поле реактивним
+                                    ->live() 
                                     ->label('Прийом їжі'),
+                                
+                                // 🔥 ДОДАНО: Поле для кастомного відсотка
+                                TextInput::make('custom_energy_percent')
+                                    ->label('% ккал (кастом)')
+                                    ->numeric()
+                                    ->suffix('%')
+                                    ->helperText('Порожньо = дефолт')
+                                    ->live() // live() обов'язковий, щоб прев'ю ваги/ціни оновлювалося одразу!
+                                    ->minValue(1)
+                                    ->maxValue(100),
                                     
                                 Select::make('dish_id')
                                     ->relationship('dish', 'name')
                                     ->searchable()
                                     ->preload()
                                     ->required()
-                                    ->live() // 🔥 Робить поле реактивним
+                                    ->live() 
                                     ->label('Страва'),
 
-                                // 🔥 НОВЕ ПОЛЕ: ДИНАМІЧНИЙ РОЗРАХУНОК ЦІНИ
                                 Placeholder::make('cost_preview')
                                     ->label('Собівартість (на 1500 ккал)')
                                     ->content(function (Forms\Get $get) {
                                         $dishId = $get('dish_id');
                                         $mealTypeId = $get('meal_type_id');
+                                        // 🔥 ДОДАНО: Отримуємо значення кастомного поля
+                                        $customPercent = $get('custom_energy_percent'); 
 
                                         if (!$dishId || !$mealTypeId) {
                                             return new HtmlString('<span class="text-gray-400">—</span>');
@@ -86,7 +97,11 @@ class DailyMenuResource extends Resource
 
                                         // Рахуємо конкретно для 1500 ккал
                                         $targetKcal = 1500;
-                                        $p = (float)($mealType->energy_percent ?? 0);
+                                        
+                                        // 🔥 ЗМІНЕНО: Беремо кастомний відсоток, якщо він є, інакше дефолтний
+                                        $p = ($customPercent !== null && $customPercent !== '') 
+                                            ? (float)$customPercent 
+                                            : (float)($mealType->energy_percent ?? 0);
                                         
                                         $mealKcal = $targetKcal * ($p / 100.0);
 
@@ -102,7 +117,6 @@ class DailyMenuResource extends Resource
 
                                         $cost = $weightGrams * $costPerGram;
 
-                                        // 🔥 Кольорова індикація: Дорожче 50 - червоне, 30-50 - жовте, дешевше 30 - зелене
                                         if ($cost > 50) {
                                             $color = '#ef4444'; // червоний
                                         } elseif ($cost > 30) {
@@ -114,12 +128,12 @@ class DailyMenuResource extends Resource
                                         return new HtmlString(
                                             "<div style='display: flex; flex-direction: column; gap: 2px;'>" .
                                             "<span style='font-size: 16px; font-weight: 800; color: {$color};'>" . number_format($cost, 2) . " ₴</span>" .
-                                            "<span style='font-size: 11px; font-weight: 600; color: #6b7280;'>Вага порції: " . round($weightGrams) . " г</span>" .
+                                            "<span style='font-size: 11px; font-weight: 600; color: #6b7280;'>Вага: " . round($weightGrams) . " г (" . round($p) ."%)</span>" .
                                             "</div>"
                                         );
                                     }),
                             ])
-                            ->columns(3) // 🔥 РОБИМО 3 КОЛОНКИ (Прийом, Страва, Ціна)
+                            ->columns(4) // 🔥 ЗМІНЕНО: 4 колонки, щоб влізло нове поле
                             ->itemLabel(fn (array $state): ?string => 
                                 $state['dish_id'] ? \App\Models\Dish::find($state['dish_id'])?->name : null
                             )
@@ -145,7 +159,6 @@ class DailyMenuResource extends Resource
                     ->sortable()
                     ->alignCenter(),
 
-                // Залишаємо лише 3 колонки: 950, 1500 та 2500
                 self::makeCostColumn('cost_950', '950 ккал', 950, [1, 3, 5], 'success', true),
                 self::makeCostColumn('cost_1500', '1500 ккал', 1500, [1, 2, 3, 4, 5], 'warning', false),
                 self::makeCostColumn('cost_2500', '2500 ккал', 2500, [1, 2, 3, 4, 5], 'danger', false),
@@ -206,7 +219,13 @@ class DailyMenuResource extends Resource
             return 0.0;
         }
 
-        $percentSum = $menuItems->sum(fn ($item) => (float)($item->mealType?->energy_percent ?? 0));
+        // 🔥 ЗМІНЕНО: Сумуємо відсотки з урахуванням кастомних
+        $percentSum = $menuItems->sum(function ($item) {
+            return $item->custom_energy_percent !== null 
+                ? (float) $item->custom_energy_percent 
+                : (float) ($item->mealType?->energy_percent ?? 0);
+        });
+
         if ($percentSum <= 0) {
             $percentSum = 100.0;
         }
@@ -215,7 +234,11 @@ class DailyMenuResource extends Resource
 
         foreach ($menuItems as $item) {
             $dish = $item->dish;
-            $p = (float)($item->mealType?->energy_percent ?? 0);
+            
+            // 🔥 ЗМІНЕНО: Беремо кастомний відсоток, якщо він є
+            $p = $item->custom_energy_percent !== null 
+                ? (float) $item->custom_energy_percent 
+                : (float) ($item->mealType?->energy_percent ?? 0);
 
             $mealKcal = ($p > 0)
                 ? $targetKcal * ($p / $percentSum)
