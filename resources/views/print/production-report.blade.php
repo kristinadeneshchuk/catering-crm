@@ -20,17 +20,17 @@
         th { text-align: center; font-size: 10px; background-color: #ffffff !important; color: #111827; }
 
         /* 🔥 СІРА "ЗЕБРА" ДЛЯ ІНГРЕДІЄНТІВ 🔥 */
-        .table-striped tbody tr:nth-child(even) td { background-color: #e5e7eb !important; } /* Темніший сірий */
-        .table-striped tbody tr:nth-child(odd) td { background-color: #f9fafb !important; } /* Світліший сірий */
+        .table-striped tbody tr:nth-child(even) td { background-color: #e5e7eb !important; } 
+        .table-striped tbody tr:nth-child(odd) td { background-color: #f9fafb !important; } 
 
         /* 🔥 КОЛЬОРИ ПРИЙОМІВ ЇЖІ 🔥 */
         .meal-header { padding: 8px 12px; font-weight: bold; font-size: 15px; text-transform: uppercase; margin-top: 25px; margin-bottom: 15px; border-radius: 4px; }
         
-        .meal-snidanok { background-color: #14b8a6 !important; color: white !important; text-shadow: 0px 1px 1px rgba(0,0,0,0.3); } /* Бірюзовий */
-        .meal-perekus-1 { background-color: #a3e635 !important; color: black !important; } /* Салатно-кислотний */
-        .meal-obid { background-color: #fb923c !important; color: white !important; text-shadow: 0px 1px 1px rgba(0,0,0,0.3); } /* Світло-оранжевий */
-        .meal-perekus-2 { background-color: #f472b6 !important; color: white !important; text-shadow: 0px 1px 1px rgba(0,0,0,0.3); } /* Рожевий */
-        .meal-vecherya { background-color: #38bdf8 !important; color: white !important; text-shadow: 0px 1px 1px rgba(0,0,0,0.3); } /* Голубий */
+        .meal-snidanok { background-color: #14b8a6 !important; color: white !important; text-shadow: 0px 1px 1px rgba(0,0,0,0.3); } 
+        .meal-perekus-1 { background-color: #a3e635 !important; color: black !important; } 
+        .meal-obid { background-color: #fb923c !important; color: white !important; text-shadow: 0px 1px 1px rgba(0,0,0,0.3); } 
+        .meal-perekus-2 { background-color: #f472b6 !important; color: white !important; text-shadow: 0px 1px 1px rgba(0,0,0,0.3); } 
+        .meal-vecherya { background-color: #38bdf8 !important; color: white !important; text-shadow: 0px 1px 1px rgba(0,0,0,0.3); } 
         .meal-default { background-color: #94a3b8 !important; color: white !important; }
 
         /* СІТКА ДЛЯ КАРТОК (БАЗА + ПФ) */
@@ -94,7 +94,6 @@
         @else
             @foreach($report as $mealName => $dishes)
                 @php
-                    // Визначаємо колір для конкретного прийому їжі
                     $mealLower = mb_strtolower(trim($mealName));
                     $mealClass = 'meal-default';
                     if (str_contains($mealLower, 'сніданок')) $mealClass = 'meal-snidanok';
@@ -112,7 +111,6 @@
                     {{-- СТАНДАРТНІ ПОРЦІЇ ТА ЇХ ПФ --}}
                     @if($dish['standard_count'] > 0)
                         @php
-                            // Отримуємо список усіх напівфабрикатів окремо
                             $allPFs = $flattenPFs($dish['standard_structure']);
                         @endphp
 
@@ -195,6 +193,7 @@
                             
                             <div class="pf-grid">
                                 @foreach($dish['custom_cards'] as $card)
+                                    {{-- ГОЛОВНА КАРТКА КАСТОМНОЇ СТРАВИ --}}
                                     <div class="pf-card border-red-300">
                                         <div class="pf-card-header bg-gray-700 text-white print:bg-gray-200 print:text-black">
                                             <span>👤 {{ $card['client_name'] }} (Зам. #{{ $card['order_id'] }})</span>
@@ -217,20 +216,24 @@
                                                 <tbody>
                                                     @foreach($card['components'] as $item)
                                                         @php 
-                                                            $isConflict = is_array($item['conflict'] ?? null) && ($item['conflict']['is_resolved'] ?? false);
+                                                            $isConflict = is_array($item['conflict'] ?? null);
+                                                            $isResolved = $isConflict && ($item['conflict']['is_resolved'] ?? false);
                                                         @endphp
                                                         <tr>
-                                                            <td>
-                                                                {{ $item['type'] === 'pf' ? '📦 ' : '' }}
-                                                                @if($isConflict)
+                                                            <td class="{{ ($item['type'] ?? '') === 'pf' ? 'font-bold' : '' }}">
+                                                                {{ ($item['type'] ?? '') === 'pf' ? '📦 ' : '' }}
+                                                                @if($isResolved)
                                                                     <span class="line-through text-gray-400">{{ $item['name'] }}</span><br>
                                                                     <span class="font-bold text-[9px] text-blue-600">🔄 На: {{ $item['conflict']['replacement']['name'] ?? 'Заміна' }}</span>
+                                                                @elseif($isConflict)
+                                                                    <span class="line-through text-red-400">{{ $item['name'] }}</span><br>
+                                                                    <span class="font-bold text-[9px] text-red-600">❌ БЕЗ</span>
                                                                 @else
                                                                     {{ $item['name'] }}
                                                                 @endif
                                                             </td>
                                                             <td class="text-center font-bold">
-                                                                {{ round($isConflict ? ($item['conflict']['replacement']['brutto'] ?? 0) : ($item['weight_brutto_sum'] ?? $item['weight_brutto'] ?? 0)) }}
+                                                                {{ round($isResolved ? ($item['conflict']['replacement']['brutto'] ?? 0) : ($item['weight_brutto_sum'] ?? $item['weight_brutto'] ?? 0)) }}
                                                             </td>
                                                         </tr>
                                                     @endforeach
@@ -238,6 +241,76 @@
                                             </table>
                                         @endif
                                     </div>
+
+                                    {{-- 🔥 ОКРЕМІ КАРТКИ ДЛЯ КАСТОМНИХ ПФ 🔥 --}}
+                                    @if(!$card['dish_excluded'] || $card['dish_replacement'])
+                                        @php
+                                            $customPFs = $flattenPFs($card['components']);
+                                        @endphp
+                                        
+                                        @foreach($customPFs as $pf)
+                                            @php
+                                                // Збираємо список замін саме для цього ПФ, щоб вивести в заголовок
+                                                $changes = [];
+                                                foreach($pf['sub_ingredients'] ?? [] as $sub) {
+                                                    $isSubConflict = is_array($sub['conflict'] ?? null);
+                                                    $isSubResolved = $isSubConflict && ($sub['conflict']['is_resolved'] ?? false);
+                                                    
+                                                    if ($isSubResolved) {
+                                                        $changes[] = "🔄 {$sub['name']} ➡ " . ($sub['conflict']['replacement']['name'] ?? 'Інше');
+                                                    } elseif ($isSubConflict) {
+                                                        $changes[] = "❌ Без {$sub['name']}";
+                                                    }
+                                                }
+                                                
+                                                // Якщо були заміни - пишемо їх. Якщо ні (заміна була в іншій частині страви) - пишемо ім'я клієнта
+                                                $changeStr = empty($changes) ? '👤 ' . $card['client_name'] : implode(', ', $changes);
+                                            @endphp
+
+                                            <div class="pf-card border-orange-300">
+                                                <div class="pf-card-header bg-orange-100 text-orange-900 print:bg-gray-100 print:text-black">
+                                                    <span>{{ $pf['name'] }} > <span class="text-blue-700 font-bold print:text-black">[{{ $changeStr }}]</span></span>
+                                                </div>
+                                                <table class="table-striped">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Інгредієнт/ПФ</th>
+                                                            <th style="width: 40px;">Брутто</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        @foreach($pf['sub_ingredients'] as $item)
+                                                            @php 
+                                                                $isSubConflict = is_array($item['conflict'] ?? null);
+                                                                $isSubResolved = $isSubConflict && ($item['conflict']['is_resolved'] ?? false);
+                                                            @endphp
+                                                            <tr>
+                                                                <td class="{{ ($item['type'] ?? '') === 'pf' ? 'font-bold' : '' }}">
+                                                                    {{ ($item['type'] ?? '') === 'pf' ? '📦 ' : '' }}
+                                                                    @if($isSubResolved)
+                                                                        <span class="line-through text-gray-400">{{ $item['name'] }}</span><br>
+                                                                        <span class="font-bold text-[9px] text-blue-600">🔄 На: {{ $item['conflict']['replacement']['name'] ?? 'Заміна' }}</span>
+                                                                    @elseif($isSubConflict)
+                                                                        <span class="line-through text-red-400">{{ $item['name'] }}</span><br>
+                                                                        <span class="font-bold text-[9px] text-red-600">❌ БЕЗ</span>
+                                                                    @else
+                                                                        {{ $item['name'] }}
+                                                                    @endif
+                                                                </td>
+                                                                <td class="text-center font-bold">
+                                                                    {{ round($isSubResolved ? ($item['conflict']['replacement']['brutto'] ?? 0) : ($item['weight_brutto_sum'] ?? $item['weight_brutto'] ?? 0)) }}
+                                                                </td>
+                                                            </tr>
+                                                        @endforeach
+                                                        <tr class="sum-row">
+                                                            <td class="text-right">Вихід ПФ:</td>
+                                                            <td class="text-center">{{ round($pf['weight_output'] ?? 0) }}</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        @endforeach
+                                    @endif
                                 @endforeach
                             </div>
                         </div>
