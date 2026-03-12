@@ -6,7 +6,7 @@ use App\Filament\Resources\StockDocumentResource\Pages;
 use App\Models\StockDocument;
 use App\Models\Ingredient;
 use App\Models\Packaging;
-use App\Models\Dish;
+use App\Models\Warehouse;
 
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -21,7 +21,6 @@ use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\MorphToSelect;
 use Filament\Forms\Components\Hidden;
 use Illuminate\Support\HtmlString;
 
@@ -48,7 +47,6 @@ class StockDocumentResource extends Resource
                             ->options([
                                 'receipt'   => '⬇️ Надходження на склад',
                                 'write_off' => '⬆️ Списання зі складу',
-                                'inventory' => '🔄 Інвентаризація',
                             ])
                             ->required()
                             ->live()
@@ -64,7 +62,8 @@ class StockDocumentResource extends Resource
                             ->relationship('warehouse', 'name')
                             ->required()
                             ->preload()
-                            ->searchable(),
+                            ->searchable()
+                            ->live(), // 🔥 ДОДАНО LIVE, щоб система знала, який склад обрано
 
                         Select::make('supplier_id')
                             ->label('Постачальник')
@@ -84,52 +83,71 @@ class StockDocumentResource extends Resource
                             ->relationship('items')
                             ->label('')
                             ->addActionLabel('Додати ще позицію')
-                            ->key('stock_items_repeater_v4')
                             ->schema([
 
-                                // ✅ Тільки для розрахунків, не шлемо в БД
                                 Hidden::make('price_manual')
                                     ->default(false)
                                     ->dehydrated(false),
 
-                                // ✅ Тільки для розрахунків, не шлемо в БД
-                                Hidden::make('itemable_hash')
-                                    ->default('')
-                                    ->dehydrated(false),
+                                // 🔥 ПРИХОВАНІ ПОЛЯ, КУДИ МИ БУДЕМО ЗАПИСУВАТИ ТИП І ID
+                                Hidden::make('itemable_type'),
+                                Hidden::make('itemable_id'),
 
-                                MorphToSelect::make('itemable')
+                                // 🔥 РОЗУМНИЙ ВИПАДАЮЧИЙ СПИСОК
+                                Select::make('item_composite')
                                     ->label('Товар / Продукт')
-                                    ->types([
-                                        MorphToSelect\Type::make(Ingredient::class)
-                                            ->titleAttribute('name')
-                                            ->label('🍏 Продукт'),
-
-                                        MorphToSelect\Type::make(Packaging::class)
-                                            ->titleAttribute('name')
-                                            ->label('📦 Упаковка'),
-                                    ])
                                     ->required()
                                     ->searchable()
-                                    ->preload()
                                     ->columnSpan(2)
+                                    ->dehydrated(false) // Не зберігаємо це віртуальне поле напряму в базу
+                                    ->formatStateUsing(function ($state, $record) {
+                                        // При редагуванні підтягуємо існуючий товар
+                                        if ($record && $record->itemable_type && $record->itemable_id) {
+                                            return $record->itemable_type . '||' . $record->itemable_id;
+                                        }
+                                        return null;
+                                    })
+                                    ->options(function (Forms\Get $get) {
+                                        $warehouseId = $get('../../warehouse_id');
+                                        if (!$warehouseId) return [];
+
+                                        $warehouse = Warehouse::find($warehouseId);
+                                        $wName = mb_strtolower($warehouse?->name ?? '');
+
+                                        $options = [];
+
+                                        // Якщо в назві складу є слова "упаков" або "госп" -> вантажимо Упаковки
+                                        if (str_contains($wName, 'упаков') || str_contains($wName, 'госп')) {
+                                            $items = Packaging::all();
+                                            foreach ($items as $item) {
+                                                $options[Packaging::class . '||' . $item->id] = '📦 ' . $item->name;
+                                            }
+                                        } else {
+                                            // У всіх інших випадках (Кухня, Бар, Продукти) -> вантажимо Інгредієнти
+                                            $items = Ingredient::all();
+                                            foreach ($items as $item) {
+                                                $options[Ingredient::class . '||' . $item->id] = '🍏 ' . $item->name;
+                                            }
+                                        }
+
+                                        return $options;
+                                    })
                                     ->live()
                                     ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
-
-                                        $modelClass = $get('itemable_type');
-                                        $modelId    = $get('itemable_id');
-
-                                        if (!$modelClass || !class_exists($modelClass) || !$modelId) {
+                                        if (!$state) {
+                                            $set('itemable_type', null);
+                                            $set('itemable_id', null);
+                                            $set('price', null);
+                                            $set('total_price', 0);
                                             return;
                                         }
 
-                                        $newHash = $modelClass . ':' . $modelId;
-                                        $oldHash = (string) ($get('itemable_hash') ?? '');
+                                        // Розбиваємо наш ключ на Клас та ID
+                                        [$modelClass, $modelId] = explode('||', $state);
 
-                                        if ($newHash === $oldHash) {
-                                            return;
-                                        }
-
-                                        $set('itemable_hash', $newHash);
+                                        // Записуємо в приховані поля
+                                        $set('itemable_type', $modelClass);
+                                        $set('itemable_id', $modelId);
 
                                         $item = $modelClass::find($modelId);
                                         if (!$item) return;
@@ -146,51 +164,26 @@ class StockDocumentResource extends Resource
 
                                         $defaultPrice = round($defaultPrice, 2);
 
-                                        // 🔥 Якщо це "Надходження", ми НЕ заповнюємо ціну (залишаємо порожньою)
+                                        // Якщо "Надходження", ціну не ставимо. Інакше - ставимо.
                                         if ($get('../../type') === 'receipt') {
                                             $set('price', null);
                                             $set('total_price', 0);
                                         } else {
-                                            // Для Списання або Інвентаризації підставляємо ціну з бази
                                             $set('price', $defaultPrice);
-                                            
                                             $qty = (float) ($get('qty') ?? 0);
-                                            if ($get('../../type') === 'inventory') {
-                                                $systemQty = (float) ($get('system_qty') ?? 0);
-                                                $diff = round($qty - $systemQty, 3);
-                                                $set('total_price', round($diff * $defaultPrice, 2));
-                                            } else {
-                                                $set('total_price', round($qty * $defaultPrice, 2));
-                                            }
-                                        }
-
-                                        if ($get('../../type') === 'inventory') {
-                                            $set('system_qty', $item->stock ?? 0);
+                                            $set('total_price', round($qty * $defaultPrice, 2));
                                         }
                                     }),
 
                                 TextInput::make('qty')
-                                    ->label(fn (Forms\Get $get) => $get('../../type') === 'inventory' ? 'Факт' : 'Кількість')
+                                    ->label('Кількість')
                                     ->numeric()
                                     ->default(1)
                                     ->required()
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
                                         $price = (float) ($get('price') ?? 0);
-
-                                        if ($get('../../type') === 'inventory') {
-                                            $systemQty = (float) ($get('system_qty') ?? 0);
-                                            $diff = round((float) $state - $systemQty, 3);
-                                            $set('difference_qty', $diff);
-
-                                            $set('total_price', round($diff * $price, 2));
-
-                                            if ($diff > 0) $set('inventory_status', 'Надлишок');
-                                            elseif ($diff < 0) $set('inventory_status', 'Нестача');
-                                            else $set('inventory_status', 'ОК');
-                                        } else {
-                                            $set('total_price', round((float) $state * $price, 2));
-                                        }
+                                        $set('total_price', round((float) $state * $price, 2));
                                     }),
 
                                 TextInput::make('price')
@@ -198,17 +191,14 @@ class StockDocumentResource extends Resource
                                     ->numeric()
                                     ->prefix('₴')
                                     ->required()
-                                    ->live(debounce: 500) // 🔥 Реактивне поле: оновлюється під час вводу
+                                    ->live(debounce: 500)
                                     ->dehydrated(true)
-                                    ->hidden(fn (Forms\Get $get) => $get('../../type') === 'inventory')
                                     ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
                                         $set('price_manual', true);
                                         $qty = (float) ($get('qty') ?? 0);
                                         $set('total_price', round($qty * (float) $state, 2));
                                     })
-                                    // 🔥 ДОДАНО: Контроль закупівельних цін (як у Poster)
                                     ->helperText(function (Forms\Get $get) {
-                                        // Підказка працює ТІЛЬКИ для "Надходження"
                                         if ($get('../../type') !== 'receipt') {
                                             return null;
                                         }
@@ -223,7 +213,6 @@ class StockDocumentResource extends Resource
                                         $item = $modelClass::find($modelId);
                                         if (!$item) return null;
 
-                                        // Отримуємо останню/середню ціну з бази
                                         $lastPrice = 0.0;
                                         if ($item instanceof Ingredient) {
                                             $lastPrice = (float) ($item->average_price ?? 0);
@@ -238,12 +227,10 @@ class StockDocumentResource extends Resource
                                         $currentPrice = (float) $get('price');
                                         $message = "<span class='text-[11px] text-gray-500'>Попередня ціна: <b>" . number_format($lastPrice, 2) . " ₴</b></span>";
 
-                                        // Якщо юзер ввів нову ціну - рахуємо різницю
                                         if ($currentPrice > 0) {
                                             $diff = $currentPrice - $lastPrice;
                                             $percent = ($diff / $lastPrice) * 100;
 
-                                            // Якщо ціна змінилася хоча б на 0.1%
                                             if (round($percent, 1) > 0) {
                                                 $message .= "<br><span style='color: #dc2626; font-weight: bold; font-size: 11px;'>Поточна ціна більша на " . round(abs($percent), 1) . "% 📈</span>";
                                             } elseif (round($percent, 1) < 0) {
@@ -257,39 +244,12 @@ class StockDocumentResource extends Resource
                                     }),
 
                                 TextInput::make('total_price')
-                                    ->label(fn (Forms\Get $get) => $get('../../type') === 'inventory' ? 'Різниця (₴)' : 'Сума')
+                                    ->label('Сума')
                                     ->numeric()
                                     ->readOnly()
                                     ->prefix('₴'),
-
-                                TextInput::make('system_qty')
-                                    ->label('В прогр.')
-                                    ->numeric()
-                                    ->readOnly()
-                                    ->dehydrated(false)
-                                    ->visible(fn (Forms\Get $get) => $get('../../type') === 'inventory'),
-
-                                TextInput::make('difference_qty')
-                                    ->label('Різниця (кількість)')
-                                    ->numeric()
-                                    ->readOnly()
-                                    ->dehydrated(false)
-                                    ->visible(fn (Forms\Get $get) => $get('../../type') === 'inventory'),
-
-                                TextInput::make('inventory_status')
-                                    ->label('Статус')
-                                    ->readOnly()
-                                    ->dehydrated(false)
-                                    ->extraInputAttributes(fn ($state) => [
-                                        'style' => 'font-weight: bold; color: ' . match ($state) {
-                                            'Надлишок' => '#22c55e',
-                                            'Нестача' => '#ef4444',
-                                            default => '#6b7280',
-                                        },
-                                    ])
-                                    ->visible(fn (Forms\Get $get) => $get('../../type') === 'inventory'),
                             ])
-                            ->columns(6),
+                            ->columns(5),
                     ]),
             ]);
     }
@@ -306,13 +266,11 @@ class StockDocumentResource extends Resource
                     ->formatStateUsing(fn ($state) => match ($state) {
                         'receipt' => 'Надходження',
                         'write_off' => 'Списання',
-                        'inventory' => 'Інвентаризація',
                         default => $state,
                     })
                     ->color(fn ($state) => match ($state) {
                         'receipt' => 'success',
                         'write_off' => 'danger',
-                        'inventory' => 'info',
                         default => 'gray',
                     }),
                 TextColumn::make('total_sum')->label('Сума')->money('UAH'),

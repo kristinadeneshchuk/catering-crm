@@ -58,9 +58,6 @@ class StockDocumentItem extends Model
             $this->itemable->increment('stock', $qty);
         } elseif ($type === 'write_off') {
             $this->itemable->decrement('stock', $qty);
-        } elseif ($type === 'inventory') {
-            $this->itemable->stock = $qty;
-            $this->itemable->save();
         }
     }
 
