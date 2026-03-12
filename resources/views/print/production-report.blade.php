@@ -193,54 +193,69 @@
                             
                             <div class="pf-grid">
                                 @foreach($dish['custom_cards'] as $card)
-                                    {{-- ГОЛОВНА КАРТКА КАСТОМНОЇ СТРАВИ --}}
-                                    <div class="pf-card border-red-300">
-                                        <div class="pf-card-header bg-gray-700 text-white print:bg-gray-200 print:text-black">
-                                            <span>👤 {{ $card['client_name'] }} (Зам. #{{ $card['order_id'] }})</span>
-                                        </div>
-                                        
-                                        <div class="p-1.5 bg-orange-50 text-orange-800 text-[10px] border-b border-gray-300 print:bg-white print:text-black">
-                                            @if($card['dish_excluded']) <span class="font-bold text-red-600 print:text-black">❌ СТРАВУ ВИКЛЮЧЕНО</span> <br> @endif
-                                            @if($card['dish_replacement']) <span class="font-bold text-blue-600 print:text-black">🔄 Заміна на: {{ $card['dish_replacement'] }}</span> <br> @endif
-                                            @if($card['comment']) <span class="font-bold">📝 Коментар:</span> {{ $card['comment'] }} @endif
-                                        </div>
+                                    @php
+                                        // Перевіряємо, чи є конфлікти саме в головній страві (не в ПФ)
+                                        $hasRootConflicts = false;
+                                        foreach($card['components'] as $item) {
+                                            if (($item['type'] ?? '') !== 'pf' && is_array($item['conflict'] ?? null)) {
+                                                $hasRootConflicts = true;
+                                                break;
+                                            }
+                                        }
+                                        // Вирішуємо, чи показувати головну картку
+                                        $showRootCard = $card['dish_excluded'] || !empty($card['dish_replacement']) || !empty($card['comment']) || $hasRootConflicts;
+                                    @endphp
 
-                                        @if(!$card['dish_excluded'] || $card['dish_replacement'])
-                                            <table class="table-striped">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Інгредієнт</th>
-                                                        <th style="width: 40px;">Брутто</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    @foreach($card['components'] as $item)
-                                                        @php 
-                                                            $isConflict = is_array($item['conflict'] ?? null);
-                                                            $isResolved = $isConflict && ($item['conflict']['is_resolved'] ?? false);
-                                                        @endphp
+                                    @if($showRootCard)
+                                        {{-- ГОЛОВНА КАРТКА КАСТОМНОЇ СТРАВИ --}}
+                                        <div class="pf-card border-red-300">
+                                            <div class="pf-card-header bg-gray-700 text-white print:bg-gray-200 print:text-black">
+                                                <span>👤 {{ $card['client_name'] }} (Зам. #{{ $card['order_id'] }})</span>
+                                            </div>
+                                            
+                                            <div class="p-1.5 bg-orange-50 text-orange-800 text-[10px] border-b border-gray-300 print:bg-white print:text-black">
+                                                @if($card['dish_excluded']) <span class="font-bold text-red-600 print:text-black">❌ СТРАВУ ВИКЛЮЧЕНО</span> <br> @endif
+                                                @if($card['dish_replacement']) <span class="font-bold text-blue-600 print:text-black">🔄 Заміна на: {{ $card['dish_replacement'] }}</span> <br> @endif
+                                                @if($card['comment']) <span class="font-bold">📝 Коментар:</span> {{ $card['comment'] }} @endif
+                                            </div>
+
+                                            @if(!$card['dish_excluded'] || $card['dish_replacement'])
+                                                <table class="table-striped">
+                                                    <thead>
                                                         <tr>
-                                                            <td class="{{ ($item['type'] ?? '') === 'pf' ? 'font-bold' : '' }}">
-                                                                {{ ($item['type'] ?? '') === 'pf' ? '📦 ' : '' }}
-                                                                @if($isResolved)
-                                                                    <span class="line-through text-gray-400">{{ $item['name'] }}</span><br>
-                                                                    <span class="font-bold text-[9px] text-blue-600">🔄 На: {{ $item['conflict']['replacement']['name'] ?? 'Заміна' }}</span>
-                                                                @elseif($isConflict)
-                                                                    <span class="line-through text-red-400">{{ $item['name'] }}</span><br>
-                                                                    <span class="font-bold text-[9px] text-red-600">❌ БЕЗ</span>
-                                                                @else
-                                                                    {{ $item['name'] }}
-                                                                @endif
-                                                            </td>
-                                                            <td class="text-center font-bold">
-                                                                {{ round($isResolved ? ($item['conflict']['replacement']['brutto'] ?? 0) : ($item['weight_brutto_sum'] ?? $item['weight_brutto'] ?? 0)) }}
-                                                            </td>
+                                                            <th>Інгредієнт</th>
+                                                            <th style="width: 40px;">Брутто</th>
                                                         </tr>
-                                                    @endforeach
-                                                </tbody>
-                                            </table>
-                                        @endif
-                                    </div>
+                                                    </thead>
+                                                    <tbody>
+                                                        @foreach($card['components'] as $item)
+                                                            @php 
+                                                                $isConflict = is_array($item['conflict'] ?? null);
+                                                                $isResolved = $isConflict && ($item['conflict']['is_resolved'] ?? false);
+                                                            @endphp
+                                                            <tr>
+                                                                <td class="{{ ($item['type'] ?? '') === 'pf' ? 'font-bold' : '' }}">
+                                                                    {{ ($item['type'] ?? '') === 'pf' ? '📦 ' : '' }}
+                                                                    @if($isResolved)
+                                                                        <span class="line-through text-gray-400">{{ $item['name'] }}</span><br>
+                                                                        <span class="font-bold text-[9px] text-blue-600">🔄 На: {{ $item['conflict']['replacement']['name'] ?? 'Заміна' }}</span>
+                                                                    @elseif($isConflict)
+                                                                        <span class="line-through text-red-400">{{ $item['name'] }}</span><br>
+                                                                        <span class="font-bold text-[9px] text-red-600">❌ БЕЗ</span>
+                                                                    @else
+                                                                        {{ $item['name'] }}
+                                                                    @endif
+                                                                </td>
+                                                                <td class="text-center font-bold">
+                                                                    {{ round($isResolved ? ($item['conflict']['replacement']['brutto'] ?? 0) : ($item['weight_brutto_sum'] ?? $item['weight_brutto'] ?? 0)) }}
+                                                                </td>
+                                                            </tr>
+                                                        @endforeach
+                                                    </tbody>
+                                                </table>
+                                            @endif
+                                        </div>
+                                    @endif
 
                                     {{-- 🔥 ОКРЕМІ КАРТКИ ДЛЯ КАСТОМНИХ ПФ 🔥 --}}
                                     @if(!$card['dish_excluded'] || $card['dish_replacement'])
@@ -272,7 +287,7 @@
 
                                                 <div class="pf-card border-orange-300">
                                                     <div class="pf-card-header bg-orange-100 text-orange-900 print:bg-gray-100 print:text-black">
-                                                        <span>{{ $pf['name'] }} > <span class="text-blue-700 font-bold print:text-black">[{{ $changeStr }}]</span></span>
+                                                        <span>{{ $pf['name'] }} > <span class="text-blue-700 font-bold print:text-black">[👤 {{ $card['client_name'] }}: {{ $changeStr }}]</span></span>
                                                     </div>
                                                     <table class="table-striped">
                                                         <thead>
