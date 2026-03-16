@@ -402,6 +402,21 @@ class PrintController extends Controller
         ]);
     }
 
+    public function logistics(Request $request)
+    {
+        // Отримуємо дату (якщо немає - беремо сьогодні)
+        $date = $request->input('date', now()->format('Y-m-d'));
+        
+        // Отримуємо зміну (morning або evening). По замовчуванню - ранок
+        $shift = $request->input('shift', 'morning');
+
+        // Формуємо красиву назву файлу (наприклад: logistics_morning_2026-03-16.xlsx)
+        $fileName = "logistics_{$shift}_{$date}.xlsx";
+
+        // Передаємо ДВА параметри в наш оновлений LogisticsExport
+        return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\LogisticsExport($date, $shift), $fileName);
+    }
+
     private function calculateOrderPlan(Order $order, DailyMenu $menu): array
     {
         $targetKcal = (float) ($order->calories ?? 0);

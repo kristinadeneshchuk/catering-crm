@@ -15,21 +15,36 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithColumnWidths
 {
     protected $targetDate;
+    protected $shift; // 'morning' або 'evening'
 
-    public function __construct($date)
+    public function __construct($date, $shift = 'morning')
     {
-        // 🔥 ВИПРАВЛЕНО: Явно додаємо 1 день, щоб логістика завжди була на ЗАВТРА
+        // Додаємо 1 день, щоб логістика завжди брала меню на ЗАВТРА
         $this->targetDate = Carbon::parse($date)->addDay()->format('Y-m-d');
+        $this->shift = $shift;
     }
 
     public function collection()
     {
         $targetDate = $this->targetDate;
+        $shift = $this->shift;
 
         // 1. Шукаємо замовлення, які мають запис у календарі на цей день
         $orders = Order::query()
             ->with(['client', 'orderDays'])
             ->whereIn('status', ['active', 'new'])
+            // 🔥 ФІЛЬТР ПО ЗМІНІ (Ранок або Вечір)
+            ->where(function ($query) use ($shift) {
+                if ($shift === 'morning') {
+                    // Шукаємо графіки, що містять слово ранок або morning
+                    $query->where('schedule_type', 'like', '%morning%')
+                          ->orWhere('schedule_type', 'like', '%ранок%');
+                } else {
+                    // Шукаємо графіки, що містять слово вечір або evening
+                    $query->where('schedule_type', 'like', '%evening%')
+                          ->orWhere('schedule_type', 'like', '%вечір%');
+                }
+            })
             ->whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
@@ -63,7 +78,7 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
             
             // Проекти і калорії
             $projects = $group->map(fn($o) => 
-                ($o->project === 'u_fit' ? 'U-FIT' : 'Avocado') . " (" . (int)$o->calories . ")"
+                ($o->projectData?->name ?? $o->project) . " (" . (int)$o->calories . ")"
             )->join(' | ');
             $infoParts[] = $projects;
 
@@ -126,8 +141,11 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
         $sheet->getStyle($range)->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
         $sheet->getStyle($range)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
         
+        // Колір шапки залежно від зміни (Ранок - синій, Вечір - помаранчевий)
+        $headerColor = $this->shift === 'morning' ? '4472C4' : 'ED7D31';
+
         return [
-            1 => ['font' => ['bold' => true, 'size' => 11, 'color' => ['rgb' => 'FFFFFF']], 'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '4472C4']]]
+            1 => ['font' => ['bold' => true, 'size' => 11, 'color' => ['rgb' => 'FFFFFF']], 'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => $headerColor]]]
         ];
     }
 }

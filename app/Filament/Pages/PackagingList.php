@@ -41,32 +41,58 @@ class PackagingList extends Page implements HasForms
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('print_stickers')
-                ->label('1. Стікери')
-                ->icon('heroicon-o-tag')
-                ->color('gray')
-                ->url(fn () => route('print.stickers', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
-                ->openUrlInNewTab(),
+            // 🔥 ПЕРШИЙ ВИПАДАЮЧИЙ СПИСОК: Друк
+            \Filament\Actions\ActionGroup::make([
+                Action::make('print_stickers')
+                    ->label('1. Стікери')
+                    ->icon('heroicon-o-tag')
+                    ->color('gray')
+                    ->url(fn () => route('print.stickers', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
+                    ->openUrlInNewTab(),
 
-            Action::make('print_mini_manifest')
-                ->label('2. На пакет')
-                ->icon('heroicon-o-document-text')
-                ->color('info')
-                ->url(fn () => route('print.mini-manifest', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
-                ->openUrlInNewTab(),
+                Action::make('print_mini_manifest')
+                    ->label('2. На пакет')
+                    ->icon('heroicon-o-document-text')
+                    ->color('info')
+                    ->url(fn () => route('print.mini-manifest', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
+                    ->openUrlInNewTab(),
 
-            Action::make('print_manifest')
-                ->label('3. В пакет (з меню)')
-                ->icon('heroicon-o-shopping-bag')
-                ->color('warning')
-                ->url(fn () => route('print.manifest', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
-                ->openUrlInNewTab(),
+                Action::make('print_manifest')
+                    ->label('3. В пакет (з меню)')
+                    ->icon('heroicon-o-shopping-bag')
+                    ->color('warning')
+                    ->url(fn () => route('print.manifest', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
+                    ->openUrlInNewTab(),
+            ])
+            ->label('Друк маркування')
+            ->icon('heroicon-o-printer')
+            ->button()
+            ->color('gray'),
 
-            Action::make('download_logistics')
-                ->label('Завантажити логістику (Excel)')
-                ->icon('heroicon-o-arrow-down-tray')
-                ->color('success')
-                ->url(fn () => route('print.logistics', ['date' => $this->data['date'] ?? now()->format('Y-m-d')])),
+            // 🔥 ДРУГИЙ ВИПАДАЮЧИЙ СПИСОК: Логістика
+            \Filament\Actions\ActionGroup::make([
+                Action::make('download_logistics_evening')
+                    ->label('Вечір (Сьогодні)')
+                    ->icon('heroicon-o-moon')
+                    ->color('danger')
+                    ->url(fn () => route('print.logistics', [
+                        'date' => $this->data['date'] ?? now()->format('Y-m-d'),
+                        'shift' => 'evening' 
+                    ])),
+
+                Action::make('download_logistics_morning')
+                    ->label('Ранок (Завтра)')
+                    ->icon('heroicon-o-sun')
+                    ->color('success')
+                    ->url(fn () => route('print.logistics', [
+                        'date' => $this->data['date'] ?? now()->format('Y-m-d'),
+                        'shift' => 'morning' 
+                    ])),
+            ])
+            ->label('Логістика (Excel)')
+            ->icon('heroicon-o-truck')
+            ->button()
+            ->color('primary'),
         ];
     }
 
