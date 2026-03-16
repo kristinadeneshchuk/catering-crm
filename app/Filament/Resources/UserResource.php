@@ -16,9 +16,9 @@ protected static ?string $model = User::class;
 
     protected static ?string $navigationGroup = 'Система';
     protected static ?int $navigationSort = 2;
-    protected static ?string $navigationLabel = 'Співробітники';
-    protected static ?string $pluralModelLabel = 'Співробітники';
-    protected static ?string $modelLabel = 'Співробітник';
+    protected static ?string $navigationLabel = 'Користувачі (Доступи)'; 
+    protected static ?string $pluralModelLabel = 'Користувачі'; 
+    protected static ?string $modelLabel = 'Користувач';
 
     // 🔒 ЗАХИСТ: Тільки Адмін
     public static function canViewAny(): bool

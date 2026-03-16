@@ -25,9 +25,9 @@
                 <tr class="row-hover text-white bg-white/[0.02]">
                     <td class="font-semibold text-sm">Вартість раціонів (Виручка)</td>
                     @foreach($dates as $ymd => $dm) 
-                        <td class="font-medium">{{ number_format($revenueCount[$ymd] ?? 0, 0, '.', ' ') }} ₴</td> 
+                        <td class="font-medium text-emerald-400">{{ number_format($revenueCount[$ymd] ?? 0, 0, '.', ' ') }} ₴</td> 
                     @endforeach
-                    <td>{{ number_format($totalRevenue ?? 0, 0, '.', ' ') }} ₴</td>
+                    <td class="text-emerald-400">{{ number_format($totalRevenue ?? 0, 0, '.', ' ') }} ₴</td>
                 </tr>
 
                 <tr class="row-hover text-rose-400 bg-rose-500/[0.03]">
@@ -35,9 +35,15 @@
                         <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path></svg>
                         Основні витрати
                     </td>
-                    @foreach($dates as $ymd => $dm) <td class="font-medium">0 ₴</td> @endforeach
-                    <td class="text-rose-400">0 ₴</td>
+                    @foreach($dates as $ymd => $dm) 
+                        @php 
+                            $dailyBasicExp = ($foodCostCount[$ymd] ?? 0) + ($fopCount[$ymd] ?? 0); 
+                        @endphp
+                        <td class="font-medium text-rose-300">{{ number_format($dailyBasicExp, 0, '.', ' ') }} ₴</td> 
+                    @endforeach
+                    <td class="text-rose-400">{{ number_format(($totalFoodCost + $totalFop), 0, '.', ' ') }} ₴</td>
                 </tr>
+                
                 <tr class="row-hover sub-row">
                     <td>Собівартість продуктів</td>
                     @foreach($dates as $ymd => $dm) 
@@ -56,10 +62,14 @@
                     @foreach($dates as $ymd => $dm) <td>0 ₴</td> @endforeach
                     <td>0 ₴</td>
                 </tr>
-                <tr class="row-hover sub-row">
-                    <td>Фонд оплати праці (ФОП)</td>
-                    @foreach($dates as $ymd => $dm) <td>0 ₴</td> @endforeach
-                    <td>0 ₴</td>
+                <tr class="row-hover sub-row text-zinc-300">
+                    <td class="font-medium">Фонд оплати праці (ФОП)</td>
+                    @foreach($dates as $ymd => $dm) 
+                        <td class="{{ ($fopCount[$ymd] ?? 0) > 0 ? 'text-zinc-200' : 'text-zinc-600' }}">
+                            {{ number_format($fopCount[$ymd] ?? 0, 0, '.', ' ') }} ₴
+                        </td> 
+                    @endforeach
+                    <td class="text-white">{{ number_format($totalFop ?? 0, 0, '.', ' ') }} ₴</td>
                 </tr>
 
                 <tr class="row-hover text-emerald-400 bg-emerald-500/[0.05]">
@@ -67,42 +77,119 @@
                         <svg class="w-5 h-5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08-.402-2.599-1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         Операційний прибуток
                     </td>
-                    @foreach($dates as $ymd => $dm) <td class="font-bold text-[15px]">0 ₴</td> @endforeach
-                    <td class="text-emerald-400">0 ₴</td>
+                    @foreach($dates as $ymd => $dm) 
+                        @php $opProfit = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0); @endphp
+                        <td class="font-bold text-[15px] {{ $opProfit < 0 ? 'text-rose-500' : 'text-emerald-400' }}">
+                            {{ number_format($opProfit, 0, '.', ' ') }} ₴
+                        </td> 
+                    @endforeach
+                    <td class="text-emerald-400">{{ number_format(($totalRevenue - $totalFoodCost - $totalFop), 0, '.', ' ') }} ₴</td>
                 </tr>
 
                 <tr class="row-hover text-zinc-300">
-                    <td class="font-medium">Середній чек</td>
-                    @foreach($dates as $ymd => $dm) <td>0 ₴</td> @endforeach
-                    <td>0 ₴</td>
+                    <td class="font-medium text-sm">Середній чек</td>
+                    @foreach($dates as $ymd => $dm) 
+                        @php $avg = ($rationsCount[$ymd] ?? 0) > 0 ? ($revenueCount[$ymd] / $rationsCount[$ymd]) : 0; @endphp
+                        <td>{{ number_format($avg, 0, '.', ' ') }} ₴</td> 
+                    @endforeach
+                    <td>{{ number_format($totalRations > 0 ? $totalRevenue / $totalRations : 0, 0, '.', ' ') }} ₴</td>
                 </tr>
-                <tr class="row-hover text-zinc-300">
-                    <td class="font-medium flex items-center">
-                        Відсоток браку <input type="number" value="7" class="inline-input"> %
+
+                <tr class="row-hover text-zinc-300 bg-rose-500/[0.01]">
+                    <td class="font-medium flex items-center gap-2">
+                        Відсоток браку 
+                        <input type="number" name="spoilage_percent" form="analytics-form" 
+                               value="{{ $spoilagePercent }}" 
+                               class="inline-input border-rose-500/30 focus:border-rose-500 w-16"> %
                     </td>
-                    @foreach($dates as $ymd => $dm) <td class="text-zinc-500">0 ₴</td> @endforeach
-                    <td class="text-zinc-500">0 ₴</td>
+                    @foreach($dates as $ymd => $dm) 
+                        @php $spoilage = ($revenueCount[$ymd] ?? 0) * ($spoilagePercent / 100); @endphp
+                        <td class="text-rose-400/70 text-sm italic">{{ number_format($spoilage, 0, '.', ' ') }} ₴</td> 
+                    @endforeach
+                    <td class="text-rose-400">{{ number_format($totalRevenue * ($spoilagePercent / 100), 0, '.', ' ') }} ₴</td>
                 </tr>
+
                 <tr class="row-hover text-zinc-300">
-                    <td class="font-medium flex items-center">
-                        Інші витрати <input type="number" value="1000" class="inline-input"> грн/день
+                    <td class="font-medium flex items-center gap-2">
+                        Інші витрати 
+                        <input type="number" name="other_expenses" form="analytics-form" 
+                               value="{{ $otherExpenses }}" 
+                               class="inline-input border-zinc-700 w-20"> грн/день
                     </td>
-                    @foreach($dates as $ymd => $dm) <td class="text-zinc-500">1 000 ₴</td> @endforeach
-                    <td class="text-zinc-500">0 ₴</td>
+                    @foreach($dates as $ymd => $dm) 
+                        <td class="text-zinc-500 text-sm">{{ number_format($otherExpenses, 0, '.', ' ') }} ₴</td> 
+                    @endforeach
+                    <td class="text-zinc-500">{{ number_format(count($dates) * $otherExpenses, 0, '.', ' ') }} ₴</td>
                 </tr>
 
                 <tr class="row-hover text-white bg-gradient-to-r from-emerald-600/20 to-transparent">
                     <td class="font-bold text-base text-emerald-300">Чистий прибуток</td>
-                    @foreach($dates as $ymd => $dm) <td class="font-bold text-base text-emerald-300">0 ₴</td> @endforeach
-                    <td class="text-emerald-400">0 ₴</td>
+                    @foreach($dates as $ymd => $dm) 
+                        @php 
+                            $dailySpoilage = ($revenueCount[$ymd] ?? 0) * ($spoilagePercent / 100);
+                            $dailyNet = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0) - $dailySpoilage - $otherExpenses; 
+                        @endphp
+                        <td class="font-bold text-base {{ $dailyNet < 0 ? 'text-rose-400' : 'text-emerald-300' }}">
+                            {{ number_format($dailyNet, 0, '.', ' ') }} ₴
+                        </td> 
+                    @endforeach
+                    <td class="text-emerald-400">
+                        @php 
+                            $totalSpoilage = $totalRevenue * ($spoilagePercent / 100);
+                            $totalOther = count($dates) * $otherExpenses;
+                            $totalNet = ($totalRevenue - $totalFoodCost - $totalFop - $totalSpoilage - $totalOther); 
+                        @endphp
+                        {{ number_format($totalNet, 0, '.', ' ') }} ₴
+                    </td>
                 </tr>
                 <tr class="row-hover text-avocado-500">
-                    <td class="font-semibold">Маржинальність</td>
-                    @foreach($dates as $ymd => $dm) <td class="font-semibold">0 %</td> @endforeach
-                    <td>0 %</td>
+                    <td class="font-semibold text-sm uppercase tracking-wider">Маржинальність</td>
+                    @foreach($dates as $ymd => $dm) 
+                        @php 
+                            $dailySpoilage = ($revenueCount[$ymd] ?? 0) * ($spoilagePercent / 100);
+                            $profit = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0) - $dailySpoilage - $otherExpenses;
+                            $margin = ($revenueCount[$ymd] ?? 0) > 0 ? ($profit / $revenueCount[$ymd]) * 100 : 0;
+                        @endphp
+                        <td class="font-semibold {{ $margin < 20 ? 'text-rose-400' : 'text-avocado-500' }}">
+                            {{ round($margin) }} %
+                        </td> 
+                    @endforeach
+                    @php 
+                        $totalMargin = $totalRevenue > 0 ? ($totalNet / $totalRevenue) * 100 : 0;
+                    @endphp
+                    <td class="font-bold">{{ round($totalMargin) }} %</td>
                 </tr>
 
             </tbody>
         </table>
     </div>
 </div>
+
+{{-- 🔥 СКРИПТ АВТОМАТИЧНОГО ПЕРЕРАХУНКУ --}}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const spoilageInput = document.querySelector('input[name="spoilage_percent"]');
+        const expensesInput = document.querySelector('input[name="other_expenses"]');
+        const mainForm = document.getElementById('analytics-form');
+
+        if (mainForm) {
+            const submitForm = () => mainForm.submit();
+
+            // Спрацьовує, коли ти закінчила вводити або клацнула стрілочку
+            if (spoilageInput) spoilageInput.addEventListener('change', submitForm);
+            if (expensesInput) expensesInput.addEventListener('change', submitForm);
+
+            // Також спрацьовує при натисканні Enter
+            [spoilageInput, expensesInput].forEach(input => {
+                if (input) {
+                    input.addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            submitForm();
+                        }
+                    });
+                }
+            });
+        }
+    });
+</script>

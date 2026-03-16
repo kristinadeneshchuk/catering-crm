@@ -7,7 +7,7 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
@@ -31,26 +31,15 @@
         .fin-table th, .fin-table td { padding: 14px 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: right; font-variant-numeric: tabular-nums; }
         .fin-table th { text-transform: uppercase; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; color: #71717a; background: #09090b; position: sticky; top: 0; z-index: 10; }
         .fin-table td:first-child, .fin-table th:first-child { position: sticky; left: 0; z-index: 20; text-align: left; background: #18181b; border-right: 1px solid rgba(255, 255, 255, 0.05); box-shadow: 10px 0 15px -3px rgba(0, 0, 0, 0.3); }
-        .fin-table th:first-child { background: #09090b; z-index: 30; }
         .fin-table td:last-child, .fin-table th:last-child { position: sticky; right: 0; z-index: 20; background: #18181b; border-left: 1px solid rgba(255, 255, 255, 0.05); box-shadow: -10px 0 15px -3px rgba(0, 0, 0, 0.3); font-weight: 700; color: #fff; }
-        .fin-table th:last-child { background: #09090b; z-index: 30; color: #f59e0b; }
-        .row-hover:hover td { background-color: rgba(255, 255, 255, 0.02); }
-        .row-hover:hover td:first-child, .row-hover:hover td:last-child { background-color: #202024; }
-        .sub-row td { padding-top: 8px; padding-bottom: 8px; font-size: 13px; color: #71717a; }
-        .sub-row td:first-child { padding-left: 40px; }
-        .sub-row td:first-child::before { content: ''; position: absolute; left: 24px; top: -14px; bottom: 50%; width: 2px; background: #3f3f46; border-bottom-left-radius: 4px; }
-        .sub-row td:first-child::after { content: ''; position: absolute; left: 24px; top: 50%; width: 8px; height: 2px; background: #3f3f46; }
         .tab-btn { cursor: pointer; transition: all 0.2s ease; }
         .tab-active { border-bottom: 2px solid #f59e0b; color: #f59e0b; }
         .tab-inactive { color: #71717a; border-bottom: 2px solid transparent; }
-        .tab-inactive:hover { color: #fff; border-bottom: 2px solid #52525b; }
         .hidden { display: none !important; }
-        .apexcharts-tooltip { background: #18181b !important; border: 1px solid rgba(255,255,255,0.1) !important; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important; }
-        .apexcharts-tooltip-title { background: #09090b !important; border-bottom: 1px solid rgba(255,255,255,0.05) !important; font-family: 'Inter', sans-serif !important; font-weight: bold !important; }
-        .apexcharts-text { fill: #a1a1aa !important; font-family: 'Inter', sans-serif !important; }
-        .apexcharts-legend-text { color: #a1a1aa !important; }
-        .inline-input { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; border-radius: 6px; padding: 4px 8px; width: 70px; text-align: center; font-size: 13px; margin: 0 8px; transition: all 0.2s ease; }
-        .inline-input:focus { outline: none; border-color: #f59e0b; background: rgba(245, 158, 11, 0.1); box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2); }
+        .inline-input { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; border-radius: 6px; padding: 4px 8px; width: 70px; text-align: center; font-size: 13px; margin: 0 8px; }
+        /* Стилізація тултіпів для візуалу */
+        .apexcharts-tooltip { background: #18181b !important; border: 1px solid rgba(255,255,255,0.1) !important; color: #fff !important; }
+        .apexcharts-tooltip-title { background: #09090b !important; border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
     </style>
 </head>
 <body class="p-4 md:p-8 antialiased selection:bg-avocado-500 selection:text-white">
@@ -68,14 +57,16 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-6 mb-8 border-b border-white/10">
-            <button onclick="switchTab('dashboard')" id="btn-dashboard" class="tab-btn pb-3 font-bold text-[13px] uppercase tracking-wider tab-active">Головний Дашборд</button>
+            <button onclick="switchTab('dashboard')" id="btn-dashboard" class="tab-btn pb-3 font-bold text-[13px] uppercase tracking-wider tab-inactive">Головний Дашборд</button>
             <button onclick="switchTab('unit')" id="btn-unit" class="tab-btn pb-3 font-bold text-[13px] uppercase tracking-wider tab-inactive">Юніт-Економіка</button>
             <button onclick="switchTab('marketing')" id="btn-marketing" class="tab-btn pb-3 font-bold text-[13px] uppercase tracking-wider tab-inactive">Маркетинг та Джерела</button>
             <button onclick="switchTab('retention')" id="btn-retention" class="tab-btn pb-3 font-bold text-[13px] uppercase tracking-wider tab-inactive">Утримання (Retention)</button>
             <button onclick="switchTab('finance')" id="btn-finance" class="tab-btn pb-3 font-bold text-[13px] uppercase tracking-wider tab-inactive">Фінанси (P&L)</button>
         </div>
 
-        <form method="GET" action="{{ route('analytics.index') }}" class="bg-zinc-900/50 backdrop-blur-xl border border-white/10 p-2 rounded-2xl mb-8 flex flex-wrap items-center gap-2 shadow-xl">
+        <form id="analytics-form" method="GET" action="{{ route('analytics.index') }}" class="bg-zinc-900/50 backdrop-blur-xl border border-white/10 p-2 rounded-2xl mb-8 flex flex-wrap items-center gap-2 shadow-xl">
+            <input type="hidden" name="tab" id="active_tab_input" value="{{ $activeTab ?? 'dashboard' }}">
+            
             <div class="flex items-center gap-2 p-2">
                 <span class="text-zinc-500 text-sm font-medium mr-2">Період:</span>
                 <input type="date" name="start_date" value="{{ $startDate }}" class="bg-transparent text-zinc-300 text-sm focus:outline-none focus:text-white cursor-pointer [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert opacity-80 hover:opacity-100">
@@ -87,105 +78,146 @@
             </button>
         </form>
 
-        <div id="content-dashboard" class="tab-content block">@include('analytics.tabs.dashboard')</div>
+        <div id="content-dashboard" class="tab-content hidden">@include('analytics.tabs.dashboard')</div>
         <div id="content-unit" class="tab-content hidden">@include('analytics.tabs.unit')</div>
         <div id="content-marketing" class="tab-content hidden">@include('analytics.tabs.marketing')</div>
-        
         <div id="content-retention" class="tab-content hidden">@include('analytics.tabs.retention')</div>
-        
         <div id="content-finance" class="tab-content hidden">@include('analytics.tabs.finance')</div>
     </div>
 
 <script>
+    // --- 1. ЛОГІКА ТАБІВ ---
     function switchTab(tabId) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-        document.getElementById('content-' + tabId).classList.remove('hidden');
-
         document.querySelectorAll('.tab-btn').forEach(el => {
             el.classList.remove('tab-active');
             el.classList.add('tab-inactive');
         });
-        document.getElementById('btn-' + tabId).classList.remove('tab-inactive');
-        document.getElementById('btn-' + tabId).classList.add('tab-active');
-        
+
+        const targetContent = document.getElementById('content-' + tabId);
+        const targetBtn = document.getElementById('btn-' + tabId);
+
+        if (targetContent && targetBtn) {
+            targetContent.classList.remove('hidden');
+            targetBtn.classList.remove('tab-inactive');
+            targetBtn.classList.add('tab-active');
+            
+            history.pushState(null, null, '#' + tabId);
+            
+            const tabInput = document.getElementById('active_tab_input');
+            if (tabInput) tabInput.value = tabId;
+        }
         window.dispatchEvent(new Event('resize'));
     }
 
-    const chartDates = {!! json_encode(array_values($dates)) !!};
-    const chartRevenue = {!! json_encode(array_values($revenueCount)) !!};
-    const chartFoodCost = {!! json_encode(array_values($foodCostCount)) !!};
+    document.addEventListener('DOMContentLoaded', function() {
+        const phpTab = "{{ $activeTab ?? 'dashboard' }}";
+        const hashTab = window.location.hash.replace('#', '');
+        switchTab(phpTab || hashTab || 'dashboard');
+
+        const mainForm = document.getElementById('analytics-form');
+        
+        // Автоматичне оновлення при зміні цифр браку/витрат
+        document.addEventListener('change', function(e) {
+            if (e.target.name === 'spoilage_percent' || e.target.name === 'other_expenses') {
+                if (mainForm) mainForm.submit();
+            }
+        });
+    });
+
+    // --- 2. ПІДГОТОВКА ДАНИХ (БЕЗПЕЧНА) ---
+    const chartDates = {!! json_encode(array_values($dates ?? [])) !!};
+    const chartRevenue = {!! json_encode(array_values($revenueCount ?? [])) !!};
+    const chartFoodCost = {!! json_encode(array_values($foodCostCount ?? [])) !!};
     
     @php
         $pieLabels = []; $pieSeries = [];
-        if(!empty($unitEconomics)) { 
-            foreach($unitEconomics as $cal => $data) { 
-                $pieLabels[] = $cal . ' ккал'; 
-                $pieSeries[] = $data['count']; 
-            } 
+        if(!empty($unitEconomics)) {
+            foreach($unitEconomics as $cal => $data) {
+                $pieLabels[] = $cal . ' ккал';
+                $pieSeries[] = (int)$data['count'];
+            }
         }
     @endphp
     
     const pieLabels = {!! json_encode($pieLabels) !!};
     const pieSeries = {!! json_encode($pieSeries) !!};
 
-    // 🔥 ВІДНОВЛЕНИЙ ГРАФІК ДИНАМІКИ (ГРАДІЄНТ + ПЛАВНІСТЬ)
-    new ApexCharts(document.querySelector("#revenueChart"), {
-        series: [{ name: 'Виручка', data: chartRevenue }, { name: 'Собівартість', data: chartFoodCost }],
-        chart: { 
-            type: 'area', 
-            height: 300, 
-            toolbar: { show: false }, 
-            background: 'transparent', // Прозорий фон
-            fontFamily: 'Inter, sans-serif' 
-        },
-        colors: ['#34d399', '#f43f5e'],
-        fill: {
-            type: 'gradient',
-            gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 100] }
-        },
-        dataLabels: { enabled: false }, // Вимикаємо цифри на лініях
-        stroke: { curve: 'smooth', width: 2 },
-        xaxis: { 
-            categories: chartDates, 
-            axisBorder: { show: false },
-            axisTicks: { show: false },
-            labels: { style: { colors: '#71717a' } } 
-        },
-        yaxis: { 
-            labels: { style: { colors: '#71717a' }, formatter: function (value) { return value + " ₴"; } } 
-        },
-        grid: { borderColor: 'rgba(255,255,255,0.05)', strokeDashArray: 4 }, 
-        theme: { mode: 'dark' }
-    }).render();
+    // --- 3. ГРАФІК ДИНАМІКИ (ВІДНОВЛЕНИЙ КРАСИВИЙ ВІЗУАЛ) ---
+    if (document.querySelector("#revenueChart")) {
+        new ApexCharts(document.querySelector("#revenueChart"), {
+            series: [
+                { name: 'Виручка', data: chartRevenue }, 
+                { name: 'Собівартість', data: chartFoodCost }
+            ],
+            chart: { 
+                type: 'area', 
+                height: 300, 
+                toolbar: { show: false }, 
+                background: 'transparent',
+                fontFamily: 'Inter, sans-serif'
+            },
+            colors: ['#34d399', '#f43f5e'],
+            fill: {
+                type: 'gradient',
+                gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 100] }
+            },
+            stroke: { curve: 'smooth', width: 2 },
+            xaxis: { 
+                categories: chartDates,
+                axisBorder: { show: false },
+                axisTicks: { show: false },
+                labels: { style: { colors: '#71717a' } }
+            },
+            yaxis: {
+                labels: { 
+                    style: { colors: '#71717a' },
+                    formatter: function (val) { return val.toLocaleString() + " ₴"; }
+                }
+            },
+            grid: { borderColor: 'rgba(255,255,255,0.05)', strokeDashArray: 4 },
+            dataLabels: { enabled: false },
+            theme: { mode: 'dark' }
+        }).render();
+    }
 
-    // 🔥 ВІДНОВЛЕНИЙ ЧАРТ ПОПУЛЯРНОСТІ (БЕЗ СІРОЇ ПІДКЛАДКИ)
-    new ApexCharts(document.querySelector("#caloriesChart"), {
-        series: pieSeries.length > 0 ? pieSeries : [1],
-        labels: pieLabels.length > 0 ? pieLabels : ['Немає даних'],
-        chart: { 
-            type: 'donut', 
-            height: 300, 
-            fontFamily: 'Inter, sans-serif',
-            background: 'transparent' // 🔥 ОСЬ ТУТ МАЄ БУТИ ЦЕЙ ПАРАМЕТР
-        },
-        colors: ['#f59e0b', '#3b82f6', '#10b981', '#ec4899', '#8b5cf6', '#06b6d4', '#f43f5e', '#64748b'],
-        plotOptions: { 
-            pie: { 
-                donut: { 
-                    size: '70%', 
-                    labels: { 
-                        show: true, 
-                        name: { color: '#a1a1aa' },
-                        value: { color: '#fff', fontSize: '24px', fontWeight: 'bold' } 
-                    } 
-                } 
-            } 
-        },
-        dataLabels: { enabled: false }, // Вимикаємо відсотки поверх чарта
-        stroke: { show: true, colors: '#18181b', width: 2 }, 
-        theme: { mode: 'dark' }, 
-        legend: { position: 'bottom' }
-    }).render();
+    // --- 4. ГРАФІК ПОПУЛЯРНОСТІ (ВІДНОВЛЕНИЙ КРАСИВИЙ ВІЗУАЛ) ---
+    if (document.querySelector("#caloriesChart")) {
+        new ApexCharts(document.querySelector("#caloriesChart"), {
+            series: pieSeries.length > 0 ? pieSeries : [1],
+            labels: pieLabels.length > 0 ? pieLabels : ['Немає даних'],
+            chart: { 
+                type: 'donut', 
+                height: 300, 
+                background: 'transparent',
+                fontFamily: 'Inter, sans-serif'
+            },
+            colors: ['#f59e0b', '#3b82f6', '#10b981', '#ec4899', '#8b5cf6', '#06b6d4', '#f43f5e', '#64748b'],
+            plotOptions: {
+                pie: {
+                    donut: {
+                        size: '75%',
+                        labels: {
+                            show: true,
+                            name: { show: true, color: '#a1a1aa', fontSize: '12px' },
+                            value: { show: true, color: '#fff', fontSize: '24px', fontWeight: '900',
+                                formatter: function(val) { return val; }
+                            },
+                            total: { show: true, label: 'Всього', color: '#71717a',
+                                formatter: function (w) {
+                                    return w.globals.seriesNumbers.reduce((a, b) => a + b, 0);
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            stroke: { show: true, colors: '#18181b', width: 3 },
+            dataLabels: { enabled: false },
+            legend: { position: 'bottom', labels: { colors: '#71717a' } },
+            theme: { mode: 'dark' }
+        }).render();
+    }
 </script>
 </body>
 </html>

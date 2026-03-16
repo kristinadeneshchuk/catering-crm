@@ -27,35 +27,41 @@ class Transaction extends Model
     // === ЛОГІКА БАЛАНСУ ТА АВТО-ОПЛАТИ ===
     protected static function booted()
     {
-        // Коли створили транзакцію (внесли гроші)
+        // Коли створили транзакцію (внесли гроші або списали на ЗП)
         static::created(function ($transaction) {
-            $client = $transaction->order->client;
-            if ($client) {
-                // 1. Оновлюємо загальний баланс (цифру)
-                if ($transaction->type === 'income') {
-                    $client->increment('balance', $transaction->amount);
-                } else {
-                    $client->decrement('balance', $transaction->amount);
-                }
+            // 🔥 ВИПРАВЛЕННЯ: Додано перевірку, чи транзакція пов'язана із замовленням
+            if ($transaction->order) {
+                $client = $transaction->order->client;
+                if ($client) {
+                    // 1. Оновлюємо загальний баланс клієнта
+                    if ($transaction->type === 'income') {
+                        $client->increment('balance', $transaction->amount);
+                    } else {
+                        $client->decrement('balance', $transaction->amount);
+                    }
 
-                // 2. ВАЖЛИВО: Запускаємо перерахунок статусів замовлень (FIFO)
-                $client->recalculateOrderPaymentStatus();
+                    // 2. ВАЖЛИВО: Запускаємо перерахунок статусів замовлень клієнта (FIFO)
+                    $client->recalculateOrderPaymentStatus();
+                }
             }
         });
 
         // Коли видалили транзакцію (скасували оплату)
         static::deleted(function ($transaction) {
-            $client = $transaction->order->client;
-            if ($client) {
-                // 1. Відкочуємо баланс назад
-                if ($transaction->type === 'income') {
-                    $client->decrement('balance', $transaction->amount);
-                } else {
-                    $client->increment('balance', $transaction->amount);
-                }
+            // 🔥 ВИПРАВЛЕННЯ: Додано перевірку, чи була транзакція пов'язана із замовленням
+            if ($transaction->order) {
+                $client = $transaction->order->client;
+                if ($client) {
+                    // 1. Відкочуємо баланс клієнта назад
+                    if ($transaction->type === 'income') {
+                        $client->decrement('balance', $transaction->amount);
+                    } else {
+                        $client->increment('balance', $transaction->amount);
+                    }
 
-                // 2. ВАЖЛИВО: Знову перераховуємо статуси (можливо, якісь замовлення стануть неоплаченими)
-                $client->recalculateOrderPaymentStatus();
+                    // 2. Знову перераховуємо статуси оплат
+                    $client->recalculateOrderPaymentStatus();
+                }
             }
         });
     }

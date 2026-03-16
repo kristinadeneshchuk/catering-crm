@@ -8,7 +8,8 @@ use App\Models\OrderDay;
 use App\Models\Setting;
 use App\Models\DailyMenu;
 use App\Models\Ingredient;
-use App\Models\Client; // 🔥 Обов'язково додаємо модель Client
+use App\Models\Client;
+use App\Models\EmployeeShift; // 🔥 Для ФОП
 use App\Services\FoodCostService;
 use Illuminate\Support\Collection;
 
@@ -23,27 +24,35 @@ class AnalyticsController extends Controller
 
     public function index(Request $request)
     {
+        // 1. Отримуємо параметри запиту
         $startDate = $request->input('start_date', Carbon::now()->startOfMonth()->format('Y-m-d'));
         $endDate = $request->input('end_date', Carbon::now()->format('Y-m-d'));
+
+        // 🔥 Динамічні параметри для P&L (брак, інші витрати) та вкладка
+        $spoilagePercent = (float) $request->input('spoilage_percent', 7);
+        $otherExpenses = (float) $request->input('other_expenses', 1000);
+        $activeTab = $request->input('tab', 'dashboard');
 
         $start = Carbon::parse($startDate);
         $end = Carbon::parse($endDate);
 
+        // Обмеження до 60 днів для швидкодії
         if ($start->diffInDays($end) > 60) {
             $end = $start->copy()->addDays(60);
             $endDate = $end->format('Y-m-d');
         }
 
+        // Формуємо масив дат
         $dates = [];
         for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
             $dates[$date->format('Y-m-d')] = $date->format('d.m');
         }
 
+        // 2. Завантаження даних
+        // Включаємо всі необхідні зв'язки для FoodCostService та аналітики
         $validDays = OrderDay::whereBetween('date', [$startDate, $endDate])
             ->with([
                 'order.client.mealTypes',
-                'order.client.ingredientExclusions',
-                'order.client.dishExclusions',
                 'order.replacements.replacementProduct',
                 'order.replacements.replacementDish.dishIngredients.ingredient'
             ])
@@ -53,32 +62,45 @@ class AnalyticsController extends Controller
             return Carbon::parse($item->date)->format('Y-m-d');
         });
 
+        // 🔥 Зарплати (ФОП) одним запитом за період
+        $allShifts = EmployeeShift::whereBetween('date', [$startDate, $endDate])
+            ->get()
+            ->groupBy('date');
+
+        // Налаштування меню та циклу
         $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
         $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
         $anchorDate = Carbon::parse($startDateStr);
 
         $allMenus = DailyMenu::with([
             'menuItems.dish.dishIngredients.ingredient',
-            'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
             'menuItems.mealType'
         ])->get()->keyBy('day_number');
         
         $allIngredients = Ingredient::all()->keyBy('id');
 
+        // Ініціалізація підсумкових змінних
         $rationsCount = []; $totalRations = 0;
         $revenueCount = []; $totalRevenue = 0;
         $foodCostCount = []; $totalFoodCost = 0;
+        $fopCount = []; $totalFop = 0;
         
         $unitEconomics = [];
         $marketingStats = [];
-        $uniqueClientIds = []; // 🔥 Масив для збору ID клієнтів для Retention
+        $uniqueClientIds = []; 
 
+        // 3. ОСНОВНИЙ ЦИКЛ ПО ДНЯХ
         foreach ($dates as $ymd => $dm) {
             $days = $groupedDays->get($ymd, collect());
             
             $count = $days->count();
             $rationsCount[$ymd] = $count;
             $totalRations += $count;
+
+            // ФОП за день
+            $dailyFop = $allShifts->has($ymd) ? $allShifts->get($ymd)->sum('rate') : 0;
+            $fopCount[$ymd] = round($dailyFop);
+            $totalFop += round($dailyFop);
 
             $dailyRevenue = 0;
             $dailyFoodCost = 0;
@@ -92,25 +114,25 @@ class AnalyticsController extends Controller
                     $order = $orderDay->order;
                     if (!$order || !$order->client) continue;
 
-                    // 🔥 Запам'ятовуємо клієнта для аналізу відтоку
+                    // Збираємо ID для Retention
                     $uniqueClientIds[$order->client->id] = true;
 
+                    // Виручка (ціна пакету / тривалість)
                     $duration = max(1, (int)$order->duration); 
                     $pricePerDay = ((float)$order->total_price / $duration);
                     $dailyRevenue += $pricePerDay;
 
+                    // Food Cost (через сервіс)
                     $orderCost = 0;
                     if ($menu) {
                         $orderCost = $this->foodCostService->calculateOrderFoodCost($order, $menu, $allIngredients);
                         $dailyFoodCost += $orderCost;
                     }
 
-                    // --- ЗБІР ЮНІТ-ЕКОНОМІКИ ---
+                    // --- ЗБІР ЮНІТ-ЕКОНОМІКИ (за калоріями) ---
                     $cal = (int) $order->calories;
                     if (!isset($unitEconomics[$cal])) {
-                        $unitEconomics[$cal] = [
-                            'count' => 0, 'revenue' => 0, 'cost' => 0, 'unique_orders' => [] 
-                        ];
+                        $unitEconomics[$cal] = ['count' => 0, 'revenue' => 0, 'cost' => 0, 'unique_orders' => []];
                     }
                     $unitEconomics[$cal]['count'] += 1;
                     $unitEconomics[$cal]['revenue'] += $pricePerDay;
@@ -136,7 +158,7 @@ class AnalyticsController extends Controller
             $totalFoodCost += round($dailyFoodCost);
         }
 
-        // ПІДРАХУНОК ЮНІТ-ЕКОНОМІКИ
+        // 4. ПІДРАХУНОК ЮНІТ-ЕКОНОМІКИ (Агрегація)
         ksort($unitEconomics); 
         foreach ($unitEconomics as $cal => &$data) {
             $data['profit'] = $data['revenue'] - $data['cost'];
@@ -156,7 +178,7 @@ class AnalyticsController extends Controller
         }
         unset($data);
 
-        // ПІДРАХУНОК МАРКЕТИНГУ
+        // 5. ПІДРАХУНОК МАРКЕТИНГУ (Агрегація)
         foreach ($marketingStats as $source => &$stats) {
             $uniqueClientsCount = count($stats['clients_count']);
             $stats['avg_lva'] = $uniqueClientsCount > 0 ? $stats['revenue'] / $uniqueClientsCount : 0;
@@ -165,16 +187,10 @@ class AnalyticsController extends Controller
         }
         unset($stats);
 
-        // =========================================================
-        // 🔥 РОЗРАХУНОК RETENTION (Утримання та LTV) 🔥
-        // =========================================================
+        // 6. РОЗРАХУНОК RETENTION (Утримання та LTV за всю історію)
         $retentionStats = [
-            'total_clients' => 0,
-            'active_now' => 0,
-            'churned' => 0,
-            'avg_lifetime_days' => 0,
-            'avg_ltv' => 0,
-            'churn_rate' => 0,
+            'total_clients' => 0, 'active_now' => 0, 'churned' => 0,
+            'avg_lifetime_days' => 0, 'avg_ltv' => 0, 'churn_rate' => 0,
             'segments' => [
                 'trial' => ['count' => 0, 'label' => 'Пробні (1-3 дні)', 'color' => 'bg-rose-500'],
                 'regular' => ['count' => 0, 'label' => 'Постійні (4-14 днів)', 'color' => 'bg-blue-500'],
@@ -183,22 +199,18 @@ class AnalyticsController extends Controller
         ];
 
         if (!empty($uniqueClientIds)) {
-            // Завантажуємо цих клієнтів разом з усіма їхніми замовленнями (за весь час)
             $clients = Client::whereIn('id', array_keys($uniqueClientIds))->with('orders')->get();
             $today = Carbon::now()->format('Y-m-d');
             $totalLifetimeDays = 0;
             $totalLtv = 0;
 
             foreach ($clients as $client) {
-                $clientDays = 0;
-                $clientRevenue = 0;
-                $lastOrderEndDate = null;
+                $clientDays = 0; $clientRevenue = 0; $lastOrderEndDate = null;
 
                 foreach ($client->orders as $o) {
                     if ($o->total_price > 0 && !in_array($o->status, ['cancelled'])) {
                         $clientDays += max(1, (int)$o->duration);
                         $clientRevenue += (float)$o->total_price;
-                        
                         if (!$lastOrderEndDate || $o->end_date > $lastOrderEndDate) {
                             $lastOrderEndDate = $o->end_date;
                         }
@@ -209,14 +221,12 @@ class AnalyticsController extends Controller
                 $totalLtv += $clientRevenue;
                 $retentionStats['total_clients']++;
 
-                // Перевіряємо чи клієнт активний сьогодні (або його підписка ще триває)
                 if ($lastOrderEndDate && $lastOrderEndDate >= $today) {
                     $retentionStats['active_now']++;
                 } else {
-                    $retentionStats['churned']++; // Клієнт "відвалився"
+                    $retentionStats['churned']++;
                 }
 
-                // Сегментація
                 if ($clientDays <= 3) {
                     $retentionStats['segments']['trial']['count']++;
                 } elseif ($clientDays <= 14) {
@@ -226,7 +236,6 @@ class AnalyticsController extends Controller
                 }
             }
 
-            // Рахуємо середні показники
             if ($retentionStats['total_clients'] > 0) {
                 $retentionStats['avg_lifetime_days'] = $totalLifetimeDays / $retentionStats['total_clients'];
                 $retentionStats['avg_ltv'] = $totalLtv / $retentionStats['total_clients'];
@@ -234,12 +243,52 @@ class AnalyticsController extends Controller
             }
         }
 
+        // 7. Повернення у View
         return view('analytics.index', compact(
             'dates', 'startDate', 'endDate',
             'rationsCount', 'totalRations',
             'revenueCount', 'totalRevenue',
             'foodCostCount', 'totalFoodCost',
-            'unitEconomics', 'marketingStats', 'retentionStats' // 🔥 Додано нову змінну
+            'fopCount', 'totalFop',
+            'spoilagePercent', 'otherExpenses', 'activeTab',
+            'unitEconomics', 'marketingStats', 'retentionStats'
         ));
+    }
+
+    /**
+     * 🔥 МЕТОД ДЛЯ РЕАЛЬНОЇ ВИПЛАТИ ЗАРПЛАТИ
+     */
+    public function paySalary(Request $request)
+    {
+        $request->validate([
+            'employee_id' => 'required|exists:employees,id',
+            'account_id'  => 'required|exists:accounts,id',
+            'amount'      => 'required|numeric|min:1',
+        ]);
+
+        // Використовуємо транзакцію, щоб дані не "розірвалися" при помилці
+        \Illuminate\Support\Facades\DB::transaction(function () use ($request) {
+            $employee = \App\Models\Employee::findOrFail($request->employee_id);
+            $account  = \App\Models\Account::findOrFail($request->account_id);
+            $amount   = (float) $request->amount;
+
+            // 1. Зменшуємо борг компанії перед співробітником (його баланс)
+            $employee->decrement('balance', $amount);
+
+            // 2. Зписуємо гроші з обраного фінансового рахунку (каса/карта)
+            $account->decrement('balance', $amount);
+
+            // 3. Створюємо запис у фінансовій історії (транзакцію)
+            \App\Models\Transaction::create([
+                'account_id'  => $account->id,
+                'amount'      => -$amount, // Від'ємне значення, бо це витрата
+                'type'        => 'expense',
+                'category'    => 'Зарплата',
+                'description' => "Виплата ЗП: {$employee->name}",
+                'date'        => now(),
+            ]);
+        });
+
+        return back()->with('success', "Успішно виплачено {$request->amount} грн для {$request->employee_name}");
     }
 }
