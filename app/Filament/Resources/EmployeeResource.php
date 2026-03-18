@@ -172,13 +172,14 @@ class EmployeeResource extends Resource
                             // Автоматика вашої системи (Observer) сама побачить тип 'expense' 
                             // і відніме суму від балансу рахунку $account->id.
                             Transaction::create([
-                                'order_id'   => null,
-                                'account_id' => $account->id,
-                                'amount'     => $amount, 
-                                'type'       => 'expense',
-                                'date'       => now(),
-                                'comment'    => "Виплата ЗП: {$record->name}",
-                                'user_id'    => auth()->id(),
+                                'employee_id' => $record->id, // 🔥 ТЕПЕР МИ ПРИВ'ЯЗУЄМО СПІВРОБІТНИКА
+                                'order_id'    => null,
+                                'account_id'  => $account->id,
+                                'amount'      => $amount, 
+                                'type'        => 'expense',
+                                'date'        => now(),
+                                'comment'     => "Виплата ЗП: {$record->name}",
+                                'user_id'     => auth()->id(),
                             ]);
                         });
 

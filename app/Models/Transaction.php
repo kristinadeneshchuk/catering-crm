@@ -7,7 +7,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Transaction extends Model
 {
-    protected $fillable = ['order_id', 'amount', 'account_id', 'type', 'date', 'comment', 'user_id'];
+    // 🔥 ДОДАНО employee_id
+    protected $fillable = [
+        'order_id', 
+        'employee_id', 
+        'amount', 
+        'account_id', 
+        'type', 
+        'date', 
+        'comment', 
+        'user_id'
+    ];
 
     protected $casts = [
         'date' => 'date',
@@ -24,44 +34,53 @@ class Transaction extends Model
         return $this->belongsTo(Account::class);
     }
 
+    // 🔥 ДОДАНО зв'язок зі співробітником
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
+    }
+
     // === ЛОГІКА БАЛАНСУ ТА АВТО-ОПЛАТИ ===
     protected static function booted()
     {
-        // Коли створили транзакцію (внесли гроші або списали на ЗП)
+        // Коли створили транзакцію
         static::created(function ($transaction) {
-            // 🔥 ВИПРАВЛЕННЯ: Додано перевірку, чи транзакція пов'язана із замовленням
+            // Логіка для клієнтів (залишаємо як була)
             if ($transaction->order) {
                 $client = $transaction->order->client;
                 if ($client) {
-                    // 1. Оновлюємо загальний баланс клієнта
                     if ($transaction->type === 'income') {
                         $client->increment('balance', $transaction->amount);
                     } else {
                         $client->decrement('balance', $transaction->amount);
                     }
-
-                    // 2. ВАЖЛИВО: Запускаємо перерахунок статусів замовлень клієнта (FIFO)
                     $client->recalculateOrderPaymentStatus();
                 }
             }
+            
+            // Примітка: Для співробітників баланс (борг) ми зменшуємо вручну в EmployeeResource,
+            // щоб мати повний контроль над процесом виплати.
         });
 
-        // Коли видалили транзакцію (скасували оплату)
+        // Коли видалили транзакцію (СКАСУВАННЯ ПОМИЛКИ)
         static::deleted(function ($transaction) {
-            // 🔥 ВИПРАВЛЕННЯ: Додано перевірку, чи була транзакція пов'язана із замовленням
+            // 1. Якщо це була транзакція замовлення (клієнт)
             if ($transaction->order) {
                 $client = $transaction->order->client;
                 if ($client) {
-                    // 1. Відкочуємо баланс клієнта назад
                     if ($transaction->type === 'income') {
                         $client->decrement('balance', $transaction->amount);
                     } else {
                         $client->increment('balance', $transaction->amount);
                     }
-
-                    // 2. Знову перераховуємо статуси оплат
                     $client->recalculateOrderPaymentStatus();
                 }
+            }
+
+            // 🔥 2. НОВА ЛОГІКА: Якщо це була виплата зарплати (співробітник)
+            if ($transaction->employee_id && $transaction->type === 'expense') {
+                // Повертаємо суму назад у "Борг компанії"
+                $transaction->employee()->increment('balance', $transaction->amount);
             }
         });
     }
