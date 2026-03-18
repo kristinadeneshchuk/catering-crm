@@ -58,6 +58,7 @@ class OrderResource extends Resource
                             ->preload()
                             ->live()
                             ->label('Клієнт')
+                            ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->name} (ID: {$record->id})")
                             ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                 $client = Client::find($state);
                                 if ($client) {
@@ -186,6 +187,7 @@ class OrderResource extends Resource
 
                 TextColumn::make('client.name')
                     ->label('Клієнт')
+                    ->description(fn ($record) => "ID: {$record->client_id}")
                     ->searchable()
                     ->sortable(),
 
