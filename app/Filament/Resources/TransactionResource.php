@@ -141,7 +141,7 @@ class TransactionResource extends Resource
                     ->limit(30)
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->defaultSort('date', 'desc') // Останні транзакції зверху
+            ->defaultSort('created_at', 'desc') // Останні транзакції зверху
             ->filters([
                 SelectFilter::make('type')
                     ->label('Тип')
