@@ -67,26 +67,30 @@ class Order extends Model
 
         static::created(function ($o) {
             self::handleBalance($o, 'sub');
+            $defaultAccount = \App\Models\Account::where('is_default', true)->first();
             Transaction::create([
-                'type'     => 'expense',
-                'category' => 'Новий замовлення',
-                'amount'   => $o->total_price ?? 0,
-                'date'     => now(),
-                'comment'  => "Замовлення #{$o->id}" . ($o->client ? " — {$o->client->name}" : ''),
-                'user_id'  => auth()->id(),
+                'type'       => 'income',
+                'category'   => 'Нове замовлення',
+                'amount'     => $o->total_price ?? 0,
+                'account_id' => $defaultAccount?->id,
+                'date'       => now(),
+                'comment'    => "Замовлення #{$o->id}" . ($o->client ? " — {$o->client->name}" : ''),
+                'user_id'    => auth()->id(),
             ]);
         });
 
         static::updated(function ($o) {
             self::handleBalanceUpdate($o);
             if ($o->isDirty(['total_price', 'start_date', 'end_date', 'duration'])) {
+                $defaultAccount = \App\Models\Account::where('is_default', true)->first();
                 Transaction::create([
-                    'type'     => 'expense',
-                    'category' => 'Зміна замовлення',
-                    'amount'   => $o->total_price ?? 0,
-                    'date'     => now(),
-                    'comment'  => "Зміна замовлення #{$o->id}" . ($o->client ? " — {$o->client->name}" : ''),
-                    'user_id'  => auth()->id(),
+                    'type'       => 'income',
+                    'category'   => 'Зміна замовлення',
+                    'amount'     => $o->total_price ?? 0,
+                    'account_id' => $defaultAccount?->id,
+                    'date'       => now(),
+                    'comment'    => "Зміна замовлення #{$o->id}" . ($o->client ? " — {$o->client->name}" : ''),
+                    'user_id'    => auth()->id(),
                 ]);
             }
         });

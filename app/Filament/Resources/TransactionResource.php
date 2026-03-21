@@ -114,7 +114,7 @@ class TransactionResource extends Resource
                     ->color(fn (?string $state): string => match ($state) {
                         'Закупівля'           => 'warning',
                         'Списання зі складу'  => 'gray',
-                        'Новий замовлення'    => 'info',
+                        'Нове замовлення'     => 'info',
                         'Зміна замовлення'    => 'primary',
                         default               => 'gray',
                     })
@@ -152,7 +152,7 @@ class TransactionResource extends Resource
                 SelectFilter::make('category')
                     ->label('Категорія')
                     ->options([
-                        'Новий замовлення'   => 'Новий замовлення',
+                        'Нове замовлення'    => 'Нове замовлення',
                         'Зміна замовлення'   => 'Зміна замовлення',
                         'Закупівля'          => 'Закупівля',
                         'Списання зі складу' => 'Списання зі складу',
