@@ -92,6 +92,7 @@ class TransactionsRelationManager extends RelationManager
                     ->modalHeading('Нова оплата')
                     ->mutateFormDataUsing(function (array $data) {
                         $data['user_id'] = auth()->id();
+                        $data['category'] = $data['type'] === 'income' ? 'Оплата клієнта' : 'Повернення коштів';
                         return $data;
                     }),
             ])

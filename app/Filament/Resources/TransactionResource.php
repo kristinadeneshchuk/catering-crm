@@ -112,10 +112,13 @@ class TransactionResource extends Resource
                     ->label('Категорія')
                     ->badge()
                     ->color(fn (?string $state): string => match ($state) {
+                        'Оплата клієнта'      => 'success',
+                        'Повернення коштів'   => 'warning',
                         'Закупівля'           => 'warning',
                         'Списання зі складу'  => 'gray',
                         'Нове замовлення'     => 'info',
                         'Зміна замовлення'    => 'primary',
+                        'Виплата ЗП'          => 'danger',
                         default               => 'gray',
                     })
                     ->placeholder('—'),
@@ -152,8 +155,11 @@ class TransactionResource extends Resource
                 SelectFilter::make('category')
                     ->label('Категорія')
                     ->options([
+                        'Оплата клієнта'     => 'Оплата клієнта',
+                        'Повернення коштів'  => 'Повернення коштів',
                         'Нове замовлення'    => 'Нове замовлення',
                         'Зміна замовлення'   => 'Зміна замовлення',
+                        'Виплата ЗП'         => 'Виплата ЗП',
                         'Закупівля'          => 'Закупівля',
                         'Списання зі складу' => 'Списання зі складу',
                     ]),
