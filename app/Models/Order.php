@@ -81,17 +81,20 @@ class Order extends Model
 
         static::updated(function ($o) {
             self::handleBalanceUpdate($o);
-            if ($o->isDirty(['total_price', 'start_date', 'end_date', 'duration'])) {
-                $defaultAccount = \App\Models\Account::where('is_default', true)->first();
-                Transaction::create([
-                    'type'       => 'income',
-                    'category'   => 'Зміна замовлення',
-                    'amount'     => $o->total_price ?? 0,
-                    'account_id' => $defaultAccount?->id,
-                    'date'       => now(),
-                    'comment'    => "Зміна замовлення #{$o->id}" . ($o->client ? " — {$o->client->name}" : ''),
-                    'user_id'    => auth()->id(),
-                ]);
+            if ($o->isDirty('total_price')) {
+                $diff = $o->total_price - $o->getOriginal('total_price');
+                if ($diff != 0) {
+                    $defaultAccount = \App\Models\Account::where('is_default', true)->first();
+                    Transaction::create([
+                        'type'       => $diff > 0 ? 'income' : 'expense',
+                        'category'   => 'Зміна замовлення',
+                        'amount'     => abs($diff),
+                        'account_id' => $defaultAccount?->id,
+                        'date'       => now(),
+                        'comment'    => "Зміна замовлення #{$o->id}" . ($o->client ? " — {$o->client->name}" : '') . ($diff > 0 ? " (+{$diff} ₴)" : " ({$diff} ₴)"),
+                        'user_id'    => auth()->id(),
+                    ]);
+                }
             }
         });
 
