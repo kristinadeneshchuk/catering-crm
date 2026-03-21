@@ -84,14 +84,33 @@ class Order extends Model
             if ($o->isDirty('total_price')) {
                 $diff = $o->total_price - $o->getOriginal('total_price');
                 if ($diff != 0) {
+                    $clientName = $o->client ? " — {$o->client->name}" : '';
+                    $absDiff = abs(round($diff, 2));
+
+                    if ($o->isDirty('duration')) {
+                        $oldDuration = (int) $o->getOriginal('duration');
+                        $newDuration = (int) $o->duration;
+                        $daysDiff = $newDuration - $oldDuration;
+                        $action = $daysDiff > 0
+                            ? "Додано " . abs($daysDiff) . " дн."
+                            : "Прибрано " . abs($daysDiff) . " дн.";
+                    } elseif ($o->isDirty(['start_date', 'end_date'])) {
+                        $action = $diff > 0 ? "Додано днів" : "Прибрано днів";
+                    } else {
+                        $action = "Зміна ціни";
+                    }
+
+                    $sign = $diff > 0 ? '+' : '-';
+                    $comment = "{$action}{$clientName} ({$sign}{$absDiff} ₴), замовлення #{$o->id}";
+
                     $defaultAccount = \App\Models\Account::where('is_default', true)->first();
                     Transaction::create([
                         'type'       => $diff > 0 ? 'income' : 'expense',
                         'category'   => 'Зміна замовлення',
-                        'amount'     => abs($diff),
+                        'amount'     => $absDiff,
                         'account_id' => $defaultAccount?->id,
                         'date'       => now(),
-                        'comment'    => "Зміна замовлення #{$o->id}" . ($o->client ? " — {$o->client->name}" : '') . ($diff > 0 ? " (+{$diff} ₴)" : " ({$diff} ₴)"),
+                        'comment'    => $comment,
                         'user_id'    => auth()->id(),
                     ]);
                 }
