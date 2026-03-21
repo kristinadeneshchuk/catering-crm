@@ -72,6 +72,13 @@ class StockDocumentResource extends Resource
                             ->preload()
                             ->visible(fn (Forms\Get $get) => $get('type') === 'receipt'),
 
+                        Select::make('account_id')
+                            ->label('Рахунок (звідки списати)')
+                            ->relationship('account', 'name')
+                            ->searchable()
+                            ->preload()
+                            ->visible(fn (Forms\Get $get) => $get('type') === 'receipt'),
+
                         Textarea::make('comment')
                             ->label('Коментар')
                             ->columnSpanFull(),

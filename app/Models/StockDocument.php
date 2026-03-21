@@ -23,6 +23,11 @@ class StockDocument extends Model
         return $this->belongsTo(Supplier::class);
     }
 
+    public function account()
+    {
+        return $this->belongsTo(\App\Models\Account::class);
+    }
+
     public function items()
     {
         return $this->hasMany(StockDocumentItem::class);
@@ -55,15 +60,19 @@ class StockDocument extends Model
         $supplierName = $doc->supplier?->name;
         $comment = "Документ #{$doc->id}" . ($supplierName ? " від {$supplierName}" : '');
 
+        $accountId = $doc->account_id
+            ?? \App\Models\Account::where('is_default', true)->value('id');
+
         Transaction::updateOrCreate(
             ['stock_document_id' => $doc->id],
             [
-                'type'     => $isReceipt ? 'expense' : 'income',
-                'category' => $isReceipt ? 'Закупівля' : 'Списання зі складу',
-                'amount'   => $doc->total_sum,
-                'date'     => $doc->operation_date,
-                'comment'  => $comment,
-                'user_id'  => auth()->id(),
+                'type'       => $isReceipt ? 'expense' : 'income',
+                'category'   => $isReceipt ? 'Закупівля' : 'Списання зі складу',
+                'amount'     => $doc->total_sum,
+                'account_id' => $accountId,
+                'date'       => $doc->operation_date,
+                'comment'    => $comment,
+                'user_id'    => auth()->id(),
             ]
         );
     }
