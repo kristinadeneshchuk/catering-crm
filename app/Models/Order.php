@@ -67,15 +67,13 @@ class Order extends Model
 
         static::created(function ($o) {
             self::handleBalance($o, 'sub');
-            $defaultAccount = \App\Models\Account::where('is_default', true)->first();
             Transaction::create([
-                'type'       => 'income',
-                'category'   => 'Нове замовлення',
-                'amount'     => $o->total_price ?? 0,
-                'account_id' => $defaultAccount?->id,
-                'date'       => now(),
-                'comment'    => "Замовлення #{$o->id}" . ($o->client ? " — {$o->client->name}" : ''),
-                'user_id'    => auth()->id(),
+                'type'     => 'income',
+                'category' => 'Нове замовлення',
+                'amount'   => $o->total_price ?? 0,
+                'date'     => now(),
+                'comment'  => "Замовлення #{$o->id}" . ($o->client ? " — {$o->client->name}" : ''),
+                'user_id'  => auth()->id(),
             ]);
         });
 
@@ -103,13 +101,11 @@ class Order extends Model
                     $sign = $diff > 0 ? '+' : '-';
                     $comment = "{$action}{$clientName} ({$sign}{$absDiff} ₴), замовлення #{$o->id}";
 
-                    $defaultAccount = \App\Models\Account::where('is_default', true)->first();
                     Transaction::create([
-                        'type'       => $diff > 0 ? 'income' : 'expense',
-                        'category'   => 'Зміна замовлення',
-                        'amount'     => $absDiff,
-                        'account_id' => $defaultAccount?->id,
-                        'date'       => now(),
+                        'type'     => $diff > 0 ? 'income' : 'expense',
+                        'category' => 'Зміна замовлення',
+                        'amount'   => $absDiff,
+                        'date'     => now(),
                         'comment'    => $comment,
                         'user_id'    => auth()->id(),
                     ]);
