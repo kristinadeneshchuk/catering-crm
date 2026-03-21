@@ -21,27 +21,30 @@ class StockDocumentItem extends Model
     protected static function booted()
     {
         static::created(function ($item) {
-            $item->applyStock(); 
+            $item->applyStock();
             if ($item->stockDocument) {
                 $item->stockDocument->updateTotalSum();
+                $item->stockDocument->syncTransaction();
             }
         });
 
         static::updating(function ($item) {
-            $item->revertStock(); 
+            $item->revertStock();
         });
 
         static::updated(function ($item) {
-            $item->applyStock(); 
+            $item->applyStock();
             if ($item->stockDocument) {
                 $item->stockDocument->updateTotalSum();
+                $item->stockDocument->syncTransaction();
             }
         });
 
         static::deleted(function ($item) {
-            $item->revertStock(); 
+            $item->revertStock();
             if ($item->stockDocument) {
                 $item->stockDocument->updateTotalSum();
+                $item->stockDocument->syncTransaction();
             }
         });
     }

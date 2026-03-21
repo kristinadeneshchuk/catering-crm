@@ -9,13 +9,15 @@ class Transaction extends Model
 {
     // 🔥 ДОДАНО employee_id
     protected $fillable = [
-        'order_id', 
-        'employee_id', 
-        'amount', 
-        'account_id', 
-        'type', 
-        'date', 
-        'comment', 
+        'order_id',
+        'employee_id',
+        'stock_document_id',
+        'amount',
+        'account_id',
+        'type',
+        'category',
+        'date',
+        'comment',
         'user_id'
     ];
 
@@ -34,10 +36,14 @@ class Transaction extends Model
         return $this->belongsTo(Account::class);
     }
 
-    // 🔥 ДОДАНО зв'язок зі співробітником
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function stockDocument(): BelongsTo
+    {
+        return $this->belongsTo(StockDocument::class);
     }
 
     // === ЛОГІКА БАЛАНСУ ТА АВТО-ОПЛАТИ ===

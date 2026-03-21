@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Transaction;
 use Illuminate\Database\Eloquent\Model;
 
 class StockDocument extends Model
@@ -33,15 +34,37 @@ class StockDocument extends Model
         $this->saveQuietly(); 
     }
 
-    // 🔥 ДОДАЄМО ЦЕЙ БЛОК:
     protected static function booted()
     {
-        // Перед видаленням самого документа...
         static::deleting(function ($document) {
-            // ...проходимося по всіх його товарах і повертаємо залишки
             foreach ($document->items as $item) {
                 $item->revertStock();
             }
+            Transaction::where('stock_document_id', $document->id)->delete();
         });
+    }
+
+    public function syncTransaction(): void
+    {
+        $doc = $this->fresh();
+        if (!$doc || $doc->total_sum <= 0) {
+            return;
+        }
+
+        $isReceipt = $doc->type === 'receipt';
+        $supplierName = $doc->supplier?->name;
+        $comment = "Документ #{$doc->id}" . ($supplierName ? " від {$supplierName}" : '');
+
+        Transaction::updateOrCreate(
+            ['stock_document_id' => $doc->id],
+            [
+                'type'     => $isReceipt ? 'expense' : 'income',
+                'category' => $isReceipt ? 'Закупівля' : 'Списання зі складу',
+                'amount'   => $doc->total_sum,
+                'date'     => $doc->operation_date,
+                'comment'  => $comment,
+                'user_id'  => auth()->id(),
+            ]
+        );
     }
 }

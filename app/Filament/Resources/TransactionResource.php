@@ -108,17 +108,31 @@ class TransactionResource extends Resource
                     ->color(fn ($record) => $record->type === 'expense' ? 'danger' : 'success')
                     ->sortable(),
 
-                // 🔥 РОЗУМНА КОЛОНКА ДЕТАЛЕЙ
+                TextColumn::make('category')
+                    ->label('Категорія')
+                    ->badge()
+                    ->color(fn (?string $state): string => match ($state) {
+                        'Закупівля'           => 'warning',
+                        'Списання зі складу'  => 'gray',
+                        'Новий замовлення'    => 'info',
+                        'Зміна замовлення'    => 'primary',
+                        default               => 'gray',
+                    })
+                    ->placeholder('—'),
+
                 TextColumn::make('details')
                     ->label('Деталі / Призначення')
                     ->getStateUsing(function ($record) {
                         if ($record->employee_id) {
-                            return "👤 Виплата ЗП: " . ($record->employee?->name ?? 'Видалений співробітник');
+                            return '👤 Виплата ЗП: ' . ($record->employee?->name ?? 'Видалений співробітник');
+                        }
+                        if ($record->stock_document_id) {
+                            return '🏭 ' . ($record->comment ?: "Документ #{$record->stock_document_id}");
                         }
                         if ($record->order_id) {
-                            return "🛒 Замовлення #" . $record->order_id;
+                            return '🛒 Замовлення #' . $record->order_id;
                         }
-                        return $record->comment ?: 'Інше';
+                        return $record->comment ?: ($record->category ?? 'Інше');
                     })
                     ->searchable(['comment']),
 
@@ -132,8 +146,16 @@ class TransactionResource extends Resource
                 SelectFilter::make('type')
                     ->label('Тип')
                     ->options([
-                        'income' => 'Дохід',
+                        'income'  => 'Дохід',
                         'expense' => 'Витрата',
+                    ]),
+                SelectFilter::make('category')
+                    ->label('Категорія')
+                    ->options([
+                        'Новий замовлення'   => 'Новий замовлення',
+                        'Зміна замовлення'   => 'Зміна замовлення',
+                        'Закупівля'          => 'Закупівля',
+                        'Списання зі складу' => 'Списання зі складу',
                     ]),
                 SelectFilter::make('account_id')
                     ->label('Рахунок')

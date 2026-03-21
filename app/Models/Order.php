@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
+use App\Models\Transaction;
 
 class Order extends Model
 {
@@ -64,9 +65,32 @@ class Order extends Model
             }
         });
 
-        // Інші події (як у тебе)
-        static::created(fn ($o) => self::handleBalance($o, 'sub'));
-        static::updated(fn ($o) => self::handleBalanceUpdate($o));
+        static::created(function ($o) {
+            self::handleBalance($o, 'sub');
+            Transaction::create([
+                'type'     => 'expense',
+                'category' => 'Новий замовлення',
+                'amount'   => $o->total_price ?? 0,
+                'date'     => now(),
+                'comment'  => "Замовлення #{$o->id}" . ($o->client ? " — {$o->client->name}" : ''),
+                'user_id'  => auth()->id(),
+            ]);
+        });
+
+        static::updated(function ($o) {
+            self::handleBalanceUpdate($o);
+            if ($o->isDirty(['total_price', 'start_date', 'end_date', 'duration'])) {
+                Transaction::create([
+                    'type'     => 'expense',
+                    'category' => 'Зміна замовлення',
+                    'amount'   => $o->total_price ?? 0,
+                    'date'     => now(),
+                    'comment'  => "Зміна замовлення #{$o->id}" . ($o->client ? " — {$o->client->name}" : ''),
+                    'user_id'  => auth()->id(),
+                ]);
+            }
+        });
+
         static::deleted(fn ($o) => self::handleBalance($o, 'add'));
     }
 
