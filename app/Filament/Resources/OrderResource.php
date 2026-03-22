@@ -109,7 +109,7 @@ class OrderResource extends Resource
 
                         // 🔥 Оновлено на новий системний slug
                         Hidden::make('project')
-                            ->default('afood'),
+                            ->default(null),
                     ]),
 
                 // === СЕКЦІЯ 2: Дати та Логістика ===

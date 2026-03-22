@@ -39,7 +39,6 @@ class TariffResource extends Resource
                             ->options(\App\Models\Project::all()->pluck('name', 'slug'))
                             ->required()
                             ->native(false)
-                            ->default('afood') // Оновлено на новий slug
                             ->prefixIcon('heroicon-o-building-storefront'),
 
                         // Назва тарифу
