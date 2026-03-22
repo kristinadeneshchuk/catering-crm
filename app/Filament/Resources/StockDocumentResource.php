@@ -54,7 +54,8 @@ class StockDocumentResource extends Resource
 
                         DateTimePicker::make('operation_date')
                             ->label('Дата та час')
-                            ->default(now())
+                            ->default(now('Europe/Kiev'))
+                            ->timezone('Europe/Kiev')
                             ->required(),
 
                         Select::make('warehouse_id')
