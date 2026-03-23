@@ -1,0 +1,34 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-afood:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to afood
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AFOOD_HOST }}
+          username: afood
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /home/afood/a-food.com.ua/okn
+            git pull origin main
+            php artisan config:clear
+
+  deploy-shinshin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to ufit
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SHINSHIN_HOST }}
+          username: shinshin
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /home/shinshin/u-fit.com.ua/crm
+            git pull origin main
+            php artisan config:clear
