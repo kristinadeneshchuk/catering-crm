@@ -40,11 +40,14 @@ class PaymentObserver
             
             if ($account) {
                 if ($transaction->type === 'income') {
-                    $account->balance += $diff;
+                    $diff >= 0
+                        ? $account->increment('balance', $diff)
+                        : $account->decrement('balance', abs($diff));
                 } else {
-                    $account->balance -= $diff;
+                    $diff >= 0
+                        ? $account->decrement('balance', $diff)
+                        : $account->increment('balance', abs($diff));
                 }
-                $account->save();
             }
         }
     }

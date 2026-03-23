@@ -275,17 +275,15 @@ class AnalyticsController extends Controller
             // 1. Зменшуємо борг компанії перед співробітником (його баланс)
             $employee->decrement('balance', $amount);
 
-            // 2. Зписуємо гроші з обраного фінансового рахунку (каса/карта)
-            $account->decrement('balance', $amount);
-
-            // 3. Створюємо запис у фінансовій історії (транзакцію)
+            // 2. Створюємо транзакцію — PaymentObserver автоматично спише гроші з рахунку
             \App\Models\Transaction::create([
-                'account_id'  => $account->id,
-                'amount'      => -$amount, // Від'ємне значення, бо це витрата
-                'type'        => 'expense',
-                'category'    => 'Зарплата',
-                'description' => "Виплата ЗП: {$employee->name}",
-                'date'        => now(),
+                'account_id' => $account->id,
+                'amount'     => $amount,
+                'type'       => 'expense',
+                'category'   => 'Виплата ЗП',
+                'comment'    => "Виплата ЗП: {$employee->name}",
+                'date'       => now(),
+                'user_id'    => auth()->id(),
             ]);
         });
 
