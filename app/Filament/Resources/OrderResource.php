@@ -287,7 +287,6 @@ class OrderResource extends Resource
     {
         return [
             TransactionsRelationManager::class,
-            DeliveryCalendarRelationManager::class,
         ];
     }
 
