@@ -192,13 +192,7 @@ class ClientResource extends Resource
 
                 Section::make('Логістика')
                     ->description('Адреси доставки керуються у вкладці "Адреси доставки".')
-                    ->schema([
-                        Textarea::make('delivery_comment')
-                            ->label('Загальний коментар для доставки')
-                            ->placeholder('Напр.: код домофону 45, залишити у консьєржа, зателефонувати за 5 хв.')
-                            ->rows(2)
-                            ->columnSpanFull(),
-                    ])->columns(1),
+                    ->schema([])->columns(1),
 
                 Section::make('Для менеджера')
                     ->schema([
