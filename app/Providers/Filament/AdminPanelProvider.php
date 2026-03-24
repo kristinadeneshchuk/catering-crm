@@ -28,7 +28,7 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->brandName(env('APP_NAME', 'CRM'))
-            ->favicon(asset(env('APP_FAVICON', 'images/favicon.svg')))
+            ->favicon(asset(config('app.favicon', 'images/favicon.svg')))
             ->login()
             ->colors([
                 'primary' => Color::Amber,
