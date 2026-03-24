@@ -25,3 +25,4 @@ Thumbs.db
 /storage/framework
 /storage/framework/*
 /storage/logs/*
+.claude/worktrees/
