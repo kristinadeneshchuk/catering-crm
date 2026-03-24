@@ -154,7 +154,7 @@
                         {{ \Carbon\Carbon::parse($modalDate)->locale('uk')->translatedFormat('l, d F Y') }}
                     </p>
                 </div>
-                <button wire:click="closeAddressModal" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
+                <button type="button" wire:click="closeAddressModal" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
                     <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
@@ -164,49 +164,37 @@
             {{-- Body --}}
             <div class="px-6 py-5 space-y-4">
 
-                {{-- Адреса з автодоповненням --}}
-                <div class="relative">
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Адреса</label>
-                    <input
-                        type="text"
-                        wire:model="addressSearch"
-                        wire:input.debounce.400ms="searchAddress"
-                        x-on:focus="open = true"
-                        x-on:click.away="open = false"
-                        placeholder="Вулиця, будинок..."
-                        class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                    @if(count($addressResults) > 0)
-                        <div x-show="open" class="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-44 overflow-y-auto">
-                            @foreach($addressResults as $result)
-                                <button
-                                    wire:click="selectAddress('{{ addslashes($result) }}')"
-                                    x-on:click="open = false"
-                                    class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 last:border-0"
-                                >{{ $result }}</button>
+                {{-- Список адрес клієнта --}}
+                @if(count($clientAddresses) > 0)
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Адреса доставки</label>
+                        <div class="space-y-2 max-h-48 overflow-y-auto">
+                            @foreach($clientAddresses as $addr)
+                                <button type="button"
+                                    wire:click="selectClientAddress({{ $addr['id'] }})"
+                                    class="w-full text-left px-3 py-2.5 rounded-lg border text-sm transition-colors
+                                        {{ $selectedClientAddressId === $addr['id']
+                                            ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                                            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300' }}"
+                                >
+                                    <div class="font-medium">{{ $addr['address'] }}</div>
+                                    @if($addr['entrance'] || $addr['apartment'] || $addr['floor'])
+                                        <div class="text-xs text-gray-500 mt-0.5">
+                                            @if($addr['entrance']) Під'їзд {{ $addr['entrance'] }} @endif
+                                            @if($addr['apartment']) · Кв {{ $addr['apartment'] }} @endif
+                                            @if($addr['floor']) · Пов {{ $addr['floor'] }} @endif
+                                        </div>
+                                    @endif
+                                    @if($addr['is_default'])
+                                        <span class="text-xs text-primary-500">За замовчуванням</span>
+                                    @endif
+                                </button>
                             @endforeach
                         </div>
-                    @endif
-                </div>
-
-                {{-- Під'їзд / Кв / Поверх --}}
-                <div class="grid grid-cols-3 gap-3">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Під'їзд</label>
-                        <input type="text" wire:model="modalEntrance" placeholder="—"
-                            class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500"/>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Кв/офіс</label>
-                        <input type="text" wire:model="modalApartment" placeholder="—"
-                            class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500"/>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Поверх</label>
-                        <input type="text" wire:model="modalFloor" placeholder="—"
-                            class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500"/>
-                    </div>
-                </div>
+                @else
+                    <p class="text-sm text-gray-400 dark:text-gray-500">У клієнта немає збережених адрес. Додайте їх у картці клієнта.</p>
+                @endif
 
                 {{-- Коментар --}}
                 <div>
@@ -218,22 +206,16 @@
 
             {{-- Footer --}}
             <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                <button wire:click="removeDay"
+                <button type="button" wire:click="removeDay"
                     wire:confirm="Видалити цей день з замовлення?"
                     class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center gap-1.5">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                     Видалити день
                 </button>
-                <div class="flex items-center gap-2">
-                    <button wire:click="resetAddress"
-                        class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
-                        Адреса клієнта
-                    </button>
-                    <button wire:click="saveAddress"
-                        class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors">
-                        Зберегти
-                    </button>
-                </div>
+                <button type="button" wire:click="saveAddress"
+                    class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors">
+                    Зберегти
+                </button>
             </div>
         </div>
     </div>

@@ -37,6 +37,8 @@ class OrderCalendar extends Component
     public string $modalComment = '';
     public string $addressSearch = '';
     public array $addressResults = [];
+    public array $clientAddresses = [];
+    public ?int $selectedClientAddressId = null;
 
     public function mount(?Order $order = null)
     {
@@ -150,14 +152,33 @@ class OrderCalendar extends Component
         $client = $this->order?->client;
         $this->modalDate      = $dateStr;
         $this->modalDayId     = $day->id;
-        $this->modalAddress   = $day->address   ?? $client?->address ?? '';
-        $this->modalEntrance  = $day->address_entrance  ?? $client?->address_entrance ?? '';
-        $this->modalApartment = $day->address_apartment ?? $client?->address_apartment ?? '';
-        $this->modalFloor     = $day->address_floor     ?? $client?->address_floor ?? '';
-        $this->modalComment   = $day->delivery_comment  ?? $client?->delivery_comment ?? '';
-        $this->addressSearch  = $this->modalAddress;
+        $this->modalAddress   = $day->address   ?? '';
+        $this->modalEntrance  = $day->address_entrance  ?? '';
+        $this->modalApartment = $day->address_apartment ?? '';
+        $this->modalFloor     = $day->address_floor     ?? '';
+        $this->modalComment   = $day->delivery_comment  ?? '';
+        $this->addressSearch  = '';
         $this->addressResults = [];
+        $this->selectedClientAddressId = null;
+
+        // Завантажуємо адреси клієнта
+        $this->clientAddresses = $client
+            ? $client->addresses()->orderByDesc('is_default')->get()->toArray()
+            : [];
+
         $this->showAddressModal = true;
+    }
+
+    public function selectClientAddress(int $id): void
+    {
+        $this->selectedClientAddressId = $id;
+        $addr = collect($this->clientAddresses)->firstWhere('id', $id);
+        if ($addr) {
+            $this->modalAddress   = $addr['address'] ?? '';
+            $this->modalEntrance  = $addr['entrance'] ?? '';
+            $this->modalApartment = $addr['apartment'] ?? '';
+            $this->modalFloor     = $addr['floor'] ?? '';
+        }
     }
 
     public function closeAddressModal(): void
