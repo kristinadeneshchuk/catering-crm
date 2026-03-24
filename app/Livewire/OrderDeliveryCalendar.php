@@ -5,6 +5,7 @@ namespace App\Livewire;
 use Livewire\Component;
 use App\Models\Order;
 use App\Models\OrderDay;
+use App\Models\ClientAddress;
 use Carbon\Carbon;
 use Filament\Notifications\Notification;
 
@@ -25,9 +26,8 @@ class OrderDeliveryCalendar extends Component
     public string $address_floor = '';
     public string $delivery_comment = '';
 
-    // Автодоповнення адреси
-    public string $addressSearch = '';
-    public array $addressResults = [];
+    // Вибір адреси клієнта
+    public ?int $selectedAddressId = null;
 
     public function mount(Order $order): void
     {
@@ -76,42 +76,20 @@ class OrderDeliveryCalendar extends Component
         $this->address_apartment= $day->address_apartment ?? $client?->address_apartment ?? '';
         $this->address_floor    = $day->address_floor    ?? $client?->address_floor ?? '';
         $this->delivery_comment = $day->delivery_comment ?? $client?->delivery_comment ?? '';
-        $this->addressSearch    = $this->address;
-        $this->addressResults   = [];
+        $this->selectedAddressId = null;
     }
 
-    public function searchAddress(): void
+    public function selectClientAddress(int $addressId): void
     {
-        if (strlen($this->addressSearch) < 3) {
-            $this->addressResults = [];
-            return;
-        }
+        $addr = ClientAddress::find($addressId);
+        if (!$addr) return;
 
-        $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
-            'q'            => $this->addressSearch . ', Київ',
-            'format'       => 'json',
-            'limit'        => 6,
-            'countrycodes' => 'ua',
-        ]);
-
-        $response = @file_get_contents($url, false, stream_context_create([
-            'http' => ['header' => "User-Agent: CRM/1.0\r\n"],
-        ]));
-
-        if (!$response) {
-            $this->addressResults = [];
-            return;
-        }
-
-        $results = json_decode($response, true) ?? [];
-        $this->addressResults = array_column($results, 'display_name');
-    }
-
-    public function selectAddress(string $address): void
-    {
-        $this->address       = $address;
-        $this->addressSearch = $address;
-        $this->addressResults = [];
+        $this->selectedAddressId  = $addressId;
+        $this->address            = $addr->address;
+        $this->address_entrance   = $addr->address_entrance ?? '';
+        $this->address_apartment  = $addr->address_apartment ?? '';
+        $this->address_floor      = $addr->address_floor ?? '';
+        $this->delivery_comment   = $addr->delivery_comment ?? '';
     }
 
     public function saveDay(): void
@@ -157,7 +135,6 @@ class OrderDeliveryCalendar extends Component
         $this->address_apartment= $client?->address_apartment ?? '';
         $this->address_floor    = $client?->address_floor ?? '';
         $this->delivery_comment = $client?->delivery_comment ?? '';
-        $this->addressSearch    = $this->address;
 
         Notification::make()
             ->title('Адресу скинуто до адреси клієнта')
@@ -180,10 +157,15 @@ class OrderDeliveryCalendar extends Component
             ->get()
             ->keyBy(fn ($day) => Carbon::parse($day->date)->format('Y-m-d'));
 
+        $clientAddresses = $this->order->client
+            ? $this->order->client->addresses()->orderByDesc('is_default')->get()
+            : collect();
+
         return view('livewire.order-delivery-calendar', [
-            'daysInGrid'    => $daysInGrid,
-            'calendarMonth' => $calendarMonth,
-            'orderDays'     => $orderDays,
+            'daysInGrid'      => $daysInGrid,
+            'calendarMonth'   => $calendarMonth,
+            'orderDays'       => $orderDays,
+            'clientAddresses' => $clientAddresses,
         ]);
     }
 }
