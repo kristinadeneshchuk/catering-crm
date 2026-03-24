@@ -69,13 +69,16 @@ class OrderDeliveryCalendar extends Component
         $this->selectedDate     = $dateStr;
         $this->selectedDayId    = $day->id;
 
-        // Заповнюємо форму: якщо є своя адреса — беремо її, інакше адресу клієнта
+        // Заповнюємо форму: якщо є своя адреса — беремо її, інакше дефолтну адресу клієнта
         $client = $this->order->client;
-        $this->address          = $day->address          ?? $client?->address ?? '';
-        $this->address_entrance = $day->address_entrance ?? $client?->address_entrance ?? '';
-        $this->address_apartment= $day->address_apartment ?? $client?->address_apartment ?? '';
-        $this->address_floor    = $day->address_floor    ?? $client?->address_floor ?? '';
-        $this->delivery_comment = $day->delivery_comment ?? $client?->delivery_comment ?? '';
+        $defaultAddr = $client?->addresses()->where('is_default', true)->first()
+            ?? $client?->addresses()->first();
+
+        $this->address          = $day->address          ?? $defaultAddr?->address ?? '';
+        $this->address_entrance = $day->address_entrance ?? $defaultAddr?->address_entrance ?? '';
+        $this->address_apartment= $day->address_apartment ?? $defaultAddr?->address_apartment ?? '';
+        $this->address_floor    = $day->address_floor    ?? $defaultAddr?->address_floor ?? '';
+        $this->delivery_comment = $day->delivery_comment ?? $defaultAddr?->delivery_comment ?? $client?->delivery_comment ?? '';
         $this->selectedAddressId = null;
     }
 
