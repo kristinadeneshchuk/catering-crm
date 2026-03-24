@@ -191,7 +191,7 @@ class ClientResource extends Resource
                     ])->columns(3),
 
                 Section::make('Логістика')
-                    ->description('Адреси доставки керуються у вкладці "Адреси доставки" нижче.')
+                    ->description('Адреси доставки керуються у вкладці "Адреси доставки".')
                     ->schema([
                         Textarea::make('delivery_comment')
                             ->label('Загальний коментар для доставки')

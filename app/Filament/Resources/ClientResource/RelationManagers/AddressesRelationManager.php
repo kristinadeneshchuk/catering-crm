@@ -29,10 +29,31 @@ class AddressesRelationManager extends RelationManager
                 ->onColor('success')
                 ->columnSpanFull(),
 
-            Forms\Components\TextInput::make('address')
+            Forms\Components\Select::make('address')
                 ->label('Адреса')
-                ->placeholder('вул. Хрещатик, 1, Київ')
+                ->searchable()
+                ->getSearchResultsUsing(function (string $search) {
+                    if (strlen($search) < 3) return [];
+                    $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
+                        'q'            => $search . ', Київ',
+                        'format'       => 'json',
+                        'limit'        => 7,
+                        'countrycodes' => 'ua',
+                    ]);
+                    $response = @file_get_contents($url, false, stream_context_create([
+                        'http' => ['header' => "User-Agent: CRM/1.0\r\n"],
+                    ]));
+                    if (!$response) return [];
+                    $results = json_decode($response, true) ?? [];
+                    $options = [];
+                    foreach ($results as $r) {
+                        $label = $r['display_name'] ?? '';
+                        $options[$label] = $label;
+                    }
+                    return $options;
+                })
                 ->required()
+                ->placeholder('Почніть вводити вулицю...')
                 ->columnSpanFull(),
 
             Forms\Components\TextInput::make('address_entrance')
