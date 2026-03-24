@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\ClientResource\Pages;
 use App\Filament\Resources\ClientResource\RelationManagers\OrdersRelationManager;
+use App\Filament\Resources\ClientResource\RelationManagers\AddressesRelationManager;
 use App\Models\Client;
 use App\Models\MealType;
 use Filament\Forms;
@@ -379,7 +380,7 @@ class ClientResource extends Resource
     {
         return [
             OrdersRelationManager::class,
-            RelationManagers\AddressesRelationManager::class,
+            AddressesRelationManager::class,
         ];
     }
 
