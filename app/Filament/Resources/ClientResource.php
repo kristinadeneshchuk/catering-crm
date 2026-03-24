@@ -191,52 +191,13 @@ class ClientResource extends Resource
                     ])->columns(3),
 
                 Section::make('Логістика')
+                    ->description('Адреси доставки керуються у вкладці "Адреси доставки" нижче.')
                     ->schema([
-                        Forms\Components\Select::make('address')
-                            ->label('Адреса доставки')
-                            ->searchable()
-                            ->getSearchResultsUsing(function (string $search) {
-                                if (strlen($search) < 3) return [];
-                                $url = 'https://nominatim.openstreetmap.org/search?'
-                                    . http_build_query([
-                                        'q'              => $search . ', Київ',
-                                        'format'         => 'json',
-                                        'addressdetails' => 1,
-                                        'limit'          => 7,
-                                        'countrycodes'   => 'ua',
-                                    ]);
-                                $response = @file_get_contents($url, false, stream_context_create([
-                                    'http' => ['header' => "User-Agent: CRM/1.0\r\n"],
-                                ]));
-                                if (!$response) return [];
-                                $results = json_decode($response, true);
-                                $options = [];
-                                foreach ($results as $r) {
-                                    $label = $r['display_name'] ?? '';
-                                    $options[$label] = $label;
-                                }
-                                return $options;
-                            })
-                            ->allowHtml(false)
-                            ->columnSpanFull()
-                            ->placeholder('Почніть вводити вулицю...'),
-
-                        Forms\Components\TextInput::make('address_entrance')
-                            ->label('Під\'їзд')
-                            ->maxLength(10),
-
-                        Forms\Components\TextInput::make('address_apartment')
-                            ->label('Кв/офіс')
-                            ->maxLength(20),
-
-                        Forms\Components\TextInput::make('address_floor')
-                            ->label('Поверх')
-                            ->maxLength(10),
-
                         Textarea::make('delivery_comment')
-                            ->label('Коментар для доставки')
+                            ->label('Загальний коментар для доставки')
                             ->placeholder('Напр.: код домофону 45, залишити у консьєржа, зателефонувати за 5 хв.')
-                            ->rows(2),
+                            ->rows(2)
+                            ->columnSpanFull(),
                     ])->columns(1),
 
                 Section::make('Для менеджера')
