@@ -460,35 +460,21 @@ class PrintController extends Controller
 
         $byMeal = $selectedItems->groupBy('meal_type_id');
 
-        // 🔥 ЗМІНЕНО: Рахуємо загальну суму відсотків з урахуванням кастомних
-        $percentSum = 0.0;
-        foreach ($byMeal as $mealTypeId => $items) {
-            $firstItem = $items->first();
-            $p = $firstItem->custom_energy_percent !== null 
-                ? (float) $firstItem->custom_energy_percent 
-                : (float) ($firstItem->mealType?->energy_percent ?? 0);
-            
-            $percentSum += $p;
-        }
-        
-        if ($percentSum <= 0) {
-            $percentSum = 100.0;
-        }
-
         $totals = ['kcal' => 0.0, 'prot' => 0.0, 'fat' => 0.0, 'carb' => 0.0];
         $resultItems = [];
 
         foreach ($byMeal as $mealTypeId => $items) {
             $firstItem = $items->first();
             $mealType = $firstItem->mealType;
-            
-            // 🔥 ЗМІНЕНО: Беремо кастомний відсоток, якщо він є
-            $p = $firstItem->custom_energy_percent !== null 
-                ? (float) $firstItem->custom_energy_percent 
+
+            // Ділимо на 100 (не на суму відсотків!) — кожен прийом отримує рівно
+            // свою частку від цільових ккал, незалежно від кількості страв у раціоні.
+            $p = $firstItem->custom_energy_percent !== null
+                ? (float) $firstItem->custom_energy_percent
                 : (float) ($mealType?->energy_percent ?? 0);
 
             $mealKcal = ($p > 0)
-                ? $targetKcal * ($p / $percentSum)
+                ? $targetKcal * ($p / 100.0)
                 : $targetKcal * (1.0 / max(1, $byMeal->count()));
 
             $countInMeal = max(1, $items->count());

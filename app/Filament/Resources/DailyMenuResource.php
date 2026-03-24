@@ -219,29 +219,17 @@ class DailyMenuResource extends Resource
             return 0.0;
         }
 
-        // 🔥 ЗМІНЕНО: Сумуємо відсотки з урахуванням кастомних
-        $percentSum = $menuItems->sum(function ($item) {
-            return $item->custom_energy_percent !== null 
-                ? (float) $item->custom_energy_percent 
-                : (float) ($item->mealType?->energy_percent ?? 0);
-        });
-
-        if ($percentSum <= 0) {
-            $percentSum = 100.0;
-        }
-
         $totalCost = 0.0;
 
         foreach ($menuItems as $item) {
             $dish = $item->dish;
-            
-            // 🔥 ЗМІНЕНО: Беремо кастомний відсоток, якщо він є
-            $p = $item->custom_energy_percent !== null 
-                ? (float) $item->custom_energy_percent 
+
+            $p = $item->custom_energy_percent !== null
+                ? (float) $item->custom_energy_percent
                 : (float) ($item->mealType?->energy_percent ?? 0);
 
             $mealKcal = ($p > 0)
-                ? $targetKcal * ($p / $percentSum)
+                ? $targetKcal * ($p / 100.0)
                 : $targetKcal * (1.0 / $menuItems->count());
 
             $baseW = (float)($dish->base_weight_g ?? 0);

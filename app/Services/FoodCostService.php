@@ -26,11 +26,6 @@ class FoodCostService
         if ($selectedItems->isEmpty()) return 0.0;
 
         $byMeal = $selectedItems->groupBy('meal_type_id');
-        $percentSum = 0.0;
-        foreach ($byMeal as $mealTypeId => $items) {
-            $percentSum += (float)($items->first()->mealType?->energy_percent ?? 0);
-        }
-        if ($percentSum <= 0) $percentSum = 100.0;
 
         $totalOrderCost = 0.0;
 
@@ -39,7 +34,7 @@ class FoodCostService
             $p = (float)($mealType?->energy_percent ?? 0);
 
             $mealKcal = ($p > 0)
-                ? $targetKcal * ($p / $percentSum)
+                ? $targetKcal * ($p / 100.0)
                 : $targetKcal * (1.0 / max(1, $byMeal->count()));
 
             $countInMeal = max(1, $items->count());
