@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\OrderResource\Pages;
 use App\Filament\Resources\OrderResource\RelationManagers\TransactionsRelationManager;
+use App\Filament\Resources\OrderResource\RelationManagers\DeliveryCalendarRelationManager;
 use App\Models\Order;
 use App\Models\Client;
 use App\Models\Tariff;
@@ -286,6 +287,7 @@ class OrderResource extends Resource
     {
         return [
             TransactionsRelationManager::class,
+            DeliveryCalendarRelationManager::class,
         ];
     }
 
