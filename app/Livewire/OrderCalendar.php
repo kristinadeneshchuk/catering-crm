@@ -16,7 +16,7 @@ class OrderCalendar extends Component
 {
     // Замовлення може бути null (при створенні)
     public ?Order $order = null;
-    
+
     public $year;
     public $month;
 
@@ -25,6 +25,18 @@ class OrderCalendar extends Component
 
     // 🔥 Зберігаємо поточний вибраний тип графіку (оновлюється через подію)
     public ?string $scheduleType = null;
+
+    // Modal адреси
+    public bool $showAddressModal = false;
+    public ?string $modalDate = null;
+    public ?int $modalDayId = null;
+    public string $modalAddress = '';
+    public string $modalEntrance = '';
+    public string $modalApartment = '';
+    public string $modalFloor = '';
+    public string $modalComment = '';
+    public string $addressSearch = '';
+    public array $addressResults = [];
 
     public function mount(?Order $order = null)
     {
@@ -103,14 +115,9 @@ class OrderCalendar extends Component
             ->first();
 
         if ($existingDay) {
-            // 🔥 ВИДАЛЯЄМО: Тільки видаляємо запис. 
-            // Гроші повернуться автоматично через Observer моделі OrderDay
-            $existingDay->delete();
-            
-            Notification::make()
-                ->title('День скасовано')
-                ->body("Повернуто на баланс: {$pricePerDay} грн")
-                ->success()->send();
+            // Відкриваємо modal для редагування адреси
+            $this->openAddressModal($dateStr, $existingDay);
+            return;
         } else {
             // 🔥 ВИДАЛЯЄМО: Тільки створюємо запис.
             // Гроші спишуться автоматично через Observer моделі OrderDay
@@ -136,6 +143,105 @@ class OrderCalendar extends Component
             ->toArray();
             
         $this->dispatch('update-selected-days', days: $updatedDays);
+    }
+
+    public function openAddressModal(string $dateStr, OrderDay $day): void
+    {
+        $client = $this->order?->client;
+        $this->modalDate      = $dateStr;
+        $this->modalDayId     = $day->id;
+        $this->modalAddress   = $day->address   ?? $client?->address ?? '';
+        $this->modalEntrance  = $day->address_entrance  ?? $client?->address_entrance ?? '';
+        $this->modalApartment = $day->address_apartment ?? $client?->address_apartment ?? '';
+        $this->modalFloor     = $day->address_floor     ?? $client?->address_floor ?? '';
+        $this->modalComment   = $day->delivery_comment  ?? $client?->delivery_comment ?? '';
+        $this->addressSearch  = $this->modalAddress;
+        $this->addressResults = [];
+        $this->showAddressModal = true;
+    }
+
+    public function closeAddressModal(): void
+    {
+        $this->showAddressModal = false;
+        $this->modalDate = null;
+        $this->modalDayId = null;
+        $this->addressResults = [];
+    }
+
+    public function searchAddress(): void
+    {
+        if (strlen($this->addressSearch) < 3) {
+            $this->addressResults = [];
+            return;
+        }
+        $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
+            'q' => $this->addressSearch . ', Київ', 'format' => 'json', 'limit' => 6, 'countrycodes' => 'ua',
+        ]);
+        $response = @file_get_contents($url, false, stream_context_create([
+            'http' => ['header' => "User-Agent: CRM/1.0\r\n"],
+        ]));
+        $results = $response ? (json_decode($response, true) ?? []) : [];
+        $this->addressResults = array_column($results, 'display_name');
+    }
+
+    public function selectAddress(string $address): void
+    {
+        $this->modalAddress  = $address;
+        $this->addressSearch = $address;
+        $this->addressResults = [];
+    }
+
+    public function saveAddress(): void
+    {
+        if (!$this->modalDayId) return;
+        $day = OrderDay::find($this->modalDayId);
+        if (!$day) return;
+
+        $day->update([
+            'address'          => $this->modalAddress ?: null,
+            'address_entrance' => $this->modalEntrance ?: null,
+            'address_apartment'=> $this->modalApartment ?: null,
+            'address_floor'    => $this->modalFloor ?: null,
+            'delivery_comment' => $this->modalComment ?: null,
+        ]);
+
+        $this->closeAddressModal();
+        Notification::make()->title('Адресу збережено')->success()->send();
+    }
+
+    public function resetAddress(): void
+    {
+        if (!$this->modalDayId) return;
+        $day = OrderDay::find($this->modalDayId);
+        if (!$day) return;
+
+        $day->update([
+            'address' => null, 'address_entrance' => null,
+            'address_apartment' => null, 'address_floor' => null, 'delivery_comment' => null,
+        ]);
+
+        $this->closeAddressModal();
+        Notification::make()->title('Адресу скинуто до адреси клієнта')->success()->send();
+    }
+
+    public function removeDay(): void
+    {
+        if (!$this->modalDayId || !$this->order) return;
+        $day = OrderDay::find($this->modalDayId);
+        if (!$day) return;
+
+        $pricePerDay = $this->calculatePricePerDay();
+        $day->delete();
+        $this->updateOrderStatus();
+        $this->closeAddressModal();
+
+        $updatedDays = OrderDay::where('order_id', $this->order->id)
+            ->orderBy('date')->get()
+            ->map(fn ($d) => Carbon::parse($d->date)->format('Y-m-d'))
+            ->values()->toArray();
+        $this->dispatch('update-selected-days', days: $updatedDays);
+
+        Notification::make()->title('День скасовано')->body("Повернуто на баланс: {$pricePerDay} грн")->success()->send();
     }
 
     private function calculatePricePerDay(): float
