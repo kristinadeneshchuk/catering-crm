@@ -25,7 +25,7 @@ class PrintController extends Controller
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
-            ->with(['client.mealTypes', 'projectData']) 
+            ->with(['client.mealTypes', 'projectData', 'orderDays' => fn($q) => $q->where('date', $targetDate)])
             ->get();
 
         $manifests = [];
@@ -37,12 +37,18 @@ class PrintController extends Controller
                 continue;
             }
 
+            $orderDay = $order->orderDays->first();
+            $address = $orderDay?->address
+                ?? $order->client?->addresses()->where('is_default', true)->first()?->address
+                ?? $order->client?->address
+                ?? 'Самовивіз';
+
             $manifests[] = [
                 'client_id'   => $order->client?->id ?? '---',
                 'has_cutlery' => (bool) ($order->client?->has_cutlery ?? true),
                 'project'     => $order->project,
                 'client'      => $order->client?->name ?? 'Без імені',
-                'address'     => $order->client?->addresses()->where('is_default', true)->first()?->address ?? $order->client?->address ?? 'Самовивіз',
+                'address'     => $address,
                 'calories'    => (int) $order->calories,
                 'comment'     => $order->client?->production_comment,
                 'items'       => $calc['items'],
@@ -75,17 +81,23 @@ class PrintController extends Controller
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
-            ->with(['client', 'projectData']) 
+            ->with(['client', 'projectData', 'orderDays' => fn($q) => $q->where('date', $targetDate)])
             ->get();
 
         $manifests = [];
 
         foreach ($orders as $order) {
+            $orderDay = $order->orderDays->first();
+            $address = $orderDay?->address
+                ?? $order->client?->addresses()->where('is_default', true)->first()?->address
+                ?? $order->client?->address
+                ?? 'Самовивіз';
+
             $manifests[] = [
                 'client_id'   => $order->client?->id ?? '---',
                 'project'     => $order->project,
                 'client'      => $order->client?->name ?? 'Без імені',
-                'address'     => $order->client?->addresses()->where('is_default', true)->first()?->address ?? $order->client?->address ?? 'Самовивіз',
+                'address'     => $address,
                 'calories'    => (int) $order->calories,
             ];
         }

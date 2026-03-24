@@ -69,7 +69,7 @@
                                 {{ $man['calories'] ?? 0 }} ККАЛ
                             </span>
                         </div>
-                        <span class="truncate ml-2 italic text-slate-500">{{ $man['address'] ?? 'Самовивіз' }}</span>
+                        <span class="truncate ml-2 italic text-slate-500 max-w-[55%]">{{ $man['address'] ?? 'Самовивіз' }}</span>
                     </div>
                 </div>
 

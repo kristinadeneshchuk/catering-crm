@@ -31,7 +31,7 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
 
         // 1. Шукаємо замовлення, які мають запис у календарі на цей день
         $orders = Order::query()
-            ->with(['client', 'orderDays'])
+            ->with(['client', 'orderDays' => fn($q) => $q->where('date', $targetDate)])
             ->whereIn('status', ['active', 'new'])
             // 🔥 ФІЛЬТР ПО ЗМІНІ (Ранок або Вечір)
             ->where(function ($query) use ($shift) {
@@ -52,8 +52,9 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
 
         // 2. Групуємо за "чистою" адресою
         $groupedOrders = $orders->groupBy(function($order) {
+            $dayAddr = $order->orderDays->first()?->address;
             $defaultAddr = $order->client->addresses()->where('is_default', true)->first();
-            $address = mb_strtolower($defaultAddr?->address ?? $order->client->address ?? '');
+            $address = mb_strtolower($dayAddr ?? $defaultAddr?->address ?? $order->client->address ?? '');
             
             $garbageWords = ['вулиця', 'вул.', 'вул', 'проспект', 'просп.', 'просп', 'провулок', 'пров.', 'будинок', 'буд.', 'буд', 'квартира', 'кв.', 'кв', 'місто', 'м.', 'під\'їзд', 'під.', 'код', 'домофон'];
             $cleanAddress = str_replace($garbageWords, '', $address);
@@ -107,7 +108,17 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
                 'Comp_Id' => $ids,
                 'Comp_Name' => $names,
                 'Phone' => $client->phone,
-                'Address' => (function() use ($client) {
+                'Address' => (function() use ($client, $mainOrder) {
+                    $dayAddr = $mainOrder->orderDays->first();
+                    if ($dayAddr?->address) {
+                        $parts = array_filter([
+                            $dayAddr->address,
+                            $dayAddr->address_entrance ? 'під\'їзд ' . $dayAddr->address_entrance : null,
+                            $dayAddr->address_floor ? 'пов' . $dayAddr->address_floor : null,
+                            $dayAddr->address_apartment ? 'кв ' . $dayAddr->address_apartment : null,
+                        ]);
+                        return implode(', ', $parts);
+                    }
                     $addr = $client->addresses()->where('is_default', true)->first();
                     if (!$addr) return $client->address;
                     $parts = array_filter([
