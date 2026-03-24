@@ -9,7 +9,10 @@ class OrderDay extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['order_id', 'date', 'is_completed'];
+    protected $fillable = [
+        'order_id', 'date', 'is_completed',
+        'address', 'address_entrance', 'address_apartment', 'address_floor', 'delivery_comment',
+    ];
 
     protected $casts = [
         'date' => 'date',
