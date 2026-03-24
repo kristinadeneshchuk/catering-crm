@@ -47,11 +47,11 @@
             }
         @else
             /* 📄 СТИЛІ ДЛЯ СТАНДАРТНОГО А4 (Звичайні) */
-            .sticker-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; max-width: 1000px; margin: 0 auto; }
+            .sticker-grid { display: grid; grid-template-columns: repeat(2, 480px); gap: 15px; justify-content: center; margin: 0 auto; }
             .sticker-box { border: 2px solid black !important; }
             @media print {
                 @page { size: A4; margin: 10mm; }
-                .sticker-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 5mm !important; padding: 0 !important; }
+                .sticker-grid { display: grid !important; grid-template-columns: repeat(2, 480px) !important; gap: 5mm !important; padding: 0 !important; justify-content: center !important; }
                 .sticker-box { break-inside: avoid !important; height: auto !important; }
             }
         @endif
@@ -120,7 +120,7 @@
                         <h2 class="client-name text-[17px] font-black uppercase leading-none tracking-tighter mb-1">{{ $man['client'] }}</h2>
                         <div class="flex justify-between items-center text-[10px] font-bold uppercase">
                             <span class="bg-slate-900 text-white px-1.5 py-0.5 rounded font-black">ID: {{ $man['client_id'] }}</span>
-                            <span class="truncate ml-2 italic text-slate-500">{{ $man['address'] ?? 'Самовивіз' }}</span>
+                            <span class="truncate min-w-0 ml-2 italic text-slate-500">{{ $man['address'] ?? 'Самовивіз' }}</span>
                         </div>
                     </div>
                 </div>

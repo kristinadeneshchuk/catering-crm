@@ -422,8 +422,11 @@ class PrintController extends Controller
         // Отримуємо зміну (morning або evening). По замовчуванню - ранок
         $shift = $request->input('shift', 'morning');
 
-        // Формуємо красиву назву файлу (наприклад: logistics_morning_2026-03-16.xlsx)
-        $fileName = "logistics_{$shift}_{$date}.xlsx";
+        // Формуємо красиву назву файлу з датою ДОСТАВКИ (не фасування)
+        $deliveryDate = $shift === 'morning'
+            ? \Carbon\Carbon::parse($date)->addDay()->format('Y-m-d')
+            : $date;
+        $fileName = "logistics_{$shift}_{$deliveryDate}.xlsx";
 
         // Передаємо ДВА параметри в наш оновлений LogisticsExport
         return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\LogisticsExport($date, $shift), $fileName);

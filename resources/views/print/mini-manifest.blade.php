@@ -13,7 +13,7 @@
             .sticker-box { break-inside: avoid !important; height: auto !important; border: 2px solid #000 !important; }
         }
         body { background: #f3f4f6; padding: 20px; font-family: sans-serif; }
-        .sticker-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; max-width: 1000px; margin: 0 auto; }
+        .sticker-grid { display: grid; grid-template-columns: repeat(2, 420px); gap: 15px; justify-content: center; margin: 0 auto; }
         .sticker-box { background: white; border: 2px solid black; position: relative; display: flex; flex-direction: column; padding: 15px; min-height: 120px; }
     </style>
 </head>
@@ -62,14 +62,12 @@
                 <div class="border-b-2 border-slate-900 pb-2">
                     <span class="text-[9px] text-gray-400 font-bold uppercase block tracking-tighter">Отримувач:</span>
                     <h2 class="text-xl font-black uppercase leading-none tracking-tighter mb-1">{{ $man['client'] }}</h2>
-                    <div class="flex justify-between items-center text-[11px] font-bold uppercase">
-                        <div class="flex gap-2">
-                            <span class="bg-slate-900 text-white px-2 py-0.5 rounded text-[12px] font-black">ID: {{ $man['client_id'] }}</span>
-                            <span class="text-white px-2 py-0.5 rounded text-[12px] font-black" style="background-color: {{ $brandColor }};">
-                                {{ $man['calories'] ?? 0 }} ККАЛ
-                            </span>
-                        </div>
-                        <span class="truncate ml-2 italic text-slate-500 max-w-[55%]">{{ $man['address'] ?? 'Самовивіз' }}</span>
+                    <div class="flex items-center gap-2 text-[11px] font-bold uppercase overflow-hidden">
+                        <span class="bg-slate-900 text-white px-2 py-0.5 rounded text-[12px] font-black shrink-0">ID: {{ $man['client_id'] }}</span>
+                        <span class="text-white px-2 py-0.5 rounded text-[12px] font-black shrink-0" style="background-color: {{ $brandColor }};">
+                            {{ $man['calories'] ?? 0 }} ККАЛ
+                        </span>
+                        <span class="truncate italic text-slate-500 text-[10px] min-w-0">{{ $man['address'] ?? 'Самовивіз' }}</span>
                     </div>
                 </div>
 
