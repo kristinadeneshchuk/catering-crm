@@ -42,7 +42,7 @@ class PrintController extends Controller
                 'has_cutlery' => (bool) ($order->client?->has_cutlery ?? true),
                 'project'     => $order->project,
                 'client'      => $order->client?->name ?? 'Без імені',
-                'address'     => $order->client?->address ?? 'Самовивіз',
+                'address'     => $order->client?->addresses()->where('is_default', true)->first()?->address ?? $order->client?->address ?? 'Самовивіз',
                 'calories'    => (int) $order->calories,
                 'comment'     => $order->client?->production_comment,
                 'items'       => $calc['items'],
@@ -85,7 +85,7 @@ class PrintController extends Controller
                 'client_id'   => $order->client?->id ?? '---',
                 'project'     => $order->project,
                 'client'      => $order->client?->name ?? 'Без імені',
-                'address'     => $order->client?->address ?? 'Самовивіз',
+                'address'     => $order->client?->addresses()->where('is_default', true)->first()?->address ?? $order->client?->address ?? 'Самовивіз',
                 'calories'    => (int) $order->calories,
             ];
         }

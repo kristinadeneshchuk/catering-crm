@@ -178,11 +178,11 @@
                                             : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300' }}"
                                 >
                                     <div class="font-medium">{{ $addr['address'] }}</div>
-                                    @if($addr['entrance'] || $addr['apartment'] || $addr['floor'])
+                                    @if($addr['address_entrance'] || $addr['address_apartment'] || $addr['address_floor'])
                                         <div class="text-xs text-gray-500 mt-0.5">
-                                            @if($addr['entrance']) Під'їзд {{ $addr['entrance'] }} @endif
-                                            @if($addr['apartment']) · Кв {{ $addr['apartment'] }} @endif
-                                            @if($addr['floor']) · Пов {{ $addr['floor'] }} @endif
+                                            @if($addr['address_entrance']) Під'їзд {{ $addr['address_entrance'] }} @endif
+                                            @if($addr['address_apartment']) · Кв {{ $addr['address_apartment'] }} @endif
+                                            @if($addr['address_floor']) · Пов {{ $addr['address_floor'] }} @endif
                                         </div>
                                     @endif
                                     @if($addr['is_default'])

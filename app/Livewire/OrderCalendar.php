@@ -159,12 +159,28 @@ class OrderCalendar extends Component
         $this->modalComment   = $day->delivery_comment  ?? '';
         $this->addressSearch  = '';
         $this->addressResults = [];
-        $this->selectedClientAddressId = null;
-
         // Завантажуємо адреси клієнта
         $this->clientAddresses = $client
             ? $client->addresses()->orderByDesc('is_default')->get()->toArray()
             : [];
+
+        // Якщо у дня вже є адреса — знаходимо відповідну в списку, інакше вибираємо дефолтну
+        if ($day->address) {
+            $match = collect($this->clientAddresses)->firstWhere('address', $day->address);
+            $this->selectedClientAddressId = $match ? $match['id'] : null;
+        } else {
+            $default = collect($this->clientAddresses)->firstWhere('is_default', true);
+            if ($default) {
+                $this->selectedClientAddressId = $default['id'];
+                $this->modalAddress   = $default['address'] ?? '';
+                $this->modalEntrance  = $default['address_entrance'] ?? '';
+                $this->modalApartment = $default['address_apartment'] ?? '';
+                $this->modalFloor     = $default['address_floor'] ?? '';
+                $this->modalComment   = $default['delivery_comment'] ?? '';
+            } else {
+                $this->selectedClientAddressId = null;
+            }
+        }
 
         $this->showAddressModal = true;
     }
@@ -175,9 +191,10 @@ class OrderCalendar extends Component
         $addr = collect($this->clientAddresses)->firstWhere('id', $id);
         if ($addr) {
             $this->modalAddress   = $addr['address'] ?? '';
-            $this->modalEntrance  = $addr['entrance'] ?? '';
-            $this->modalApartment = $addr['apartment'] ?? '';
-            $this->modalFloor     = $addr['floor'] ?? '';
+            $this->modalEntrance  = $addr['address_entrance'] ?? '';
+            $this->modalApartment = $addr['address_apartment'] ?? '';
+            $this->modalFloor     = $addr['address_floor'] ?? '';
+            $this->modalComment   = $addr['delivery_comment'] ?? '';
         }
     }
 
