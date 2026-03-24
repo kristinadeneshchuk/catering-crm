@@ -379,6 +379,7 @@ class ClientResource extends Resource
     {
         return [
             OrdersRelationManager::class,
+            RelationManagers\AddressesRelationManager::class,
         ];
     }
 

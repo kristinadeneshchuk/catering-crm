@@ -6,7 +6,7 @@
 
             {{-- Навігація --}}
             <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-                <button wire:click="prevMonth" class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+                <button type="button" wire:click="prevMonth" class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                     </svg>
@@ -14,7 +14,7 @@
                 <span class="font-semibold text-sm text-gray-800 dark:text-gray-200">
                     {{ $calendarMonth->translatedFormat('F Y') }}
                 </span>
-                <button wire:click="nextMonth" class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+                <button type="button" wire:click="nextMonth" class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                     </svg>
@@ -40,6 +40,7 @@
                         $hasCustomAddr = $isOrderDay && $orderDays[$dateStr]->address !== null;
                     @endphp
                     <button
+                        type="button"
                         @if($isOrderDay) wire:click="selectDay('{{ $dateStr }}')" @endif
                         class="
                             relative aspect-square flex flex-col items-center justify-center rounded-lg text-xs transition-all
@@ -94,34 +95,38 @@
                     @endif
                 </div>
 
-                {{-- Адреса з автодоповненням --}}
-                <div class="mb-4 relative" x-data="{ open: false }">
+                {{-- Вибір збереженої адреси клієнта --}}
+                @if($clientAddresses->count() > 0)
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Адреси клієнта</label>
+                    <div class="flex flex-col gap-2">
+                        @foreach($clientAddresses as $addr)
+                        <button
+                            type="button"
+                            wire:click="selectClientAddress({{ $addr->id }})"
+                            class="text-left px-3 py-2 rounded-lg border text-sm transition-all
+                                {{ $selectedAddressId === $addr->id
+                                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900 text-primary-700 dark:text-primary-300'
+                                    : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300' }}"
+                        >
+                            <span class="font-medium">{{ $addr->label }}</span>
+                            @if($addr->is_default) <span class="text-xs text-green-600 dark:text-green-400 ml-1">• за замовч.</span> @endif
+                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{{ $addr->address }}</div>
+                        </button>
+                        @endforeach
+                    </div>
+                </div>
+                @endif
+
+                {{-- Адреса (ручний ввід або заповнюється при виборі) --}}
+                <div class="mb-4">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Адреса</label>
                     <input
                         type="text"
-                        wire:model="addressSearch"
-                        wire:input.debounce.400ms="searchAddress"
-                        x-on:focus="open = true"
-                        x-on:click.away="open = false"
-                        placeholder="Вулиця, будинок..."
+                        wire:model="address"
+                        placeholder="вул. Хрещатик, 1, Київ"
                         class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
-                    @if(count($addressResults) > 0)
-                        <div
-                            x-show="open"
-                            class="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto"
-                        >
-                            @foreach($addressResults as $result)
-                                <button
-                                    wire:click="selectAddress('{{ addslashes($result) }}')"
-                                    x-on:click="open = false"
-                                    class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 last:border-0"
-                                >
-                                    {{ $result }}
-                                </button>
-                            @endforeach
-                        </div>
-                    @endif
                 </div>
 
                 {{-- Під'їзд / Кв / Поверх --}}
@@ -152,12 +157,12 @@
 
                 {{-- Кнопки --}}
                 <div class="flex gap-3">
-                    <button wire:click="saveDay"
+                    <button type="button" wire:click="saveDay"
                         class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors">
                         Зберегти адресу
                     </button>
                     @if($day->address !== null)
-                        <button wire:click="resetDayAddress"
+                        <button type="button" wire:click="resetDayAddress"
                             class="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg transition-colors">
                             Скинути до адреси клієнта
                         </button>

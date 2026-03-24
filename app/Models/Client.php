@@ -50,6 +50,11 @@ class Client extends Authenticatable
         return $this->hasMany(Order::class);
     }
 
+    public function addresses(): HasMany
+    {
+        return $this->hasMany(ClientAddress::class);
+    }
+
     // Додаємо цей зв'язок, щоб Клієнт бачив усі свої транзакції через Замовлення
     public function transactions(): HasManyThrough
     {
