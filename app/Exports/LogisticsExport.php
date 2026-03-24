@@ -52,7 +52,8 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
 
         // 2. Групуємо за "чистою" адресою
         $groupedOrders = $orders->groupBy(function($order) {
-            $address = mb_strtolower($order->client->address ?? '');
+            $defaultAddr = $order->client->addresses()->where('is_default', true)->first();
+            $address = mb_strtolower($defaultAddr->address ?? $order->client->address ?? '');
             
             $garbageWords = ['вулиця', 'вул.', 'вул', 'проспект', 'просп.', 'просп', 'провулок', 'пров.', 'будинок', 'буд.', 'буд', 'квартира', 'кв.', 'кв', 'місто', 'м.', 'під\'їзд', 'під.', 'код', 'домофон'];
             $cleanAddress = str_replace($garbageWords, '', $address);
@@ -84,7 +85,7 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
 
             // Найдовший коментар по доставці (щоб не втратити код домофону)
             $bestDeliveryComment = $group
-                ->map(fn($o) => $o->client->delivery_comment)
+                ->map(fn($o) => $o->client->addresses()->where('is_default', true)->first()?->delivery_comment ?? $o->client->delivery_comment)
                 ->filter()
                 ->sortByDesc(fn($s) => mb_strlen($s))
                 ->first();
@@ -106,7 +107,7 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
                 'Comp_Id' => $ids,
                 'Comp_Name' => $names,
                 'Phone' => $client->phone,
-                'Address' => $client->address,
+                'Address' => ($client->addresses()->where('is_default', true)->first()?->address) ?? $client->address,
                 'Note' => $additionalInfo,
                 'TimeWork_Info' => $mainOrder->delivery_time, // Час доставки
                 'Unload_Time' => 7,
