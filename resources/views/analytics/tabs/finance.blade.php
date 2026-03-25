@@ -23,11 +23,24 @@
                     <td class="text-white">{{ $totalRations ?? 0 }}</td>
                 </tr>
                 <tr class="row-hover text-white bg-white/[0.02]">
-                    <td class="font-semibold text-sm">Вартість раціонів (Виручка)</td>
-                    @foreach($dates as $ymd => $dm) 
-                        <td class="font-medium text-emerald-400">{{ number_format($revenueCount[$ymd] ?? 0, 0, '.', ' ') }} ₴</td> 
+                    <td class="font-semibold text-sm">Вартість раціонів (Виручка нетто)</td>
+                    @foreach($dates as $ymd => $dm)
+                        <td class="font-medium text-emerald-400">{{ number_format($revenueCount[$ymd] ?? 0, 0, '.', ' ') }} ₴</td>
                     @endforeach
                     <td class="text-emerald-400">{{ number_format($totalRevenue ?? 0, 0, '.', ' ') }} ₴</td>
+                </tr>
+
+                <tr class="row-hover text-amber-400 bg-amber-500/[0.03]">
+                    <td class="font-medium text-sm flex items-center gap-2">
+                        <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+                        Знижки (відраховано)
+                    </td>
+                    @foreach($dates as $ymd => $dm)
+                        <td class="text-amber-400/70 text-sm">
+                            {{ ($discountCount[$ymd] ?? 0) > 0 ? '−' . number_format($discountCount[$ymd], 0, '.', ' ') . ' ₴' : '—' }}
+                        </td>
+                    @endforeach
+                    <td class="text-amber-400 font-medium">{{ $totalDiscount > 0 ? '−' . number_format($totalDiscount, 0, '.', ' ') . ' ₴' : '—' }}</td>
                 </tr>
 
                 <tr class="row-hover text-rose-400 bg-rose-500/[0.03]">

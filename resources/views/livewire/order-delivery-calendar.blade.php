@@ -155,11 +155,38 @@
                         class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500"></textarea>
                 </div>
 
+                {{-- Знижка на день --}}
+                <div class="mb-5 border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Знижка на цей день</label>
+                    <div class="flex gap-3">
+                        <div class="flex-1">
+                            <label class="block text-xs text-gray-500 mb-1">Тип</label>
+                            <select wire:model.live="discount_type"
+                                class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500">
+                                <option value="">— без знижки —</option>
+                                <option value="percent">Відсоткова (%)</option>
+                                <option value="fixed">Фіксована (₴)</option>
+                            </select>
+                        </div>
+                        @if($discount_type)
+                        <div class="flex-1">
+                            <label class="block text-xs text-gray-500 mb-1">
+                                {{ $discount_type === 'percent' ? 'Розмір (%)' : 'Сума (₴)' }}
+                            </label>
+                            <input type="number" wire:model="discount_value" min="0"
+                                {{ $discount_type === 'percent' ? 'max="100"' : '' }}
+                                placeholder="{{ $discount_type === 'percent' ? '10' : '50' }}"
+                                class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500" />
+                        </div>
+                        @endif
+                    </div>
+                </div>
+
                 {{-- Кнопки --}}
                 <div class="flex gap-3">
                     <button type="button" wire:click="saveDay"
                         class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors">
-                        Зберегти адресу
+                        Зберегти
                     </button>
                     @if($day->address !== null)
                         <button type="button" wire:click="resetDayAddress"

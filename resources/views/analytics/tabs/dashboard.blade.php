@@ -33,6 +33,16 @@
         <p class="text-zinc-500 text-[11px] font-bold uppercase tracking-widest mb-1">Всього страв (~)</p>
         <h3 class="text-2xl font-black text-white">{{ round($totalRations * 4.5) }} <span class="text-sm text-zinc-500 font-medium">шт</span></h3>
     </div>
+
+    <div class="bg-zinc-900 border border-amber-500/20 p-5 rounded-2xl shadow-lg relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+        <p class="text-zinc-500 text-[11px] font-bold uppercase tracking-widest mb-1">Знижки</p>
+        <h3 class="text-2xl font-black text-amber-400">{{ number_format($totalDiscount ?? 0, 0, '.', ' ') }} ₴</h3>
+        @if(($totalRevenue ?? 0) + ($totalDiscount ?? 0) > 0)
+            @php $discountPercent = (($totalRevenue + $totalDiscount) > 0) ? ($totalDiscount / ($totalRevenue + $totalDiscount)) * 100 : 0; @endphp
+            <p class="text-zinc-500 text-xs mt-1">{{ round($discountPercent, 1) }}% від брутто</p>
+        @endif
+    </div>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">

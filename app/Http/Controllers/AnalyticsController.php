@@ -84,15 +84,16 @@ class AnalyticsController extends Controller
         $revenueCount = []; $totalRevenue = 0;
         $foodCostCount = []; $totalFoodCost = 0;
         $fopCount = []; $totalFop = 0;
-        
+        $discountCount = []; $totalDiscount = 0;  // 🔥 Трекінг знижок
+
         $unitEconomics = [];
         $marketingStats = [];
-        $uniqueClientIds = []; 
+        $uniqueClientIds = [];
 
         // 3. ОСНОВНИЙ ЦИКЛ ПО ДНЯХ
         foreach ($dates as $ymd => $dm) {
             $days = $groupedDays->get($ymd, collect());
-            
+
             $count = $days->count();
             $rationsCount[$ymd] = $count;
             $totalRations += $count;
@@ -104,6 +105,7 @@ class AnalyticsController extends Controller
 
             $dailyRevenue = 0;
             $dailyFoodCost = 0;
+            $dailyDiscount = 0;  // 🔥
 
             if ($count > 0) {
                 $diff = abs(Carbon::parse($ymd)->diffInDays($anchorDate));
@@ -114,48 +116,57 @@ class AnalyticsController extends Controller
                     $order = $orderDay->order;
                     if (!$order || !$order->client) continue;
 
-                    // Збираємо ID для Retention
                     $uniqueClientIds[$order->client->id] = true;
 
-                    // Виручка (ціна пакету / тривалість)
-                    $duration = max(1, (int)$order->duration); 
-                    $pricePerDay = ((float)$order->total_price / $duration);
-                    $dailyRevenue += $pricePerDay;
+                    $duration = max(1, (int) $order->duration);
 
-                    // Food Cost (через сервіс)
+                    // 🔥 Виручка по final_price (net)
+                    // Базова ціна дня мінус частка знижки замовлення мінус знижка цього дня
+                    $basePricePerDay     = (float) $order->total_price / $duration;
+                    $orderDiscountPerDay = (float) $order->discount_amount / $duration;
+                    $dayDiscount         = (float) $orderDay->discount_amount;
+                    $netPricePerDay      = max(0, $basePricePerDay - $orderDiscountPerDay - $dayDiscount);
+
+                    $dailyRevenue  += $netPricePerDay;
+                    $dailyDiscount += $orderDiscountPerDay + $dayDiscount;  // 🔥
+
+                    // Food Cost
                     $orderCost = 0;
                     if ($menu) {
                         $orderCost = $this->foodCostService->calculateOrderFoodCost($order, $menu, $allIngredients);
                         $dailyFoodCost += $orderCost;
                     }
 
-                    // --- ЗБІР ЮНІТ-ЕКОНОМІКИ (за калоріями) ---
+                    // Юніт-економіка
                     $cal = (int) $order->calories;
                     if (!isset($unitEconomics[$cal])) {
                         $unitEconomics[$cal] = ['count' => 0, 'revenue' => 0, 'cost' => 0, 'unique_orders' => []];
                     }
-                    $unitEconomics[$cal]['count'] += 1;
-                    $unitEconomics[$cal]['revenue'] += $pricePerDay;
-                    $unitEconomics[$cal]['cost'] += $orderCost;
+                    $unitEconomics[$cal]['count']   += 1;
+                    $unitEconomics[$cal]['revenue'] += $netPricePerDay;
+                    $unitEconomics[$cal]['cost']    += $orderCost;
                     $unitEconomics[$cal]['unique_orders'][$order->id] = [
-                        'total_price' => (float) $order->total_price, 'duration' => $duration
+                        'total_price' => (float) $order->final_price,
+                        'duration'    => $duration,
                     ];
 
-                    // --- ЗБІР МАРКЕТИНГУ ---
+                    // Маркетинг
                     $source = $order->client->sales_source ?: 'Не вказано';
                     if (!isset($marketingStats[$source])) {
                         $marketingStats[$source] = ['clients_count' => [], 'revenue' => 0, 'orders_count' => 0];
                     }
-                    $marketingStats[$source]['revenue'] += $pricePerDay;
+                    $marketingStats[$source]['revenue']     += $netPricePerDay;
                     $marketingStats[$source]['orders_count'] += 1;
                     $marketingStats[$source]['clients_count'][$order->client->id] = true;
                 }
             }
-            
-            $revenueCount[$ymd] = round($dailyRevenue);
-            $totalRevenue += round($dailyRevenue);
+
+            $revenueCount[$ymd]  = round($dailyRevenue);
+            $totalRevenue        += round($dailyRevenue);
             $foodCostCount[$ymd] = round($dailyFoodCost);
-            $totalFoodCost += round($dailyFoodCost);
+            $totalFoodCost       += round($dailyFoodCost);
+            $discountCount[$ymd] = round($dailyDiscount);  // 🔥
+            $totalDiscount       += round($dailyDiscount); // 🔥
         }
 
         // 4. ПІДРАХУНОК ЮНІТ-ЕКОНОМІКИ (Агрегація)
@@ -209,8 +220,9 @@ class AnalyticsController extends Controller
 
                 foreach ($client->orders as $o) {
                     if ($o->total_price > 0 && !in_array($o->status, ['cancelled'])) {
-                        $clientDays += max(1, (int)$o->duration);
-                        $clientRevenue += (float)$o->total_price;
+                        $clientDays += max(1, (int) $o->duration);
+                        // 🔥 LTV рахуємо по final_price (реально сплачена сума)
+                        $clientRevenue += (float) ($o->final_price > 0 ? $o->final_price : $o->total_price);
                         if (!$lastOrderEndDate || $o->end_date > $lastOrderEndDate) {
                             $lastOrderEndDate = $o->end_date;
                         }
@@ -250,6 +262,7 @@ class AnalyticsController extends Controller
             'revenueCount', 'totalRevenue',
             'foodCostCount', 'totalFoodCost',
             'fopCount', 'totalFop',
+            'discountCount', 'totalDiscount',  // 🔥 Знижки
             'spoilagePercent', 'otherExpenses', 'activeTab',
             'unitEconomics', 'marketingStats', 'retentionStats'
         ));

@@ -129,6 +129,7 @@
     const chartDates = {!! json_encode(array_values($dates ?? [])) !!};
     const chartRevenue = {!! json_encode(array_values($revenueCount ?? [])) !!};
     const chartFoodCost = {!! json_encode(array_values($foodCostCount ?? [])) !!};
+    const chartDiscount = {!! json_encode(array_values($discountCount ?? [])) !!};
     
     @php
         $pieLabels = []; $pieSeries = [];
@@ -147,8 +148,9 @@
     if (document.querySelector("#revenueChart")) {
         new ApexCharts(document.querySelector("#revenueChart"), {
             series: [
-                { name: 'Виручка', data: chartRevenue }, 
-                { name: 'Собівартість', data: chartFoodCost }
+                { name: 'Виручка (нетто)', data: chartRevenue },
+                { name: 'Собівартість', data: chartFoodCost },
+                { name: 'Знижки', data: chartDiscount }
             ],
             chart: { 
                 type: 'area', 
@@ -157,7 +159,7 @@
                 background: 'transparent',
                 fontFamily: 'Inter, sans-serif'
             },
-            colors: ['#34d399', '#f43f5e'],
+            colors: ['#34d399', '#f43f5e', '#f59e0b'],
             fill: {
                 type: 'gradient',
                 gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 100] }

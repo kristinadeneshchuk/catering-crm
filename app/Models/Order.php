@@ -19,35 +19,31 @@ class Order extends Model
         'client_id', 'tariff_id', 'project', 'is_paid',
         'start_date', 'end_date', 'duration', 'status',
         'calories', 'scale_factor', 'total_price',
-        'comment', 'schedule_type', 'delivery_time'
+        'comment', 'schedule_type', 'delivery_time',
+        'discount_type', 'discount_value', 'discount_reason',
+        'discount_amount', 'final_price',
     ];
 
     protected $casts = [
-        'is_paid' => 'boolean',
-        'duration' => 'integer',
-        'start_date' => 'date',
-        'end_date' => 'date',
-        'scale_factor' => 'float',
-        'total_price' => 'decimal:2',
+        'is_paid'         => 'boolean',
+        'duration'        => 'integer',
+        'start_date'      => 'date',
+        'end_date'        => 'date',
+        'scale_factor'    => 'float',
+        'total_price'     => 'decimal:2',
+        'discount_value'  => 'decimal:2',
+        'discount_amount' => 'decimal:2',
+        'final_price'     => 'decimal:2',
     ];
 
     protected static function booted()
     {
-        /**
-         * ✅ ВАЖНО:
-         * Більше НЕ рахуємо scale_factor тут.
-         * Бо меню різне по днях — фактор має бути денний і рахуватися "на льоту".
-         *
-         * Тут залишаємо тільки розрахунок ціни (як у тебе було).
-         */
         static::saving(function ($order) {
-
-            // Якщо scale_factor не заданий — тримаємо 1.0 як дефолт (для сумісності)
             if ($order->scale_factor === null) {
                 $order->scale_factor = 1.0;
             }
 
-            // --- Розрахунок ціни (Стандарт) ---
+            // --- Розрахунок базової ціни ---
             $range = CalorieRange::where('min_kcal', '<=', $order->calories)
                 ->where('max_kcal', '>=', $order->calories)
                 ->first();
@@ -63,6 +59,18 @@ class Order extends Model
                     $order->total_price = $tariffPrice->price_per_day * $days;
                 }
             }
+
+            // --- Розрахунок знижки рівня замовлення ---
+            $order->discount_amount = $order->calculateOrderDiscount();
+
+            // --- final_price = total_price - order discount - знижки по днях ---
+            $dayDiscounts = $order->exists
+                ? (float) DB::table('order_days')
+                    ->where('order_id', $order->id)
+                    ->sum('discount_amount')
+                : 0;
+
+            $order->final_price = max(0, (float) $order->total_price - (float) $order->discount_amount - $dayDiscounts);
         });
 
         static::created(function ($o) {
@@ -70,7 +78,7 @@ class Order extends Model
             Transaction::create([
                 'type'     => 'income',
                 'category' => 'Нове замовлення',
-                'amount'   => $o->total_price ?? 0,
+                'amount'   => $o->final_price ?? $o->total_price ?? 0,
                 'date'     => now(),
                 'comment'  => "Замовлення #{$o->id}" . ($o->client ? " — {$o->client->name}" : ''),
                 'user_id'  => auth()->id(),
@@ -79,35 +87,39 @@ class Order extends Model
 
         static::updated(function ($o) {
             self::handleBalanceUpdate($o);
-            if ($o->isDirty('total_price')) {
-                $diff = $o->total_price - $o->getOriginal('total_price');
-                if ($diff != 0) {
+
+            if ($o->isDirty('final_price')) {
+                $diff = (float) $o->final_price - (float) $o->getOriginal('final_price');
+                if (abs($diff) > 0.001) {
                     $clientName = $o->client ? " — {$o->client->name}" : '';
-                    $absDiff = abs(round($diff, 2));
+                    $absDiff    = abs(round($diff, 2));
+                    $sign       = $diff > 0 ? '+' : '-';
 
-                    if ($o->isDirty('duration')) {
-                        $oldDuration = (int) $o->getOriginal('duration');
-                        $newDuration = (int) $o->duration;
-                        $daysDiff = $newDuration - $oldDuration;
-                        $action = $daysDiff > 0
-                            ? "Додано " . abs($daysDiff) . " дн."
-                            : "Прибрано " . abs($daysDiff) . " дн.";
+                    // Визначаємо категорію та опис транзакції
+                    if ($o->isDirty(['discount_type', 'discount_value'])) {
+                        $category = $diff < 0 ? 'Знижка' : 'Скасування знижки';
+                        $action   = $diff < 0 ? 'Знижка застосована' : 'Знижка скасована';
+                    } elseif ($o->isDirty('duration')) {
+                        $daysDiff = (int) $o->duration - (int) $o->getOriginal('duration');
+                        $category = 'Зміна замовлення';
+                        $action   = $daysDiff > 0
+                            ? 'Додано ' . abs($daysDiff) . ' дн.'
+                            : 'Прибрано ' . abs($daysDiff) . ' дн.';
                     } elseif ($o->isDirty(['start_date', 'end_date'])) {
-                        $action = $diff > 0 ? "Додано днів" : "Прибрано днів";
+                        $category = 'Зміна замовлення';
+                        $action   = $diff > 0 ? 'Додано днів' : 'Прибрано днів';
                     } else {
-                        $action = "Зміна ціни";
+                        $category = 'Зміна замовлення';
+                        $action   = 'Зміна ціни';
                     }
-
-                    $sign = $diff > 0 ? '+' : '-';
-                    $comment = "{$action}{$clientName} ({$sign}{$absDiff} ₴), замовлення #{$o->id}";
 
                     Transaction::create([
                         'type'     => $diff > 0 ? 'income' : 'expense',
-                        'category' => 'Зміна замовлення',
+                        'category' => $category,
                         'amount'   => $absDiff,
                         'date'     => now(),
-                        'comment'    => $comment,
-                        'user_id'    => auth()->id(),
+                        'comment'  => "{$action}{$clientName} ({$sign}{$absDiff} ₴), замовлення #{$o->id}",
+                        'user_id'  => auth()->id(),
                     ]);
                 }
             }
@@ -121,21 +133,59 @@ class Order extends Model
     // =========================
     private static function handleBalance($order, $op)
     {
-        if ($order->client_id && $order->total_price > 0) {
+        $price = (float) ($order->final_price > 0 ? $order->final_price : $order->total_price);
+        if ($order->client_id && $price > 0) {
             $op === 'sub'
-                ? $order->client->decrement('balance', $order->total_price)
-                : $order->client->increment('balance', $order->total_price);
+                ? $order->client->decrement('balance', $price)
+                : $order->client->increment('balance', $price);
         }
         if ($order->client) $order->client->recalculateOrderPaymentStatus();
     }
 
     private static function handleBalanceUpdate($order)
     {
-        if ($order->client_id && $order->isDirty('total_price')) {
-            $diff = $order->total_price - $order->getOriginal('total_price');
+        if ($order->client_id && $order->isDirty('final_price')) {
+            $diff = (float) $order->final_price - (float) $order->getOriginal('final_price');
             $order->client->decrement('balance', $diff);
         }
         if ($order->client) $order->client->recalculateOrderPaymentStatus();
+    }
+
+    // =========================
+    // Знижки
+    // =========================
+
+    /**
+     * Розраховує суму знижки рівня замовлення (без днів).
+     */
+    public function calculateOrderDiscount(): float
+    {
+        if (!$this->discount_type || !$this->discount_value || (float) $this->discount_value <= 0) {
+            return 0;
+        }
+
+        return match ($this->discount_type) {
+            'percent' => round((float) $this->total_price * (float) $this->discount_value / 100, 2),
+            'fixed'   => min((float) $this->discount_value, (float) $this->total_price),
+            default   => 0,
+        };
+    }
+
+    /**
+     * Перераховує final_price з урахуванням знижок на дні.
+     * Викликається з OrderDay після зміни знижки на день.
+     */
+    public function syncFinalPrice(): void
+    {
+        $dayDiscounts = (float) DB::table('order_days')
+            ->where('order_id', $this->id)
+            ->sum('discount_amount');
+
+        $newFinalPrice = max(0, (float) $this->total_price - (float) $this->discount_amount - $dayDiscounts);
+
+        if (abs($newFinalPrice - (float) $this->final_price) > 0.001) {
+            $this->update(['final_price' => $newFinalPrice]);
+        }
     }
 
     // =========================

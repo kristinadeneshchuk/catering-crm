@@ -40,6 +40,10 @@ class OrderCalendar extends Component
     public array $clientAddresses = [];
     public ?int $selectedClientAddressId = null;
 
+    // Знижка на день
+    public ?string $modalDiscountType = null;
+    public ?string $modalDiscountValue = null;
+
     public function mount(?Order $order = null)
     {
         $this->order = $order;
@@ -150,13 +154,15 @@ class OrderCalendar extends Component
     public function openAddressModal(string $dateStr, OrderDay $day): void
     {
         $client = $this->order?->client;
-        $this->modalDate      = $dateStr;
-        $this->modalDayId     = $day->id;
-        $this->modalAddress   = $day->address   ?? '';
-        $this->modalEntrance  = $day->address_entrance  ?? '';
-        $this->modalApartment = $day->address_apartment ?? '';
-        $this->modalFloor     = $day->address_floor     ?? '';
-        $this->modalComment   = $day->delivery_comment  ?? '';
+        $this->modalDate          = $dateStr;
+        $this->modalDayId         = $day->id;
+        $this->modalAddress       = $day->address   ?? '';
+        $this->modalEntrance      = $day->address_entrance  ?? '';
+        $this->modalApartment     = $day->address_apartment ?? '';
+        $this->modalFloor         = $day->address_floor     ?? '';
+        $this->modalComment       = $day->delivery_comment  ?? '';
+        $this->modalDiscountType  = $day->discount_type;
+        $this->modalDiscountValue = $day->discount_value ? (string) $day->discount_value : null;
         $this->addressSearch  = '';
         $this->addressResults = [];
         // Завантажуємо адреси клієнта
@@ -204,6 +210,8 @@ class OrderCalendar extends Component
         $this->modalDate = null;
         $this->modalDayId = null;
         $this->addressResults = [];
+        $this->modalDiscountType = null;
+        $this->modalDiscountValue = null;
     }
 
     public function searchAddress(): void
@@ -241,10 +249,14 @@ class OrderCalendar extends Component
             'address_apartment'=> $this->modalApartment ?: null,
             'address_floor'    => $this->modalFloor ?: null,
             'delivery_comment' => $this->modalComment ?: null,
+            'discount_type'    => $this->modalDiscountType ?: null,
+            'discount_value'   => ($this->modalDiscountType && $this->modalDiscountValue !== null && $this->modalDiscountValue !== '')
+                ? (float) $this->modalDiscountValue
+                : null,
         ]);
 
         $this->closeAddressModal();
-        Notification::make()->title('Адресу збережено')->success()->send();
+        Notification::make()->title('Збережено')->success()->send();
     }
 
     public function resetAddress(): void

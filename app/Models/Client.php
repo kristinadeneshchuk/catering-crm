@@ -103,27 +103,24 @@ class Client extends Authenticatable
         $orders = $this->orders()->orderBy('start_date', 'asc')->get();
 
         foreach ($orders as $order) {
-            // Якщо ціна замовлення 0 (наприклад, тестове), ми його пропускаємо або позначаємо оплаченим
-            if ($order->total_price <= 0) {
+            // Реальна сума до сплати — final_price якщо є, інакше total_price
+            $due = (float) ($order->final_price > 0 ? $order->final_price : $order->total_price);
+
+            if ($due <= 0) {
                 if (!$order->is_paid) $order->updateQuietly(['is_paid' => true]);
                 continue;
             }
 
-            // Перевіряємо, чи вистачає грошей у "гаманці" на це замовлення
-            if ($totalWallet >= $order->total_price) {
-                // Грошей вистачає -> Ставимо "Оплачено"
+            if ($totalWallet >= $due) {
                 if (!$order->is_paid) {
                     $order->updateQuietly(['is_paid' => true]);
                 }
-                // Віднімаємо суму замовлення з гаманця, йдемо до наступного
-                $totalWallet -= $order->total_price;
+                $totalWallet -= $due;
             } else {
-                // Грошей НЕ вистачає -> Знімаємо "Оплачено" (якщо раптом стояло)
                 if ($order->is_paid) {
                     $order->updateQuietly(['is_paid' => false]);
                 }
-                // Гаманець йде в мінус (для логіки циклу), грошей більше немає
-                $totalWallet -= $order->total_price;
+                $totalWallet -= $due;
             }
         }
     }

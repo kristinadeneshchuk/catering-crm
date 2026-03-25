@@ -161,14 +161,67 @@ class OrderResource extends Resource
                             ->columnSpanFull(),
                     ]),
 
-                // === СЕКЦІЯ 3: КАЛЕНДАР ===
+                // === СЕКЦІЯ 3: ЗНИЖКА ===
+                Section::make('Знижка')
+                    ->columns(2)
+                    ->collapsed()
+                    ->schema([
+                        Select::make('discount_type')
+                            ->label('Тип знижки')
+                            ->options([
+                                'percent' => 'Відсоткова (%)',
+                                'fixed'   => 'Фіксована (₴)',
+                            ])
+                            ->nullable()
+                            ->live()
+                            ->afterStateUpdated(function (Set $set, Get $get) {
+                                $set('discount_value', null);
+                                $set('discount_amount', 0);
+                                static::updateOrderTotals($set, $get);
+                            }),
+
+                        TextInput::make('discount_value')
+                            ->label(fn (Get $get) => $get('discount_type') === 'percent' ? 'Розмір знижки (%)' : 'Розмір знижки (₴)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(fn (Get $get) => $get('discount_type') === 'percent' ? 100 : null)
+                            ->suffix(fn (Get $get) => $get('discount_type') === 'percent' ? '%' : '₴')
+                            ->visible(fn (Get $get) => filled($get('discount_type')))
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(fn (Set $set, Get $get) => static::updateOrderTotals($set, $get)),
+
+                        Textarea::make('discount_reason')
+                            ->label('Причина знижки')
+                            ->rows(2)
+                            ->columnSpanFull(),
+
+                        TextInput::make('discount_amount')
+                            ->label('Сума знижки')
+                            ->prefix('₴')
+                            ->numeric()
+                            ->default(0)
+                            ->readOnly()
+                            ->dehydrated()
+                            ->helperText('Розраховується автоматично'),
+
+                        TextInput::make('final_price')
+                            ->label('До сплати (з урахуванням знижок)')
+                            ->prefix('₴')
+                            ->numeric()
+                            ->default(0)
+                            ->readOnly()
+                            ->dehydrated()
+                            ->helperText('total_price − всі знижки'),
+                    ]),
+
+                // === СЕКЦІЯ 4: КАЛЕНДАР ===
                 Section::make('Календар харчування')
                     ->schema([
                         TextInput::make('selected_days_buffer')
                             ->view('filament.forms.components.order-calendar-field')
                             ->default('[]')
-                            ->live() 
-                            ->dehydrated(true) 
+                            ->live()
+                            ->dehydrated(true)
                             ->label(''),
                     ]),
             ]);
@@ -231,9 +284,15 @@ class OrderResource extends Resource
                     ->falseColor('danger')
                     ->alignCenter(),
 
-                TextColumn::make('total_price')
-                    ->label('Сума')
+                TextColumn::make('final_price')
+                    ->label('До сплати')
                     ->money('UAH')
+                    ->description(function ($record) {
+                        $totalDiscount = (float) $record->total_price - (float) $record->final_price;
+                        return $totalDiscount > 0
+                            ? '−₴' . number_format($totalDiscount, 2) . ' знижка'
+                            : null;
+                    })
                     ->sortable(),
 
                 TextColumn::make('duration')
@@ -293,9 +352,13 @@ class OrderResource extends Resource
 
     protected static function updateOrderTotals(Set $set, Get $get)
     {
-        $calories = (int) $get('calories');
-        $tariffId = $get('tariff_id');
-        $duration = (int) $get('duration') ?: 1;
+        $calories      = (int) $get('calories');
+        $tariffId      = $get('tariff_id');
+        $duration      = (int) $get('duration') ?: 1;
+        $discountType  = $get('discount_type');
+        $discountValue = (float) $get('discount_value');
+
+        $totalPrice = 0;
 
         if ($calories && $tariffId) {
             $range = CalorieRange::where('min_kcal', '<=', $calories)
@@ -306,12 +369,22 @@ class OrderResource extends Resource
                     ->where('calorie_range_id', $range->id)->first();
 
                 if ($priceEntry) {
-                    $set('total_price', $priceEntry->price_per_day * $duration);
-                    return;
+                    $totalPrice = $priceEntry->price_per_day * $duration;
                 }
             }
         }
-        $set('total_price', 0);
+
+        $set('total_price', $totalPrice);
+
+        // Рахуємо знижку рівня замовлення
+        $discountAmount = match ($discountType) {
+            'percent' => $discountValue > 0 ? round($totalPrice * $discountValue / 100, 2) : 0,
+            'fixed'   => $discountValue > 0 ? min($discountValue, $totalPrice) : 0,
+            default   => 0,
+        };
+
+        $set('discount_amount', $discountAmount);
+        $set('final_price', max(0, $totalPrice - $discountAmount));
     }
 
     public static function getPages(): array

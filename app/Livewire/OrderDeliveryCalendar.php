@@ -26,6 +26,10 @@ class OrderDeliveryCalendar extends Component
     public string $address_floor = '';
     public string $delivery_comment = '';
 
+    // Знижка на день
+    public ?string $discount_type = null;
+    public ?string $discount_value = null;
+
     // Вибір адреси клієнта
     public ?int $selectedAddressId = null;
 
@@ -80,6 +84,8 @@ class OrderDeliveryCalendar extends Component
         $this->address_floor    = $day->address_floor    ?? $defaultAddr?->address_floor ?? '';
         $this->delivery_comment = $day->delivery_comment ?? $defaultAddr?->delivery_comment ?? $client?->delivery_comment ?? '';
         $this->selectedAddressId = null;
+        $this->discount_type    = $day->discount_type;
+        $this->discount_value   = $day->discount_value !== null ? (string) $day->discount_value : null;
     }
 
     public function selectClientAddress(int $addressId): void
@@ -108,10 +114,14 @@ class OrderDeliveryCalendar extends Component
             'address_apartment'=> $this->address_apartment ?: null,
             'address_floor'    => $this->address_floor ?: null,
             'delivery_comment' => $this->delivery_comment ?: null,
+            'discount_type'    => $this->discount_type ?: null,
+            'discount_value'   => ($this->discount_type && $this->discount_value !== null && $this->discount_value !== '')
+                ? (float) $this->discount_value
+                : null,
         ]);
 
         Notification::make()
-            ->title('Адресу збережено')
+            ->title('Збережено')
             ->success()
             ->send();
     }
