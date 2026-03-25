@@ -342,6 +342,7 @@ public function form(Form $form): Form
 
             $standard = []; // ['order'=>Order,'scale'=>float]
             $custom = [];   // ['order'=>Order,'scale'=>float]
+            $commentClients = []; // клієнти лише з коментарем, без реальних змін
 
             foreach ($this->activeOrders as $order) {
                 $plan = $this->orderPlans[$order->id] ?? null;
@@ -353,9 +354,10 @@ public function form(Form $form): Form
                 $baseW = (float)($dish->base_weight_g ?? 0);
                 $dishScale = ($baseW > 0) ? ((float)$plannedWeight / $baseW) : 0.0;
 
+                // Кастомним вважається лише клієнт з реальними змінами (заміни/виключення)
+                // Коментар виробництва — це нотатка, не причина для окремої картки
                 $isCustom =
-                    (!empty($order->client->production_comment))
-                    || $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
+                    $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
                     || $order->client->dishExclusions->contains('id', $dish->id)
                     || $this->checkRecursiveConflict($dish, $order->client->ingredientExclusions);
 
@@ -363,6 +365,14 @@ public function form(Form $form): Form
                     $custom[] = ['order' => $order, 'scale' => $dishScale];
                 } else {
                     $standard[] = ['order' => $order, 'scale' => $dishScale];
+                    // Зібрати коментар якщо є
+                    if (!empty(trim($order->client->production_comment ?? ''))) {
+                        $commentClients[] = [
+                            'client_name' => $order->client->name,
+                            'order_id'    => $order->id,
+                            'comment'     => trim($order->client->production_comment),
+                        ];
+                    }
                 }
             }
 
@@ -388,6 +398,7 @@ public function form(Form $form): Form
                 'standard_total_brutto' => $standardTotals['brutto'],
 
                 'custom_cards' => $customCards,
+                'comment_clients' => $commentClients,
             ];
         }
     }

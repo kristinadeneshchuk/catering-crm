@@ -184,6 +184,18 @@
                         </div>
                     @endif
 
+                    {{-- 2б. КОМЕНТАРІ ДО ВИРОБНИЦТВА --}}
+                    @if(!empty($dish['comment_clients']))
+                        <div style="margin-bottom: 12px; border: 1px solid #fcd34d; background-color: #fffbeb; border-radius: 4px; padding: 6px 10px;">
+                            <div style="font-weight: bold; font-size: 11px; color: #92400e; margin-bottom: 4px;">📝 Коментарі до виробництва:</div>
+                            @foreach($dish['comment_clients'] as $cc)
+                                <div style="font-size: 10px; border-bottom: 1px dashed #fde68a; padding: 2px 0;">
+                                    <strong>{{ $cc['client_name'] }}</strong> — {{ $cc['comment'] }}
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+
                     {{-- 3. ІНДИВІДУАЛЬНІ ЗАМОВЛЕННЯ (КАСТОМ) --}}
                     @if(count($dish['custom_cards']) > 0)
                         <div>
@@ -203,7 +215,8 @@
                                             }
                                         }
                                         // Вирішуємо, чи показувати головну картку
-                                        $showRootCard = $card['dish_excluded'] || !empty($card['dish_replacement']) || !empty($card['comment']) || $hasRootConflicts;
+                                        // Показуємо картку лише при реальних змінах (не просто коментар)
+                                        $showRootCard = $card['dish_excluded'] || !empty($card['dish_replacement']) || $hasRootConflicts;
                                     @endphp
 
                                     @if($showRootCard)

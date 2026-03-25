@@ -195,6 +195,19 @@
                                 </div>
                             @endif
 
+                            {{-- КОМЕНТАРІ (клієнти без змін, але з нотаткою) --}}
+                            @if(!empty($dishRow['comment_clients']))
+                                <div style="margin-bottom: 12px; border-left: 4px solid #f59e0b; background-color: #fffbeb; padding: 8px 12px; border-radius: 0 8px 8px 0;">
+                                    <div style="font-weight: 800; font-size: 12px; color: #92400e; margin-bottom: 6px;">📝 КОМЕНТАРІ ДО ВИРОБНИЦТВА:</div>
+                                    @foreach($dishRow['comment_clients'] as $cc)
+                                        <div style="font-size: 12px; padding: 3px 0; border-bottom: 1px dashed #fde68a;">
+                                            <span style="font-weight: 700;">{{ $cc['client_name'] }}</span>
+                                            <span style="color: #78350f;"> — {{ $cc['comment'] }}</span>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
+
                             {{-- ІНДИВІДУАЛЬНІ КАРТКИ --}}
                             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px;">
                                 @foreach($dishRow['custom_cards'] as $card)
