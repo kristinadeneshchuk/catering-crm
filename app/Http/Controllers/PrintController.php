@@ -354,8 +354,9 @@ class PrintController extends Controller
             $mealName = $item->mealType->name ?? 'Інше';
             $dish = $item->dish;
 
-            $standard = []; 
-            $custom = [];   
+            $standard = [];
+            $custom = [];
+            $commentClients = [];
 
             foreach ($orders as $order) {
                 $plan = $orderPlans[$order->id] ?? null;
@@ -370,9 +371,17 @@ class PrintController extends Controller
                 $baseW = (float)($dish->base_weight_g ?? 0);
                 $dishScale = ($baseW > 0) ? ((float)$plannedWeight / $baseW) : 0.0;
 
+                // Коментар — це нотатка, не причина для окремої картки
+                if (!empty(trim($order->client->production_comment ?? ''))) {
+                    $commentClients[] = [
+                        'client_name' => $order->client->name,
+                        'order_id'    => $order->id,
+                        'comment'     => trim($order->client->production_comment),
+                    ];
+                }
+
                 $isCustom =
-                    (!empty($order->client->production_comment)) 
-                    || $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
+                    $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
                     || $order->client->dishExclusions->contains('id', $dish->id)
                     || !empty($this->getConflictingIngredients($dish, $order->client->ingredientExclusions));
 
@@ -402,6 +411,7 @@ class PrintController extends Controller
                 'standard_total_netto' => $standardTotals['netto'],
                 'standard_total_brutto' => $standardTotals['brutto'],
                 'custom_cards' => $customCards,
+                'comment_clients' => $commentClients,
             ];
         }
 

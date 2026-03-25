@@ -92,6 +92,32 @@
         @if(empty($report))
             <p class="text-center text-gray-500 py-10">Немає замовлень або страв для приготування на цю дату.</p>
         @else
+            @php
+                // Збираємо всі унікальні коментарі з усіх страв (один раз на день)
+                $allDayComments = [];
+                foreach($report as $mealGroup) {
+                    foreach($mealGroup as $dishRow) {
+                        foreach($dishRow['comment_clients'] ?? [] as $cc) {
+                            $allDayComments[$cc['order_id']] = $cc; // дедуплікація по order_id
+                        }
+                    }
+                }
+            @endphp
+
+            {{-- КОМЕНТАРІ ДО ВИРОБНИЦТВА — один раз на всю сторінку --}}
+            @if(!empty($allDayComments))
+                <div style="margin-bottom: 20px; border: 1px solid #fcd34d; background-color: #fffbeb; border-radius: 4px; padding: 8px 12px;">
+                    <div style="font-weight: bold; font-size: 12px; color: #92400e; margin-bottom: 6px;">📝 Коментарі до виробництва:</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px 20px;">
+                        @foreach($allDayComments as $cc)
+                            <div style="font-size: 10px; border-bottom: 1px dashed #fde68a; padding: 2px 0;">
+                                <strong>{{ $cc['client_name'] }}</strong> — {{ $cc['comment'] }}
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
             @foreach($report as $mealName => $dishes)
                 @php
                     $mealLower = mb_strtolower(trim($mealName));
@@ -179,18 +205,6 @@
                                             </tr>
                                         </tbody>
                                     </table>
-                                </div>
-                            @endforeach
-                        </div>
-                    @endif
-
-                    {{-- 2б. КОМЕНТАРІ ДО ВИРОБНИЦТВА --}}
-                    @if(!empty($dish['comment_clients']))
-                        <div style="margin-bottom: 12px; border: 1px solid #fcd34d; background-color: #fffbeb; border-radius: 4px; padding: 6px 10px;">
-                            <div style="font-weight: bold; font-size: 11px; color: #92400e; margin-bottom: 4px;">📝 Коментарі до виробництва:</div>
-                            @foreach($dish['comment_clients'] as $cc)
-                                <div style="font-size: 10px; border-bottom: 1px dashed #fde68a; padding: 2px 0;">
-                                    <strong>{{ $cc['client_name'] }}</strong> — {{ $cc['comment'] }}
                                 </div>
                             @endforeach
                         </div>

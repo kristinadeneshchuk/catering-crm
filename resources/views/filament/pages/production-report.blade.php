@@ -171,6 +171,33 @@
     </div>
     @endif
 
+    @php
+        // Збираємо всі унікальні коментарі з усіх страв — один раз на день
+        $allDayComments = [];
+        foreach($reportData as $mealGroup) {
+            foreach($mealGroup as $dishRow) {
+                foreach($dishRow['comment_clients'] ?? [] as $cc) {
+                    $allDayComments[$cc['order_id']] = $cc;
+                }
+            }
+        }
+    @endphp
+
+    {{-- КОМЕНТАРІ ДО ВИРОБНИЦТВА — один блок на весь день --}}
+    @if(!empty($allDayComments))
+        <div style="margin-bottom: 15px; border-left: 4px solid #f59e0b; background-color: #fffbeb; padding: 10px 14px; border-radius: 0 8px 8px 0;">
+            <div style="font-weight: 800; font-size: 13px; color: #92400e; margin-bottom: 8px;">📝 КОМЕНТАРІ ДО ВИРОБНИЦТВА:</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 4px;">
+                @foreach($allDayComments as $cc)
+                    <div style="font-size: 12px; padding: 3px 0; border-bottom: 1px dashed #fde68a;">
+                        <span style="font-weight: 700;">{{ $cc['client_name'] }}</span>
+                        <span style="color: #78350f;"> — {{ $cc['comment'] }}</span>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     <div style="display: flex; flex-direction: column; gap: 15px; color: #0f172a !important;">
         @forelse($reportData as $mealName => $dishes)
             <div class="meal-group" style="background-color: white; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
@@ -192,19 +219,6 @@
                                     <div style="display: flex; flex-direction: column; gap: 8px;">
                                         {!! renderStandardList($dishRow['standard_structure']) !!}
                                     </div>
-                                </div>
-                            @endif
-
-                            {{-- КОМЕНТАРІ (клієнти без змін, але з нотаткою) --}}
-                            @if(!empty($dishRow['comment_clients']))
-                                <div style="margin-bottom: 12px; border-left: 4px solid #f59e0b; background-color: #fffbeb; padding: 8px 12px; border-radius: 0 8px 8px 0;">
-                                    <div style="font-weight: 800; font-size: 12px; color: #92400e; margin-bottom: 6px;">📝 КОМЕНТАРІ ДО ВИРОБНИЦТВА:</div>
-                                    @foreach($dishRow['comment_clients'] as $cc)
-                                        <div style="font-size: 12px; padding: 3px 0; border-bottom: 1px dashed #fde68a;">
-                                            <span style="font-weight: 700;">{{ $cc['client_name'] }}</span>
-                                            <span style="color: #78350f;"> — {{ $cc['comment'] }}</span>
-                                        </div>
-                                    @endforeach
                                 </div>
                             @endif
 
