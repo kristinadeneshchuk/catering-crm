@@ -19,6 +19,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\CheckboxList;
 use Carbon\Carbon;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Set;
 
 class ClientResource extends Resource
@@ -190,6 +191,67 @@ class ClientResource extends Resource
                             ->placeholder('Наприклад: Передзвонити клієнту')
                             ->rows(3)
                             ->columnSpanFull(),
+                    ]),
+
+                // Тільки при створенні — адреси через Repeater (при редагуванні є вкладка)
+                Section::make('Адреси доставки')
+                    ->icon('heroicon-o-map-pin')
+                    ->visibleOn('create')
+                    ->schema([
+                        Repeater::make('addresses_data')
+                            ->label('')
+                            ->addActionLabel('+ Додати адресу')
+                            ->defaultItems(0)
+                            ->schema([
+                                TextInput::make('label')
+                                    ->label('Назва')
+                                    ->placeholder('Дім, Робота, Дача...')
+                                    ->default('Адреса')
+                                    ->required(),
+
+                                Toggle::make('is_default')
+                                    ->label('Основна адреса')
+                                    ->onColor('success')
+                                    ->columnSpanFull(),
+
+                                Select::make('address')
+                                    ->label('Адреса')
+                                    ->searchable()
+                                    ->getSearchResultsUsing(function (string $search) {
+                                        if (strlen($search) < 3) return [];
+                                        $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
+                                            'q'            => $search . ', Київ',
+                                            'format'       => 'json',
+                                            'limit'        => 7,
+                                            'countrycodes' => 'ua',
+                                        ]);
+                                        $response = @file_get_contents($url, false, stream_context_create([
+                                            'http' => ['header' => "User-Agent: CRM/1.0\r\n"],
+                                        ]));
+                                        if (!$response) return [];
+                                        $results = json_decode($response, true) ?? [];
+                                        $options = [];
+                                        foreach ($results as $r) {
+                                            $label = $r['display_name'] ?? '';
+                                            $options[$label] = $label;
+                                        }
+                                        return $options;
+                                    })
+                                    ->required()
+                                    ->placeholder('Почніть вводити вулицю...')
+                                    ->columnSpanFull(),
+
+                                TextInput::make('address_entrance')->label('Під\'їзд'),
+                                TextInput::make('address_apartment')->label('Кв/офіс'),
+                                TextInput::make('address_floor')->label('Поверх'),
+
+                                TextInput::make('delivery_comment')
+                                    ->label('Коментар для доставки')
+                                    ->placeholder('Домофон, код...')
+                                    ->columnSpanFull(),
+                            ])
+                            ->columns(3)
+                            ->dehydrated(false),
                     ]),
             ]);
     }
