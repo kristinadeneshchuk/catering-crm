@@ -63,6 +63,7 @@ class AdminPanelProvider extends PanelProvider
             ->widgets([
                 Widgets\AccountWidget::class,
                 \App\Filament\Widgets\ProductionLoadList::class,
+                \App\Filament\Widgets\DebtsList::class,
             ])
             ->middleware([
                 EncryptCookies::class,
