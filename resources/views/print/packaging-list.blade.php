@@ -95,13 +95,25 @@
                 <tr>
                     @foreach($table['columns'] as $colKey => $colData)
                         @php $kcalClass = 'kcal-' . trim($colKey); @endphp
-                        <th class="{{ $kcalClass }}">{{ $colKey }}</th>
+                        <th class="{{ $kcalClass }}">
+                            {{ $colKey }}
+                            <span style="font-size:11px; font-weight:400; opacity:.85;">({{ $colData['count'] }})</span>
+                        </th>
                     @endforeach
                 </tr>
                 <tr>
                     <td class="portions-title">КІЛЬКІСТЬ ПОРЦІЙ</td>
                     @foreach($table['columns'] as $colData)
-                        <td class="portions-cell">{{ $colData['count'] }}</td>
+                        <td class="portions-cell">
+                            {{ $colData['count'] }}
+                            @if(!empty($colData['projects']))
+                                <div style="font-size:10px; font-weight:400; margin-top:2px; opacity:.85;">
+                                    @foreach($colData['projects'] as $p)
+                                        {{ $p['name'] }}: {{ $p['count'] }}<br>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </td>
                     @endforeach
                 </tr>
             </thead>
@@ -109,8 +121,11 @@
                 @foreach($table['rows'] as $row)
                     <tr>
                         <td class="text-left" style="font-weight: bold;">{{ $row['original_name'] }}</td>
-                        @foreach($row['cells'] as $cell)
-                            <td style="font-weight: bold; font-size: 13px;">{{ $cell['val'] }} г</td>
+                        @foreach($table['columns'] as $colKey => $colData)
+                            <td style="font-weight: bold; font-size: 13px;">
+                                @php $cell = $row['cells'][$colKey] ?? 0; @endphp
+                                {{ is_array($cell) ? ($cell['val'] ?? 0) : $cell }} г
+                            </td>
                         @endforeach
                     </tr>
                 @endforeach

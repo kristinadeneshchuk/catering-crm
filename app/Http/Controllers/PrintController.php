@@ -212,6 +212,7 @@ class PrintController extends Controller
                 'client.ingredientExclusions',
                 'replacements.replacementProduct',
                 'replacements.originalProduct',
+                'projectData',
             ])
             ->get();
 
@@ -265,17 +266,25 @@ class PrintController extends Controller
                     $tableData['individual_notes'][] = "• (#{$order->client->id}) {$order->client->name}: " . implode(', ', $noteParts);
                 }
 
-                $colKey = (string) (int) ($order->calories ?? 0);
+                $colKey   = (string)(int)($order->calories ?? 0);
+                $projSlug = $order->project ?? 'none';
+                $projName = $order->projectData?->name ?? ucfirst($projSlug);
 
                 if (!isset($tableData['columns'][$colKey])) {
                     $tableData['columns'][$colKey] = [
-                        'count' => 0,
+                        'count'     => 0,
                         'sum_scale' => 0.0,
+                        'projects'  => [],
                     ];
                 }
 
                 $tableData['columns'][$colKey]['count']++;
                 $tableData['columns'][$colKey]['sum_scale'] += $dishScale;
+
+                if (!isset($tableData['columns'][$colKey]['projects'][$projSlug])) {
+                    $tableData['columns'][$colKey]['projects'][$projSlug] = ['name' => $projName, 'count' => 0];
+                }
+                $tableData['columns'][$colKey]['projects'][$projSlug]['count']++;
             }
 
             if (empty($tableData['columns'])) continue;

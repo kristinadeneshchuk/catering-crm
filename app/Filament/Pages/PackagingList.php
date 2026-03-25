@@ -177,7 +177,8 @@ class PackagingList extends Page implements HasForms
                 'client.ingredientExclusions',
                 'client.dishExclusions',
                 'replacements.replacementProduct',
-                'replacements.replacementDish'
+                'replacements.replacementDish',
+                'projectData',
             ])
             ->get();
 
@@ -224,17 +225,25 @@ class PackagingList extends Page implements HasForms
                 $baseW = (float)($dish->base_weight_g ?? 0);
                 $dishScale = $baseW > 0 ? ((float)$plannedWeight / $baseW) : 0.0;
 
-                $colKey = (string)(int)($order->calories ?? 0);
+                $colKey   = (string)(int)($order->calories ?? 0);
+                $projSlug = $order->project ?? 'none';
+                $projName = $order->projectData?->name ?? ucfirst($projSlug);
 
                 if (!isset($tableData['columns'][$colKey])) {
                     $tableData['columns'][$colKey] = [
-                        'count' => 0,
+                        'count'     => 0,
                         'sum_scale' => 0.0,
+                        'projects'  => [],
                     ];
                 }
 
                 $tableData['columns'][$colKey]['count']++;
                 $tableData['columns'][$colKey]['sum_scale'] += $dishScale;
+
+                if (!isset($tableData['columns'][$colKey]['projects'][$projSlug])) {
+                    $tableData['columns'][$colKey]['projects'][$projSlug] = ['name' => $projName, 'count' => 0];
+                }
+                $tableData['columns'][$colKey]['projects'][$projSlug]['count']++;
             }
 
             if (empty($tableData['columns'])) {
@@ -251,16 +260,15 @@ class PackagingList extends Page implements HasForms
                     ? $di->ingredient->name
                     : ($di->childDish ? "📦 " . $di->childDish->name : '???');
 
+                $netWeight = (float)($di->net_weight_g ?? 0);
                 $cells = [];
                 foreach ($tableData['columns'] as $key => $col) {
-                    $count = (int)($col['count'] ?? 1);
+                    $count    = (int)($col['count'] ?? 1);
                     $sumScale = (float)($col['sum_scale'] ?? 0.0);
-                    
+
                     $onePortionScale = $count > 0 ? ($sumScale / $count) : 0;
 
-                    $cells[$key] = [
-                        'val' => round(((float)($di->net_weight_g ?? 0)) * $onePortionScale),
-                    ];
+                    $cells[$key] = round($netWeight * $onePortionScale);
                 }
 
                 $tableData['rows'][] = [

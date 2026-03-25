@@ -4,7 +4,7 @@
            /* Стилі для відображення в адмінці */
             .matrix-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; background: white; color: black; font-size: 13px; border: 1px solid #e5e7eb; }
             .matrix-table th, .matrix-table td { border: 1px solid #e5e7eb; padding: 6px 4px; text-align: center; }
-            
+
             .header-top { background: #4ade80; color: #064e3b; font-weight: 900; text-transform: uppercase; }
             .header-kcal { background: #f3f4f6; font-weight: 700; font-size: 11px; }
             .row-label { text-align: left; font-weight: 700; background: #f9fafb; padding-left: 10px; width: 220px; }
@@ -15,23 +15,21 @@
         </style>
 
         {{-- ПАНЕЛЬ КЕРУВАННЯ --}}
-        {{-- Тут виводиться форма, в якій ми вже додали кнопку в PackagingList.php --}}
         <div style="background: #18181b; padding: 20px; border-radius: 15px; margin-bottom: 25px; border: 1px solid #27272a;">
             <form wire:submit.prevent="calculate">
                 {{ $this->form }}
             </form>
-            
+
             @if($this->debugMessage)
                 <div style="color: #fbbf24; margin-top: 10px; font-weight: bold; font-size: 12px;">{{ $this->debugMessage }}</div>
             @endif
         </div>
 
-        {{-- ПОПЕРЕДНІЙ ПЕРЕГЛЯД (Тільки на екрані) --}}
-        
+        {{-- ПОПЕРЕДНІЙ ПЕРЕГЛЯД --}}
         @if(count($report) > 0)
             <div class="bg-white p-6 rounded-xl border text-black">
                 <h3 class="font-bold text-lg mb-6">Попередній перегляд на екрані:</h3>
-                
+
                 @foreach($report as $table)
                     <div class="meal-section">
                         <div class="meal-badge">
@@ -46,13 +44,27 @@
                                 </tr>
                                 <tr class="header-kcal">
                                     @foreach($table['columns'] as $label => $info)
-                                        <th>{{ $label }}</th>
+                                        <th style="font-size:15px; font-weight:900;">
+                                            {{ $label }}
+                                            <span style="font-size:11px; font-weight:500; opacity:.8;">
+                                                ({{ $info['count'] }})
+                                            </span>
+                                        </th>
                                     @endforeach
                                 </tr>
                                 <tr class="row-count">
                                     <td class="row-label">КІЛЬКІСТЬ ПОРЦІЙ</td>
                                     @foreach($table['columns'] as $info)
-                                        <td>{{ $info['count'] }}</td>
+                                        <td>
+                                            {{ $info['count'] }}
+                                            @if(!empty($info['projects']))
+                                                <div style="font-size:10px; font-weight:500; opacity:.75; margin-top:2px;">
+                                                    @foreach($info['projects'] as $p)
+                                                        {{ $p['name'] }}: {{ $p['count'] }}<br>
+                                                    @endforeach
+                                                </div>
+                                            @endif
+                                        </td>
                                     @endforeach
                                 </tr>
                             </thead>
@@ -60,9 +72,12 @@
                                 @foreach($table['rows'] as $row)
                                     <tr>
                                         <td class="row-label">{{ $row['original_name'] }}</td>
-                                        @foreach($table['columns'] as $key => $info)
+                                        @foreach($table['columns'] as $colKey => $info)
                                             <td>
-                                                <span style="font-weight: 800;">{{ $row['cells'][$key]['val'] }} г</span>
+                                                <span style="font-weight: 800;">
+                                                    @php $cell = $row['cells'][$colKey] ?? 0; @endphp
+                                                    {{ is_array($cell) ? ($cell['val'] ?? 0) : $cell }} г
+                                                </span>
                                             </td>
                                         @endforeach
                                     </tr>
