@@ -101,27 +101,20 @@ class ClientResource extends Resource
                                 $allMeals = MealType::all();
                                 $mealTypeIds = [];
 
-                                if ($kcal < 1200) {
-                                    // 3 прийоми: Сніданок, Обід, Вечеря
-                                    $mealTypeIds = $allMeals->filter(function ($meal) {
-                                        $name = mb_strtolower($meal->name);
-                                        return str_contains($name, 'сніданок') || 
-                                               str_contains($name, 'обід') || 
-                                               str_contains($name, 'вечеря');
-                                    })->pluck('id')->toArray();
-                                    
-                                } elseif ($kcal < 1500) {
-                                    // 4 прийоми: Сніданок, Обід, Перекус 2, Вечеря (без Перекусу 1)
-                                    $mealTypeIds = $allMeals->filter(function ($meal) {
-                                        $name = mb_strtolower($meal->name);
-                                        return str_contains($name, 'сніданок') || 
-                                               str_contains($name, 'обід') || 
-                                               str_contains($name, 'перекус 2') || 
-                                               str_contains($name, 'вечеря');
-                                    })->pluck('id')->toArray();
-                                    
+                                // Вибираємо прийоми за конкретними sort_order позиціями.
+                                // НЕ беремо перші N підряд, бо 900 ккал пропускає Перекус і Полуденок!
+                                // Порядки: Сніданок=1, Перекус 1=2, Обід=3, Полуденок=4, Вечеря 1=5, Додаток=6
+                                if ($kcal < 1100) {
+                                    // Сніданок + Обід + Вечеря 1 (без перекусу і полуденку)
+                                    $mealTypeIds = $allMeals->whereIn('sort_order', [1, 3, 5])->pluck('id')->toArray();
+                                } elseif ($kcal < 1300) {
+                                    // + Перекус 1 (без полуденку)
+                                    $mealTypeIds = $allMeals->whereIn('sort_order', [1, 2, 3, 5])->pluck('id')->toArray();
+                                } elseif ($kcal < 1600) {
+                                    // + Полуденок (без Додатку)
+                                    $mealTypeIds = $allMeals->whereIn('sort_order', [1, 2, 3, 4, 5])->pluck('id')->toArray();
                                 } else {
-                                    // 5 прийомів: Усі
+                                    // Всі 6, включно з Додатком до прийому
                                     $mealTypeIds = $allMeals->pluck('id')->toArray();
                                 }
 

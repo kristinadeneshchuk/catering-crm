@@ -405,9 +405,10 @@ class PackagingList extends Page implements HasForms
 
     private function expectedDishCount(int $kcal): int
     {
-        if ($kcal < 1200) return 3;
-        if ($kcal < 1500) return 4;
-        return 5;
+        if ($kcal < 1100) return 3;  // 900 ккал → сніданок, обід, вечеря
+        if ($kcal < 1300) return 4;  // 1100 ккал → + перекус
+        if ($kcal < 1600) return 5;  // 1300 ккал → + полуденок
+        return 6;                     // 1600+ ккал → + додаток до прийому
     }
 
     private function dishKcalPer100g($dish): float
