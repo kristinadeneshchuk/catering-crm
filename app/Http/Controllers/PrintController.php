@@ -523,9 +523,10 @@ class PrintController extends Controller
 
     private function expectedDishCount(int $kcal): int
     {
-        if ($kcal < 1200) return 3;
-        if ($kcal < 1500) return 4;
-        return 5;
+        if ($kcal < 1100) return 3;  // сніданок, обід, вечеря
+        if ($kcal < 1300) return 4;  // + перекус
+        if ($kcal < 1600) return 5;  // + полуденок
+        return 6;                     // + додаток до прийому
     }
 
     private function dishKcalPer100g($dish): float
