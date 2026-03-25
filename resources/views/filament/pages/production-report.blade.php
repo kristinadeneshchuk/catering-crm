@@ -189,9 +189,9 @@
             <div style="font-weight: 800; font-size: 13px; color: #92400e; margin-bottom: 8px;">📝 КОМЕНТАРІ ДО ВИРОБНИЦТВА:</div>
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 4px;">
                 @foreach($allDayComments as $cc)
-                    <div style="font-size: 12px; padding: 3px 0; border-bottom: 1px dashed #fde68a;">
-                        <span style="font-weight: 700;">{{ $cc['client_name'] }}</span>
-                        <span style="color: #78350f;"> — {{ $cc['comment'] }}</span>
+                    <div style="font-size: 12px; padding: 3px 0; border-bottom: 1px dashed #fde68a; color: #78350f;">
+                        <span style="font-weight: 700; color: #1c1917;">{{ $cc['client_name'] }}</span>
+                        <span> — {{ $cc['comment'] }}</span>
                     </div>
                 @endforeach
             </div>
