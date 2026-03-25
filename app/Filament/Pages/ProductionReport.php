@@ -361,18 +361,19 @@ public function form(Form $form): Form
                     || $order->client->dishExclusions->contains('id', $dish->id)
                     || $this->checkRecursiveConflict($dish, $order->client->ingredientExclusions);
 
+                // Коментар збираємо для ВСІХ клієнтів (і стандартних, і кастомних)
+                if (!empty(trim($order->client->production_comment ?? ''))) {
+                    $commentClients[] = [
+                        'client_name' => $order->client->name,
+                        'order_id'    => $order->id,
+                        'comment'     => trim($order->client->production_comment),
+                    ];
+                }
+
                 if ($isCustom) {
                     $custom[] = ['order' => $order, 'scale' => $dishScale];
                 } else {
                     $standard[] = ['order' => $order, 'scale' => $dishScale];
-                    // Зібрати коментар якщо є
-                    if (!empty(trim($order->client->production_comment ?? ''))) {
-                        $commentClients[] = [
-                            'client_name' => $order->client->name,
-                            'order_id'    => $order->id,
-                            'comment'     => trim($order->client->production_comment),
-                        ];
-                    }
                 }
             }
 

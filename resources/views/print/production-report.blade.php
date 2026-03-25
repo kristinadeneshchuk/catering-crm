@@ -226,11 +226,12 @@
                                                 <span>👤 {{ $card['client_name'] }} (Зам. #{{ $card['order_id'] }})</span>
                                             </div>
                                             
+                                            @if($card['dish_excluded'] || $card['dish_replacement'])
                                             <div class="p-1.5 bg-orange-50 text-orange-800 text-[10px] border-b border-gray-300 print:bg-white print:text-black">
                                                 @if($card['dish_excluded']) <span class="font-bold text-red-600 print:text-black">❌ СТРАВУ ВИКЛЮЧЕНО</span> <br> @endif
-                                                @if($card['dish_replacement']) <span class="font-bold text-blue-600 print:text-black">🔄 Заміна на: {{ $card['dish_replacement'] }}</span> <br> @endif
-                                                @if($card['comment']) <span class="font-bold">📝 Коментар:</span> {{ $card['comment'] }} @endif
+                                                @if($card['dish_replacement']) <span class="font-bold text-blue-600 print:text-black">🔄 Заміна на: {{ $card['dish_replacement'] }}</span> @endif
                                             </div>
+                                            @endif
 
                                             @if(!$card['dish_excluded'] || $card['dish_replacement'])
                                                 <table class="table-striped">
