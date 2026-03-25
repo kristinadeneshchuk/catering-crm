@@ -59,6 +59,7 @@ class OrderResource extends Resource
                             ->preload()
                             ->live()
                             ->label('Клієнт')
+                            ->default(fn () => request('client_id'))
                             ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->name} (ID: {$record->id})")
                             ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                 $client = Client::find($state);

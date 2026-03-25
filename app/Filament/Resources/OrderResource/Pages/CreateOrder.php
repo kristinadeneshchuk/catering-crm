@@ -4,6 +4,7 @@ namespace App\Filament\Resources\OrderResource\Pages;
 
 use App\Filament\Resources\OrderResource;
 use Filament\Resources\Pages\CreateRecord;
+use App\Models\Client;
 use App\Models\OrderDay;
 use App\Models\CalorieRange;
 use App\Models\TariffPrice;
@@ -15,6 +16,22 @@ class CreateOrder extends CreateRecord
 
     // Змінна для зберігання днів між етапами збереження
     protected array $customSelectedDays = [];
+
+    public function mount(): void
+    {
+        parent::mount();
+
+        $clientId = request('client_id');
+        if ($clientId) {
+            $client = Client::find($clientId);
+            if ($client && $client->target_kcal) {
+                $this->form->fill([
+                    'client_id' => (int) $clientId,
+                    'calories'  => $client->target_kcal,
+                ]);
+            }
+        }
+    }
 
     protected function getRedirectUrl(): string
     {

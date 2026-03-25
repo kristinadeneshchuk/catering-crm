@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ClientResource\Pages;
 
 use App\Filament\Resources\ClientResource;
+use App\Filament\Resources\OrderResource;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
 
@@ -13,6 +14,11 @@ class EditClient extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('create_order')
+                ->label('Нове замовлення')
+                ->icon('heroicon-o-plus-circle')
+                ->color('success')
+                ->url(fn () => OrderResource::getUrl('create', ['client_id' => $this->record->id])),
             Actions\DeleteAction::make(),
         ];
     }

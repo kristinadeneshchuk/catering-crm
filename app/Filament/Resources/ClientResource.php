@@ -183,10 +183,6 @@ class ClientResource extends Resource
                             ->prefixIcon('heroicon-o-user-circle'),
                     ])->columns(3),
 
-                Section::make('Логістика')
-                    ->description('Адреси доставки керуються у вкладці "Адреси доставки".')
-                    ->schema([])->columns(1),
-
                 Section::make('Для менеджера')
                     ->schema([
                         Textarea::make('manager_comment')
