@@ -98,7 +98,7 @@ class DishResource extends Resource
                                     ->label('Тип')
                                     ->options([
                                         'product' => 'Продукт',
-                                        'pf' => 'Напівфабрикат (НФ)',
+                                        'pf' => 'НФ',
                                     ])
                                     ->required()
                                     ->live()
@@ -106,37 +106,96 @@ class DishResource extends Resource
                                         $set('ingredient_id', null);
                                         $set('child_dish_id', null);
                                     })
-                                    ->default('product'),
+                                    ->default('product')
+                                    ->columnSpan(1),
 
                                 Select::make('ingredient_id')
                                     ->relationship('ingredient', 'name')
-                                    ->label('Оберіть продукт')
+                                    ->label('Продукт')
                                     ->searchable()
                                     ->preload()
                                     ->visible(fn (Forms\Get $get) => $get('type') === 'product')
-                                    ->required(fn (Forms\Get $get) => $get('type') === 'product'),
+                                    ->required(fn (Forms\Get $get) => $get('type') === 'product')
+                                    ->columnSpan(2),
 
                                 Select::make('child_dish_id')
-                                    ->label('Оберіть НФ')
+                                    ->label('Напівфабрикат')
                                     ->options(fn () => Dish::where('is_semi_finished', true)->pluck('name', 'id'))
                                     ->searchable()
                                     ->preload()
                                     ->getOptionLabelUsing(fn ($value): ?string => Dish::find($value)?->name)
                                     ->visible(fn (Forms\Get $get) => $get('type') === 'pf')
-                                    ->required(fn (Forms\Get $get) => $get('type') === 'pf'),
+                                    ->required(fn (Forms\Get $get) => $get('type') === 'pf')
+                                    ->columnSpan(2),
 
                                 TextInput::make('net_weight_g')
                                     ->numeric()
                                     ->required()
-                                    ->label('Вага нетто (г)')
+                                    ->label('Нетто (г)')
                                     ->live(onBlur: true)
-                                    ->extraInputAttributes(['autocomplete' => 'off']),
+                                    ->extraInputAttributes(['autocomplete' => 'off'])
+                                    ->columnSpan(1),
                             ])
-                            ->columns(3)
-                            ->itemLabel(fn (array $state): ?string =>
-                                ($state['type'] === 'pf' ? '📦 НФ: ' : '🍎 Прод: ') .
-                                ($state['net_weight_g'] ?? 0) . 'г'
-                            )
+                            ->columns(4)
+                            ->reorderable()
+                            ->collapsible()
+                            ->collapsed()
+                            ->addActionLabel('+ Додати інгредієнт')
+                            ->extraItemActions([
+                                \Filament\Forms\Components\Actions\Action::make('preview')
+                                    ->icon('heroicon-o-eye')
+                                    ->tooltip('Деталі')
+                                    ->color('gray')
+                                    ->slideOver()
+                                    ->modalWidth('md')
+                                    ->modalSubmitAction(false)
+                                    ->modalCancelActionLabel('Закрити')
+                                    ->modalHeading(function (array $arguments, Repeater $component): string {
+                                        $item = $component->getState()[$arguments['item']] ?? [];
+                                        if (($item['type'] ?? 'product') === 'pf' && !empty($item['child_dish_id'])) {
+                                            return Dish::find($item['child_dish_id'])?->name ?? 'НФ';
+                                        }
+                                        return \App\Models\Ingredient::find($item['ingredient_id'] ?? null)?->name ?? 'Інгредієнт';
+                                    })
+                                    ->modalContent(function (array $arguments, Repeater $component): \Illuminate\Contracts\View\View {
+                                        $item = $component->getState()[$arguments['item']] ?? [];
+                                        $type = $item['type'] ?? 'product';
+                                        $netWeight = $item['net_weight_g'] ?? 0;
+
+                                        if ($type === 'pf' && !empty($item['child_dish_id'])) {
+                                            $dish = Dish::with('dishIngredients.ingredient')->find($item['child_dish_id']);
+                                            return view('filament.modals.dish-preview', compact('dish', 'netWeight'));
+                                        }
+
+                                        $ingredient = \App\Models\Ingredient::find($item['ingredient_id'] ?? null);
+                                        return view('filament.modals.ingredient-preview', compact('ingredient', 'netWeight'));
+                                    }),
+                            ])
+                            ->itemLabel(function (array $state): ?string {
+                                $weight = $state['net_weight_g'] ?? 0;
+                                if (($state['type'] ?? 'product') === 'pf') {
+                                    $name = isset($state['child_dish_id'])
+                                        ? Dish::find($state['child_dish_id'])?->name
+                                        : null;
+                                    return '📦 ' . ($name ?? 'НФ') . ($weight ? ' — ' . $weight . 'г' : '');
+                                }
+                                $name = isset($state['ingredient_id'])
+                                    ? \App\Models\Ingredient::find($state['ingredient_id'])?->name
+                                    : null;
+                                return '🍎 ' . ($name ?? 'Продукт') . ($weight ? ' — ' . $weight . 'г' : '');
+                            }),
+
+                        Placeholder::make('total_net_weight')
+                            ->label('')
+                            ->content(function (Forms\Get $get) {
+                                $total = collect($get('dishIngredients'))
+                                    ->sum(fn ($item) => (float) ($item['net_weight_g'] ?? 0));
+                                return new \Illuminate\Support\HtmlString(
+                                    '<span style="font-size:13px;color:#94a3b8;">Загальна нетто вага:</span> '
+                                    . '<strong style="font-size:15px;">' . $total . ' г</strong>'
+                                );
+                            })
+                            ->live(),
                     ]),
 
                 Section::make('Економіка та Поживність (Підсумок)')
