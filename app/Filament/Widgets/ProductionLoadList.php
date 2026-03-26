@@ -24,7 +24,7 @@ class ProductionLoadList extends Widget
     protected function getViewData(): array
     {
         $startDate = Carbon::now()->startOfDay();
-        $endDate = Carbon::now()->addDays(9)->endOfDay();
+        $endDate = Carbon::now()->addDays(19)->endOfDay();
 
         $daysData = OrderDay::whereBetween('date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
             ->whereHas('order', function ($query) {
@@ -40,7 +40,7 @@ class ProductionLoadList extends Widget
             4 => 'Четвер', 5 => 'П\'ятниця', 6 => 'Субота'
         ];
 
-        for ($i = 0; $i < 10; $i++) {
+        for ($i = 0; $i < 20; $i++) {
             $currentDate = Carbon::now()->addDays($i);
             $dateString = $currentDate->format('Y-m-d');
             

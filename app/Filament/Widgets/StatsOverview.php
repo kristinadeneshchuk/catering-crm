@@ -3,77 +3,69 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Order;
+use App\Models\OrderDay;
 use App\Models\Setting;
-use Filament\Widgets\StatsOverviewWidget as BaseWidget;
-use Filament\Widgets\StatsOverviewWidget\Stat;
+use Filament\Widgets\Widget;
 use Carbon\Carbon;
 
-class StatsOverview extends BaseWidget
+class StatsOverview extends Widget
 {
-    protected static ?string $pollingInterval = '15s';
+    protected static string $view = 'filament.widgets.stats-overview';
+    protected static ?int $sort = 2;
+    protected static ?string $pollingInterval = '30s';
+    protected int | string | array $columnSpan = 'full';
 
     public static function canView(): bool
     {
-        return auth()->user()->role === 'admin' || auth()->user()->role === 'manager';
+        return in_array(auth()->user()?->role, ['admin', 'manager']);
     }
 
-    protected function getStats(): array
+    protected function getViewData(): array
     {
-        // Отримуємо поточну дату без часу
-        $now = now()->startOfDay();
-        $todayStr = $now->format('Y-m-d');
+        $now      = now()->startOfDay();
+        $today    = $now->format('Y-m-d');
+        $tomorrow = $now->copy()->addDay()->format('Y-m-d');
 
-        // === 1. РОЗРАХУНОК ДНЯ ЦИКЛУ (ДЕНЬ У ДЕНЬ) ===
-        $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-        $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: $todayStr;
-        
-        // Встановлюємо початок дня для дати відліку, щоб diffInDays рахував коректно
-        $anchorDate = Carbon::parse($startDateStr)->startOfDay();
-        
-        // Рахуємо різницю в днях (16.02 - 16.02 = 0)
-        $diff = abs($now->diffInDays($anchorDate));
-        
-        // Формула: (0 % 10) + 1 = 1
-        $currentDayNumber = ($diff % $cycleDays) + 1;
+        // День меню
+        $cycleDays    = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
+        $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: $today;
+        $anchorDate   = Carbon::parse($startDateStr)->startOfDay();
+        $menuDay      = (abs($now->diffInDays($anchorDate)) % $cycleDays) + 1;
 
-        // === 2. АКТИВНІ КЛІЄНТИ ===
-        $activeTodayCount = Order::whereIn('status', ['active', 'new'])
-            ->whereHas('orderDays', function ($query) use ($todayStr) {
-                $query->where('date', $todayStr);
-            })
+        // Порцій сьогодні
+        $todayCount = OrderDay::where('date', $today)
+            ->whereHas('order', fn($q) => $q->whereIn('status', ['active', 'new']))
             ->count();
 
-        // 3. Виручка за місяць
-        $revenue = Order::whereMonth('created_at', Carbon::now()->month)
-            ->sum('total_price');
+        // Порцій завтра
+        $tomorrowCount = OrderDay::where('date', $tomorrow)
+            ->whereHas('order', fn($q) => $q->whereIn('status', ['active', 'new']))
+            ->count();
 
-        // 4. Закінчуються скоро
+        // Всього активних клієнтів
+        $totalActive = Order::whereIn('status', ['active', 'new'])
+            ->whereDate('end_date', '>=', $today)
+            ->count();
+
+        // Закінчуються за 3 дні
         $expiringSoon = Order::where('status', 'active')
-            ->whereDate('end_date', '>=', $todayStr)
+            ->whereDate('end_date', '>=', $today)
             ->whereDate('end_date', '<=', $now->copy()->addDays(3)->format('Y-m-d'))
             ->count();
 
-        return [
-            Stat::make('День Меню', "№ {$currentDayNumber}")
-                ->description("Сьогоднішній день раціону")
-                ->descriptionIcon('heroicon-m-calendar-days')
-                ->color('info'),
+        // Несплачені
+        $unpaidOrders = Order::where('is_paid', false)
+            ->whereIn('status', ['active', 'new'])
+            ->where(fn($q) => $q->where('final_price', '>', 0)->orWhere('total_price', '>', 0));
 
-            Stat::make('Активні Клієнти', $activeTodayCount)
-                ->description('Отримують їжу сьогодні')
-                ->descriptionIcon('heroicon-m-users')
-                ->color('success')
-                ->chart([7, 3, 4, 5, 6, 3, 5, 8]),
+        $unpaidCount = $unpaidOrders->count();
+        $unpaidSum   = $unpaidOrders->sum(\DB::raw('COALESCE(NULLIF(final_price,0), total_price)'));
 
-            Stat::make('Виручка (Цей місяць)', number_format($revenue, 0, '.', ' ') . ' ₴')
-                ->description('Сума всіх замовлень')
-                ->descriptionIcon('heroicon-m-currency-dollar')
-                ->color('primary'), 
-
-            Stat::make('Закінчуються скоро', $expiringSoon)
-                ->description('Продовження за 3 дні')
-                ->descriptionIcon('heroicon-m-bell-alert')
-                ->color($expiringSoon > 0 ? 'warning' : 'gray'),
-        ];
+        return compact(
+            'menuDay', 'cycleDays',
+            'todayCount', 'tomorrowCount',
+            'totalActive', 'expiringSoon',
+            'unpaidCount', 'unpaidSum'
+        );
     }
 }

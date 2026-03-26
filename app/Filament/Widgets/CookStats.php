@@ -16,7 +16,7 @@ class CookStats extends BaseWidget
      */
     public static function canView(): bool
     {
-        return auth()->user()->role === 'cook' || auth()->user()->role === 'admin';
+        return auth()->user()->role === 'cook';
     }
 
     protected function getStats(): array
@@ -55,9 +55,12 @@ class CookStats extends BaseWidget
                 ->descriptionIcon('heroicon-m-cake')
                 ->color('warning'),
 
-            Stat::make('Графік роботи', '08:00 - 18:00')
-                ->description('Час видачі першої партії')
-                ->descriptionIcon('heroicon-m-clock')
+            Stat::make('Порцій завтра', Order::where('start_date', '<=', now()->addDay()->format('Y-m-d'))
+                    ->where('end_date', '>=', now()->addDay()->format('Y-m-d'))
+                    ->whereIn('status', ['new', 'active'])
+                    ->count())
+                ->description('Планування на завтра')
+                ->descriptionIcon('heroicon-m-arrow-right-circle')
                 ->color('info'),
         ];
     }
