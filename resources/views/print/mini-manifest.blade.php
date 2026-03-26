@@ -3,80 +3,264 @@
 <head>
     <meta charset="UTF-8">
     <title>На пакет — {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y') }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        @media print {
-            .no-print { display: none !important; }
-            body { background: white !important; padding: 0 !important; margin: 0 !important; }
-            .sticker-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 5mm !important; padding: 10mm !important; }
-            .sticker-box { break-inside: avoid !important; height: auto !important; border: 2px solid #000 !important; }
+        * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        body { background: #f3f4f6; padding: 20px; font-family: sans-serif; }
-        .sticker-grid { display: grid; grid-template-columns: repeat(2, 420px); gap: 15px; justify-content: center; margin: 0 auto; }
-        .sticker-box { background: white; border: 2px solid black; position: relative; display: flex; flex-direction: column; padding: 15px; min-height: 120px; }
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 10px;
+            background: #e2e8f0;
+        }
+
+        .no-print {
+            padding: 20px;
+            text-align: center;
+        }
+
+        .no-print button {
+            background: #334155;
+            color: white;
+            border: none;
+            padding: 16px 40px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 900;
+            cursor: pointer;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .no-print button:hover { background: #475569; }
+
+        /* A4: 210×297mm, 70×42mm стікери — 3 колонки × 7 рядків = 21 шт */
+        .label-sheet {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 10px auto;
+            background: white;
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+            padding: 1.5mm 0 0 0;
+        }
+
+        .sticker {
+            width: 70mm;
+            height: 42mm;
+            position: relative;
+            overflow: hidden;
+            padding: 3mm 3mm 2mm 5.5mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            border: none;
+        }
+
+        /* Кольорова ліва смуга */
+        .sticker::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--brand-color, #000);
+        }
+
+        /* Тонка рамка для вирівнювання */
+        .sticker-border {
+            position: absolute;
+            inset: 0;
+            border: 0.3px solid #d1d5db;
+            pointer-events: none;
+        }
+
+        /* Верх: дата + лого */
+        .sticker-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .date-badge {
+            background: #fde047;
+            color: #000;
+            font-size: 7pt;
+            font-weight: 900;
+            padding: 1px 5px;
+            border-radius: 3px;
+            line-height: 1.3;
+        }
+
+        .project-logo {
+            height: 10mm;
+            max-width: 18mm;
+            object-fit: contain;
+        }
+
+        /* Клієнт */
+        .sticker-client {
+            border-bottom: 1.5px solid #0f172a;
+            padding-bottom: 1.5mm;
+        }
+
+        .label-receiver {
+            font-size: 5.5pt;
+            color: #9ca3af;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            display: block;
+            margin-bottom: 0.5mm;
+        }
+
+        .client-name {
+            font-size: 13pt;
+            font-weight: 900;
+            text-transform: uppercase;
+            line-height: 1;
+            letter-spacing: -0.3px;
+            color: #000;
+        }
+
+        /* Теги: ID, ккал, адреса */
+        .sticker-tags {
+            display: flex;
+            align-items: center;
+            gap: 2mm;
+            margin-top: 1mm;
+            flex-wrap: nowrap;
+            overflow: hidden;
+        }
+
+        .tag-id {
+            background: #0f172a;
+            color: #fff;
+            font-size: 7pt;
+            font-weight: 900;
+            padding: 1px 4px;
+            border-radius: 3px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .tag-kcal {
+            color: #fff;
+            font-size: 7pt;
+            font-weight: 900;
+            padding: 1px 5px;
+            border-radius: 3px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            background: var(--brand-color, #000);
+        }
+
+        .tag-address {
+            font-size: 6pt;
+            color: #6b7280;
+            font-style: italic;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        /* Підпис */
+        .sticker-footer {
+            text-align: center;
+        }
+
+        .footer-text {
+            font-size: 5pt;
+            font-weight: 900;
+            color: #cbd5e1;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+
+        /* Друк */
+        @media print {
+            body { background: white !important; }
+            .no-print { display: none !important; }
+            .label-sheet {
+                margin: 0 !important;
+                padding: 1.5mm 0 0 0 !important;
+            }
+            .sticker-border { border-color: transparent !important; }
+        }
+
+        @page {
+            size: A4;
+            margin: 0;
+        }
     </style>
 </head>
-<body class="bg-gray-100">
+<body>
 
-<div class="no-print text-center mb-10">
-    <button onclick="window.print()" class="bg-slate-900 text-white px-12 py-4 rounded-2xl font-black uppercase tracking-widest text-lg shadow-xl">
-        🖨️ ДРУКУВАТИ НАКЛЕЙКИ НА ПАКЕТ ({{ count($manifests) }} шт)
+<div class="no-print">
+    <button onclick="window.print()">
+        🖨 ДРУКУВАТИ НАКЛЕЙКИ НА ПАКЕТ ({{ count($manifests) }} шт.)
     </button>
 </div>
 
-<div class="sticker-grid">
+<div class="label-sheet">
     @foreach($manifests as $man)
-        @php 
+        @php
             $project = \App\Models\Project::where('slug', $man['project'])->first();
-            
+
             $brandColor = match($project?->color) {
-                'success' => '#22c55e',
-                'primary' => '#3b82f6',
-                'info'    => '#06b6d4',
-                'warning' => '#eab308',
-                'danger'  => '#ef4444',
-                default   => '#000000',
+                'success' => '#16a34a',
+                'primary' => '#2563eb',
+                'info'    => '#0891b2',
+                'warning' => '#d97706',
+                'danger'  => '#dc2626',
+                default   => '#1e293b',
             };
 
-            $projectLogo = ($project?->logo && file_exists(storage_path('app/public/' . $project->logo))) 
-                ? 'data:image/png;base64,' . base64_encode(file_get_contents(storage_path('app/public/' . $project->logo))) 
+            $projectLogo = ($project?->logo && file_exists(storage_path('app/public/' . $project->logo)))
+                ? 'data:image/png;base64,' . base64_encode(file_get_contents(storage_path('app/public/' . $project->logo)))
                 : null;
+
+            $deliveryDate = \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y');
         @endphp
-        
-        <div class="sticker-box" style="border-color: {{ $brandColor }} !important;">
-            <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 6px; border-right: 3px dotted {{ $brandColor }};"></div>
-            
-            <div class="pl-4 flex flex-col justify-between h-full gap-3">
-                <div class="flex justify-between items-start">
-                    <span class="text-xs font-black bg-yellow-300 px-2 py-0.5 rounded shadow-sm inline-block text-black">
-                        {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y') }}
-                    </span>
-                    <div class="w-28 min-h-[45px] flex items-center justify-end">
-                        @if($projectLogo)
-                            <img src="{{ $projectLogo }}" class="w-full object-contain">
-                        @endif
-                    </div>
-                </div>
 
-                <div class="border-b-2 border-slate-900 pb-2">
-                    <span class="text-[9px] text-gray-400 font-bold uppercase block tracking-tighter">Отримувач:</span>
-                    <h2 class="text-xl font-black uppercase leading-none tracking-tighter mb-1">{{ $man['client'] }}</h2>
-                    <div class="flex items-center gap-2 text-[11px] font-bold uppercase overflow-hidden">
-                        <span class="bg-slate-900 text-white px-2 py-0.5 rounded text-[12px] font-black shrink-0">ID: {{ $man['client_id'] }}</span>
-                        <span class="text-white px-2 py-0.5 rounded text-[12px] font-black shrink-0" style="background-color: {{ $brandColor }};">
-                            {{ $man['calories'] ?? 0 }} ККАЛ
-                        </span>
-                        <span class="truncate italic text-slate-500 text-[10px] min-w-0">{{ $man['address'] ?? 'Самовивіз' }}</span>
-                    </div>
-                </div>
+        <div class="sticker" style="--brand-color: {{ $brandColor }};">
+            <div class="sticker-border"></div>
 
-                <div class="pt-2 text-center mt-auto">
-                    <p class="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em]">Смачного від {{ $project?->name ?? 'BRAND' }}!</p>
+            {{-- Верх: дата + лого --}}
+            <div class="sticker-top">
+                <span class="date-badge">{{ $deliveryDate }}</span>
+                @if($projectLogo)
+                    <img src="{{ $projectLogo }}" class="project-logo" alt="">
+                @endif
+            </div>
+
+            {{-- Клієнт --}}
+            <div class="sticker-client">
+                <span class="label-receiver">Отримувач:</span>
+                <div class="client-name">{{ $man['client'] }}</div>
+                <div class="sticker-tags">
+                    <span class="tag-id">ID: {{ $man['client_id'] }}</span>
+                    <span class="tag-kcal">{{ $man['calories'] ?? 0 }} ккал</span>
+                    <span class="tag-address">{{ $man['address'] ?? 'Самовивіз' }}</span>
                 </div>
+            </div>
+
+            {{-- Підпис --}}
+            <div class="sticker-footer">
+                <span class="footer-text">Смачного від {{ $project?->name ?? 'BRAND' }}!</span>
             </div>
         </div>
     @endforeach
 </div>
+
 </body>
 </html>

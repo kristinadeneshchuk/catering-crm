@@ -56,11 +56,19 @@ class Dish extends Model
 
                 $grossWeight = ($netWeight * 100.0) / $yield;
                 
-                $avgPrice = (float)($ing->average_price ?? 0);
+                $avgPrice  = (float)($ing->average_price ?? 0);
                 $basePrice = (float)($ing->price_per_kg ?? 0);
-                $pricePerKg = $avgPrice > 0 ? $avgPrice : $basePrice;
-                
-                $totals['cost'] += ($pricePerKg / 1000.0) * $grossWeight;
+                $unitPrice = $avgPrice > 0 ? $avgPrice : $basePrice;
+
+                // Конвертуємо ціну до "за грам" залежно від одиниці виміру інгредієнта
+                $unit = mb_strtolower(trim((string)($ing->unit ?? 'кг')));
+                $pricePerGram = match(true) {
+                    in_array($unit, ['кг', 'kg', 'л', 'l'])  => $unitPrice / 1000.0,
+                    in_array($unit, ['г',  'g',  'мл', 'ml']) => $unitPrice,
+                    default                                    => $unitPrice / 1000.0,
+                };
+
+                $totals['cost'] += $pricePerGram * $grossWeight;
 
                 $totals['prot'] += ((float)($ing->proteins_100g ?? 0) * $netWeight / 100.0);
                 $totals['fat']  += ((float)($ing->fats_100g ?? 0)     * $netWeight / 100.0);

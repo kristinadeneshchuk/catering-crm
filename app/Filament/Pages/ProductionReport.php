@@ -141,10 +141,15 @@ public function form(Form $form): Form
 
                         \Filament\Forms\Components\Actions::make([
                             \Filament\Forms\Components\Actions\Action::make('print_view')
-                                ->label('🖨 Відкрити версію для друку')
+                                ->label('🖨 Версія для друку')
                                 ->color('warning')
                                 ->url(fn () => route('print.production-report', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
-                                ->openUrlInNewTab()
+                                ->openUrlInNewTab(),
+                            \Filament\Forms\Components\Actions\Action::make('print_stock')
+                                ->label('📦 Список списання')
+                                ->color('gray')
+                                ->url(fn () => route('print.stock-list', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
+                                ->openUrlInNewTab(),
                         ])->alignRight(),
                     ])
                 ])

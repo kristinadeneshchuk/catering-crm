@@ -433,6 +433,239 @@ class PrintController extends Controller
         ]);
     }
 
+    public function shoppingList(Request $request)
+    {
+        $date = $request->input('date', now()->addDay()->format('Y-m-d'));
+
+        $cycleDays  = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
+        $startDate  = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
+        $anchorDate = Carbon::parse($startDate);
+        $carbonDate = Carbon::parse($date);
+        $diff       = abs($carbonDate->diffInDays($anchorDate));
+        $globalDay  = ($diff % $cycleDays) + 1;
+
+        $menu = DailyMenu::where('day_number', $globalDay)
+            ->with([
+                'menuItems.dish.dishIngredients.ingredient',
+                'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
+                'menuItems.mealType',
+            ])->first();
+
+        $shoppingList = [];
+
+        if ($menu) {
+            $orders = Order::whereHas('orderDays', fn ($q) => $q->where('date', $date))
+                ->whereIn('status', ['new', 'active'])
+                ->with([
+                    'client.mealTypes', 'client.ingredientExclusions', 'client.dishExclusions',
+                    'replacements.replacementProduct',
+                    'replacements.replacementDish.dishIngredients.ingredient',
+                ])->get();
+
+            $orderPlans = [];
+            foreach ($orders as $order) {
+                $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
+            }
+
+            $bruttoByIng = [];
+
+            foreach ($menu->menuItems->sortBy(fn ($i) => $i->mealType?->sort_order ?? 99) as $item) {
+                if (!$item->dish) continue;
+                $dish = $item->dish;
+
+                foreach ($orders as $order) {
+                    $plan = $orderPlans[$order->id] ?? null;
+                    if (!$plan) continue;
+
+                    $plannedWeight = collect($plan['items'])->first(
+                        fn ($it) => (int)$it['dish_id'] === (int)$dish->id
+                            && (int)$it['meal_type_id'] === (int)$item->meal_type_id
+                    )['weight'] ?? null;
+
+                    if ($plannedWeight === null) continue;
+
+                    $baseW     = (float)($dish->base_weight_g ?? 0);
+                    $dishScale = $baseW > 0 ? ($plannedWeight / $baseW) : 0.0;
+
+                    $dishReplacement = $order->replacements
+                        ->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
+                    $activeDish = ($dishReplacement?->replacementDish) ?? $dish;
+
+                    if ($order->client->dishExclusions->contains('id', $dish->id) && !$dishReplacement) continue;
+
+                    $this->collectBruttoForShopping($activeDish, $dishScale, 1.0, $order, (int)$dish->id, $bruttoByIng);
+                }
+            }
+
+            foreach ($bruttoByIng as $id => $info) {
+                $dbIng = \App\Models\Ingredient::find($id);
+                if (!$dbIng) continue;
+
+                $stock  = (float)($dbIng->stock ?? 0);
+                $unit   = $info['unit'];
+                $bruttoInUnit = in_array($unit, ['кг', 'л', 'kg', 'l']) ? $info['brutto_g'] / 1000.0 : $info['brutto_g'];
+                $toBuy  = max(0.0, $bruttoInUnit - $stock);
+
+                $shoppingList[] = [
+                    'name'   => $info['name'],
+                    'need'   => $bruttoInUnit,
+                    'stock'  => $stock,
+                    'to_buy' => $toBuy,
+                    'unit'   => $unit,
+                    'enough' => $toBuy <= 0,
+                ];
+            }
+            usort($shoppingList, fn ($a, $b) => strcmp($a['name'], $b['name']));
+        }
+
+        return view('print.shopping-list', [
+            'shoppingList'        => $shoppingList,
+            'date'                => Carbon::parse($date)->format('d.m.Y'),
+            'dayNumber'           => $globalDay,
+        ]);
+    }
+
+    private function collectBruttoForShopping($dish, float $scale, float $subRatio, $order, int $rootDishId, array &$acc): void
+    {
+        if (!$dish || !$dish->dishIngredients) return;
+
+        foreach ($dish->dishIngredients as $di) {
+            $k    = $scale * $subRatio;
+            $type = mb_strtolower(trim((string)($di->type ?? '')));
+            $netG = (float)($di->net_weight_g ?? 0) * $k;
+
+            $isProduct = in_array($type, ['product', 'продукт'], true);
+            $isPf      = in_array($type, ['pf', 'напівфабрикат', 'п/ф', 'н/ф'], true);
+
+            if ($isProduct && $di->ingredient) {
+                $ing = $di->ingredient;
+                $rep = $order?->replacements
+                    ->where('dish_id', $rootDishId)
+                    ->where('original_product_id', $ing->id)->first();
+                if ($rep?->replacementProduct) $ing = $rep->replacementProduct;
+
+                $isExcluded = $order?->client->ingredientExclusions->contains('id', $di->ingredient->id);
+                if ($isExcluded && !$rep?->replacementProduct) continue;
+
+                $yield   = (float)($ing->yield_percent ?: 100);
+                $bruttoG = ($netG * 100) / max($yield, 1);
+
+                if (!isset($acc[$ing->id])) {
+                    $acc[$ing->id] = ['name' => $ing->name, 'brutto_g' => 0.0, 'unit' => $ing->unit ?? 'г'];
+                }
+                $acc[$ing->id]['brutto_g'] += $bruttoG;
+            }
+
+            if ($isPf && $di->childDish) {
+                $pfOutput = (float)(($di->childDish->calculated_totals)['output_weight'] ?? 0);
+                if ($pfOutput <= 0) continue;
+                $pfRatio = ((float)($di->net_weight_g ?? 0)) / $pfOutput;
+                $this->collectBruttoForShopping($di->childDish, $scale, $pfRatio * $subRatio, $order, $rootDishId, $acc);
+            }
+        }
+    }
+
+    public function stockList(Request $request)
+    {
+        $inputDate = $request->input('date', now()->format('Y-m-d'));
+        $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
+
+        [$menu, $globalDay] = $this->getMenuForTargetDate($targetDate);
+
+        if (!$menu) {
+            return "❌ Меню не знайдено на завтра ({$targetDate})";
+        }
+
+        $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
+                $query->where('date', $targetDate);
+            })
+            ->with([
+                'client.mealTypes',
+                'client.ingredientExclusions',
+                'client.dishExclusions',
+                'replacements.replacementProduct',
+                'replacements.replacementDish.dishIngredients.ingredient',
+            ])
+            ->get();
+
+        if ($orders->isEmpty()) {
+            return "Немає активних замовлень на {$targetDate}.";
+        }
+
+        $orderPlans = [];
+        foreach ($orders as $order) {
+            $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
+        }
+
+        $summaryIngredients = [];
+
+        $collectSummary = function($components) use (&$summaryIngredients, &$collectSummary) {
+            foreach ($components as $comp) {
+                if (($comp['type'] ?? '') === 'product') {
+                    $name = $comp['name'];
+                    $summaryIngredients[$name] = ($summaryIngredients[$name] ?? 0) + ($comp['weight_brutto'] ?? 0);
+                } elseif (($comp['type'] ?? '') === 'pf' && isset($comp['sub_ingredients'])) {
+                    $collectSummary($comp['sub_ingredients']);
+                }
+            }
+        };
+
+        $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType?->sort_order ?? 99);
+
+        foreach ($sortedMenuItems as $item) {
+            if (!$item->dish) continue;
+
+            $dish = $item->dish;
+            $standard = [];
+            $custom = [];
+
+            foreach ($orders as $order) {
+                $plan = $orderPlans[$order->id] ?? null;
+                if (!$plan) continue;
+
+                $plannedWeight = collect($plan['items'])->first(function ($it) use ($dish, $item) {
+                    return (int)$it['dish_id'] === (int)$dish->id && (int)$it['meal_type_id'] === (int)$item->meal_type_id;
+                })['weight'] ?? null;
+
+                if ($plannedWeight === null) continue;
+
+                $baseW = (float)($dish->base_weight_g ?? 0);
+                $dishScale = ($baseW > 0) ? ((float)$plannedWeight / $baseW) : 0.0;
+
+                $isCustom =
+                    $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
+                    || $order->client->dishExclusions->contains('id', $dish->id)
+                    || !empty($this->getConflictingIngredients($dish, $order->client->ingredientExclusions));
+
+                if ($isCustom) {
+                    $custom[] = ['order' => $order, 'scale' => $dishScale];
+                } else {
+                    $standard[] = ['order' => $order, 'scale' => $dishScale];
+                }
+            }
+
+            $standardScales = array_map(fn($x) => (float)$x['scale'], $standard);
+            $standardStructure = $this->calculateIngredientsStructureByScales($dish, $standardScales);
+            $collectSummary($standardStructure);
+
+            foreach ($custom as $entry) {
+                $card = $this->buildCustomCard($dish, $entry['order'], (float)$entry['scale']);
+                if (!$card['dish_excluded'] || isset($card['dish_replacement'])) {
+                    $collectSummary($card['components']);
+                }
+            }
+        }
+
+        ksort($summaryIngredients);
+
+        return view('print.stock-list', [
+            'ingredients'        => $summaryIngredients,
+            'date'               => Carbon::parse($inputDate)->format('d.m.Y'),
+            'targetDateFormatted'=> Carbon::parse($targetDate)->format('d.m.Y'),
+            'dayNumber'          => $globalDay,
+        ]);
+    }
+
     public function logistics(Request $request)
     {
         // Отримуємо дату (якщо немає - беремо сьогодні)

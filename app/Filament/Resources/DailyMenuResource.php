@@ -55,89 +55,107 @@ class DailyMenuResource extends Resource
                                 Select::make('meal_type_id')
                                     ->relationship('mealType', 'name')
                                     ->required()
-                                    ->live() 
-                                    ->label('Прийом їжі'),
-                                
-                                // 🔥 ДОДАНО: Поле для кастомного відсотка
+                                    ->live()
+                                    ->label('Прийом їжі')
+                                    ->columnSpan(1),
+
                                 TextInput::make('custom_energy_percent')
                                     ->label('% ккал (кастом)')
                                     ->numeric()
                                     ->suffix('%')
                                     ->helperText('Порожньо = дефолт')
-                                    ->live() // live() обов'язковий, щоб прев'ю ваги/ціни оновлювалося одразу!
+                                    ->live()
                                     ->minValue(1)
-                                    ->maxValue(100),
-                                    
+                                    ->maxValue(100)
+                                    ->columnSpan(1),
+
                                 Select::make('dish_id')
                                     ->relationship('dish', 'name')
                                     ->searchable()
                                     ->preload()
                                     ->required()
-                                    ->live() 
-                                    ->label('Страва'),
+                                    ->live()
+                                    ->label('Страва')
+                                    ->columnSpan(2),
 
-                                Placeholder::make('cost_preview')
-                                    ->label('Собівартість (на 1500 ккал)')
+                                Placeholder::make('dish_info')
+                                    ->label('')
+                                    ->columnSpanFull()
                                     ->content(function (Forms\Get $get) {
-                                        $dishId = $get('dish_id');
-                                        $mealTypeId = $get('meal_type_id');
-                                        // 🔥 ДОДАНО: Отримуємо значення кастомного поля
-                                        $customPercent = $get('custom_energy_percent'); 
+                                        $dishId       = $get('dish_id');
+                                        $mealTypeId   = $get('meal_type_id');
+                                        $customPercent = $get('custom_energy_percent');
 
                                         if (!$dishId || !$mealTypeId) {
-                                            return new HtmlString('<span class="text-gray-400">—</span>');
+                                            return new HtmlString('');
                                         }
 
-                                        $dish = \App\Models\Dish::find($dishId);
+                                        $dish     = \App\Models\Dish::find($dishId);
                                         $mealType = \App\Models\MealType::find($mealTypeId);
 
                                         if (!$dish || !$mealType) {
-                                            return new HtmlString('<span class="text-gray-400">—</span>');
+                                            return new HtmlString('');
                                         }
 
-                                        // Рахуємо конкретно для 1500 ккал
                                         $targetKcal = 1500;
-                                        
-                                        // 🔥 ЗМІНЕНО: Беремо кастомний відсоток, якщо він є, інакше дефолтний
-                                        $p = ($customPercent !== null && $customPercent !== '') 
-                                            ? (float)$customPercent 
+                                        $p = ($customPercent !== null && $customPercent !== '')
+                                            ? (float)$customPercent
                                             : (float)($mealType->energy_percent ?? 0);
-                                        
-                                        $mealKcal = $targetKcal * ($p / 100.0);
 
-                                        $baseW = (float)($dish->base_weight_g ?? 0);
-                                        $dishTotalKcal = (float)($dish->total_kcal ?? 0);
-                                        $kcalPer100 = ($baseW > 0 && $dishTotalKcal > 0) ? ($dishTotalKcal / $baseW) * 100.0 : 0;
-
+                                        $mealKcal   = $targetKcal * ($p / 100.0);
+                                        $baseW      = (float)($dish->base_weight_g ?? 0);
+                                        $totalKcal  = (float)($dish->total_kcal ?? 0);
+                                        $kcalPer100 = ($baseW > 0 && $totalKcal > 0) ? ($totalKcal / $baseW) * 100.0 : 0;
                                         $weightGrams = ($kcalPer100 > 0) ? ($mealKcal / $kcalPer100) * 100.0 : 0;
 
-                                        $outW = (float)($dish->output_weight ?? $baseW);
-                                        $recipeCost = (float)($dish->total_cost ?? 0);
+                                        $outW        = (float)($dish->output_weight ?? $baseW);
+                                        $recipeCost  = (float)($dish->total_cost ?? 0);
                                         $costPerGram = ($outW > 0) ? ($recipeCost / $outW) : 0;
+                                        $cost        = $weightGrams * $costPerGram;
 
-                                        $cost = $weightGrams * $costPerGram;
+                                        $costColor = $cost > 50 ? '#ef4444' : ($cost > 30 ? '#f59e0b' : '#22c55e');
 
-                                        if ($cost > 50) {
-                                            $color = '#ef4444'; // червоний
-                                        } elseif ($cost > 30) {
-                                            $color = '#f59e0b'; // жовтий
-                                        } else {
-                                            $color = '#22c55e'; // зелений
-                                        }
+                                        $dt    = $dish->calculated_totals;
+                                        $scale = ($baseW > 0) ? ($weightGrams / $baseW) : 0;
+                                        $prot  = round((float)($dt['prot'] ?? 0) * $scale, 1);
+                                        $fat   = round((float)($dt['fat']  ?? 0) * $scale, 1);
+                                        $carb  = round((float)($dt['carb'] ?? 0) * $scale, 1);
+                                        $kcal  = round($mealKcal);
+
+                                        $cell = fn($label, $val, $valColor = '#e5e7eb') =>
+                                            "<div style='display:flex;flex-direction:column;align-items:center;padding:8px 18px;text-align:center;'>" .
+                                            "<span style='font-size:10px;font-weight:500;color:#6b7280;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:3px;'>{$label}</span>" .
+                                            "<span style='font-size:17px;font-weight:800;color:{$valColor};line-height:1;'>{$val}</span>" .
+                                            "</div>";
+
+                                        $sep = "<div style='width:1px;background:#374151;align-self:stretch;margin:6px 0;'></div>";
 
                                         return new HtmlString(
-                                            "<div style='display: flex; flex-direction: column; gap: 2px;'>" .
-                                            "<span style='font-size: 16px; font-weight: 800; color: {$color};'>" . number_format($cost, 2) . " ₴</span>" .
-                                            "<span style='font-size: 11px; font-weight: 600; color: #6b7280;'>Вага: " . round($weightGrams) . " г (" . round($p) ."%)</span>" .
+                                            "<div style='display:flex;align-items:stretch;border:1px solid #374151;border-radius:10px;overflow:hidden;'>" .
+                                            $cell('Ккал', $kcal, '#a78bfa') .
+                                            $sep .
+                                            $cell('Вага', round($weightGrams) . 'г', '#e5e7eb') .
+                                            $sep .
+                                            $cell('Білки', $prot . 'г', '#60a5fa') .
+                                            $cell('Жири', $fat . 'г', '#fbbf24') .
+                                            $cell('Вугл.', $carb . 'г', '#34d399') .
+                                            $sep .
+                                            "<div style='display:flex;flex-direction:column;align-items:center;padding:8px 18px;text-align:center;'>" .
+                                            "<span style='font-size:10px;font-weight:500;color:#6b7280;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:3px;'>Собівартість</span>" .
+                                            "<span style='font-size:17px;font-weight:800;color:{$costColor};line-height:1;'>" . number_format($cost, 2) . " ₴</span>" .
+                                            "</div>" .
+                                            "<div style='margin-left:auto;display:flex;align-items:center;padding:0 16px;'>" .
+                                            "<span style='font-size:11px;color:#4b5563;'>{$p}% · на 1500 ккал</span>" .
+                                            "</div>" .
                                             "</div>"
                                         );
                                     }),
                             ])
-                            ->columns(4) // 🔥 ЗМІНЕНО: 4 колонки, щоб влізло нове поле
-                            ->itemLabel(fn (array $state): ?string => 
+                            ->columns(4)
+                            ->itemLabel(fn (array $state): ?string =>
                                 $state['dish_id'] ? \App\Models\Dish::find($state['dish_id'])?->name : null
                             )
-                            ->collapsible() 
+                            ->collapsible()
                     ]),
             ]);
     }

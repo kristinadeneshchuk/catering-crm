@@ -76,6 +76,8 @@ Route::get('/migrate-orders-to-days', function () {
 });
 
 Route::get('/print/production-report', [PrintController::class, 'productionReport'])->name('print.production-report');
+Route::get('/print/stock-list', [PrintController::class, 'stockList'])->name('print.stock-list');
+Route::get('/print/shopping-list', [PrintController::class, 'shoppingList'])->name('print.shopping-list');
 Route::get('/print/mini-manifest', [\App\Http\Controllers\PrintController::class, 'miniManifest'])->name('print.mini-manifest');
 
 // 🔥 НОВИЙ МАРШРУТ АНАЛІТИКИ (закритий авторизацією)
