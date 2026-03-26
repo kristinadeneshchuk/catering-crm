@@ -1,71 +1,128 @@
 @php
-    $order = $record->order;
+    $order  = $record->order;
     $client = $record->client;
-    
+
     if (!$order || !$client) return;
 
     $endDate = \Carbon\Carbon::parse($order->end_date);
-    $diff = now()->startOfDay()->diffInDays($endDate->startOfDay(), false);
+    $diff    = now()->startOfDay()->diffInDays($endDate->startOfDay(), false);
 
-    // Нова логіка: колір тексту/бордюру та легкий фон
-    $color = ''; $bg = ''; $badgeText = '';
-
-    if ($diff > 0) {
-        $color = '#3b82f6'; // Синій
-        $bg = 'rgba(59, 130, 246, 0.1)'; 
-        $badgeText = "⚡ Залишилось {$diff} дн.";
+    if ($diff > 3) {
+        $color      = '#3b82f6';
+        $bgAlpha    = 'rgba(59, 130, 246, 0.04)';
+        $badgeColor = '#3b82f6';
+        $badgeBg    = 'rgba(59, 130, 246, 0.10)';
+        $badgeText  = $diff . ' дн.';
+    } elseif ($diff > 0) {
+        $color      = '#f97316';
+        $bgAlpha    = 'rgba(249, 115, 22, 0.04)';
+        $badgeColor = '#f97316';
+        $badgeBg    = 'rgba(249, 115, 22, 0.10)';
+        $badgeText  = $diff . ' дн.';
     } elseif ($diff == 0) {
-        $color = '#ef4444'; // Червоний
-        $bg = 'rgba(239, 68, 68, 0.1)';
-        $badgeText = "🔥 ОСТАННІЙ ДЕНЬ";
+        $color      = '#ef4444';
+        $bgAlpha    = 'rgba(239, 68, 68, 0.04)';
+        $badgeColor = '#ef4444';
+        $badgeBg    = 'rgba(239, 68, 68, 0.10)';
+        $badgeText  = 'Сьогодні!';
     } else {
-        $color = '#f97316'; // Помаранчевий
-        $bg = 'rgba(249, 115, 22, 0.1)';
-        $badgeText = "⚠️ Відвалився " . abs($diff) . " дн. тому";
+        $color      = '#6b7280';
+        $bgAlpha    = 'rgba(107, 114, 128, 0.04)';
+        $badgeColor = '#6b7280';
+        $badgeBg    = 'rgba(107, 114, 128, 0.10)';
+        $badgeText  = abs($diff) . ' дн. тому';
     }
 @endphp
 
-<div 
+<div
     id="{{ $record->id }}"
     wire:click="recordClicked('{{ $record->id }}', {{ $record }})"
-    class="p-4 bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 cursor-pointer transition-all hover:ring-1 hover:ring-primary-500"
-    style="border-left: 2px solid {{ $color }};"
+    style="
+        border-left: 3px solid {{ $color }};
+        background: {{ $bgAlpha }};
+        border-radius: 10px;
+        padding: 10px 12px;
+        cursor: pointer;
+        transition: box-shadow 0.15s ease, transform 0.1s ease;
+        margin-bottom: 0;
+        border-top: 1px solid rgba(255,255,255,0.06);
+        border-right: 1px solid rgba(255,255,255,0.06);
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+    "
+    onmouseenter="this.style.boxShadow='0 2px 10px rgba(0,0,0,0.10)'; this.style.transform='translateY(-1px)';"
+    onmouseleave="this.style.boxShadow='none'; this.style.transform='translateY(0)';"
 >
-    <div class="flex justify-between items-start mb-3">
-        <h3 class="font-bold text-sm text-gray-900 dark:text-white leading-tight">
+    {{-- Row 1: Client name + urgency badge --}}
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px;">
+        <span style="font-weight: 700; font-size: 13px; color: #f3f4f6; line-height: 1.3; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
             {{ $client->name ?? 'Без імені' }}
-        </h3>
-    </div>
-
-    {{-- 🔥 ОНОВЛЕНИЙ ДИЗАЙН БЕЙДЖА: Тонкий і легкий --}}
-    <div class="mb-3">
-        <span class="text-[10px] px-2 py-0.5 rounded border font-medium uppercase tracking-wider" 
-              style="background-color: {{ $bg }}; color: {{ $color }}; border-color: {{ $color }};">
+        </span>
+        <span style="
+            background: {{ $badgeBg }};
+            color: {{ $badgeColor }};
+            border: 1px solid {{ $badgeColor }};
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 7px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            letter-spacing: 0.01em;
+        ">
             {{ $badgeText }}
         </span>
     </div>
 
-    {{-- Контактна інформація --}}
-    <div class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-1">
-        <x-filament::icon icon="heroicon-m-phone" class="w-4 h-4 text-gray-400" />
-        <a href="tel:{{ $client->phone }}" class="hover:underline text-primary-600" @click.stop>{{ $client->phone ?? 'Немає номеру' }}</a>
+    {{-- Row 2: Phone --}}
+    <div style="margin-bottom: 5px;">
+        <a
+            href="tel:{{ $client->phone }}"
+            @click.stop
+            style="font-size: 11px; color: #6b7280; text-decoration: none; transition: color 0.1s;"
+            onmouseenter="this.style.color='#3b82f6';"
+            onmouseleave="this.style.color='#6b7280';"
+        >
+            {{ $client->phone ?? 'Немає номеру' }}
+        </a>
     </div>
 
-    {{-- Раціон --}}
-    <div class="text-[11px] text-gray-500 dark:text-gray-400 flex flex-col gap-1">
-        <div class="flex justify-between border-b border-gray-100 dark:border-gray-800 pb-1">
-            <span>Раціон:</span>
-            <span class="font-semibold text-gray-800 dark:text-gray-200">{{ $order->calories }} ккал</span>
-        </div>
-        <div class="flex justify-between pt-1">
-            <span>Закінчення:</span>
-            <span class="font-semibold text-gray-800 dark:text-gray-200">{{ $endDate->format('d.m.Y') }}</span>
-        </div>
+    {{-- Row 3: Kcal + end date --}}
+    <div style="display: flex; gap: 12px; font-size: 11px; color: #9ca3af;">
+        <span>
+            <span style="color: #6b7280; font-weight: 500;">{{ $order->calories ?? '—' }} ккал</span>
+        </span>
+        <span style="color: #d1d5db;">|</span>
+        <span>до <span style="color: #6b7280; font-weight: 500;">{{ $endDate->format('d.m.Y') }}</span></span>
     </div>
 
+    {{-- Comment (if exists) --}}
     @if($record->comment)
-        <div class="mt-3 text-[11px] italic text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800 pt-2 line-clamp-2">
-            💬 {{ $record->comment }}
+        <div style="
+            margin-top: 7px;
+            padding-top: 7px;
+            border-top: 1px solid rgba(255,255,255,0.07);
+            font-size: 11px;
+            color: #9ca3af;
+            font-style: italic;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.4;
+        ">
+            "{{ $record->comment }}"
+        </div>
+    @endif
+
+    {{-- Next call reminder (if exists) --}}
+    @if($record->next_call_at)
+        <div style="
+            margin-top: 6px;
+            font-size: 11px;
+            color: #f97316;
+            font-weight: 500;
+        ">
+            Передзвонити: {{ \Carbon\Carbon::parse($record->next_call_at)->format('d.m H:i') }}
         </div>
     @endif
 </div>

@@ -22,6 +22,8 @@ class RetentionBoard extends KanbanBoard
     protected static ?int $navigationSort = 4;
 
     protected static string $recordView = 'filament.pages.retention-card';
+    protected static string $headerView = 'filament.pages.retention-header';
+    protected static string $statusView = 'filament.pages.retention-status';
 
     public static function getNavigationBadge(): ?string
     {
