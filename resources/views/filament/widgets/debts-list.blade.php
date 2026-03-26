@@ -40,13 +40,35 @@
             {{-- Скролюємий список --}}
             <div style="max-height:420px; overflow-y:auto; margin:0 -1.5rem; padding:0 1.5rem;">
                 <table style="width:100%; border-collapse:collapse;">
+                    @php
+                        $thBase = 'padding:0.5rem 0.75rem;font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;cursor:pointer;user-select:none;white-space:nowrap;';
+                        $thActive = 'color:#60a5fa;';
+                        $thGray   = 'color:#6b7280;';
+                        $arrow = fn($col) => $sortBy === $col
+                            ? ($sortDir === 'asc'
+                                ? '<svg style="display:inline;width:10px;height:10px;margin-left:3px;vertical-align:middle;" viewBox="0 0 10 10" fill="currentColor"><path d="M5 2l4 6H1z"/></svg>'
+                                : '<svg style="display:inline;width:10px;height:10px;margin-left:3px;vertical-align:middle;" viewBox="0 0 10 10" fill="currentColor"><path d="M5 8L1 2h8z"/></svg>')
+                            : '<svg style="display:inline;width:10px;height:10px;margin-left:3px;vertical-align:middle;opacity:0.3;" viewBox="0 0 10 14" fill="currentColor"><path d="M5 0l3.5 5h-7z"/><path d="M5 14L1.5 9h7z"/></svg>';
+                    @endphp
                     <thead style="position:sticky; top:0; z-index:1; background:#1f2937;">
                         <tr style="border-bottom:1px solid #374151;">
-                            <th style="padding:0.5rem 0.75rem; font-size:0.7rem; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.05em; text-align:left;">№</th>
-                            <th style="padding:0.5rem 0.75rem; font-size:0.7rem; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.05em; text-align:left;">Клієнт</th>
-                            <th style="padding:0.5rem 0.75rem; font-size:0.7rem; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.05em; text-align:left;">Дата</th>
-                            <th style="padding:0.5rem 0.75rem; font-size:0.7rem; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.05em; text-align:center;">Статус</th>
-                            <th style="padding:0.5rem 0.75rem; font-size:0.7rem; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.05em; text-align:right;">До оплати</th>
+                            <th style="{{ $thBase }}{{ $thGray }}text-align:left;">№</th>
+                            <th wire:click="sortByColumn('client_id')"
+                                style="{{ $thBase }}{{ $sortBy === 'client_id' ? $thActive : $thGray }}text-align:left;">
+                                Клієнт{!! $arrow('client_id') !!}
+                            </th>
+                            <th wire:click="sortByColumn('start_date')"
+                                style="{{ $thBase }}{{ $sortBy === 'start_date' ? $thActive : $thGray }}text-align:left;">
+                                Дата{!! $arrow('start_date') !!}
+                            </th>
+                            <th wire:click="sortByColumn('status')"
+                                style="{{ $thBase }}{{ $sortBy === 'status' ? $thActive : $thGray }}text-align:center;">
+                                Статус{!! $arrow('status') !!}
+                            </th>
+                            <th wire:click="sortByColumn('final_price')"
+                                style="{{ $thBase }}{{ $sortBy === 'final_price' ? $thActive : $thGray }}text-align:right;">
+                                До оплати{!! $arrow('final_price') !!}
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
