@@ -444,13 +444,10 @@ class DailyMenuResource extends Resource
                 $suggestions[] = "Собівартість дня вже " . number_format($dayCost, 2) . " ₴ — забагато. Рекомендується замінити страву для збереження маржинальності.";
             }
 
-            // Total percent warnings
-            if ($totalPercent > 100) {
+            // Total percent warnings — only fire when truly over budget
+            if ($totalPercent > 105) {
                 $over = round($totalPercent - 100, 1);
-                $suggestions[] = "Сума % калорій на день вже {$totalPercent}% — перевищує норму на {$over}%!";
-            } elseif ($totalPercent >= 90) {
-                $left = round(100 - $totalPercent, 1);
-                $suggestions[] = "День майже заповнений: {$totalPercent}% від денної норми. Залишилось лише {$left}%.";
+                $warnings[] = "Сума % калорій на день {$totalPercent}% — перевищує норму на {$over}%! Потрібно зменшити порції або прибрати страву.";
             }
         }
 
