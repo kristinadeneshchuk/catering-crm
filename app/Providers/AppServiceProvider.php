@@ -3,10 +3,12 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
-use App\Models\Transaction;          
-use App\Models\Order;                // 1. Додали модель Order
+use App\Models\Transaction;
+use App\Models\Order;
+use App\Models\StockDocumentItem;
 use App\Observers\PaymentObserver;
-use App\Observers\OrderObserver;     // 2. Додали OrderObserver
+use App\Observers\OrderObserver;
+use App\Observers\StockDocumentItemObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -26,7 +28,9 @@ class AppServiceProvider extends ServiceProvider
         // Слідкуємо за фінансами
         Transaction::observe(PaymentObserver::class); 
 
-        // 3. ДОДАЄМО: Слідкуємо за замовленнями (статуси new/active)
         Order::observe(OrderObserver::class);
+
+        // Після кожного надходження товару — оновлюємо кеш собівартості меню
+        StockDocumentItem::observe(StockDocumentItemObserver::class);
     }
 }

@@ -10,26 +10,22 @@ class DailyMenu extends Model
 {
     use HasFactory;
 
-    /**
-     * Масив дозволених полів для Mass Assignment.
-     * ЗАМІНА: 'date' на 'day_number'.
-     */
     protected $fillable = [
-        'day_number', // Тепер це головне поле для циклічного меню
+        'day_number',
+        'target_kcal',
+        'cached_cost_950',
+        'cached_cost_1500',
+        'cached_cost_2500',
     ];
 
-    /**
-     * Перетворення типів (Casting).
-     * ГАРАНТІЯ: 'day_number' завжди буде цілим числом.
-     */
     protected $casts = [
-        'day_number' => 'integer',
+        'day_number'       => 'integer',
+        'target_kcal'      => 'integer',
+        'cached_cost_950'  => 'float',
+        'cached_cost_1500' => 'float',
+        'cached_cost_2500' => 'float',
     ];
 
-    /**
-     * Список усіх страв, запланованих на цей день циклу.
-     * Зв'язок залишається без змін.
-     */
     public function menuItems(): HasMany
     {
         return $this->hasMany(DailyMenuDish::class, 'daily_menu_id');
