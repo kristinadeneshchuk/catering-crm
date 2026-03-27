@@ -25,6 +25,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Toggle;
 use Illuminate\Support\HtmlString;
 
 use Filament\Tables\Columns\TextColumn;
@@ -94,6 +95,13 @@ class StockDocumentResource extends Resource
                             ->searchable()
                             ->preload()
                             ->visible(fn (Forms\Get $get) => $get('type') === 'receipt'),
+
+                        Toggle::make('is_paid')
+                            ->label('Оплачено')
+                            ->helperText('Транзакція буде створена тільки після позначення як "Оплачено"')
+                            ->default(false)
+                            ->onColor('success')
+                            ->columnSpanFull(),
 
                         Textarea::make('comment')
                             ->label('Коментар')
@@ -309,6 +317,12 @@ class StockDocumentResource extends Resource
                             ->label('Разом за період')
                             ->money('UAH'),
                     ]),
+
+                TextColumn::make('is_paid')
+                    ->label('Оплата')
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => $state ? 'Оплачено' : 'Не оплачено')
+                    ->color(fn ($state) => $state ? 'success' : 'warning'),
             ])
             ->filters([
                 // Фільтр по діапазону дат
@@ -357,6 +371,20 @@ class StockDocumentResource extends Resource
             ->filtersFormColumns(3)
             ->defaultSort('operation_date', 'desc')
             ->actions([
+                Tables\Actions\Action::make('toggle_paid')
+                    ->label(fn ($record) => $record->is_paid ? 'Скасувати оплату' : 'Позначити оплаченим')
+                    ->icon(fn ($record) => $record->is_paid ? 'heroicon-o-x-circle' : 'heroicon-o-check-circle')
+                    ->color(fn ($record) => $record->is_paid ? 'warning' : 'success')
+                    ->requiresConfirmation()
+                    ->modalHeading(fn ($record) => $record->is_paid ? 'Скасувати оплату?' : 'Позначити як оплачено?')
+                    ->modalDescription(fn ($record) => $record->is_paid
+                        ? 'Транзакцію буде видалено з рахунку.'
+                        : 'Буде створена транзакція та списано кошти з рахунку.')
+                    ->action(function ($record) {
+                        // Беремо свіжий стан з БД щоб уникнути кешованих даних Livewire
+                        $fresh = $record->fresh();
+                        $fresh->update(['is_paid' => !$fresh->is_paid]);
+                    }),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ]);

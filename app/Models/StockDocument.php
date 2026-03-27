@@ -47,14 +47,48 @@ class StockDocument extends Model
             }
             Transaction::where('stock_document_id', $document->id)->delete();
         });
+
+        // Якщо змінили is_paid → синхронізуємо транзакцію
+        static::updated(function ($document) {
+            if ($document->wasChanged('is_paid')) {
+                $document->syncTransaction();
+            }
+        });
     }
 
     public function syncTransaction(): void
     {
         $doc = $this->fresh();
-        if (!$doc || $doc->total_sum <= 0) {
+        if (!$doc) return;
+
+        // Якщо не оплачено — залишаємо оригінал у журналі, відновлюємо баланс
+        if (!$doc->is_paid) {
+            $existing = Transaction::where('stock_document_id', $doc->id)->first();
+            if ($existing) {
+                $supplierName = $doc->supplier?->name;
+
+                // Відв'язуємо оригінал від документу і додаємо позначку (залишається в журналі)
+                $existing->updateQuietly([
+                    'stock_document_id' => null,
+                    'comment'           => $existing->comment . ' (скасовано ' . now()->format('d.m.Y') . ')',
+                ]);
+
+                // Створюємо зворотну проводку — відновлює баланс рахунку
+                Transaction::create([
+                    'type'              => $existing->type === 'expense' ? 'income' : 'expense',
+                    'category'          => 'Скасування оплати',
+                    'amount'            => $existing->amount,
+                    'account_id'        => $existing->account_id,
+                    'date'              => now(),
+                    'comment'           => "Скасування оплати: Документ #{$doc->id}" . ($supplierName ? " від {$supplierName}" : ''),
+                    'user_id'           => auth()->id(),
+                    'stock_document_id' => null,
+                ]);
+            }
             return;
         }
+
+        if ($doc->total_sum <= 0) return;
 
         $isReceipt = $doc->type === 'receipt';
         $supplierName = $doc->supplier?->name;
