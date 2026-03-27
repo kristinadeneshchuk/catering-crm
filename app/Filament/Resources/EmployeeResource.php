@@ -90,11 +90,11 @@ class EmployeeResource extends Resource
                     ->label('Посада')
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'cook' => '👨‍🍳 Кухар',
-                        'courier' => '🛵 Кур\'єр',
-                        'manager' => '📊 Менеджер',
-                        'packer' => '📦 Пакувальник',
-                        'admin' => '🔑 Адмін',
+                        'cook' => 'Кухар',
+                        'courier' => 'Кур\'єр',
+                        'manager' => 'Менеджер',
+                        'packer' => 'Пакувальник',
+                        'admin' => 'Адмін',
                         default => $state,
                     })
                     ->color(fn (string $state): string => match ($state) {

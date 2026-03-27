@@ -13,6 +13,8 @@ use App\Models\Setting;
 use App\Models\Ingredient;
 use App\Models\Dish;
 use App\Models\OrderReplacement;
+use App\Models\ReplacementBundle;
+use App\Models\DishIngredient;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Actions\Action;
@@ -141,12 +143,12 @@ public function form(Form $form): Form
 
                         \Filament\Forms\Components\Actions::make([
                             \Filament\Forms\Components\Actions\Action::make('print_view')
-                                ->label('🖨 Версія для друку')
+                                ->label('Версія для друку')
                                 ->color('warning')
                                 ->url(fn () => route('print.production-report', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                                 ->openUrlInNewTab(),
                             \Filament\Forms\Components\Actions\Action::make('print_stock')
-                                ->label('📦 Список списання')
+                                ->label('Список списання')
                                 ->color('gray')
                                 ->url(fn () => route('print.stock-list', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                                 ->openUrlInNewTab(),
@@ -289,6 +291,216 @@ public function form(Form $form): Form
             });
     }
 
+    // === ЕКШН 3: МАСОВА ЗАМІНА ІНГРЕДІЄНТА ===
+    public function massReplaceIngredientAction(): Action
+    {
+        return Action::make('massReplaceIngredient')
+            ->label('Масова заміна')
+            ->icon('heroicon-m-arrows-right-left')
+            ->color('warning')
+            ->modalHeading('Масова заміна інгредієнта')
+            ->modalDescription('Замінить інгредієнт у ВСІХ клієнтів, у яких він виключений.')
+            ->form(function () {
+                $conflictedIngredientIds = collect();
+                foreach (($this->activeOrders ?? collect()) as $order) {
+                    $conflictedIngredientIds = $conflictedIngredientIds->merge(
+                        $order->client->ingredientExclusions->pluck('id')
+                    );
+                }
+                $conflictedIngredientIds = $conflictedIngredientIds->unique()->values()->toArray();
+
+                return [
+                    Select::make('original_ingredient_id')
+                        ->label('Який інгредієнт замінити')
+                        ->options(
+                            empty($conflictedIngredientIds)
+                                ? Ingredient::orderBy('name')->pluck('name', 'id')
+                                : Ingredient::whereIn('id', $conflictedIngredientIds)->orderBy('name')->pluck('name', 'id')
+                        )
+                        ->searchable()
+                        ->required(),
+
+                    Select::make('replacement_ingredient_id')
+                        ->label('Замінити на')
+                        ->options(Ingredient::orderBy('name')->limit(100)->pluck('name', 'id'))
+                        ->searchable()
+                        ->getSearchResultsUsing(fn (string $search) =>
+                            Ingredient::where('name', 'like', "%{$search}%")->limit(50)->pluck('name', 'id')
+                        )
+                        ->required(),
+
+                    Textarea::make('comment')->label('Коментар')->nullable(),
+                ];
+            })
+            ->action(function (array $data) {
+                if ($this->activeOrders === null) {
+                    $this->calculate();
+                }
+
+                $originalId    = (int) $data['original_ingredient_id'];
+                $replacementId = (int) $data['replacement_ingredient_id'];
+                $comment       = $data['comment'] ?? null;
+                $count         = 0;
+
+                $dishIds = $this->getDishIdsContainingIngredient($originalId);
+
+                foreach (($this->activeOrders ?? collect()) as $order) {
+                    if (!$order->client->ingredientExclusions->contains('id', $originalId)) {
+                        continue;
+                    }
+                    foreach ($dishIds as $dishId) {
+                        OrderReplacement::updateOrCreate(
+                            [
+                                'order_id'            => $order->id,
+                                'dish_id'             => $dishId,
+                                'original_product_id' => $originalId,
+                            ],
+                            [
+                                'replacement_product_id' => $replacementId,
+                                'replacement_dish_id'    => null,
+                                'comment'                => $comment,
+                            ]
+                        );
+                        $count++;
+                    }
+                }
+
+                Notification::make()
+                    ->title("Масову заміну виконано ({$count} записів)")
+                    ->success()
+                    ->send();
+
+                $this->calculate();
+            });
+    }
+
+    // === ЕКШН 4: ЗАСТОСУВАТИ ШАБЛОН ЗАМІН ===
+    public function applyBundleAction(): Action
+    {
+        return Action::make('applyBundle')
+            ->label('Застосувати шаблон')
+            ->icon('heroicon-m-rectangle-stack')
+            ->color('info')
+            ->modalHeading('Застосувати шаблон замін')
+            ->form(function () {
+                return [
+                    Select::make('bundle_id')
+                        ->label('Оберіть шаблон')
+                        ->options(ReplacementBundle::orderBy('name')->pluck('name', 'id'))
+                        ->required()
+                        ->searchable(),
+
+                    Select::make('scope')
+                        ->label('Застосувати до')
+                        ->options([
+                            'all'    => 'Всі, у кого є виключення з цим інгредієнтом',
+                            'single' => 'Конкретне замовлення',
+                        ])
+                        ->default('all')
+                        ->live()
+                        ->required(),
+
+                    Select::make('order_id')
+                        ->label('Оберіть замовлення')
+                        ->options(function () {
+                            $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
+                            $targetDate   = \Carbon\Carbon::parse($selectedDate)->addDay()->format('Y-m-d');
+
+                            return Order::whereIn('status', ['new', 'active'])
+                                ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
+                                ->with('client')
+                                ->get()
+                                ->pluck('client.name', 'id')
+                                ->toArray();
+                        })
+                        ->searchable()
+                        ->visible(fn ($get) => $get('scope') === 'single')
+                        ->required(fn ($get) => $get('scope') === 'single'),
+                ];
+            })
+            ->action(function (array $data) {
+                if ($this->activeOrders === null) {
+                    $this->calculate();
+                }
+
+                $bundle = ReplacementBundle::with('items')->find($data['bundle_id']);
+                if (!$bundle) return;
+
+                $orders = $data['scope'] === 'all'
+                    ? ($this->activeOrders ?? collect())
+                    : ($this->activeOrders ?? collect())->where('id', (int) $data['order_id']);
+
+                $count = 0;
+                foreach ($orders as $order) {
+                    foreach ($bundle->items as $item) {
+                        // For "all orders" mode: only apply to clients who actually exclude this ingredient
+                        if ($data['scope'] === 'all') {
+                            if (!$order->client->ingredientExclusions->contains('id', $item->original_ingredient_id)) {
+                                continue;
+                            }
+                        }
+
+                        $dishIds = $this->getDishIdsContainingIngredient($item->original_ingredient_id);
+                        foreach ($dishIds as $dishId) {
+                            OrderReplacement::updateOrCreate(
+                                [
+                                    'order_id'            => $order->id,
+                                    'dish_id'             => $dishId,
+                                    'original_product_id' => $item->original_ingredient_id,
+                                ],
+                                [
+                                    'replacement_product_id' => $item->replacement_ingredient_id,
+                                    'replacement_dish_id'    => null,
+                                    'comment'                => "Шаблон: {$bundle->name}",
+                                ]
+                            );
+                            $count++;
+                        }
+                    }
+                }
+
+                Notification::make()
+                    ->title("Шаблон «{$bundle->name}» застосовано ({$count} замін)")
+                    ->success()
+                    ->send();
+
+                $this->calculate();
+            });
+    }
+
+    // === ХЕЛПЕР: ID КОРЕНЕВИХ СТРАВ МЕНЮ, ЩО МІСТЯТЬ ІНГРЕДІЄНТ (будь-яка глибина вкладеності) ===
+    private function getDishIdsContainingIngredient(int $ingredientId): array
+    {
+        $menuDishIds = collect($this->report)
+            ->flatten(1)
+            ->pluck('dish_id')
+            ->unique()
+            ->toArray();
+
+        $result = [];
+        foreach ($menuDishIds as $dishId) {
+            if ($this->dishContainsIngredient((int) $dishId, $ingredientId, [])) {
+                $result[] = (int) $dishId;
+            }
+        }
+        return $result;
+    }
+
+    private function dishContainsIngredient(int $dishId, int $ingredientId, array $visited): bool
+    {
+        if (in_array($dishId, $visited, true)) return false;
+        $visited[] = $dishId;
+
+        $rows = DishIngredient::where('dish_id', $dishId)->get();
+        foreach ($rows as $row) {
+            if ((int) $row->ingredient_id === $ingredientId) return true;
+            if ($row->child_dish_id && $this->dishContainsIngredient((int) $row->child_dish_id, $ingredientId, $visited)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public function calculate(): void
     {
         $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
@@ -310,8 +522,8 @@ public function form(Form $form): Form
 
         $menu = DailyMenu::where('day_number', $this->currentDayNumber)
             ->with([
-                'menuItems.dish.dishIngredients.ingredient',
-                'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
+                'menuItems.dish.dishIngredients.ingredient.allergens',
+                'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient.allergens',
                 'menuItems.mealType'
             ])
             ->first();
@@ -609,9 +821,10 @@ public function form(Form $form): Form
                     }
 
                     $conflictData = [
-                        'is_resolved' => (bool)$replacementInfo,
-                        'replacement' => $replacementInfo,
-                        'original_ing_id' => $ingId
+                        'is_resolved'     => (bool)$replacementInfo,
+                        'replacement'     => $replacementInfo,
+                        'original_ing_id' => $ingId,
+                        'allergen'        => $di->ingredient->allergens->pluck('name')->join(', ') ?: null,
                     ];
                 }
             }

@@ -122,7 +122,7 @@ class PackagingList extends Page implements HasForms
 
                             return new HtmlString(
                                 "<div class='p-4 bg-gray-900 border border-gray-700 rounded-lg text-white'>
-                                    📦 Фасування на <strong class='text-primary-400'>завтра (" . $targetDateObj->format('d.m.Y') . ")</strong>.
+                                    Фасування на <strong class='text-primary-400'>завтра (" . $targetDateObj->format('d.m.Y') . ")</strong>.
                                     <br> Це буде <strong class='text-primary-400'>" . $dayNum . "-й день</strong> циклу меню.
                                 </div>"
                             );
@@ -130,7 +130,7 @@ class PackagingList extends Page implements HasForms
                         
                     \Filament\Forms\Components\Actions::make([
                         \Filament\Forms\Components\Actions\Action::make('print_view')
-                            ->label('🖨 Відкрити версію для друку')
+                            ->label('Відкрити версію для друку')
                             ->color('warning')
                             ->url(fn () => route('print.packaging-list', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                             ->openUrlInNewTab()
@@ -166,7 +166,7 @@ class PackagingList extends Page implements HasForms
             ->first();
 
         if (!$menu) {
-            $this->debugMessage = "⚠️ Меню на {$targetDateObj->format('d.m.Y')} (день циклу {$globalDay}) не знайдено";
+            $this->debugMessage = "Меню на {$targetDateObj->format('d.m.Y')} (день циклу {$globalDay}) не знайдено";
             return;
         }
 
@@ -258,7 +258,7 @@ class PackagingList extends Page implements HasForms
             foreach ($dish->dishIngredients as $di) {
                 $name = $di->ingredient
                     ? $di->ingredient->name
-                    : ($di->childDish ? "📦 " . $di->childDish->name : '???');
+                    : ($di->childDish ? "[НФ] " . $di->childDish->name : '???');
 
                 $netWeight = (float)($di->net_weight_g ?? 0);
                 $cells = [];
@@ -295,16 +295,16 @@ class PackagingList extends Page implements HasForms
         // 1. Коментарі
         $comment = trim($order->client->production_comment ?? '');
         if (!empty($comment)) {
-            $notes[] = "👤 {$clientInfo}: {$comment}";
+            $notes[] = "{$clientInfo}: {$comment}";
         }
 
         // 2. Виключення цілої страви
         if ($order->client->dishExclusions->contains('id', $dish->id)) {
             $rep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
             if ($rep && $rep->replacementDish) {
-                $notes[] = "🔄 {$clientInfo}: Страву повністю замінено на «{$rep->replacementDish->name}»";
+                $notes[] = "{$clientInfo}: Страву повністю замінено на «{$rep->replacementDish->name}»";
             } else {
-                $notes[] = "❌ {$clientInfo}: Страву повністю ВИКЛЮЧЕНО";
+                $notes[] = "{$clientInfo}: Страву повністю ВИКЛЮЧЕНО";
             }
             // Якщо страва виключена, не перевіряємо інгредієнти
             return $notes;
@@ -325,9 +325,9 @@ class PackagingList extends Page implements HasForms
             if ($di->ingredient_id && $order->client->ingredientExclusions->contains('id', $di->ingredient_id)) {
                 $rep = $order->replacements->where('dish_id', $rootDishId)->where('original_product_id', $di->ingredient_id)->first();
                 if ($rep && $rep->replacementProduct) {
-                    $notes[] = "🔄 {$clientInfo}: «{$di->ingredient->name}» замінено на «{$rep->replacementProduct->name}»";
+                    $notes[] = "{$clientInfo}: «{$di->ingredient->name}» замінено на «{$rep->replacementProduct->name}»";
                 } else {
-                    $notes[] = "❌ {$clientInfo}: Без «{$di->ingredient->name}»";
+                    $notes[] = "{$clientInfo}: Без «{$di->ingredient->name}»";
                 }
             }
             // Якщо це ПФ - йдемо вглиб

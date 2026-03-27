@@ -77,7 +77,7 @@
 <body>
 
 <div class="no-print">
-    <button onclick="window.print()">🖨 ДРУКУВАТИ СПИСОК ПОКУПОК</button>
+    <button onclick="window.print()">ДРУКУВАТИ СПИСОК ПОКУПОК</button>
 </div>
 
 <div class="page">
@@ -144,7 +144,7 @@
 
     {{-- Достатньо --}}
     @if(!empty($enough))
-    <div class="section-title ok">✅ Достатньо на складі</div>
+    <div class="section-title ok">✓ Достатньо на складі</div>
     <div class="ok-grid">
         @foreach($enough as $row)
         <div class="ok-row">

@@ -134,7 +134,7 @@
 
         @if(!empty($table['individual_notes']))
             <div class="notes-box">
-                <div class="notes-header">⚠️ Індивідуальні заміни:</div>
+                <div class="notes-header">Індивідуальні заміни:</div>
                 @foreach($table['individual_notes'] as $note)
                     <div>{{ $note }}</div>
                 @endforeach

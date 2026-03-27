@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Ingredient extends Model
 {
-    // Список доступних одиниць виміру
     public const UNITS = [
         'g' => 'г',
         'kg' => 'кг',
@@ -23,7 +22,7 @@ class Ingredient extends Model
     ];
 
     protected $casts = [
-        'stock' => 'decimal:3', 
+        'stock' => 'decimal:3',
         'price_per_kg' => 'decimal:2',
         'yield_percent' => 'integer',
         'calories_100g' => 'integer',
@@ -32,10 +31,6 @@ class Ingredient extends Model
         'carbs_100g' => 'float',
     ];
 
-    /**
-     * 🔥 АКСЕСОР: Середньозважена ціна закупівлі
-     * Рахується на основі всіх документів "Надходження" (receipt)
-     */
     public function getAveragePriceAttribute(): float
     {
         $avgData = \App\Models\StockDocumentItem::query()
@@ -45,7 +40,6 @@ class Ingredient extends Model
             ->selectRaw('SUM(qty * price) as total_cost, SUM(qty) as total_qty')
             ->first();
 
-        // Якщо закупівлі були — повертаємо середню. Якщо ні — повертаємо фіксовану ціну з картки.
         if ($avgData && $avgData->total_qty > 0) {
             return (float) ($avgData->total_cost / $avgData->total_qty);
         }
@@ -54,23 +48,25 @@ class Ingredient extends Model
     }
 
     public function getTotalSpentAttribute(): float
-{
-    return (float) \App\Models\StockDocumentItem::query()
-        ->whereIn('itemable_type', [self::class, 'App\Models\Ingredient'])
-        ->where('itemable_id', $this->id)
-        ->whereHas('stockDocument', fn($q) => $q->where('type', 'receipt'))
-        ->sum(\Illuminate\Support\Facades\DB::raw('qty * price'));
-}
+    {
+        return (float) \App\Models\StockDocumentItem::query()
+            ->whereIn('itemable_type', [self::class, 'App\Models\Ingredient'])
+            ->where('itemable_id', $this->id)
+            ->whereHas('stockDocument', fn($q) => $q->where('type', 'receipt'))
+            ->sum(\Illuminate\Support\Facades\DB::raw('qty * price'));
+    }
 
-    /**
-     * Зв'язок зі стравами через таблицю-посередник.
-     */
+    public function allergens(): BelongsToMany
+    {
+        return $this->belongsToMany(Allergen::class, 'allergen_ingredient');
+    }
+
     public function dishes(): BelongsToMany
     {
         return $this->belongsToMany(
-            Dish::class, 
+            Dish::class,
             'dish_ingredients',
-            'ingredient_id', 
+            'ingredient_id',
             'dish_id'
         )->withPivot('net_weight_g');
     }

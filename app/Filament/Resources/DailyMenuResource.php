@@ -498,7 +498,7 @@ class DailyMenuResource extends Resource
 
         if (!empty($suggestions)) {
             $sections .= "<div>"
-                . "<div style='font-size:10px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;'>🔄 Контекст дня</div>";
+                . "<div style='font-size:10px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;'>Контекст дня</div>";
             foreach ($suggestions as $s) {
                 $sections .= "<div style='font-size:11.5px;color:#fcd34d;line-height:1.5;padding:5px 8px;background:rgba(245,158,11,0.1);border-left:2px solid #f59e0b;border-radius:3px;margin-bottom:3px;'>"
                     . htmlspecialchars($s) . "</div>";

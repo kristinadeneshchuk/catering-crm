@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\IngredientResource\Pages;
+use App\Models\Allergen;
 use App\Models\Ingredient;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -65,6 +66,14 @@ class IngredientResource extends Resource
                                     ->createOptionUsing(function (array $data) {
                                         return $data['group'];
                                     }),
+
+                                Select::make('allergens')
+                                    ->label('Алергени')
+                                    ->multiple()
+                                    ->relationship('allergens', 'name')
+                                    ->searchable()
+                                    ->preload()
+                                    ->placeholder('— немає —'),
 
                                 TextInput::make('price_per_kg')
                                     ->label('Базова ціна за кг (грн)')
@@ -131,6 +140,13 @@ class IngredientResource extends Resource
                     ->color('success')
                     ->weight('bold'),
                 
+                Tables\Columns\TextColumn::make('allergens.name')
+                    ->label('Алергени')
+                    ->badge()
+                    ->color('warning')
+                    ->default('—')
+                    ->separator(','),
+
                 Tables\Columns\TextColumn::make('group')->label('Група/Тип')->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'Фрукти', 'Овочі', 'Зелень', 'Ягоди', 'Гриби', 'Сухофрукти' => 'success',

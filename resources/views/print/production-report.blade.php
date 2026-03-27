@@ -79,7 +79,7 @@
             <p class="text-sm text-gray-500">Готуємо сьогодні ({{ $date }}) на завтра ({{ \Carbon\Carbon::parse($targetDate)->format('d.m.Y') }})</p>
         </div>
         <button onclick="window.print()" class="bg-yellow-500 hover:bg-yellow-600 text-black px-6 py-2 rounded-lg font-bold shadow transition">
-            🖨 Роздрукувати звіт
+            Роздрукувати звіт
         </button>
     </div>
 
@@ -98,7 +98,7 @@
                 foreach($report as $mealGroup) {
                     foreach($mealGroup as $dishRow) {
                         foreach($dishRow['comment_clients'] ?? [] as $cc) {
-                            $allDayComments[$cc['order_id']] = $cc; // дедуплікація по order_id
+                            $allDayComments[$cc['client_name']] = $cc; // дедуплікація по клієнту
                         }
                     }
                 }
@@ -107,7 +107,7 @@
             {{-- КОМЕНТАРІ ДО ВИРОБНИЦТВА — один раз на всю сторінку --}}
             @if(!empty($allDayComments))
                 <div style="margin-bottom: 20px; border: 1px solid #fcd34d; background-color: #fffbeb; border-radius: 4px; padding: 8px 12px;">
-                    <div style="font-weight: bold; font-size: 12px; color: #92400e; margin-bottom: 6px;">📝 Коментарі до виробництва:</div>
+                    <div style="font-weight: bold; font-size: 12px; color: #92400e; margin-bottom: 6px;">Коментарі до виробництва:</div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px 20px;">
                         @foreach($allDayComments as $cc)
                             <div style="font-size: 10px; border-bottom: 1px dashed #fde68a; padding: 2px 0;">
@@ -159,7 +159,7 @@
                                         @foreach($dish['standard_structure'] as $item)
                                             <tr>
                                                 <td class="{{ $item['type'] === 'pf' ? 'font-bold' : '' }}">
-                                                    {{ $item['type'] === 'pf' ? '📦 ' : '' }}{{ $item['name'] }}
+                                                    {{ $item['name'] }}
                                                 </td>
                                                 <td class="text-center font-bold">{{ round($item['weight_brutto_sum'] ?? $item['weight_brutto'] ?? 0) }}</td>
                                                 <td class="text-center">{{ round($item['weight_netto_sum'] ?? $item['weight_netto'] ?? $item['weight_output'] ?? 0) }}</td>
@@ -192,7 +192,7 @@
                                             @foreach($pf['sub_ingredients'] as $item)
                                                 <tr>
                                                     <td class="{{ $item['type'] === 'pf' ? 'font-bold' : '' }}">
-                                                        {{ $item['type'] === 'pf' ? '📦 ' : '' }}{{ $item['name'] }}
+                                                        {{ $item['name'] }}
                                                     </td>
                                                     <td class="text-center font-bold">{{ round($item['weight_brutto_sum'] ?? $item['weight_brutto'] ?? 0) }}</td>
                                                     <td class="text-center">{{ round($item['weight_netto_sum'] ?? $item['weight_netto'] ?? $item['weight_output'] ?? 0) }}</td>
@@ -214,7 +214,7 @@
                     @if(count($dish['custom_cards']) > 0)
                         <div>
                             <h4 class="font-bold text-red-600 mb-2 uppercase text-xs border-b border-red-200 pb-1 print:text-black">
-                                ⚠️ Індивідуальні замовлення (Заміни)
+                                Індивідуальні замовлення (Заміни)
                             </h4>
                             
                             <div class="pf-grid">
@@ -237,13 +237,13 @@
                                         {{-- ГОЛОВНА КАРТКА КАСТОМНОЇ СТРАВИ --}}
                                         <div class="pf-card border-red-300">
                                             <div class="pf-card-header bg-gray-700 text-white print:bg-gray-200 print:text-black">
-                                                <span>👤 {{ $card['client_name'] }} (Зам. #{{ $card['order_id'] }})</span>
+                                                <span>{{ $card['client_name'] }} (Зам. #{{ $card['order_id'] }})</span>
                                             </div>
                                             
                                             @if($card['dish_excluded'] || $card['dish_replacement'])
                                             <div class="p-1.5 bg-orange-50 text-orange-800 text-[10px] border-b border-gray-300 print:bg-white print:text-black">
-                                                @if($card['dish_excluded']) <span class="font-bold text-red-600 print:text-black">❌ СТРАВУ ВИКЛЮЧЕНО</span> <br> @endif
-                                                @if($card['dish_replacement']) <span class="font-bold text-blue-600 print:text-black">🔄 Заміна на: {{ $card['dish_replacement'] }}</span> @endif
+                                                @if($card['dish_excluded']) <span class="font-bold text-red-600 print:text-black">СТРАВУ ВИКЛЮЧЕНО</span> <br> @endif
+                                                @if($card['dish_replacement']) <span class="font-bold text-blue-600 print:text-black">Заміна на: {{ $card['dish_replacement'] }}</span> @endif
                                             </div>
                                             @endif
 
@@ -263,13 +263,16 @@
                                                             @endphp
                                                             <tr>
                                                                 <td class="{{ ($item['type'] ?? '') === 'pf' ? 'font-bold' : '' }}">
-                                                                    {{ ($item['type'] ?? '') === 'pf' ? '📦 ' : '' }}
+                                                                    {{ ($item['type'] ?? '') === 'pf' ? '[НФ] ' : '' }}
                                                                     @if($isResolved)
                                                                         <span class="line-through text-gray-400">{{ $item['name'] }}</span><br>
-                                                                        <span class="font-bold text-[9px] text-blue-600">🔄 На: {{ $item['conflict']['replacement']['name'] ?? 'Заміна' }}</span>
+                                                                        <span class="font-bold text-[9px] text-blue-600">На: {{ $item['conflict']['replacement']['name'] ?? 'Заміна' }}</span>
                                                                     @elseif($isConflict)
                                                                         <span class="line-through text-red-400">{{ $item['name'] }}</span><br>
-                                                                        <span class="font-bold text-[9px] text-red-600">❌ БЕЗ</span>
+                                                                        <span class="font-bold text-[9px] text-red-600">БЕЗ</span>
+                                                                        @if(!empty($item['conflict']['allergen']))
+                                                                            <span class="font-bold text-[8px] text-orange-600">{{ $item['conflict']['allergen'] }}</span>
+                                                                        @endif
                                                                     @else
                                                                         {{ $item['name'] }}
                                                                     @endif
@@ -300,9 +303,9 @@
                                                     $isSubResolved = $isSubConflict && ($sub['conflict']['is_resolved'] ?? false);
                                                     
                                                     if ($isSubResolved) {
-                                                        $changes[] = "🔄 {$sub['name']} ➡ " . ($sub['conflict']['replacement']['name'] ?? 'Інше');
+                                                        $changes[] = "{$sub['name']} → " . ($sub['conflict']['replacement']['name'] ?? 'Інше');
                                                     } elseif ($isSubConflict) {
-                                                        $changes[] = "❌ Без {$sub['name']}";
+                                                        $changes[] = "БЕЗ {$sub['name']}";
                                                     }
                                                 }
                                             @endphp
@@ -315,7 +318,7 @@
 
                                                 <div class="pf-card border-orange-300">
                                                     <div class="pf-card-header bg-orange-100 text-orange-900 print:bg-gray-100 print:text-black">
-                                                        <span>{{ $pf['name'] }} > <span class="text-blue-700 font-bold print:text-black">[👤 {{ $card['client_name'] }}: {{ $changeStr }}]</span></span>
+                                                        <span>{{ $pf['name'] }} > <span class="text-blue-700 font-bold print:text-black">[{{ $card['client_name'] }}: {{ $changeStr }}]</span></span>
                                                     </div>
                                                     <table class="table-striped">
                                                         <thead>
@@ -332,13 +335,16 @@
                                                                 @endphp
                                                                 <tr>
                                                                     <td class="{{ ($item['type'] ?? '') === 'pf' ? 'font-bold' : '' }}">
-                                                                        {{ ($item['type'] ?? '') === 'pf' ? '📦 ' : '' }}
+                                                                        {{ ($item['type'] ?? '') === 'pf' ? '[НФ] ' : '' }}
                                                                         @if($isSubResolved)
                                                                             <span class="line-through text-gray-400">{{ $item['name'] }}</span><br>
-                                                                            <span class="font-bold text-[9px] text-blue-600">🔄 На: {{ $item['conflict']['replacement']['name'] ?? 'Заміна' }}</span>
+                                                                            <span class="font-bold text-[9px] text-blue-600">На: {{ $item['conflict']['replacement']['name'] ?? 'Заміна' }}</span>
                                                                         @elseif($isSubConflict)
                                                                             <span class="line-through text-red-400">{{ $item['name'] }}</span><br>
-                                                                            <span class="font-bold text-[9px] text-red-600">❌ БЕЗ</span>
+                                                                            <span class="font-bold text-[9px] text-red-600">БЕЗ</span>
+                                                                            @if(!empty($item['conflict']['allergen']))
+                                                                                <span class="font-bold text-[8px] text-orange-600">{{ $item['conflict']['allergen'] }}</span>
+                                                                            @endif
                                                                         @else
                                                                             {{ $item['name'] }}
                                                                         @endif

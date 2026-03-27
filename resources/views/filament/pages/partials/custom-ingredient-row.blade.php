@@ -39,7 +39,16 @@
                 <x-filament::icon icon="heroicon-m-no-symbol" class="w-4 h-4" style="color: #b91c1c;" />
                 <span style="color: #b91c1c; font-weight: 800; font-size: 13px;">{{ $comp['name'] }}</span>
             </div>
-            <div style="font-size: 10px; font-weight: 900; color: #ef4444; text-transform: uppercase; margin-top: 2px;">⛔️ НЕ ЇСТЬ! (Зробіть заміну)</div>
+            <div style="display:flex; align-items:center; gap:3px; margin-top:2px;">
+                <x-filament::icon icon="heroicon-m-x-circle" class="w-3 h-3" style="color:#ef4444; flex-shrink:0;" />
+                <span style="font-size: 10px; font-weight: 900; color: #ef4444; text-transform: uppercase;">НЕ ЇСТЬ! (Зробіть заміну)</span>
+            </div>
+            @if(!empty($comp['conflict']['allergen']))
+                <div style="display:inline-flex; align-items:center; gap:3px; margin-top:3px; background:#fef3c7; color:#92400e; border:1px solid #fbbf24; border-radius:4px; font-size:9px; font-weight:900; padding:2px 6px;">
+                    <x-filament::icon icon="heroicon-m-exclamation-triangle" class="w-3 h-3" style="color:#b45309; flex-shrink:0;" />
+                    АЛЕРГІЯ: {{ $comp['conflict']['allergen'] }}
+                </div>
+            @endif
 
         @else
             {{-- ВАРІАНТ 3: НОРМА (СТАНДАРТНИЙ ІНГРЕДІЄНТ) --}}

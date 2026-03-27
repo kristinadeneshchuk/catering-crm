@@ -19,7 +19,7 @@ class PrintController extends Controller
         [$menu, $globalDay] = $this->getMenuForTargetDate($targetDate);
 
         if (!$menu) {
-            return "❌ На День циклу №{$globalDay} меню ще не створено.";
+            return "На День циклу №{$globalDay} меню ще не створено.";
         }
 
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
@@ -119,7 +119,7 @@ class PrintController extends Controller
         [$menu, $globalDay] = $this->getMenuForTargetDate($targetDate);
 
         if (!$menu) {
-            return "❌ Меню не створено на завтра ({$targetDate}).";
+            return "Меню не створено на завтра ({$targetDate}).";
         }
 
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
@@ -161,9 +161,9 @@ class PrintController extends Controller
 
                     $dishRep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
                     if ($dishRep && $dishRep->replacementDish) {
-                        $changes[] = "🔄 ЗАМІНА СТРАВИ: " . $dishRep->replacementDish->name;
+                        $changes[] = "ЗАМІНА СТРАВИ: " . $dishRep->replacementDish->name;
                     } elseif ($order->client->dishExclusions->contains('id', $dish->id)) {
-                        $changes[] = "⛔ КЛІЄНТ НЕ ЇСТЬ ЦЮ СТРАВУ!";
+                        $changes[] = "НЕ ЇСТЬ ЦЮ СТРАВУ";
                     } else {
                         $ingredientChanges = $this->findIngredientChanges($dish, $order, $dish->id);
                         $changes = array_merge($changes, $ingredientChanges);
@@ -256,10 +256,10 @@ class PrintController extends Controller
 
                 $noteParts = [];
                 foreach ($replacements as $r) {
-                    $noteParts[] = "🔄 " . ($r->originalProduct->name ?? '?') . " ➡ " . ($r->replacementProduct->name ?? '?');
+                    $noteParts[] = ($r->originalProduct->name ?? '?') . " → " . ($r->replacementProduct->name ?? '?');
                 }
                 foreach ($conflicts as $conflictName) {
-                    $noteParts[] = "⛔ Без: {$conflictName}";
+                    $noteParts[] = "Без: {$conflictName}";
                 }
 
                 if (!empty($noteParts)) {
@@ -294,7 +294,7 @@ class PrintController extends Controller
             foreach ($dish->dishIngredients as $di) {
                 $originalName = $di->ingredient
                     ? $di->ingredient->name
-                    : ($di->childDish ? "📦 " . $di->childDish->name : '???');
+                    : ($di->childDish ? "[НФ] " . $di->childDish->name : '???');
 
                 $cells = [];
                 foreach ($tableData['columns'] as $key => $col) {
@@ -330,7 +330,7 @@ class PrintController extends Controller
         [$menu, $globalDay] = $this->getMenuForTargetDate($targetDate);
 
         if (!$menu) {
-            return "❌ Меню не знайдено на завтра ({$targetDate})";
+            return "Меню не знайдено на завтра ({$targetDate})";
         }
 
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
@@ -573,7 +573,7 @@ class PrintController extends Controller
         [$menu, $globalDay] = $this->getMenuForTargetDate($targetDate);
 
         if (!$menu) {
-            return "❌ Меню не знайдено на завтра ({$targetDate})";
+            return "Меню не знайдено на завтра ({$targetDate})";
         }
 
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
@@ -803,8 +803,8 @@ class PrintController extends Controller
 
         $menu = DailyMenu::where('day_number', $globalDay)
             ->with([
-                'menuItems.dish.dishIngredients.ingredient',
-                'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
+                'menuItems.dish.dishIngredients.ingredient.allergens',
+                'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient.allergens',
                 'menuItems.mealType',
             ])
             ->first();
@@ -829,9 +829,9 @@ class PrintController extends Controller
                         ->first();
 
                     if ($ingRep) {
-                        $changes[] = "🔄 " . $di->ingredient->name . " ➡ " . ($ingRep->replacementProduct->name ?? '?');
+                        $changes[] = $di->ingredient->name . " → " . ($ingRep->replacementProduct->name ?? '?');
                     } else {
-                        $changes[] = "❌ БЕЗ: " . $di->ingredient->name;
+                        $changes[] = "БЕЗ: " . $di->ingredient->name;
                     }
                 }
             }
@@ -943,7 +943,11 @@ class PrintController extends Controller
                             'brutto' => round(($nettoTotalRaw * 100) / $newYield, 1),
                         ];
                     }
-                    $conflictData = ['is_resolved' => (bool)$replacementInfo, 'replacement' => $replacementInfo];
+                    $conflictData = [
+                        'is_resolved' => (bool)$replacementInfo,
+                        'replacement' => $replacementInfo,
+                        'allergen'    => $di->ingredient->allergens->pluck('name')->join(', ') ?: null,
+                    ];
                 }
             }
 

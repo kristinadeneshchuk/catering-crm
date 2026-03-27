@@ -177,7 +177,7 @@ class DishResource extends Resource
                                     $name = isset($state['child_dish_id'])
                                         ? Dish::find($state['child_dish_id'])?->name
                                         : null;
-                                    return '📦 ' . ($name ?? 'НФ') . ($weight ? ' — ' . $weight . 'г' : '');
+                                    return '[НФ] ' . ($name ?? 'НФ') . ($weight ? ' — ' . $weight . 'г' : '');
                                 }
                                 $name = isset($state['ingredient_id'])
                                     ? \App\Models\Ingredient::find($state['ingredient_id'])?->name

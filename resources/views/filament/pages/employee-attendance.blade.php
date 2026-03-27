@@ -13,7 +13,7 @@
                         <x-heroicon-o-check-circle class="w-6 h-6" />
                     </div>
                     <div>
-                        <p class="font-bold text-lg leading-none">Операція виконана ✅</p>
+                        <p class="font-bold text-lg leading-none">Операція виконана ✓</p>
                         <p class="text-xs opacity-80">Зарплата за {{ \Carbon\Carbon::parse($date)->format('d.m.Y') }} нарахована в систему</p>
                     </div>
                 </div>

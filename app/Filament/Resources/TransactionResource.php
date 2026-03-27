@@ -127,7 +127,7 @@ class TransactionResource extends Resource
                     ->label('Деталі / Призначення')
                     ->getStateUsing(function ($record) {
                         if ($record->employee_id) {
-                            return '👤 Виплата ЗП: ' . ($record->employee?->name ?? 'Видалений співробітник');
+                            return 'Виплата ЗП: ' . ($record->employee?->name ?? 'Видалений співробітник');
                         }
                         if ($record->stock_document_id) {
                             return '🏭 ' . ($record->comment ?: "Документ #{$record->stock_document_id}");

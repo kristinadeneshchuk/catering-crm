@@ -254,9 +254,9 @@ class StockDocumentResource extends Resource
                                             $percent = ($diff / $lastPrice) * 100;
 
                                             if (round($percent, 1) > 0) {
-                                                $message .= "<br><span style='color: #dc2626; font-weight: bold; font-size: 11px;'>Поточна ціна більша на " . round(abs($percent), 1) . "% 📈</span>";
+                                                $message .= "<br><span style='color: #dc2626; font-weight: bold; font-size: 11px;'>Поточна ціна більша на " . round(abs($percent), 1) . "% ↑</span>";
                                             } elseif (round($percent, 1) < 0) {
-                                                $message .= "<br><span style='color: #16a34a; font-weight: bold; font-size: 11px;'>Поточна ціна менша на " . round(abs($percent), 1) . "% 📉</span>";
+                                                $message .= "<br><span style='color: #16a34a; font-weight: bold; font-size: 11px;'>Поточна ціна менша на " . round(abs($percent), 1) . "% ↓</span>";
                                             } else {
                                                 $message .= "<br><span style='color: #6b7280; font-size: 11px;'>Ціна не змінилася</span>";
                                             }

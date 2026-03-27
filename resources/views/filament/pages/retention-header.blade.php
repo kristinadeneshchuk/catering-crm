@@ -37,15 +37,13 @@
         "></span>
 
         {{-- Column title --}}
-        <span style="
-            font-size: 13px;
-            font-weight: 600;
-            color: #e5e7eb;
-            line-height: 1.2;
-            letter-spacing: -0.01em;
-        ">
+        <span class="rh-title" style="font-size: 13px; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em;">
             {{ $cleanTitle }}
         </span>
+        <style>
+            .rh-title { color: #374151; }
+            .dark .rh-title { color: #e5e7eb; }
+        </style>
     </div>
 
     {{-- Count badge --}}

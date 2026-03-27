@@ -217,7 +217,7 @@
 
 <div class="no-print">
     <button onclick="window.print()">
-        &#x1F5A8; РОЗДРУКУВАТИ ВСІ СТІКЕРИ ({{ count($stickers) }} шт.)
+        РОЗДРУКУВАТИ ВСІ СТІКЕРИ ({{ count($stickers) }} шт.)
     </button>
 </div>
 

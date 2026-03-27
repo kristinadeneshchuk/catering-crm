@@ -23,7 +23,7 @@
             <div style="display:flex; align-items:center; justify-content:space-between; background:rgba(31,41,55,0.6); border-radius:0.5rem; padding:0.5rem 0.75rem; gap:0.5rem;">
                 <div style="display:flex; align-items:center; gap:0.5rem; min-width:0;">
                     @if(($ing->type ?? 'product') === 'pf')
-                        <span>📦</span>
+                        <span style="font-size:10px;color:#94a3b8;font-weight:700;">НФ</span>
                         <span style="color:#e5e7eb; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                             {{ \App\Models\Dish::find($ing->child_dish_id)?->name ?? 'НФ' }}
                         </span>

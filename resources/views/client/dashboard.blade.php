@@ -72,8 +72,8 @@
                             </div>
                             
                             <div class="text-gray-500 text-sm space-y-1">
-                                <p>📅 {{ \Carbon\Carbon::parse($order->start_date)->format('d.m') }} — {{ \Carbon\Carbon::parse($order->end_date)->format('d.m.Y') }}</p>
-                                <p>🔥 {{ $order->calories }} ккал</p>
+                                <p>{{ \Carbon\Carbon::parse($order->start_date)->format('d.m') }} — {{ \Carbon\Carbon::parse($order->end_date)->format('d.m.Y') }}</p>
+                                <p>{{ $order->calories }} ккал</p>
                             </div>
                         </div>
 
@@ -87,12 +87,12 @@
                                     @csrf
                                     <button type="submit" onclick="return confirm('Емуляція оплати: Списати {{ $order->total_price }} грн?')"
                                         class="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow text-sm font-bold cursor-pointer">
-                                        💳 Оплатити
+                                        Оплатити
                                     </button>
                                 </form>
                             @elseif($order->status === 'active')
                                 <div class="text-green-600 text-sm font-medium flex items-center gap-1 justify-end bg-green-50 px-3 py-1 rounded border border-green-200">
-                                    ✅ Оплачено / Активний
+                                    ✓ Оплачено / Активний
                                 </div>
                             @endif
                         </div>

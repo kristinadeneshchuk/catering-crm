@@ -35,7 +35,7 @@
 <body>
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <div>Avocado Food / U-FIT</div>
-        <button onclick="window.print()" style="padding: 10px 20px; background: #000; color: #fff; border: none; cursor: pointer; border-radius: 4px;">🖨️ Друкувати список</button>
+        <button onclick="window.print()" style="padding: 10px 20px; background: #000; color: #fff; border: none; cursor: pointer; border-radius: 4px;">Друкувати список</button>
     </div>
 
     <h1>🚚 Маршрутний лист — {{ $date->format('d.m.Y') }}</h1>
@@ -88,7 +88,7 @@
                         {{-- 1. Коментар ДОСТАВКИ (з картки клієнта) --}}
                         @if($order->client->delivery_comment)
                             <span class="delivery-note">
-                                🔑 {{ $order->client->delivery_comment }}
+                                {{ $order->client->delivery_comment }}
                             </span>
                         @endif
 

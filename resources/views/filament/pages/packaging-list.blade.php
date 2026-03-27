@@ -88,7 +88,7 @@
                         @if(!empty($table['individual_notes']))
                             <div class="replacements-container">
                                 <div style="font-weight: 900; text-transform: uppercase; margin-bottom: 5px; font-size: 11px;">
-                                    ⚠️ Індивідуальні заміни:
+                                    Індивідуальні заміни:
                                 </div>
                                 @foreach(array_unique($table['individual_notes']) as $note)
                                     <div style="margin-bottom: 2px; font-weight: 700;">{{ $note }}</div>

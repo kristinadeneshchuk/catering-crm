@@ -207,7 +207,7 @@
 
 <div class="no-print">
     <button onclick="window.print()">
-        🖨 ДРУКУВАТИ НАКЛЕЙКИ НА ПАКЕТ ({{ count($manifests) }} шт.)
+        ДРУКУВАТИ НАКЛЕЙКИ НА ПАКЕТ ({{ count($manifests) }} шт.)
     </button>
 </div>
 

@@ -139,7 +139,7 @@
 <body>
 
 <div class="no-print">
-    <button onclick="window.print()">🖨 ДРУКУВАТИ СПИСОК СПИСАННЯ</button>
+    <button onclick="window.print()">ДРУКУВАТИ СПИСОК СПИСАННЯ</button>
 </div>
 
 <div class="page">

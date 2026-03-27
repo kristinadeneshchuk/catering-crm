@@ -64,13 +64,13 @@
     <div class="flex items-center gap-3">
         <label class="font-bold text-gray-500 uppercase text-xs">Розмір:</label>
         <select onchange="window.location.href=this.value" class="bg-gray-50 border border-gray-300 text-slate-800 font-bold px-4 py-3 rounded-xl outline-none focus:border-slate-900 cursor-pointer transition">
-            <option value="?date={{ $date }}&layout=default" {{ $layout === 'default' ? 'selected' : '' }}>📄 Стандартний вигляд (А4)</option>
-            <option value="?date={{ $date }}&layout=105x99" {{ $layout === '105x99' ? 'selected' : '' }}>📏 Фіксований: 105 x 99 мм</option>
+            <option value="?date={{ $date }}&layout=default" {{ $layout === 'default' ? 'selected' : '' }}>Стандартний вигляд (А4)</option>
+            <option value="?date={{ $date }}&layout=105x99" {{ $layout === '105x99' ? 'selected' : '' }}>Фіксований: 105 x 99 мм</option>
         </select>
     </div>
 
     <button onclick="window.print()" class="bg-slate-900 text-white px-10 py-3 rounded-xl font-black uppercase tracking-widest shadow-xl hover:bg-slate-800 transition">
-        🖨️ ДРУКУВАТИ ({{ count($manifests) }} шт)
+        ДРУКУВАТИ ({{ count($manifests) }} шт)
     </button>
 </div>
 
@@ -147,7 +147,7 @@
                 <div class="flex flex-col mt-auto pt-1">
                     <div class="flex items-center gap-1 mb-1">
                         <span class="text-[10px] font-bold text-slate-500 uppercase">
-                            {{ $man['has_cutlery'] ? '🍴 З приборами' : '🚫 Без приборів' }}
+                            {{ $man['has_cutlery'] ? 'З приборами' : 'Без приборів' }}
                         </span>
                     </div>
 

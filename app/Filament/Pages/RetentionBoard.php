@@ -122,7 +122,7 @@ class RetentionBoard extends KanbanBoard
     {
         return [
             Action::make('sync_calls')
-                ->label('🔄 Згенерувати задачі на прозвон')
+                ->label('Згенерувати задачі на прозвон')
                 ->color('primary')
                 ->action(function () {
                     $this->generateCalls();

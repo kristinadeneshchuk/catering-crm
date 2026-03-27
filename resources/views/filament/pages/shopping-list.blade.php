@@ -7,7 +7,7 @@
 
     @if(empty($shoppingList))
         <div style="padding:32px;text-align:center;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:12px;">
-            <div style="font-size:32px;">✅</div>
+            <div style="font-size:32px;color:#22c55e;">✓</div>
             <div style="font-weight:700;font-size:16px;margin-top:8px;">Усе є на складі!</div>
             <div style="color:#6b7280;margin-top:4px;">На обрану дату купувати нічого не потрібно.</div>
         </div>
@@ -29,7 +29,7 @@
             </div>
             <a href="{{ $this->getPrintUrl() }}" target="_blank"
                style="display:inline-flex;align-items:center;gap:6px;background:#1e293b;color:white;padding:8px 18px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;">
-                🖨 Друкувати
+                Друкувати
             </a>
         </div>
 
