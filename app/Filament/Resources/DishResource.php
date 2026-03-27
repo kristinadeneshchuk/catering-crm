@@ -58,6 +58,7 @@ class DishResource extends Resource
                                     ->options(function () {
                                         return Dish::query()
                                             ->distinct()
+                                            ->whereNotNull('group')
                                             ->pluck('group', 'group')
                                             ->toArray();
                                     })
@@ -318,6 +319,7 @@ class DishResource extends Resource
                     ->options(function () {
                         return Dish::query()
                             ->distinct()
+                            ->whereNotNull('group')
                             ->pluck('group', 'group')
                             ->toArray();
                     })
