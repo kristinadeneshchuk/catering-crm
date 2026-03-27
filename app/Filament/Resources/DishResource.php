@@ -110,7 +110,7 @@ class DishResource extends Resource
                                     ->columnSpan(1),
 
                                 Select::make('ingredient_id')
-                                    ->relationship('ingredient', 'name')
+                                    ->relationship('ingredient', 'name', fn ($query) => $query->whereNotNull('name'))
                                     ->label('Продукт')
                                     ->searchable()
                                     ->preload()
@@ -120,7 +120,7 @@ class DishResource extends Resource
 
                                 Select::make('child_dish_id')
                                     ->label('Напівфабрикат')
-                                    ->options(fn () => Dish::where('is_semi_finished', true)->pluck('name', 'id'))
+                                    ->options(fn () => Dish::where('is_semi_finished', true)->whereNotNull('name')->pluck('name', 'id'))
                                     ->searchable()
                                     ->preload()
                                     ->getOptionLabelUsing(fn ($value): ?string => Dish::find($value)?->name)
