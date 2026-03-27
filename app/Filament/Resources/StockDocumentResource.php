@@ -8,15 +8,18 @@ use App\Models\Ingredient;
 use App\Models\Packaging;
 use App\Models\Warehouse;
 
+use Carbon\Carbon;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 
 use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Tables\Enums\FiltersLayout;
 
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Repeater;
@@ -25,6 +28,7 @@ use Filament\Forms\Components\Hidden;
 use Illuminate\Support\HtmlString;
 
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\Summarizers\Sum;
 
 class StockDocumentResource extends Resource
 {
@@ -64,7 +68,18 @@ class StockDocumentResource extends Resource
                             ->required()
                             ->preload()
                             ->searchable()
-                            ->live(), // 🔥 ДОДАНО LIVE, щоб система знала, який склад обрано
+                            ->live(),
+
+                        Select::make('item_category')
+                            ->label('Тип товарів')
+                            ->options([
+                                'ingredient' => 'Продукти / Інгредієнти',
+                                'packaging'  => 'Упаковка / Госптовари',
+                            ])
+                            ->required()
+                            ->live()
+                            ->dehydrated(false)
+                            ->visible(fn (Forms\Get $get) => $get('warehouse_id') !== null),
 
                         Select::make('supplier_id')
                             ->label('Постачальник')
@@ -116,29 +131,20 @@ class StockDocumentResource extends Resource
                                         return null;
                                     })
                                     ->options(function (Forms\Get $get) {
-                                        $warehouseId = $get('../../warehouse_id');
-                                        if (!$warehouseId) return [];
+                                        $category = $get('../../item_category');
+                                        if (!$category) return [];
 
-                                        $warehouse = Warehouse::find($warehouseId);
-                                        $wName = mb_strtolower($warehouse?->name ?? '');
-
-                                        $options = [];
-
-                                        // Якщо в назві складу є слова "упаков" або "госп" -> вантажимо Упаковки
-                                        if (str_contains($wName, 'упаков') || str_contains($wName, 'госп')) {
-                                            $items = Packaging::all();
-                                            foreach ($items as $item) {
-                                                $options[Packaging::class . '||' . $item->id] = '📦 ' . $item->name;
-                                            }
-                                        } else {
-                                            // У всіх інших випадках (Кухня, Бар, Продукти) -> вантажимо Інгредієнти
-                                            $items = Ingredient::all();
-                                            foreach ($items as $item) {
-                                                $options[Ingredient::class . '||' . $item->id] = '🍏 ' . $item->name;
-                                            }
+                                        if ($category === 'packaging') {
+                                            return Packaging::orderBy('name')->get()
+                                                ->mapWithKeys(fn ($item) => [
+                                                    Packaging::class . '||' . $item->id => $item->name,
+                                                ])->all();
                                         }
 
-                                        return $options;
+                                        return Ingredient::orderBy('name')->get()
+                                            ->mapWithKeys(fn ($item) => [
+                                                Ingredient::class . '||' . $item->id => $item->name,
+                                            ])->all();
                                     })
                                     ->live()
                                     ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
@@ -266,23 +272,90 @@ class StockDocumentResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('id')->label('№')->sortable(),
-                TextColumn::make('operation_date')->label('Дата')->dateTime('d.m.Y H:i')->sortable(),
+                TextColumn::make('id')
+                    ->label('№')
+                    ->sortable(),
+
+                TextColumn::make('operation_date')
+                    ->label('Дата')
+                    ->dateTime('d.m.Y H:i')
+                    ->sortable(),
+
                 TextColumn::make('type')
                     ->label('Тип')
                     ->badge()
                     ->formatStateUsing(fn ($state) => match ($state) {
-                        'receipt' => 'Надходження',
+                        'receipt'   => 'Надходження',
                         'write_off' => 'Списання',
-                        default => $state,
+                        default     => $state,
                     })
                     ->color(fn ($state) => match ($state) {
-                        'receipt' => 'success',
+                        'receipt'   => 'success',
                         'write_off' => 'danger',
-                        default => 'gray',
+                        default     => 'gray',
                     }),
-                TextColumn::make('total_sum')->label('Сума')->money('UAH'),
+
+                TextColumn::make('supplier.name')
+                    ->label('Постачальник')
+                    ->placeholder('—')
+                    ->toggleable(),
+
+                TextColumn::make('total_sum')
+                    ->label('Сума')
+                    ->money('UAH')
+                    ->sortable()
+                    ->summarize([
+                        Sum::make()
+                            ->label('Разом за період')
+                            ->money('UAH'),
+                    ]),
             ])
+            ->filters([
+                // Фільтр по діапазону дат
+                Tables\Filters\Filter::make('date_range')
+                    ->form([
+                        DatePicker::make('from')
+                            ->label('Від')
+                            ->native(false)
+                            ->displayFormat('d.m.Y')
+                            ->placeholder('Початок'),
+                        DatePicker::make('until')
+                            ->label('До')
+                            ->native(false)
+                            ->displayFormat('d.m.Y')
+                            ->placeholder('Кінець'),
+                    ])
+                    ->columns(2)
+                    ->query(function ($query, array $data) {
+                        return $query
+                            ->when($data['from'],  fn ($q, $d) => $q->whereDate('operation_date', '>=', $d))
+                            ->when($data['until'], fn ($q, $d) => $q->whereDate('operation_date', '<=', $d));
+                    })
+                    ->indicateUsing(function (array $data): array {
+                        $indicators = [];
+                        if (!empty($data['from'])) {
+                            $indicators[] = Tables\Filters\Indicator::make('Від ' . Carbon::parse($data['from'])->format('d.m.Y'))
+                                ->removeField('from');
+                        }
+                        if (!empty($data['until'])) {
+                            $indicators[] = Tables\Filters\Indicator::make('До ' . Carbon::parse($data['until'])->format('d.m.Y'))
+                                ->removeField('until');
+                        }
+                        return $indicators;
+                    }),
+
+                // Фільтр по типу документу
+                Tables\Filters\SelectFilter::make('type')
+                    ->label('Тип документу')
+                    ->options([
+                        'receipt'   => '⬇️ Надходження',
+                        'write_off' => '⬆️ Списання',
+                    ])
+                    ->placeholder('Всі типи'),
+            ])
+            ->filtersLayout(FiltersLayout::AboveContent)
+            ->filtersFormColumns(3)
+            ->defaultSort('operation_date', 'desc')
             ->actions([
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
