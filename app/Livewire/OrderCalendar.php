@@ -91,15 +91,6 @@ class OrderCalendar extends Component
 
     public function toggleDay($dateStr)
     {
-        if (\Carbon\Carbon::parse($dateStr)->lt(now()->startOfDay())) {
-            Notification::make()
-                ->title('Минуле не змінити')
-                ->body('Ви не можете редагувати дні, що вже минули.')
-                ->warning()
-                ->send();
-            return;
-        }
-
         // === ВАРІАНТ 1: ВІРТУАЛЬНИЙ РЕЖИМ (Створення) ===
         if (!$this->order || !$this->order->exists) {
             if (in_array($dateStr, $this->virtualDays)) {

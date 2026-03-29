@@ -35,13 +35,20 @@
                 $containerClasses = "min-h-[6rem] border rounded-lg p-1 flex flex-col relative transition select-none";
                 $blockEffects = "";
 
-                if ($isPast) {
+                if ($isPast && $isActive) {
+                    $bgClass = "bg-green-50 dark:bg-green-900/30";
+                    $borderClass = "border-green-500 ring-1 ring-green-500 dark:border-green-500 border-dashed";
+                    $textClass = "text-green-800 dark:text-green-300 font-bold";
+                    $cursorClass = "cursor-pointer";
+                    $hoverClass = "hover:shadow-md";
+                }
+                elseif ($isPast) {
                     $bgClass = "bg-gray-50 dark:bg-gray-800";
                     $borderClass = "border-gray-200 dark:border-gray-700 border-dashed";
                     $textClass = "text-gray-400 dark:text-gray-500";
-                    $cursorClass = "cursor-not-allowed";
-                    $hoverClass = "";
-                    $blockEffects = "opacity-50 grayscale";
+                    $cursorClass = "cursor-pointer";
+                    $hoverClass = "hover:border-blue-300 dark:hover:border-blue-500 hover:shadow-sm";
+                    $blockEffects = "";
                 }
                 elseif ($isActive) {
                     $bgClass = "bg-green-50 dark:bg-green-900/30";
@@ -67,7 +74,7 @@
 
                 if ($isToday) {
                     $textClass = "text-orange-600 font-extrabold";
-                    if (!$isActive && !$isPast) {
+                    if (!$isActive) {
                         $borderClass = "border-orange-400 bg-orange-50 dark:bg-orange-900/20";
                     }
                 }
@@ -82,18 +89,13 @@
             @endphp
 
             <div
-                @if(!$isPast) wire:click="toggleDay('{{ $dateKey }}')" @endif
+                wire:click="toggleDay('{{ $dateKey }}')"
                 class="{{ $containerClasses }} {{ $bgClass }} {{ $borderClass }} {{ $cursorClass }} {{ $hoverClass }} {{ $blockEffects }}"
             >
                 <div class="text-xs mb-1 flex justify-between items-center px-1">
                     <span class="{{ $textClass }}">{{ $day->day }}</span>
 
                     <div class="flex items-center gap-1">
-                        @if($isPast)
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400 dark:text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
-                            </svg>
-                        @endif
                         @if($isActive)
                             <svg class="w-3 h-3 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
                         @endif

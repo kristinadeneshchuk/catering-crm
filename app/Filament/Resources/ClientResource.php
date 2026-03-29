@@ -366,8 +366,17 @@ class ClientResource extends Resource
 
                 Tables\Columns\TextColumn::make('address')
                     ->label('Адреса')
+                    ->getStateUsing(function ($record) {
+                        $default = $record->addresses()->where('is_default', true)->first()
+                            ?? $record->addresses()->first();
+                        return $default?->address;
+                    })
                     ->limit(20)
-                    ->tooltip(fn ($record) => $record->address),
+                    ->tooltip(function ($record) {
+                        $default = $record->addresses()->where('is_default', true)->first()
+                            ?? $record->addresses()->first();
+                        return $default?->address;
+                    }),
                 
                 Tables\Columns\IconColumn::make('has_cutlery')
                     ->label('Прибори')

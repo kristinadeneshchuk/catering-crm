@@ -250,7 +250,6 @@ class OrderResource extends Resource
                 TextColumn::make('current_day')
                     ->label('День')
                     ->getStateUsing(function ($record) {
-                        // Отримуємо всі вибрані дні з бази, відсортовані за часом
                         $allDays = $record->orderDays()
                             ->orderBy('date', 'asc')
                             ->pluck('date')
@@ -258,17 +257,22 @@ class OrderResource extends Resource
                             ->toArray();
 
                         $total = count($allDays);
-                        if ($total === 0) return '0 / 0';
+                        if ($total === 0) return null;
 
                         $today = Carbon::now()->format('Y-m-d');
                         $currentDayNumber = 0;
 
-                        // Якщо сьогоднішня дата є в масиві або вже пройшла
                         foreach ($allDays as $index => $date) {
                             if ($date <= $today) {
                                 $currentDayNumber = $index + 1;
                             }
                         }
+
+                        // Якщо рацион закінчився (всі дні пройшли і останній день не сьогодні) — не показуємо лічильник
+                        if ($currentDayNumber === $total && end($allDays) < $today) return null;
+
+                        // Якщо жоден день ще не почався
+                        if ($currentDayNumber === 0) return "0 / {$total}";
 
                         return "{$currentDayNumber} / {$total}";
                     })
