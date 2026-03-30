@@ -29,7 +29,6 @@ use Filament\Forms\Components\Toggle;
 use Illuminate\Support\HtmlString;
 
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\Summarizers\Sum;
 
 class StockDocumentResource extends Resource
 {
@@ -114,6 +113,13 @@ class StockDocumentResource extends Resource
                             ->relationship('items')
                             ->label('')
                             ->addActionLabel('Додати ще позицію')
+                            ->live()
+                            ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set) {
+                                $items = $get('items') ?? [];
+                                $count = count($items);
+                                $sum   = collect($items)->sum(fn ($i) => (float) ($i['total_price'] ?? 0));
+                                $set('items_summary', $count . '||' . $sum);
+                            })
                             ->schema([
 
                                 Hidden::make('price_manual')
@@ -272,6 +278,32 @@ class StockDocumentResource extends Resource
                                     ->prefix('₴'),
                             ])
                             ->columns(5),
+
+                        Forms\Components\Hidden::make('items_summary')
+                            ->dehydrated(false),
+
+                        Forms\Components\Placeholder::make('items_totals')
+                            ->label('')
+                            ->content(function (Forms\Get $get) {
+                                $items = $get('items') ?? [];
+                                $count = count($items);
+                                $sum   = collect($items)->sum(fn ($i) => (float) ($i['total_price'] ?? 0));
+
+                                if ($count === 0) return new HtmlString('');
+
+                                return new HtmlString(
+                                    "<div style='display:flex;gap:24px;align-items:center;padding:10px 14px;"
+                                    . "background:linear-gradient(145deg,#0f172a,#1a2436);border:1px solid #1e293b;"
+                                    . "border-radius:10px;margin-top:4px;'>"
+                                    . "<span style='font-size:12px;color:#64748b;'>Позицій: "
+                                    . "<b style='color:#e2e8f0;font-size:14px;'>{$count}</b></span>"
+                                    . "<span style='color:#334155;'>|</span>"
+                                    . "<span style='font-size:12px;color:#64748b;'>Загальна сума: "
+                                    . "<b style='color:#22c55e;font-size:16px;'>" . number_format($sum, 2, '.', ' ') . " ₴</b></span>"
+                                    . "</div>"
+                                );
+                            })
+                            ->live(),
                     ]),
             ]);
     }
@@ -312,11 +344,27 @@ class StockDocumentResource extends Resource
                     ->label('Сума')
                     ->money('UAH')
                     ->sortable()
-                    ->summarize([
-                        Sum::make()
-                            ->label('Разом за період')
-                            ->money('UAH'),
-                    ]),
+                    ->summarize(
+                        Tables\Columns\Summarizers\Summarizer::make()
+                            ->label('Підсумок за фільтром')
+                            ->using(function ($query) {
+                                $total  = (clone $query)->sum('total_sum');
+                                $paid   = (clone $query)->where('is_paid', true)->sum('total_sum');
+                                $unpaid = (clone $query)->where('is_paid', false)->sum('total_sum');
+                                return compact('total', 'paid', 'unpaid');
+                            })
+                            ->formatStateUsing(function ($state) {
+                                if (!is_array($state)) return '—';
+                                $fmt = fn($v) => number_format($v, 2, '.', ' ') . ' ₴';
+                                return new HtmlString(
+                                    "<div style='display:flex;gap:24px;align-items:center;padding:4px 0;'>"
+                                    . "<span style='color:#94a3b8;font-size:12px;'>Разом: <b style='color:#e2e8f0;'>{$fmt($state['total'])}</b></span>"
+                                    . "<span style='color:#94a3b8;font-size:12px;'>Оплачено: <b style='color:#22c55e;'>{$fmt($state['paid'])}</b></span>"
+                                    . "<span style='color:#94a3b8;font-size:12px;'>Не оплачено: <b style='color:#f59e0b;'>{$fmt($state['unpaid'])}</b></span>"
+                                    . "</div>"
+                                );
+                            })
+                    ),
 
                 TextColumn::make('is_paid')
                     ->label('Оплата')
@@ -362,13 +410,21 @@ class StockDocumentResource extends Resource
                 Tables\Filters\SelectFilter::make('type')
                     ->label('Тип документу')
                     ->options([
-                        'receipt'   => '⬇️ Надходження',
-                        'write_off' => '⬆️ Списання',
+                        'receipt'   => 'Надходження',
+                        'write_off' => 'Списання',
                     ])
                     ->placeholder('Всі типи'),
+
+                // Фільтр по складу
+                Tables\Filters\SelectFilter::make('warehouse_id')
+                    ->label('Склад')
+                    ->relationship('warehouse', 'name')
+                    ->searchable()
+                    ->preload()
+                    ->placeholder('Всі склади'),
             ])
             ->filtersLayout(FiltersLayout::AboveContent)
-            ->filtersFormColumns(3)
+            ->filtersFormColumns(4)
             ->defaultSort('operation_date', 'desc')
             ->actions([
                 Tables\Actions\Action::make('toggle_paid')
