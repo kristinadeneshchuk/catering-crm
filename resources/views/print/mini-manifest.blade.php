@@ -162,15 +162,28 @@
             background: var(--brand-color, #000);
         }
 
+        .tag-slot {
+            font-size: 6pt;
+            font-weight: 900;
+            padding: 1px 4px;
+            border-radius: 3px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .tag-slot.morning { background: #fde047; color: #000; }
+        .tag-slot.evening { background: #1e293b; color: #94a3b8; }
+
         .tag-address {
             font-size: 6pt;
             color: #6b7280;
             font-style: italic;
             font-weight: 600;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            min-width: 0;
+            white-space: normal;
+            word-break: break-word;
+            line-height: 1.3;
+            margin-top: 1mm;
+            display: block;
         }
 
         /* Підпис */
@@ -250,8 +263,15 @@
                 <div class="sticker-tags">
                     <span class="tag-id">ID: {{ $man['client_id'] }}</span>
                     <span class="tag-kcal">{{ $man['calories'] ?? 0 }} ккал</span>
-                    <span class="tag-address">{{ $man['address'] ?? 'Самовивіз' }}</span>
+                    <span class="tag-slot {{ $man['is_evening'] ? 'evening' : 'morning' }}">
+                        {{ $man['delivery_slot'] }}
+                    </span>
                 </div>
+                @if(($man['address'] ?? 'Самовивіз') !== 'Самовивіз')
+                    <span class="tag-address">{{ $man['address'] }}</span>
+                @else
+                    <span class="tag-address" style="color:#94a3b8;">Самовивіз</span>
+                @endif
             </div>
 
             {{-- Підпис --}}

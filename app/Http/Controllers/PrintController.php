@@ -93,16 +93,25 @@ class PrintController extends Controller
                 ?? $order->client?->address
                 ?? 'Самовивіз';
 
+            $isEvening = str_contains((string) $order->delivery_time, 'evening')
+                      || str_contains((string) $order->schedule_type, 'evening');
+
             $manifests[] = [
-                'client_id'   => $order->client?->id ?? '---',
-                'project'     => $order->project,
-                'client'      => $order->client?->name ?? 'Без імені',
-                'address'     => $address,
-                'calories'    => (int) $order->calories,
+                'client_id'     => $order->client?->id ?? '---',
+                'project'       => $order->project,
+                'client'        => $order->client?->name ?? 'Без імені',
+                'address'       => $address,
+                'calories'      => (int) $order->calories,
+                'is_evening'    => $isEvening,
+                'delivery_slot' => $isEvening ? 'Вечір' : 'Ранок',
             ];
         }
 
         usort($manifests, function ($a, $b) {
+            // Спочатку ранок, потім вечір; в середині — за іменем
+            if ($a['is_evening'] !== $b['is_evening']) {
+                return $a['is_evening'] ? 1 : -1;
+            }
             return strcmp($a['client'], $b['client']);
         });
 
