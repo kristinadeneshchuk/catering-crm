@@ -18,7 +18,7 @@ class Ingredient extends Model
     protected $fillable = [
         'name', 'unit', 'price_per_kg', 'yield_percent',
         'calories_100g', 'proteins_100g', 'fats_100g', 'carbs_100g',
-        'stock', 'group', 'photo'
+        'stock', 'group', 'photo',
     ];
 
     protected $casts = [

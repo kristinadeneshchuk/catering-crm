@@ -230,7 +230,13 @@ class DailyMenuResource extends Resource
                             ->itemLabel(fn (array $state): ?string =>
                                 $state['dish_id'] ? \App\Models\Dish::find($state['dish_id'])?->name : null
                             )
-                            ->collapsible()
+                            ->collapsible(),
+
+                        Placeholder::make('ingredient_diversity')
+                            ->label('')
+                            ->columnSpanFull()
+                            ->live()
+                            ->content(fn ($livewire) => self::renderDiversityPanel($livewire)),
                     ]),
             ]);
     }
@@ -358,7 +364,7 @@ class DailyMenuResource extends Resource
 
         // Рендер однієї картки нутрієнта
         $card = function (
-            string $emoji, string $name, float $cur, float $tgt, string $unit, string $baseColor
+            string $name, float $cur, float $tgt, string $unit, string $baseColor
         ) use ($getStatus): string {
             [$label, $icon, $statusColor, $glow] = $getStatus($cur, $tgt);
             $pct       = $tgt > 0 ? round(($cur / $tgt) * 100) : 0;
@@ -373,10 +379,10 @@ class DailyMenuResource extends Resource
                 "border:1px solid #1e293b;border-radius:16px;padding:14px 16px;" .
                 "box-shadow:0 0 24px {$glow};'>" .
 
-                // Рядок: емодзі + назва | бейдж статусу
+                // Рядок: крапка + назва | бейдж статусу
                 "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;'>" .
-                "<div style='display:flex;align-items:center;gap:6px;'>" .
-                "<span style='font-size:20px;line-height:1;'>{$emoji}</span>" .
+                "<div style='display:flex;align-items:center;gap:8px;'>" .
+                "<div style='width:8px;height:8px;border-radius:50%;background:{$baseColor};flex-shrink:0;'></div>" .
                 "<span style='font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px;'>{$name}</span>" .
                 "</div>" .
                 "<span style='font-size:10px;font-weight:700;color:{$statusColor};" .
@@ -407,7 +413,7 @@ class DailyMenuResource extends Resource
         $planColor  = $plan ? '#22c55e' : '#ef4444';
         $planBg     = $plan ? 'rgba(34,197,94,0.07)' : 'rgba(239,68,68,0.07)';
         $planBorder = $plan ? 'rgba(34,197,94,0.22)' : 'rgba(239,68,68,0.22)';
-        $planIcon   = $plan ? '📋' : '⚠️';
+        $planIcon   = $plan ? '▪' : '!';
 
         $countBadge = $plan
             ? "<span style='font-size:10px;font-weight:700;color:{$planColor};background:rgba(34,197,94,0.12);" .
@@ -418,7 +424,7 @@ class DailyMenuResource extends Resource
         $infoRow =
             "<div style='display:flex;align-items:center;gap:10px;padding:9px 14px;margin-bottom:10px;" .
             "background:{$planBg};border:1px solid {$planBorder};border-radius:10px;'>" .
-            "<span style='font-size:18px;line-height:1;'>{$planIcon}</span>" .
+            "<div style='width:8px;height:8px;border-radius:50%;background:{$planColor};flex-shrink:0;'></div>" .
             "<div style='flex:1;min-width:0;'>" .
             "<div style='display:flex;align-items:center;flex-wrap:wrap;gap:4px;'>" .
             "<span style='font-size:12px;font-weight:700;color:{$planColor};'>{$planName}</span>" .
@@ -432,10 +438,112 @@ class DailyMenuResource extends Resource
         return new HtmlString(
             $infoRow .
             "<div style='display:flex;gap:10px;padding:0 0 8px;'>" .
-            $card('🔥', 'Ккал',      $curKcal, $targetKcal, ' ккал', '#a78bfa') .
-            $card('💪', 'Білки',     $curProt, $targetProt, 'г',     '#60a5fa') .
-            $card('🥑', 'Жири',      $curFat,  $targetFat,  'г',     '#fbbf24') .
-            $card('🌾', 'Вуглеводи', $curCarb, $targetCarb, 'г',     '#34d399') .
+            $card('Ккал',      $curKcal, $targetKcal, ' ккал', '#a78bfa') .
+            $card('Білки',     $curProt, $targetProt, 'г',     '#60a5fa') .
+            $card('Жири',      $curFat,  $targetFat,  'г',     '#fbbf24') .
+            $card('Вуглеводи', $curCarb, $targetCarb, 'г',     '#34d399') .
+            "</div>"
+        );
+    }
+
+    // ─── Різноманіття інгредієнтів ────────────────────────────────────────────
+
+    private static function renderDiversityPanel($livewire): HtmlString
+    {
+        $formData = $livewire->data ?? [];
+        $rawItems = $formData['menuItems'] ?? [];
+        $allItems = is_array($rawItems) ? array_values($rawItems) : [];
+
+        // Збираємо інгредієнти кожної страви та в яких прийомах вони зустрічаються
+        // [ingredient_id => ['name' => ..., 'meals' => [...meal names...]]]
+        $ingredientMap = [];
+
+        foreach ($allItems as $item) {
+            $dishId     = $item['dish_id']     ?? null;
+            $mealTypeId = $item['meal_type_id'] ?? null;
+            if (!$dishId) continue;
+
+            $dish     = \App\Models\Dish::with('dishIngredients.ingredient')->find($dishId);
+            $mealType = $mealTypeId ? \App\Models\MealType::find($mealTypeId) : null;
+            $mealName = $mealType?->name ?? 'Невідомий прийом';
+
+            if (!$dish) continue;
+
+            foreach ($dish->dishIngredients as $di) {
+                $ing = $di->ingredient;
+                if (!$ing) continue;
+
+                if (!isset($ingredientMap[$ing->id])) {
+                    $ingredientMap[$ing->id] = ['name' => $ing->name, 'meals' => []];
+                }
+                $ingredientMap[$ing->id]['meals'][] = $mealName;
+            }
+        }
+
+        // Залишаємо тільки ті що повторюються (2+ страви)
+        $duplicates = array_filter($ingredientMap, fn($v) => count($v['meals']) >= 2);
+
+        // ── Якщо всі унікальні ──────────────────────────────────────────────
+        if (empty($duplicates) && !empty($allItems)) {
+            return new HtmlString(
+                "<div style='display:flex;align-items:center;gap:10px;padding:12px 16px;" .
+                "background:#0a1628;border:1px solid #16a34a40;border-radius:12px;margin-top:4px;'>" .
+                "<div style='width:8px;height:8px;border-radius:50%;background:#16a34a;flex-shrink:0;'></div>" .
+                "<span style='font-size:12px;color:#4ade80;font-weight:600;'>Різноманіття в нормі</span>" .
+                "<span style='font-size:12px;color:#334155;margin-left:4px;'>— всі інгредієнти унікальні протягом дня</span>" .
+                "</div>"
+            );
+        }
+
+        if (empty($allItems)) {
+            return new HtmlString('');
+        }
+
+        // ── Є повтори ────────────────────────────────────────────────────────
+        $rows = '';
+        foreach ($duplicates as $data) {
+            $mealList  = implode(', ', $data['meals']);
+            $count     = count($data['meals']);
+            $countColor = $count >= 3 ? '#ef4444' : '#f59e0b';
+
+            $rows .=
+                "<div style='display:flex;align-items:center;justify-content:space-between;" .
+                "padding:8px 12px;border-bottom:1px solid #1e293b;'>" .
+                "<span style='font-size:13px;color:#e2e8f0;font-weight:500;'>{$data['name']}</span>" .
+                "<div style='display:flex;align-items:center;gap:10px;'>" .
+                "<span style='font-size:11px;color:#64748b;'>{$mealList}</span>" .
+                "<span style='font-size:11px;font-weight:700;color:{$countColor};" .
+                "background:{$countColor}18;padding:2px 10px;border-radius:99px;" .
+                "border:1px solid {$countColor}40;white-space:nowrap;'>{$count}x</span>" .
+                "</div>" .
+                "</div>";
+        }
+
+        $totalDuplicates = count($duplicates);
+        $headerColor  = $totalDuplicates >= 3 ? '#ef4444' : '#f59e0b';
+        $headerBg     = $totalDuplicates >= 3 ? 'rgba(239,68,68,0.06)' : 'rgba(245,158,11,0.06)';
+        $headerBorder = $totalDuplicates >= 3 ? '#ef444430' : '#f59e0b30';
+        $headerText   = $totalDuplicates === 1
+            ? '1 інгредієнт повторюється в кількох стравах'
+            : "{$totalDuplicates} інгредієнти повторюються в кількох стравах";
+
+        return new HtmlString(
+            "<div style='background:{$headerBg};border:1px solid {$headerBorder};" .
+            "border-radius:12px;overflow:hidden;margin-top:4px;'>" .
+
+            // Заголовок
+            "<div style='display:flex;align-items:center;justify-content:space-between;" .
+            "padding:12px 16px;border-bottom:1px solid {$headerBorder};'>" .
+            "<div style='display:flex;align-items:center;gap:10px;'>" .
+            "<div style='width:8px;height:8px;border-radius:50%;background:{$headerColor};flex-shrink:0;'></div>" .
+            "<span style='font-size:12px;font-weight:700;color:{$headerColor};'>{$headerText}</span>" .
+            "</div>" .
+            "<span style='font-size:11px;color:#64748b;'>Клієнт може відчути одноманітність раціону</span>" .
+            "</div>" .
+
+            // Список
+            "<div>{$rows}</div>" .
+
             "</div>"
         );
     }
