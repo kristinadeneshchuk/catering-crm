@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Маніфести — {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y') }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         /* ЗАГАЛЬНІ СТИЛІ */
         * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
@@ -157,8 +158,13 @@
                         </div>
                     @endif
 
-                    <div class="pt-1.5 text-center border-t border-slate-100 mt-1">
+                    <div class="pt-1.5 border-t border-slate-100 mt-1 flex items-center justify-between">
                         <p class="text-[8px] font-black text-slate-300 uppercase tracking-[0.2em]">Смачного від {{ $project?->name ?? 'BRAND' }}!</p>
+                        @if(!empty($man['menu_token']))
+                            <div class="qr-placeholder flex-shrink-0"
+                                 data-url="{{ url('/menu/' . $man['menu_token']) }}"
+                                 style="width:52px;height:52px;"></div>
+                        @endif
                     </div>
                 </div>
 
@@ -166,5 +172,32 @@
         </div>
     @endforeach
 </div>
+<script>
+window.addEventListener('load', function () {
+    document.querySelectorAll('.qr-placeholder').forEach(function (el) {
+        var url = el.dataset.url;
+        if (!url) return;
+        new QRCode(el, {
+            text: url,
+            width: 52,
+            height: 52,
+            colorDark: '#000000',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
+        });
+    });
+});
+
+// Перед друком — конвертуємо canvas у img для надійного відображення
+window.addEventListener('beforeprint', function () {
+    document.querySelectorAll('.qr-placeholder canvas').forEach(function (canvas) {
+        var img = document.createElement('img');
+        img.src = canvas.toDataURL('image/png');
+        img.style.width = '52px';
+        img.style.height = '52px';
+        canvas.parentNode.replaceChild(img, canvas);
+    });
+});
+</script>
 </body>
 </html>

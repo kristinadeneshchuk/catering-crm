@@ -53,6 +53,7 @@ class PrintController extends Controller
                 'comment'     => $order->client?->production_comment,
                 'items'       => $calc['items'],
                 'date'        => $targetDate,
+                'menu_token'  => $order->menu_token,
                 'nutrition'   => [
                     'b' => round($calc['totals']['prot']),
                     'j' => round($calc['totals']['fat']),

@@ -19,7 +19,7 @@ class Order extends Model
         'client_id', 'tariff_id', 'project', 'is_paid',
         'start_date', 'end_date', 'duration', 'status',
         'calories', 'scale_factor', 'total_price',
-        'comment', 'schedule_type', 'delivery_time',
+        'comment', 'menu_token', 'schedule_type', 'delivery_time',
         'discount_type', 'discount_value', 'discount_reason',
         'discount_amount', 'final_price',
     ];
@@ -38,6 +38,12 @@ class Order extends Model
 
     protected static function booted()
     {
+        static::creating(function ($order) {
+            if (empty($order->menu_token)) {
+                $order->menu_token = bin2hex(random_bytes(16));
+            }
+        });
+
         static::saving(function ($order) {
             if ($order->scale_factor === null) {
                 $order->scale_factor = 1.0;

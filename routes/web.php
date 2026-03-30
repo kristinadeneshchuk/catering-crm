@@ -6,6 +6,7 @@ use App\Http\Controllers\PrintController;
 use App\Http\Controllers\ClientAuthController;
 use App\Http\Controllers\ClientPaymentController;
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\ClientMenuController;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\LogisticsExport;
 use App\Models\Order;
@@ -21,6 +22,12 @@ use Carbon\Carbon;
 Route::get('/', function () {
     return view('welcome');
 });
+
+/**
+ * 📱 ПУБЛІЧНЕ МЕНЮ КЛІЄНТА (по QR-коду)
+ */
+Route::get('/menu/{token}', [ClientMenuController::class, 'show'])->name('menu.show');
+Route::get('/menu/{token}/dish/{dishId}', [ClientMenuController::class, 'dish'])->name('menu.dish');
 
 /**
  * 🖨️ БЛОК ДРУКУ
