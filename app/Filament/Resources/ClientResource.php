@@ -7,6 +7,7 @@ use App\Filament\Resources\ClientResource\RelationManagers\OrdersRelationManager
 use App\Filament\Resources\ClientResource\RelationManagers\AddressesRelationManager;
 use App\Models\Client;
 use App\Models\MealType;
+use App\Models\MealPlan;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -98,27 +99,8 @@ class ClientResource extends Resource
                             ->afterStateUpdated(function ($state, Set $set) {
                                 if (!$state) return;
 
-                                $kcal = (int) $state;
-                                $allMeals = MealType::all();
-                                $mealTypeIds = [];
-
-                                // Вибираємо прийоми за конкретними sort_order позиціями.
-                                // НЕ беремо перші N підряд, бо 900 ккал пропускає Перекус і Полуденок!
-                                // Порядки: Сніданок=1, Перекус 1=2, Обід=3, Полуденок=4, Вечеря 1=5, Додаток=6
-                                if ($kcal < 1100) {
-                                    // Сніданок + Обід + Вечеря 1 (без перекусу і полуденку)
-                                    $mealTypeIds = $allMeals->whereIn('sort_order', [1, 3, 5])->pluck('id')->toArray();
-                                } elseif ($kcal < 1300) {
-                                    // + Перекус 1 (без полуденку)
-                                    $mealTypeIds = $allMeals->whereIn('sort_order', [1, 2, 3, 5])->pluck('id')->toArray();
-                                } elseif ($kcal < 1600) {
-                                    // + Полуденок (без Додатку)
-                                    $mealTypeIds = $allMeals->whereIn('sort_order', [1, 2, 3, 4, 5])->pluck('id')->toArray();
-                                } else {
-                                    // Всі 6, включно з Додатком до прийому
-                                    $mealTypeIds = $allMeals->pluck('id')->toArray();
-                                }
-
+                                // Тягнемо логіку з централізованих "Планів харчування"
+                                $mealTypeIds = MealPlan::getAllowedMealTypeIds((int) $state);
                                 $set('mealTypes', $mealTypeIds);
                             }),
 

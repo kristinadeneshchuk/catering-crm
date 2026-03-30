@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\MealPlan;
 use Illuminate\Support\Collection;
 
 class FoodCostService
@@ -20,9 +21,11 @@ class FoodCostService
 
         if ($availableItems->isEmpty()) return 0.0;
 
-        $expectedDishes = ($targetKcal < 1200) ? 3 : (($targetKcal < 1500) ? 4 : 5);
-
-        $selectedItems = $availableItems->take($expectedDishes);
+        // Кількість страв визначається централізовано через "Плани харчування"
+        $allowedSortOrders = MealPlan::getAllowedSortOrders((int)$targetKcal);
+        $selectedItems = $availableItems->filter(
+            fn ($item) => in_array($item->mealType?->sort_order, $allowedSortOrders)
+        )->values();
         if ($selectedItems->isEmpty()) return 0.0;
 
         $byMeal = $selectedItems->groupBy('meal_type_id');

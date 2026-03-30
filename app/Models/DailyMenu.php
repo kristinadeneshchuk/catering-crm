@@ -13,6 +13,9 @@ class DailyMenu extends Model
     protected $fillable = [
         'day_number',
         'target_kcal',
+        'target_protein_g',
+        'target_fat_g',
+        'target_carb_g',
         'cached_cost_950',
         'cached_cost_1500',
         'cached_cost_2500',
@@ -21,6 +24,9 @@ class DailyMenu extends Model
     protected $casts = [
         'day_number'       => 'integer',
         'target_kcal'      => 'integer',
+        'target_protein_g' => 'integer',
+        'target_fat_g'     => 'integer',
+        'target_carb_g'    => 'integer',
         'cached_cost_950'  => 'float',
         'cached_cost_1500' => 'float',
         'cached_cost_2500' => 'float',

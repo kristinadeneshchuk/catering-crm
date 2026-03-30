@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\DailyMenuResource\Pages;
 use App\Models\DailyMenu;
+use App\Models\MealPlan;
 use App\Models\Setting;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -35,7 +36,7 @@ class DailyMenuResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Параметри дня')
-                    ->description('Вкажіть номер дня в циклі.')
+                    ->description('Вкажіть номер дня та цільові норми БЖУ. При зміні калорійності норми оновлюються автоматично.')
                     ->schema([
                         TextInput::make('day_number')
                             ->label('Номер дня в циклі')
@@ -53,9 +54,47 @@ class DailyMenuResource extends Resource
                             ->minValue(500)
                             ->maxValue(5000)
                             ->live()
-                            ->helperText('Всі розрахунки нутрієнтів та вага порцій перераховуються автоматично'),
+                            ->afterStateUpdated(function ($state, Forms\Set $set) {
+                                $kcal = max(500, (int)($state ?: 1500));
+                                $set('target_protein_g', (int) round($kcal * 0.30 / 4));
+                                $set('target_fat_g',     (int) round($kcal * 0.30 / 9));
+                                $set('target_carb_g',    (int) round($kcal * 0.40 / 4));
+                            }),
+
+                        TextInput::make('target_protein_g')
+                            ->label('Норма Білки')
+                            ->numeric()
+                            ->default(113)
+                            ->suffix('г')
+                            ->minValue(1)
+                            ->maxValue(500)
+                            ->live(),
+
+                        TextInput::make('target_fat_g')
+                            ->label('Норма Жири')
+                            ->numeric()
+                            ->default(50)
+                            ->suffix('г')
+                            ->minValue(1)
+                            ->maxValue(500)
+                            ->live(),
+
+                        TextInput::make('target_carb_g')
+                            ->label('Норма Вуглеводи')
+                            ->numeric()
+                            ->default(150)
+                            ->suffix('г')
+                            ->minValue(1)
+                            ->maxValue(500)
+                            ->live(),
+
+                        Placeholder::make('bju_progress_bar')
+                            ->label('')
+                            ->columnSpanFull()
+                            ->live()
+                            ->content(fn (Forms\Get $get, $livewire) => self::renderBjuProgressBar($get, $livewire)),
                     ])
-                    ->columns(2),
+                    ->columns(5),
                 
                 Forms\Components\Section::make('Склад раціону')
                     ->schema([
@@ -228,9 +267,9 @@ class DailyMenuResource extends Resource
 
                         foreach ($records as $record) {
                             $record->updateQuietly([
-                                'cached_cost_950'  => self::calculatePlanCost($record, 950,  [1, 3, 5]),
-                                'cached_cost_1500' => self::calculatePlanCost($record, 1500, [1, 2, 3, 4, 5]),
-                                'cached_cost_2500' => self::calculatePlanCost($record, 2500, [1, 2, 3, 4, 5]),
+                                'cached_cost_950'  => self::calculatePlanCost($record, 950,  MealPlan::getAllowedSortOrders(950)),
+                                'cached_cost_1500' => self::calculatePlanCost($record, 1500, MealPlan::getAllowedSortOrders(1500)),
+                                'cached_cost_2500' => self::calculatePlanCost($record, 2500, MealPlan::getAllowedSortOrders(2500)),
                             ]);
                         }
                     })
@@ -268,6 +307,137 @@ class DailyMenuResource extends Resource
             'create' => Pages\CreateDailyMenu::route('/create'),
             'edit' => Pages\EditDailyMenu::route('/{record}/edit'),
         ];
+    }
+
+    // ─── BJU Progress Bar ──────────────────────────────────────────────────────
+
+    private static function renderBjuProgressBar(Forms\Get $get, $livewire): HtmlString
+    {
+        $formData   = $livewire->data ?? [];
+        $targetKcal = max(500, (int)(($formData['target_kcal']      ?? null) ?: 1500));
+        $targetProt = max(1,   (int)(($formData['target_protein_g'] ?? null) ?: round($targetKcal * 0.30 / 4)));
+        $targetFat  = max(1,   (int)(($formData['target_fat_g']     ?? null) ?: round($targetKcal * 0.30 / 9)));
+        $targetCarb = max(1,   (int)(($formData['target_carb_g']    ?? null) ?: round($targetKcal * 0.40 / 4)));
+
+        // Знаходимо план харчування для поточної калорійності
+        $plan              = MealPlan::findForKcal($targetKcal);
+        $allowedSortOrders = $plan ? $plan->mealTypes->pluck('sort_order')->all() : [];
+        $planName          = $plan?->name ?? 'План не знайдено';
+        $planMealNames     = $plan ? $plan->mealTypes->pluck('name')->join(', ') : '—';
+        $planCount         = $plan ? $plan->mealTypes->count() : 0;
+
+        // Фільтруємо тільки страви поточного плану
+        // Завантажуємо всі MealType одним запитом → без N+1
+        $allMealTypes = \App\Models\MealType::all()->keyBy('id');
+        $rawItems     = $formData['menuItems'] ?? [];
+        $allItems     = is_array($rawItems) ? array_values($rawItems) : [];
+        $planItems    = array_filter($allItems, function ($item) use ($allowedSortOrders, $allMealTypes) {
+            $mtId = $item['meal_type_id'] ?? null;
+            if (!$mtId) return false;
+            $mt = $allMealTypes->get($mtId);
+            return $mt && in_array($mt->sort_order, $allowedSortOrders);
+        });
+
+        $ctx = self::calculateDayContext(array_values($planItems), $targetKcal);
+
+        $curProt = round((float)($ctx['prot'] ?? 0), 1);
+        $curFat  = round((float)($ctx['fat']  ?? 0), 1);
+        $curCarb = round((float)($ctx['carb'] ?? 0), 1);
+        $curKcal = round((float)($ctx['kcal'] ?? 0));
+
+        // Повертає масив [label, icon, statusColor, glow] залежно від % виконання
+        $getStatus = function (float $cur, float $tgt): array {
+            $p = $tgt > 0 ? ($cur / $tgt) * 100 : 0;
+            if ($p > 115) return ['Перебір',     '⚠️', '#ef4444', 'rgba(239,68,68,0.20)'];
+            if ($p > 105) return ['Трохи більше','↑',  '#f59e0b', 'rgba(245,158,11,0.15)'];
+            if ($p >= 80) return ['В нормі',     '✓',  '#22c55e', 'rgba(34,197,94,0.15)'];
+            if ($p >= 50) return ['Недобір',     '↓',  '#eab308', 'rgba(234,179,8,0.10)'];
+            if ($p > 0)   return ['Мало',        '○',  '#64748b', 'transparent'];
+            return             ['—',             '—',  '#374151', 'transparent'];
+        };
+
+        // Рендер однієї картки нутрієнта
+        $card = function (
+            string $emoji, string $name, float $cur, float $tgt, string $unit, string $baseColor
+        ) use ($getStatus): string {
+            [$label, $icon, $statusColor, $glow] = $getStatus($cur, $tgt);
+            $pct       = $tgt > 0 ? round(($cur / $tgt) * 100) : 0;
+            $barWidth  = min(100, $pct);
+            // В нормі → рідний колір нутрієнта, інакше → колір статусу
+            $barColor  = ($pct >= 80 && $pct <= 115) ? $baseColor : $statusColor;
+            $valColor  = $barColor;
+
+            return
+                // Картка
+                "<div style='flex:1;min-width:0;background:linear-gradient(145deg,#0f172a,#1a2436);" .
+                "border:1px solid #1e293b;border-radius:16px;padding:14px 16px;" .
+                "box-shadow:0 0 24px {$glow};'>" .
+
+                // Рядок: емодзі + назва | бейдж статусу
+                "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;'>" .
+                "<div style='display:flex;align-items:center;gap:6px;'>" .
+                "<span style='font-size:20px;line-height:1;'>{$emoji}</span>" .
+                "<span style='font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px;'>{$name}</span>" .
+                "</div>" .
+                "<span style='font-size:10px;font-weight:700;color:{$statusColor};" .
+                "background:{$statusColor}18;padding:2px 8px;border-radius:99px;border:1px solid {$statusColor}40;white-space:nowrap;'>" .
+                "{$icon} {$label}" .
+                "</span>" .
+                "</div>" .
+
+                // Велике значення + ціль
+                "<div style='display:flex;align-items:baseline;gap:4px;margin-bottom:11px;'>" .
+                "<span style='font-size:28px;font-weight:900;color:{$valColor};line-height:1;letter-spacing:-1px;'>{$cur}</span>" .
+                "<span style='font-size:12px;color:#334155;font-weight:500;'>&nbsp;/ {$tgt}{$unit}</span>" .
+                "</div>" .
+
+                // Прогрес-бар
+                "<div style='background:#0d1424;border-radius:99px;height:6px;overflow:hidden;margin-bottom:6px;'>" .
+                "<div style='width:{$barWidth}%;background:linear-gradient(90deg,{$barColor}80,{$barColor});" .
+                "height:100%;border-radius:99px;transition:width .4s ease;'></div>" .
+                "</div>" .
+
+                // Відсоток
+                "<div style='text-align:right;font-size:10px;font-weight:600;color:{$barColor}90;'>{$pct}%</div>" .
+
+                "</div>";
+        };
+
+        // Інфо-рядок про активний план
+        $planColor  = $plan ? '#22c55e' : '#ef4444';
+        $planBg     = $plan ? 'rgba(34,197,94,0.07)' : 'rgba(239,68,68,0.07)';
+        $planBorder = $plan ? 'rgba(34,197,94,0.22)' : 'rgba(239,68,68,0.22)';
+        $planIcon   = $plan ? '📋' : '⚠️';
+
+        $countBadge = $plan
+            ? "<span style='font-size:10px;font-weight:700;color:{$planColor};background:rgba(34,197,94,0.12);" .
+              "padding:1px 9px;border-radius:99px;border:1px solid rgba(34,197,94,0.3);margin-left:8px;'>" .
+              "{$planCount} прийомів їжі</span>"
+            : '';
+
+        $infoRow =
+            "<div style='display:flex;align-items:center;gap:10px;padding:9px 14px;margin-bottom:10px;" .
+            "background:{$planBg};border:1px solid {$planBorder};border-radius:10px;'>" .
+            "<span style='font-size:18px;line-height:1;'>{$planIcon}</span>" .
+            "<div style='flex:1;min-width:0;'>" .
+            "<div style='display:flex;align-items:center;flex-wrap:wrap;gap:4px;'>" .
+            "<span style='font-size:12px;font-weight:700;color:{$planColor};'>{$planName}</span>" .
+            $countBadge .
+            "</div>" .
+            "<div style='font-size:11px;color:#64748b;margin-top:2px;'>Враховуються: <span style='color:#94a3b8;'>{$planMealNames}</span></div>" .
+            "</div>" .
+            "<span style='font-size:10px;color:#475569;white-space:nowrap;padding-left:8px;'>БЖУ рахується тільки по цих прийомах</span>" .
+            "</div>";
+
+        return new HtmlString(
+            $infoRow .
+            "<div style='display:flex;gap:10px;padding:0 0 8px;'>" .
+            $card('🔥', 'Ккал',      $curKcal, $targetKcal, ' ккал', '#a78bfa') .
+            $card('💪', 'Білки',     $curProt, $targetProt, 'г',     '#60a5fa') .
+            $card('🥑', 'Жири',      $curFat,  $targetFat,  'г',     '#fbbf24') .
+            $card('🌾', 'Вуглеводи', $curCarb, $targetCarb, 'г',     '#34d399') .
+            "</div>"
+        );
     }
 
     // ─── Hint helpers ─────────────────────────────────────────────────────────
