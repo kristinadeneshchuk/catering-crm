@@ -105,14 +105,21 @@ class PrintController extends Controller
                 'calories'      => (int) $order->calories,
                 'is_evening'    => $isEvening,
                 'delivery_slot' => $isEvening ? 'Вечір' : 'Ранок',
+                'menu_token'    => $order->menu_token,
             ];
         }
 
         usort($manifests, function ($a, $b) {
-            // Спочатку ранок, потім вечір; в середині — за іменем
+            // 1. Спочатку ранок, потім вечір
             if ($a['is_evening'] !== $b['is_evening']) {
                 return $a['is_evening'] ? 1 : -1;
             }
+            // 2. Всередині — за проєктом
+            $projectCmp = strcmp($a['project'] ?? '', $b['project'] ?? '');
+            if ($projectCmp !== 0) {
+                return $projectCmp;
+            }
+            // 3. Всередині проєкту — за іменем
             return strcmp($a['client'], $b['client']);
         });
 
@@ -196,7 +203,16 @@ class PrintController extends Controller
             }
         }
 
-        usort($stickers, fn($a, $b) => strcmp($a['client'], $b['client']) ?: $a['time'] <=> $b['time']);
+        usort($stickers, function ($a, $b) {
+            // 1. За порядком прийому їжі
+            $timeCmp = $a['time'] <=> $b['time'];
+            if ($timeCmp !== 0) return $timeCmp;
+            // 2. За проєктом
+            $projectCmp = strcmp($a['project'] ?? '', $b['project'] ?? '');
+            if ($projectCmp !== 0) return $projectCmp;
+            // 3. За іменем клієнта
+            return strcmp($a['client'], $b['client']);
+        });
 
         // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату
         $date = $inputDate; 

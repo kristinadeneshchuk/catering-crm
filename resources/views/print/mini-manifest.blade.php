@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>На пакет — {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y') }}</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         * {
             -webkit-print-color-adjust: exact !important;
@@ -48,11 +49,12 @@
             display: flex;
             flex-wrap: wrap;
             align-content: flex-start;
+            justify-content: center;
             padding: 1.5mm 0 0 0;
         }
 
         .sticker {
-            width: 70mm;
+            width: 67mm;
             height: 42mm;
             position: relative;
             overflow: hidden;
@@ -188,7 +190,16 @@
 
         /* Підпис */
         .sticker-footer {
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .qr-placeholder img,
+        .qr-placeholder canvas {
+            display: block;
+            width: 50px !important;
+            height: 50px !important;
         }
 
         .footer-text {
@@ -277,10 +288,39 @@
             {{-- Підпис --}}
             <div class="sticker-footer">
                 <span class="footer-text">Смачного від {{ $project?->name ?? 'BRAND' }}!</span>
+                @if(!empty($man['menu_token']))
+                    <div class="qr-placeholder" data-url="{{ url('/menu/' . $man['menu_token']) }}" style="width:50px;height:50px;flex-shrink:0;"></div>
+                @endif
             </div>
         </div>
     @endforeach
 </div>
 
+<script>
+window.addEventListener('load', function () {
+    document.querySelectorAll('.qr-placeholder').forEach(function (el) {
+        var url = el.dataset.url;
+        if (!url) return;
+        new QRCode(el, {
+            text: url,
+            width: 50,
+            height: 50,
+            colorDark: '#000000',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
+        });
+    });
+});
+
+window.addEventListener('beforeprint', function () {
+    document.querySelectorAll('.qr-placeholder canvas').forEach(function (canvas) {
+        var img = document.createElement('img');
+        img.src = canvas.toDataURL('image/png');
+        img.style.width = '50px';
+        img.style.height = '50px';
+        canvas.parentNode.replaceChild(img, canvas);
+    });
+});
+</script>
 </body>
 </html>

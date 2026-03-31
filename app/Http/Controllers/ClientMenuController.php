@@ -20,9 +20,15 @@ class ClientMenuController extends Controller
             ->firstOrFail();
 
         $client = $order->client;
+        $today = now()->startOfDay();
         $date = $request->input('date')
             ? Carbon::parse($request->input('date'))->startOfDay()
-            : now()->startOfDay();
+            : $today;
+
+        // Клієнт не може переглядати майбутні дні
+        if ($date->greaterThan($today)) {
+            $date = $today;
+        }
 
         // Шукаємо активне замовлення на цю дату (може бути інше замовлення того ж клієнта)
         $activeOrder = Order::where('client_id', $client->id)
@@ -59,7 +65,7 @@ class ClientMenuController extends Controller
             ->whereHas('orderDays', fn($q) => $q->where('date', $prevDate->format('Y-m-d')))
             ->exists();
 
-        $hasNext = Order::where('client_id', $client->id)
+        $hasNext = !$nextDate->greaterThan($today) && Order::where('client_id', $client->id)
             ->whereHas('orderDays', fn($q) => $q->where('date', $nextDate->format('Y-m-d')))
             ->exists();
 

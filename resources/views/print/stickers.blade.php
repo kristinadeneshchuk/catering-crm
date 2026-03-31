@@ -50,11 +50,12 @@
             display: flex;
             flex-wrap: wrap;
             align-content: flex-start;
+            justify-content: center;
             padding: 1.5mm 0 0 0;
         }
 
         .sticker {
-            width: 70mm;
+            width: 67mm;
             height: 42mm;
             position: relative;
             overflow: hidden;

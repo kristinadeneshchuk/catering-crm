@@ -255,6 +255,18 @@ class ClientResource extends Resource
                     ->sortable(query: fn ($query, $direction) => $query->orderBy('clients.name', $direction))
                     ->searchable(query: fn ($query, $search) => $query->where('clients.name', 'like', "%{$search}%")),
 
+                Tables\Columns\TextColumn::make('project')
+                    ->label('Проєкт')
+                    ->badge()
+                    ->getStateUsing(function ($record) {
+                        $order = $record->orders()->latest('id')->first();
+                        return $order?->projectData?->name;
+                    })
+                    ->color(function ($record) {
+                        $order = $record->orders()->latest('id')->first();
+                        return $order?->projectData?->color ?? 'gray';
+                    }),
+
                 Tables\Columns\TextColumn::make('active_order_progress')
                     ->label('День')
                     ->badge()
