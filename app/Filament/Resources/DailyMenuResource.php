@@ -51,11 +51,9 @@ class DailyMenuResource extends Resource
                             ->numeric()
                             ->default(1500)
                             ->suffix('ккал')
-                            ->minValue(500)
-                            ->maxValue(5000)
-                            ->live()
+                            ->live(onBlur: true)
                             ->afterStateUpdated(function ($state, Forms\Set $set) {
-                                $kcal = max(500, (int)($state ?: 1500));
+                                $kcal = max(1, (int)($state ?: 1500));
                                 $set('target_protein_g', (int) round($kcal * 0.30 / 4));
                                 $set('target_fat_g',     (int) round($kcal * 0.30 / 9));
                                 $set('target_carb_g',    (int) round($kcal * 0.40 / 4));
@@ -68,7 +66,7 @@ class DailyMenuResource extends Resource
                             ->suffix('г')
                             ->minValue(1)
                             ->maxValue(500)
-                            ->live(),
+                            ->live(onBlur: true),
 
                         TextInput::make('target_fat_g')
                             ->label('Норма Жири')
@@ -77,7 +75,7 @@ class DailyMenuResource extends Resource
                             ->suffix('г')
                             ->minValue(1)
                             ->maxValue(500)
-                            ->live(),
+                            ->live(onBlur: true),
 
                         TextInput::make('target_carb_g')
                             ->label('Норма Вуглеводи')
@@ -86,7 +84,7 @@ class DailyMenuResource extends Resource
                             ->suffix('г')
                             ->minValue(1)
                             ->maxValue(500)
-                            ->live(),
+                            ->live(onBlur: true),
 
                         Placeholder::make('bju_progress_bar')
                             ->label('')
@@ -320,7 +318,7 @@ class DailyMenuResource extends Resource
     private static function renderBjuProgressBar(Forms\Get $get, $livewire): HtmlString
     {
         $formData   = $livewire->data ?? [];
-        $targetKcal = max(500, (int)(($formData['target_kcal']      ?? null) ?: 1500));
+        $targetKcal = max(1, (int)(($formData['target_kcal']      ?? null) ?: 1500));
         $targetProt = max(1,   (int)(($formData['target_protein_g'] ?? null) ?: round($targetKcal * 0.30 / 4)));
         $targetFat  = max(1,   (int)(($formData['target_fat_g']     ?? null) ?: round($targetKcal * 0.30 / 9)));
         $targetCarb = max(1,   (int)(($formData['target_carb_g']    ?? null) ?: round($targetKcal * 0.40 / 4)));
@@ -337,14 +335,35 @@ class DailyMenuResource extends Resource
         $allMealTypes = \App\Models\MealType::all()->keyBy('id');
         $rawItems     = $formData['menuItems'] ?? [];
         $allItems     = is_array($rawItems) ? array_values($rawItems) : [];
-        $planItems    = array_filter($allItems, function ($item) use ($allowedSortOrders, $allMealTypes) {
+        $planItems    = array_values(array_filter($allItems, function ($item) use ($allowedSortOrders, $allMealTypes) {
             $mtId = $item['meal_type_id'] ?? null;
             if (!$mtId) return false;
             $mt = $allMealTypes->get($mtId);
             return $mt && in_array($mt->sort_order, $allowedSortOrders);
-        });
+        }));
 
-        $ctx = self::calculateDayContext(array_values($planItems), $targetKcal);
+        // Нормалізуємо відсотки до 100% щоб правильно рахувати при зміні плану
+        // Наприклад: 3 страви з 25+35+20=80% → нормалізуються до 31.25+43.75+25=100%
+        $totalPct = array_sum(array_map(function ($item) use ($allMealTypes) {
+            $cp = $item['custom_energy_percent'] ?? null;
+            if ($cp !== null && $cp !== '') return (float)$cp;
+            $mt = $allMealTypes->get($item['meal_type_id'] ?? null);
+            return (float)($mt?->energy_percent ?? 0);
+        }, $planItems));
+
+        if ($totalPct > 0 && abs($totalPct - 100) > 0.5) {
+            $factor   = 100.0 / $totalPct;
+            $planItems = array_map(function ($item) use ($allMealTypes, $factor) {
+                $cp = $item['custom_energy_percent'] ?? null;
+                $base = ($cp !== null && $cp !== '')
+                    ? (float)$cp
+                    : (float)($allMealTypes->get($item['meal_type_id'] ?? null)?->energy_percent ?? 0);
+                $item['custom_energy_percent'] = round($base * $factor, 4);
+                return $item;
+            }, $planItems);
+        }
+
+        $ctx = self::calculateDayContext($planItems, $targetKcal);
 
         $curProt = round((float)($ctx['prot'] ?? 0), 1);
         $curFat  = round((float)($ctx['fat']  ?? 0), 1);
