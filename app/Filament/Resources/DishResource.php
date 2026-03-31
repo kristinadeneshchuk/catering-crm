@@ -327,14 +327,28 @@ class DishResource extends Resource
             ])
                 ->actions([
                     Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
-                    Tables\Actions\ReplicateAction::make()
+                    Tables\Actions\Action::make('duplicate')
                         ->label('')
                         ->icon('heroicon-o-document-duplicate')
                         ->color('gray')
                         ->tooltip('Дублювати')
-                        ->excludeAttributes(['photo'])
-                        ->beforeReplicaSaved(function (Dish $replica): void {
-                            $replica->name = $replica->name . ' (копія)';
+                        ->requiresConfirmation()
+                        ->modalHeading(fn (Dish $record) => 'Дублювати «' . $record->name . '»?')
+                        ->modalDescription('Буде створена копія страви з усіма інгредієнтами.')
+                        ->modalSubmitActionLabel('Дублювати')
+                        ->modalCancelActionLabel('Скасувати')
+                        ->action(function (Dish $record): void {
+                            $replica = $record->replicate(['photo', 'cached_cost_950', 'cached_cost_1500', 'cached_cost_2500']);
+                            $replica->name = $record->name . ' (копія)';
+                            $replica->save();
+                            foreach ($record->dishIngredients as $item) {
+                                $replica->dishIngredients()->create([
+                                    'ingredient_id'  => $item->ingredient_id,
+                                    'child_dish_id'  => $item->child_dish_id,
+                                    'net_weight_g'   => $item->net_weight_g,
+                                    'type'           => $item->type,
+                                ]);
+                            }
                         })
                         ->successNotificationTitle('Страву продубльовано'),
                     Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
