@@ -78,6 +78,70 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
-            ]);
+            ])
+            ->renderHook('panels::head.end', fn () => new \Illuminate\Support\HtmlString(
+                '<link rel="stylesheet" href="/css/leaflet/leaflet.css">'
+            ))
+            ->renderHook('panels::body.end', fn () => new \Illuminate\Support\HtmlString(
+                '<script src="/js/leaflet/leaflet.js"></script>
+<script>
+(function () {
+    function initLeafletMaps() {
+        if (!window.L) return;
+        document.querySelectorAll("[data-leaflet-cfg]:not([data-leaflet-ready])").forEach(function (el) {
+            el.setAttribute("data-leaflet-ready", "1");
+            var cfg;
+            try { cfg = JSON.parse(el.getAttribute("data-leaflet-cfg")); } catch(e) { return; }
+
+            delete L.Icon.Default.prototype._getIconUrl;
+            L.Icon.Default.mergeOptions({
+                iconUrl:       "/css/leaflet/images/marker-icon.png",
+                iconRetinaUrl: "/css/leaflet/images/marker-icon-2x.png",
+                shadowUrl:     "/css/leaflet/images/marker-shadow.png",
+            });
+
+            var map    = L.map(el).setView(cfg.center, cfg.zoom);
+            var marker = null;
+
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                attribution: "\u00a9 OpenStreetMap contributors"
+            }).addTo(map);
+
+            if (cfg.hasCoords) {
+                marker = L.marker(cfg.center, { draggable: true }).addTo(map);
+                marker.on("dragend", function (e) {
+                    onCoords(e.target.getLatLng().lat, e.target.getLatLng().lng);
+                });
+            }
+
+            map.on("click", function (e) { onCoords(e.latlng.lat, e.latlng.lng); });
+
+            setTimeout(function () { map.invalidateSize(); }, 200);
+            setTimeout(function () { map.invalidateSize(); }, 600);
+
+            function onCoords(lat, lng) {
+                if (marker) { marker.setLatLng([lat, lng]); }
+                else {
+                    marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+                    marker.on("dragend", function (e) {
+                        onCoords(e.target.getLatLng().lat, e.target.getLatLng().lng);
+                    });
+                }
+                // Глобальний Livewire event — працює навіть якщо модалка телепортована в body
+                Livewire.dispatch("map-coords-updated", { lat: lat, lng: lng });
+            }
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        initLeafletMaps();
+        setInterval(initLeafletMaps, 500);
+    });
+
+    document.addEventListener("livewire:navigated", initLeafletMaps);
+    document.addEventListener("livewire:update", initLeafletMaps);
+})();
+</script>'
+            ));
     }
 }

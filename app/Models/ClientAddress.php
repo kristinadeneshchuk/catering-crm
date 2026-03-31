@@ -11,6 +11,8 @@ class ClientAddress extends Model
         'client_id',
         'label',
         'address',
+        'lat',
+        'lng',
         'address_entrance',
         'address_apartment',
         'address_floor',

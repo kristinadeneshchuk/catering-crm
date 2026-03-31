@@ -7,6 +7,7 @@ use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Livewire\Attributes\On;
 
 class AddressesRelationManager extends RelationManager
 {
@@ -14,6 +15,9 @@ class AddressesRelationManager extends RelationManager
     protected static ?string $title = 'Адреси доставки';
     protected static ?string $modelLabel = 'адресу';
     protected static ?string $pluralModelLabel = 'адреси';
+
+    public ?float $pendingLat = null;
+    public ?float $pendingLng = null;
 
     public function form(Form $form): Form
     {
@@ -29,9 +33,19 @@ class AddressesRelationManager extends RelationManager
                 ->onColor('success')
                 ->columnSpanFull(),
 
-            Forms\Components\Select::make('address')
+            Forms\Components\Select::make('address_search')
                 ->label('Адреса')
                 ->searchable()
+                ->dehydrated(false)
+                ->live()
+                ->afterStateUpdated(function ($state, callable $set) {
+                    if ($state && str_contains((string) $state, '|||')) {
+                        [$lat, $lng, $address] = explode('|||', $state, 3);
+                        $set('lat', $lat);
+                        $set('lng', $lng);
+                        $set('address', $address);
+                    }
+                })
                 ->getSearchResultsUsing(function (string $search) {
                     if (strlen($search) < 3) return [];
                     $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
@@ -47,13 +61,28 @@ class AddressesRelationManager extends RelationManager
                     $results = json_decode($response, true) ?? [];
                     $options = [];
                     foreach ($results as $r) {
-                        $label = $r['display_name'] ?? '';
-                        $options[$label] = $label;
+                        $value = ($r['lat'] ?? '') . '|||' . ($r['lon'] ?? '') . '|||' . ($r['display_name'] ?? '');
+                        $options[$value] = $r['display_name'] ?? '';
                     }
                     return $options;
                 })
-                ->required()
                 ->placeholder('Почніть вводити вулицю...')
+                ->columnSpanFull(),
+
+            Forms\Components\TextInput::make('address')
+                ->label('Адреса (можна редагувати)')
+                ->required()
+                ->placeholder('Оберіть з пошуку або введіть вручну')
+                ->columnSpanFull(),
+
+            Forms\Components\Hidden::make('lat'),
+            Forms\Components\Hidden::make('lng'),
+
+            Forms\Components\View::make('components.address-map')
+                ->viewData(fn ($record) => [
+                    'currentLat' => $record?->lat,
+                    'currentLng' => $record?->lng,
+                ])
                 ->columnSpanFull(),
 
             Forms\Components\TextInput::make('address_entrance')
@@ -72,8 +101,23 @@ class AddressesRelationManager extends RelationManager
         ])->columns(3);
     }
 
+    #[On('map-coords-updated')]
+    public function setMapCoords($lat, $lng): void
+    {
+        $this->pendingLat = (float) $lat;
+        $this->pendingLng = (float) $lng;
+    }
+
     public function table(Table $table): Table
     {
+        $applyCoords = function (array $data): array {
+            if ($this->pendingLat !== null) {
+                $data['lat'] = $this->pendingLat;
+                $data['lng'] = $this->pendingLng;
+            }
+            return $data;
+        };
+
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('label')
@@ -96,10 +140,13 @@ class AddressesRelationManager extends RelationManager
                     ->boolean(),
             ])
             ->headerActions([
-                Tables\Actions\CreateAction::make()->label('Додати адресу'),
+                Tables\Actions\CreateAction::make()
+                    ->label('Додати адресу')
+                    ->mutateFormDataUsing($applyCoords),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->mutateFormDataUsing($applyCoords),
                 Tables\Actions\DeleteAction::make(),
             ]);
     }
