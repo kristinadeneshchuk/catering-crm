@@ -94,8 +94,8 @@ class ReplacementBundleResource extends Resource
                     ->sortable(),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
+                Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

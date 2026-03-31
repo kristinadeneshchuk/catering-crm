@@ -368,8 +368,8 @@ class ClientResource extends Resource
             ])
             ->defaultSort('active_order_progress', 'asc') 
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
+                Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
             ]);
     }
 

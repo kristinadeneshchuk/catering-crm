@@ -142,8 +142,8 @@ class MealPlanResource extends Resource
             ->defaultSort('min_kcal', 'asc')
             ->striped()
             ->actions([
-                Tables\Actions\EditAction::make()->iconButton(),
-                Tables\Actions\DeleteAction::make()->iconButton(),
+                Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
+                Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
             ]);
     }
 

@@ -84,8 +84,8 @@ protected static ?string $model = User::class;
                     }),
             ])
                 ->actions([
-                    Tables\Actions\EditAction::make(), // Ваша існуюча кнопка "Змінити"
-                    Tables\Actions\DeleteAction::make(), // Додаємо кнопку "Видалити"
+                    Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
+                    Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
                 ])
                 ->bulkActions([
                     Tables\Actions\BulkActionGroup::make([

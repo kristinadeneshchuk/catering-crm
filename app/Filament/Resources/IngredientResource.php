@@ -189,7 +189,10 @@ class IngredientResource extends Resource
                     })
                     ->searchable(),
             ])
-            ->actions([Tables\Actions\EditAction::make(), Tables\Actions\DeleteAction::make()])
+            ->actions([
+                Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
+                Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
+            ])
             ->bulkActions([Tables\Actions\BulkActionGroup::make([Tables\Actions\DeleteBulkAction::make()])]);
     }
 

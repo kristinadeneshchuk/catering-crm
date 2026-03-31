@@ -85,12 +85,10 @@ class TariffResource extends Resource
                 Tables\Filters\TrashedFilter::make(),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(), // Звичайне (м'яке) видалення
-                
-                // 🔥 3. Додаткові дії для видалених записів
-                Tables\Actions\ForceDeleteAction::make(), // Видалити назавжди
-                Tables\Actions\RestoreAction::make(),     // Відновити з кошика
+                Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
+                Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
+                Tables\Actions\ForceDeleteAction::make()->label('')->tooltip('Видалити назавжди'),
+                Tables\Actions\RestoreAction::make()->label('')->tooltip('Відновити'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

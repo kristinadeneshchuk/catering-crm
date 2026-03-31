@@ -99,7 +99,7 @@ class ProjectResource extends Resource
                 //
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

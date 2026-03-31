@@ -441,8 +441,8 @@ class StockDocumentResource extends Resource
                         $fresh = $record->fresh();
                         $fresh->update(['is_paid' => !$fresh->is_paid]);
                     }),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
+                Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
             ]);
     }
 

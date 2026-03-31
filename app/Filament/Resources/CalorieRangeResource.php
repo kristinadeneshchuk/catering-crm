@@ -121,8 +121,8 @@ class CalorieRangeResource extends Resource
                 // Тут можна додати фільтр за межами калорій
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
+                Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

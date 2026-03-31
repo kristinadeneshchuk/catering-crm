@@ -326,8 +326,18 @@ class DishResource extends Resource
                     ->searchable(),
             ])
                 ->actions([
-                    Tables\Actions\EditAction::make(),
-                    Tables\Actions\DeleteAction::make(),
+                    Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
+                    Tables\Actions\ReplicateAction::make()
+                        ->label('')
+                        ->icon('heroicon-o-document-duplicate')
+                        ->color('gray')
+                        ->tooltip('Дублювати')
+                        ->excludeAttributes(['photo'])
+                        ->beforeReplicaSaved(function (Dish $replica): void {
+                            $replica->name = $replica->name . ' (копія)';
+                        })
+                        ->successNotificationTitle('Страву продубльовано'),
+                    Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
                 ])
                 ->bulkActions([
                     Tables\Actions\BulkActionGroup::make([

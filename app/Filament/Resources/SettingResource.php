@@ -103,7 +103,7 @@ class SettingResource extends Resource
                     }),
             ])
             ->actions([
-                Tables\Actions\EditAction::make()->modalHeading('Змінити'),
+                Tables\Actions\EditAction::make()->label('')->tooltip('Змінити')->modalHeading('Змінити'),
             ])
             ->bulkActions([]);
     }

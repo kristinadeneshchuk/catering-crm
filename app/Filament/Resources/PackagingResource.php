@@ -62,8 +62,8 @@ class PackagingResource extends Resource
                     ->sortable(),
             ])
             ->actions([
-                Actions\EditAction::make(),
-                Actions\DeleteAction::make(),
+                Actions\EditAction::make()->label('')->tooltip('Змінити'),
+                Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
             ]);
     }
 

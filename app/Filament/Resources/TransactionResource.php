@@ -168,8 +168,8 @@ class TransactionResource extends Resource
                     ->relationship('account', 'name'),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                
+                Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
+
                 // 🔥 КНОПКА ВИДАЛЕННЯ (ВІДКОТ)
                 DeleteAction::make()
                     ->label('Скасувати')

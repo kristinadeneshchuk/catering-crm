@@ -129,7 +129,7 @@ class EmployeeResource extends Resource
                 ]),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
 
                 // 🔥 ФІНАЛЬНИЙ БЛОК: ВИПЛАТА ЗП
                 Action::make('pay_salary')
