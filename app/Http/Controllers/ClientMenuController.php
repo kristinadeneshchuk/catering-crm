@@ -188,8 +188,23 @@ class ClientMenuController extends Controller
             return ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
         }
 
-        $selectedItems = $availableItems->take($this->expectedDishCount((int) $targetKcal));
+        $allowedSortOrders = \App\Models\MealPlan::getAllowedSortOrders((int) $targetKcal);
+        $selectedItems = $availableItems->filter(
+            fn ($item) => in_array($item->mealType?->sort_order, $allowedSortOrders)
+        )->values();
         $byMeal = $selectedItems->groupBy('meal_type_id');
+
+        // Нормалізація: якщо вибрані страви мають відсотки що не дають 100%
+        // (наприклад, 3 страви по 20% = 60%), нормалізуємо до 100%
+        $rawPct = [];
+        foreach ($byMeal as $mealTypeId => $items) {
+            $fi = $items->first();
+            $rawPct[$mealTypeId] = $fi->custom_energy_percent !== null
+                ? (float) $fi->custom_energy_percent
+                : (float) ($fi->mealType?->energy_percent ?? 0);
+        }
+        $totalPct = array_sum($rawPct);
+        $normFactor = ($totalPct > 0.5 && abs($totalPct - 100) > 0.5) ? (100.0 / $totalPct) : 1.0;
 
         $totals = ['kcal' => 0.0, 'prot' => 0.0, 'fat' => 0.0, 'carb' => 0.0];
         $resultItems = [];
@@ -198,9 +213,7 @@ class ClientMenuController extends Controller
             $firstItem = $items->first();
             $mealType  = $firstItem->mealType;
 
-            $p = $firstItem->custom_energy_percent !== null
-                ? (float) $firstItem->custom_energy_percent
-                : (float) ($mealType?->energy_percent ?? 0);
+            $p = ($rawPct[$mealTypeId] ?? 0) * $normFactor;
 
             $mealKcal = ($p > 0)
                 ? $targetKcal * ($p / 100.0)
@@ -325,11 +338,4 @@ class ClientMenuController extends Controller
         return array_keys($allergens);
     }
 
-    private function expectedDishCount(int $kcal): int
-    {
-        if ($kcal < 1100) return 3;
-        if ($kcal < 1300) return 4;
-        if ($kcal < 1600) return 5;
-        return 6;
-    }
 }

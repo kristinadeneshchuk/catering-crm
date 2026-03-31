@@ -365,24 +365,31 @@ class PackagingList extends Page implements HasForms
 
         if ($availableItems->isEmpty()) return ['items' => []];
 
-        $expectedDishes = $this->expectedDishCount((int)$targetKcal);
-
-        $selected = $availableItems->take($expectedDishes);
+        $allowedSortOrders = \App\Models\MealPlan::getAllowedSortOrders((int)$targetKcal);
+        $selected = $availableItems->filter(
+            fn ($item) => in_array($item->mealType?->sort_order, $allowedSortOrders)
+        )->values();
         if ($selected->isEmpty()) return ['items' => []];
 
         $byMeal = $selected->groupBy('meal_type_id');
+
+        // Нормалізація відсотків до 100% для вибраних страв
+        $rawPct = [];
+        foreach ($byMeal as $mealTypeId => $items) {
+            $fi = $items->first();
+            $rawPct[$mealTypeId] = $fi->custom_energy_percent !== null
+                ? (float) $fi->custom_energy_percent
+                : (float) ($fi->mealType?->energy_percent ?? 0);
+        }
+        $totalPct = array_sum($rawPct);
+        $normFactor = ($totalPct > 0.5 && abs($totalPct - 100) > 0.5) ? (100.0 / $totalPct) : 1.0;
 
         $itemsOut = [];
 
         foreach ($byMeal as $mealTypeId => $items) {
             $firstItem = $items->first();
 
-            // Беремо кастомний відсоток якщо є, інакше з типу прийому їжі.
-            // Ділимо на 100 (не на суму відсотків!) — кожен прийом отримує рівно
-            // свою частку від цільових ккал, незалежно від кількості страв у раціоні.
-            $p = $firstItem->custom_energy_percent !== null
-                ? (float) $firstItem->custom_energy_percent
-                : (float) ($firstItem->mealType?->energy_percent ?? 0);
+            $p = ($rawPct[$mealTypeId] ?? 0) * $normFactor;
 
             $mealKcal = ($p > 0)
                 ? $targetKcal * ($p / 100.0)
@@ -411,13 +418,6 @@ class PackagingList extends Page implements HasForms
         return ['items' => $itemsOut];
     }
 
-    private function expectedDishCount(int $kcal): int
-    {
-        if ($kcal < 1100) return 3;  // 900 ккал → сніданок, обід, вечеря
-        if ($kcal < 1300) return 4;  // 1100 ккал → + перекус
-        if ($kcal < 1600) return 5;  // 1300 ккал → + полуденок
-        return 6;                     // 1600+ ккал → + додаток до прийому
-    }
 
     private function dishKcalPer100g($dish): float
     {

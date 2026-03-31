@@ -712,15 +712,27 @@ class PrintController extends Controller
             return ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
         }
 
-        $expectedDishes = $this->expectedDishCount((int)$targetKcal);
-
-        $selectedItems = $availableItems->take($expectedDishes);
+        $allowedSortOrders = \App\Models\MealPlan::getAllowedSortOrders((int)$targetKcal);
+        $selectedItems = $availableItems->filter(
+            fn ($item) => in_array($item->mealType?->sort_order, $allowedSortOrders)
+        )->values();
 
         if ($selectedItems->isEmpty()) {
             return ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
         }
 
         $byMeal = $selectedItems->groupBy('meal_type_id');
+
+        // Нормалізація відсотків до 100% для вибраних страв
+        $rawPct = [];
+        foreach ($byMeal as $mealTypeId => $items) {
+            $fi = $items->first();
+            $rawPct[$mealTypeId] = $fi->custom_energy_percent !== null
+                ? (float) $fi->custom_energy_percent
+                : (float) ($fi->mealType?->energy_percent ?? 0);
+        }
+        $totalPct = array_sum($rawPct);
+        $normFactor = ($totalPct > 0.5 && abs($totalPct - 100) > 0.5) ? (100.0 / $totalPct) : 1.0;
 
         $totals = ['kcal' => 0.0, 'prot' => 0.0, 'fat' => 0.0, 'carb' => 0.0];
         $resultItems = [];
@@ -729,11 +741,7 @@ class PrintController extends Controller
             $firstItem = $items->first();
             $mealType = $firstItem->mealType;
 
-            // Ділимо на 100 (не на суму відсотків!) — кожен прийом отримує рівно
-            // свою частку від цільових ккал, незалежно від кількості страв у раціоні.
-            $p = $firstItem->custom_energy_percent !== null
-                ? (float) $firstItem->custom_energy_percent
-                : (float) ($mealType?->energy_percent ?? 0);
+            $p = ($rawPct[$mealTypeId] ?? 0) * $normFactor;
 
             $mealKcal = ($p > 0)
                 ? $targetKcal * ($p / 100.0)
@@ -783,13 +791,6 @@ class PrintController extends Controller
         ];
     }
 
-    private function expectedDishCount(int $kcal): int
-    {
-        if ($kcal < 1100) return 3;  // сніданок, обід, вечеря
-        if ($kcal < 1300) return 4;  // + перекус
-        if ($kcal < 1600) return 5;  // + полуденок
-        return 6;                     // + додаток до прийому
-    }
 
     private function dishKcalPer100g($dish): float
     {

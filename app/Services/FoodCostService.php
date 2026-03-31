@@ -30,11 +30,22 @@ class FoodCostService
 
         $byMeal = $selectedItems->groupBy('meal_type_id');
 
+        // Нормалізація відсотків до 100% для вибраних страв
+        $rawPct = [];
+        foreach ($byMeal as $mealTypeId => $items) {
+            $fi = $items->first();
+            $rawPct[$mealTypeId] = $fi->custom_energy_percent !== null
+                ? (float) $fi->custom_energy_percent
+                : (float) ($fi->mealType?->energy_percent ?? 0);
+        }
+        $totalPct = array_sum($rawPct);
+        $normFactor = ($totalPct > 0.5 && abs($totalPct - 100) > 0.5) ? (100.0 / $totalPct) : 1.0;
+
         $totalOrderCost = 0.0;
 
         foreach ($byMeal as $mealTypeId => $items) {
             $mealType = $items->first()->mealType;
-            $p = (float)($mealType?->energy_percent ?? 0);
+            $p = ($rawPct[$mealTypeId] ?? 0) * $normFactor;
 
             $mealKcal = ($p > 0)
                 ? $targetKcal * ($p / 100.0)

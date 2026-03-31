@@ -148,13 +148,46 @@ class DailyMenuResource extends Resource
                                         // Read directly from $livewire->data — always the current form state,
                                         // works reliably inside repeater items
                                         $formData   = $livewire->data ?? [];
-                                        $targetKcal = max(500, (int)(($formData['target_kcal'] ?? null) ?: 1500));
+                                        $targetKcal = max(1, (int)(($formData['target_kcal'] ?? null) ?: 1500));
+
+                                        // Перевіряємо чи ця страва входить у план для поточних ккал
+                                        $allowedSortOrders = \App\Models\MealPlan::getAllowedSortOrders($targetKcal);
+                                        $isActive = in_array((int)($mealType->sort_order ?? 0), $allowedSortOrders);
+
+                                        if (!$isActive) {
+                                            return new HtmlString(
+                                                "<div style='display:flex;align-items:center;gap:10px;'>" .
+                                                "<div style='flex:1;display:flex;align-items:center;border:1px solid #374151;border-radius:10px;padding:8px 18px;gap:12px;background:#111827;'>" .
+                                                "<span style='font-size:20px;color:#6b7280;'>⊘</span>" .
+                                                "<div style='display:flex;flex-direction:column;'>" .
+                                                "<span style='font-size:13px;font-weight:700;color:#6b7280;'>0г — не входить у план на {$targetKcal} ккал</span>" .
+                                                "<span style='font-size:11px;color:#4b5563;margin-top:2px;'>Прийом їжі «{$mealType->name}» не включено у поточний план харчування</span>" .
+                                                "</div>" .
+                                                "</div>" .
+                                                "</div>"
+                                            );
+                                        }
+
+                                        // Нормалізація: рахуємо суму % тільки активних страв
+                                        $rawItems   = $formData['menuItems'] ?? [];
+                                        $allItems   = is_array($rawItems) ? array_values($rawItems) : [];
+                                        $allMealTypes = \App\Models\MealType::all()->keyBy('id');
+                                        $totalActivePct = 0.0;
+                                        foreach ($allItems as $item) {
+                                            $itemMt = $allMealTypes->get($item['meal_type_id'] ?? null);
+                                            if (!$itemMt || !in_array((int)$itemMt->sort_order, $allowedSortOrders)) continue;
+                                            $cp = $item['custom_energy_percent'] ?? null;
+                                            $totalActivePct += ($cp !== null && $cp !== '') ? (float)$cp : (float)($itemMt->energy_percent ?? 0);
+                                        }
+                                        $normFactor = ($totalActivePct > 0.5 && abs($totalActivePct - 100) > 0.5)
+                                            ? (100.0 / $totalActivePct) : 1.0;
 
                                         $p = ($customPercent !== null && $customPercent !== '')
                                             ? (float)$customPercent
                                             : (float)($mealType->energy_percent ?? 0);
+                                        $pNorm = round($p * $normFactor, 2);
 
-                                        $mealKcal    = $targetKcal * ($p / 100.0);
+                                        $mealKcal    = $targetKcal * ($pNorm / 100.0);
                                         $baseW       = (float)($dish->base_weight_g ?? 0);
                                         $totalKcal   = (float)($dish->total_kcal ?? 0);
                                         $kcalPer100  = ($baseW > 0 && $totalKcal > 0) ? ($totalKcal / $baseW) * 100.0 : 0;
@@ -174,8 +207,6 @@ class DailyMenuResource extends Resource
                                         $kcal  = round($mealKcal);
 
                                         // Collect all day items for contextual hints (Block 3)
-                                        $rawItems        = $formData['menuItems'] ?? [];
-                                        $allItems        = is_array($rawItems) ? array_values($rawItems) : [];
                                         $dayContext       = self::calculateDayContext($allItems, $targetKcal);
                                         $dishOccurrences = count(array_filter(
                                             $allItems,
@@ -191,6 +222,10 @@ class DailyMenuResource extends Resource
                                             $dayContext
                                         );
                                         $hintIconHtml = self::renderHintTooltip($hints);
+
+                                        $pctLabel = $normFactor != 1.0
+                                            ? "{$pNorm}% (норм. з {$p}%) · на {$targetKcal} ккал"
+                                            : "{$p}% · на {$targetKcal} ккал";
 
                                         $cell = fn($label, $val, $valColor = '#e5e7eb') =>
                                             "<div style='display:flex;flex-direction:column;align-items:center;padding:8px 18px;text-align:center;'>" .
@@ -216,7 +251,7 @@ class DailyMenuResource extends Resource
                                             "<span style='font-size:17px;font-weight:800;color:{$costColor};line-height:1;'>" . number_format($cost, 2) . " ₴</span>" .
                                             "</div>" .
                                             "<div style='margin-left:auto;display:flex;align-items:center;padding:0 16px;'>" .
-                                            "<span style='font-size:11px;color:#4b5563;'>{$p}% · на {$targetKcal} ккал</span>" .
+                                            "<span style='font-size:11px;color:#4b5563;'>{$pctLabel}</span>" .
                                             "</div>" .
                                             "</div>" .
                                             $hintIconHtml .
