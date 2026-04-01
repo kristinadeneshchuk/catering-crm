@@ -162,6 +162,26 @@
             line-height: 1.2;
         }
 
+        .circles-row {
+            display: flex;
+            gap: 2px;
+            margin-top: 1mm;
+        }
+
+        .meal-circle {
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 6px;
+            font-weight: 900;
+            color: white;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+
         .weight-row {
             text-align: right;
             margin-top: auto;
@@ -265,6 +285,14 @@
                             @foreach($sticker['changes'] as $change)
                                 <div class="change-item">{{ $change }}</div>
                             @endforeach
+
+                            @if(!empty($sticker['circles']))
+                                <div class="circles-row">
+                                    @foreach($sticker['circles'] as $circle)
+                                        <div class="meal-circle" style="background-color: {{ $circle['color'] }};">{{ $circle['letter'] }}</div>
+                                    @endforeach
+                                </div>
+                            @endif
                         </div>
                     @endif
                 </div>

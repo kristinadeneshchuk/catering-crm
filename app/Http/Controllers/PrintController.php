@@ -189,20 +189,50 @@ class PrintController extends Controller
 
                 if (!empty($changes)) {
                     $stickers[] = [
-                        'client'    => $order->client?->name ?? 'Без імені',
-                        'client_id' => $order->client?->id ?? '---',
-                        'meal'      => $menuItem->mealType?->name ?? 'Прийом',
-                        'dish'      => $dish->name,
-                        'weight'    => (int) $it['weight'],
-                        'time'      => $menuItem->mealType?->sort_order ?? 99,
-                        'calories'  => (int) $order->calories,
-                        'project'   => $order->project,
-                        'changes'   => $changes,
-                        'date'      => $targetDate,
+                        'client'          => $order->client?->name ?? 'Без імені',
+                        'client_id'       => $order->client?->id ?? '---',
+                        'meal'            => $menuItem->mealType?->name ?? 'Прийом',
+                        'meal_type_id'    => $menuItem->mealType?->id,
+                        'meal_sort_order' => $menuItem->mealType?->sort_order ?? 99,
+                        'dish'            => $dish->name,
+                        'weight'          => (int) $it['weight'],
+                        'time'            => $menuItem->mealType?->sort_order ?? 99,
+                        'calories'        => (int) $order->calories,
+                        'project'         => $order->project,
+                        'changes'         => $changes,
+                        'date'            => $targetDate,
                     ];
                 }
             }
         }
+
+        // Завантажуємо кольори та літери прямо з БД
+        $mealPalette = \App\Models\MealType::all()->keyBy('sort_order')->map(fn ($mt) => [
+            'color'  => $mt->color ?: '#94a3b8',
+            'letter' => $mt->short_letter ?: '?',
+        ])->toArray();
+
+        // Збираємо унікальні sort_order прийомів їжі із замінами для кожного клієнта
+        $clientMealSortOrders = [];
+        foreach ($stickers as $s) {
+            $cid = $s['client_id'];
+            $so  = $s['meal_sort_order'];
+            if ($so && !in_array($so, $clientMealSortOrders[$cid] ?? [], true)) {
+                $clientMealSortOrders[$cid][] = $so;
+            }
+        }
+
+        // Додаємо кружечки до кожного стікера
+        foreach ($stickers as &$s) {
+            $circles = [];
+            $sortOrders = $clientMealSortOrders[$s['client_id']] ?? [];
+            sort($sortOrders);
+            foreach ($sortOrders as $so) {
+                $circles[] = $mealPalette[$so] ?? ['color' => '#94a3b8', 'letter' => '?'];
+            }
+            $s['circles'] = $circles;
+        }
+        unset($s);
 
         usort($stickers, function ($a, $b) {
             // 1. За порядком прийому їжі

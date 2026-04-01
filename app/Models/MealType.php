@@ -9,6 +9,11 @@ class MealType extends Model
 {
     protected $guarded = [];
 
+    protected $casts = [
+        'sort_order'     => 'integer',
+        'energy_percent' => 'float',
+    ];
+
     /**
      * Зв'язок: Тип прийому їжі -> Клієнти, які його обрали
      */

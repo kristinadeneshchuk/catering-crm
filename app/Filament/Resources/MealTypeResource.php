@@ -9,6 +9,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Forms\Components\ColorPicker;
 
 class MealTypeResource extends Resource
 {
@@ -51,6 +52,17 @@ class MealTypeResource extends Resource
                     ->suffix('%')
                     ->required()
                     ->default(20),
+
+                ColorPicker::make('color')
+                    ->label('Колір (для стікерів)')
+                    ->helperText('Колір кружечка на стікері заміни')
+                    ->default('#94a3b8'),
+
+                Forms\Components\TextInput::make('short_letter')
+                    ->label('Літера (для стікерів)')
+                    ->helperText('1-2 символи: С, О, П, В, Д...')
+                    ->maxLength(4)
+                    ->default('?'),
             ]);
     }
 
@@ -59,8 +71,14 @@ class MealTypeResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')->label('Прийом їжі'),
-                
-                // Відображаємо відсоток у таблиці
+
+                Tables\Columns\ColorColumn::make('color')
+                    ->label('Колір'),
+
+                Tables\Columns\TextColumn::make('short_letter')
+                    ->label('Літера')
+                    ->alignCenter(),
+
                 Tables\Columns\TextColumn::make('energy_percent')
                     ->label('% Енергії')
                     ->suffix('%')
