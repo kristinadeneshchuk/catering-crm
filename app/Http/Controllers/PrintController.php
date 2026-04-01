@@ -177,9 +177,10 @@ class PrintController extends Controller
                     $changes = []; 
 
                     $dishRep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
+                    $dishForceApproved = $dishRep && $dishRep->force_approved;
                     if ($dishRep && $dishRep->replacementDish) {
                         $changes[] = "ЗАМІНА СТРАВИ: " . $dishRep->replacementDish->name;
-                    } elseif ($order->client->dishExclusions->contains('id', $dish->id)) {
+                    } elseif (!$dishForceApproved && $order->client->dishExclusions->contains('id', $dish->id)) {
                         $changes[] = "НЕ ЇСТЬ ЦЮ СТРАВУ";
                     } else {
                         $ingredientChanges = $this->findIngredientChanges($dish, $order, $dish->id);
@@ -517,7 +518,8 @@ class PrintController extends Controller
                         ->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
                     $activeDish = ($dishReplacement?->replacementDish) ?? $dish;
 
-                    if ($order->client->dishExclusions->contains('id', $dish->id) && !$dishReplacement) continue;
+                    $dishForceApproved = $dishReplacement && $dishReplacement->force_approved;
+                    if ($order->client->dishExclusions->contains('id', $dish->id) && !$dishReplacement && !$dishForceApproved) continue;
 
                     $this->collectBruttoForShopping($activeDish, $dishScale, 1.0, $order, (int)$dish->id, $bruttoByIng);
                 }
@@ -571,7 +573,7 @@ class PrintController extends Controller
                 if ($rep?->replacementProduct) $ing = $rep->replacementProduct;
 
                 $isExcluded = $order?->client->ingredientExclusions->contains('id', $di->ingredient->id);
-                if ($isExcluded && !$rep?->replacementProduct) continue;
+                if ($isExcluded && !$rep?->replacementProduct && !$rep?->force_approved) continue;
 
                 $yield   = (float)($ing->yield_percent ?: 100);
                 $bruttoG = ($netG * 100) / max($yield, 1);
@@ -855,8 +857,10 @@ class PrintController extends Controller
                         ->where('original_product_id', $di->ingredient->id)
                         ->first();
 
-                    if ($ingRep) {
-                        $changes[] = $di->ingredient->name . " → " . ($ingRep->replacementProduct->name ?? '?');
+                    if ($ingRep && $ingRep->force_approved) {
+                        // одобрено примусово — не показуємо як виключення
+                    } elseif ($ingRep && $ingRep->replacementProduct) {
+                        $changes[] = $di->ingredient->name . " → " . $ingRep->replacementProduct->name;
                     } else {
                         $changes[] = "БЕЗ: " . $di->ingredient->name;
                     }
@@ -914,8 +918,14 @@ class PrintController extends Controller
 
     private function buildCustomCard($dish, $order, float $scale): array
     {
-        $dishExclusion = $order->client->dishExclusions->contains('id', $dish->id);
-        $dishReplacement = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
+        $dishForcedApproval = $order->replacements
+            ->where('dish_id', $dish->id)
+            ->whereNull('original_product_id')
+            ->where('force_approved', true)
+            ->first();
+
+        $dishExclusion = !$dishForcedApproval && $order->client->dishExclusions->contains('id', $dish->id);
+        $dishReplacement = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->where('force_approved', false)->first();
 
         $replacementDishName = null;
         if ($dishReplacement && $dishReplacement->replacementDish) {
@@ -960,21 +970,25 @@ class PrintController extends Controller
                 $ingId = (int)$di->ingredient->id;
                 if ($specificOrder->client->ingredientExclusions->contains('id', $ingId)) {
                     $rep = $specificOrder->replacements->where('dish_id', $rootDishId)->where('original_product_id', $ingId)->first();
-                    $replacementInfo = null;
-                    if ($rep && $rep->replacementProduct) {
-                        $newYield = (float)($rep->replacementProduct->yield_percent ?: 100);
-                        if ($newYield <= 0) $newYield = 100;
-                        $replacementInfo = [
-                            'name' => $rep->replacementProduct->name,
-                            'netto' => round($nettoTotalRaw, 1),
-                            'brutto' => round(($nettoTotalRaw * 100) / $newYield, 1),
+                    if ($rep && $rep->force_approved) {
+                        $conflictData = null; // примусово одобрено — без конфлікту
+                    } else {
+                        $replacementInfo = null;
+                        if ($rep && $rep->replacementProduct) {
+                            $newYield = (float)($rep->replacementProduct->yield_percent ?: 100);
+                            if ($newYield <= 0) $newYield = 100;
+                            $replacementInfo = [
+                                'name' => $rep->replacementProduct->name,
+                                'netto' => round($nettoTotalRaw, 1),
+                                'brutto' => round(($nettoTotalRaw * 100) / $newYield, 1),
+                            ];
+                        }
+                        $conflictData = [
+                            'is_resolved' => (bool)$replacementInfo,
+                            'replacement' => $replacementInfo,
+                            'allergen'    => $di->ingredient->allergens->pluck('name')->join(', ') ?: null,
                         ];
                     }
-                    $conflictData = [
-                        'is_resolved' => (bool)$replacementInfo,
-                        'replacement' => $replacementInfo,
-                        'allergen'    => $di->ingredient->allergens->pluck('name')->join(', ') ?: null,
-                    ];
                 }
             }
 

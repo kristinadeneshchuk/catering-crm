@@ -31,7 +31,7 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
 
         // 1. Шукаємо замовлення, які мають запис у календарі на цей день
         $orders = Order::query()
-            ->with(['client', 'orderDays' => fn($q) => $q->where('date', $targetDate)])
+            ->with(['client.addresses', 'orderDays' => fn($q) => $q->where('date', $targetDate)])
             ->whereIn('status', ['active', 'new'])
             // 🔥 ФІЛЬТР ПО ЗМІНІ (Ранок або Вечір)
             ->where(function ($query) use ($shift) {
@@ -84,9 +84,17 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
             )->join(' | ');
             $infoParts[] = $projects;
 
-            // Найдовший коментар по доставці (щоб не втратити код домофону)
+            // Коментар по доставці: спочатку беремо з orderDays (конкретний день),
+            // потім з адреси клієнта, потім з самого клієнта
             $bestDeliveryComment = $group
-                ->map(fn($o) => $o->client->addresses()->where('is_default', true)->first()?->delivery_comment ?? $o->client->delivery_comment)
+                ->map(function ($o) {
+                    $dayComment  = $o->orderDays->first()?->delivery_comment;
+                    $defaultAddr = $o->client->addresses->firstWhere('is_default', true)
+                                   ?? $o->client->addresses->first();
+                    $addrComment = $defaultAddr?->delivery_comment ?? $o->client->delivery_comment;
+                    $parts = array_filter(array_unique([$dayComment, $addrComment]));
+                    return implode(' / ', $parts) ?: null;
+                })
                 ->filter()
                 ->sortByDesc(fn($s) => mb_strlen($s))
                 ->first();
@@ -119,7 +127,8 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
                         ]);
                         return implode(', ', $parts);
                     }
-                    $addr = $client->addresses()->where('is_default', true)->first();
+                    $addr = $client->addresses->firstWhere('is_default', true)
+                            ?? $client->addresses->first();
                     if (!$addr) return $client->address;
                     $parts = array_filter([
                         $addr->address,

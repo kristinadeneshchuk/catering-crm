@@ -104,9 +104,13 @@
                         $svgWarning = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" style="width:10px;height:10px;display:inline-block;vertical-align:middle;flex-shrink:0;"><path fill-rule="evenodd" d="M6.701 2.25c.577-1 2.02-1 2.598 0l5.196 9a1.5 1.5 0 0 1-1.299 2.25H2.804a1.5 1.5 0 0 1-1.3-2.25l5.197-9ZM8 4a.75.75 0 0 1 .75.75v3a.75.75 0 0 1-1.5 0v-3A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd"/></svg>';
                         $svgArrow = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" style="width:10px;height:10px;display:inline-block;vertical-align:middle;flex-shrink:0;"><path fill-rule="evenodd" d="M2 8a.75.75 0 0 1 .75-.75h8.69L8.22 4.03a.75.75 0 0 1 1.06-1.06l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 0 1-1.06-1.06l3.22-3.22H2.75A.75.75 0 0 1 2 8Z" clip-rule="evenodd"/></svg>';
 
+                        $isForceApproved = $comp['conflict']['is_force_approved'] ?? false;
+
                         if ($hasConflict) {
                             $html .= '<span style="color: #94a3b8; text-decoration: line-through;">' . $name . '</span>';
-                            if ($isResolved) {
+                            if ($isForceApproved) {
+                                $html .= '<span style="display:inline-flex; align-items:center; gap:3px; background:#dcfce7; color:#166534; border:1px solid #86efac; border-radius:4px; font-size:9px; font-weight:900; padding:2px 5px;">✓ Одобрено примусово</span>';
+                            } elseif ($isResolved) {
                                 $html .= '<span style="display:inline-flex; align-items:center; gap:3px; color:#166534; font-weight:700; font-size:10px;">' . $svgArrow . 'На: ' . $comp['conflict']['replacement']['name'] . '</span>';
                                 $brutto = round($comp['conflict']['replacement']['brutto'] ?? $brutto);
                             } else {
@@ -123,12 +127,15 @@
                         $html .= '<span style="font-weight: 700; color: #0f172a;">' . $brutto . ' г</span>';
                         
                         // 🔥 ВИПРАВЛЕНО: Кнопки екшенів доступні на будь-якому рівні вкладеності
-                        if ($hasConflict) { 
-                            $html .= '<div class="no-print" style="margin-left: 8px;">';
-                            if ($isResolved) {
+                        if ($hasConflict) {
+                            $html .= '<div class="no-print" style="margin-left: 8px; display: flex; flex-direction: column; gap: 2px; align-items: flex-end;">';
+                            if ($isForceApproved) {
+                                $html .= '<button type="button" wire:click="mountAction(\'resetReplacement\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['conflict']['original_ing_id'] . ' })" style="color: #64748b; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">Скасувати</button>';
+                            } elseif ($isResolved) {
                                 $html .= '<button type="button" wire:click="mountAction(\'resetReplacement\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['conflict']['original_ing_id'] . ' })" style="color: #64748b; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">Скасувати</button>';
                             } else {
                                 $html .= '<button type="button" wire:click="mountAction(\'replaceIngredient\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['product_id'] . ' })" style="color: #ea580c; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">→ Замінити</button>';
+                                $html .= '<button type="button" wire:click="mountAction(\'forceApproveIngredient\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['product_id'] . ' })" style="color: #16a34a; font-size: 10px; cursor: pointer; border: 1px solid #16a34a; background: #f0fdf4; border-radius: 3px; padding: 1px 5px; font-weight: 700;">✓ Одобрити</button>';
                             }
                             $html .= '</div>';
                         }
@@ -287,9 +294,12 @@
                                                 <div style="width: 28px; height: 28px; background-color: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="white" style="width:14px;height:14px;"><path fill-rule="evenodd" d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14Zm2.78-4.22a.75.75 0 0 1-1.06 0L8 9.06l-1.72 1.72a.75.75 0 1 1-1.06-1.06L6.94 8 5.22 6.28a.75.75 0 0 1 1.06-1.06L8 6.94l1.72-1.72a.75.75 0 1 1 1.06 1.06L9.06 8l1.72 1.72a.75.75 0 0 1 0 1.06Z" clip-rule="evenodd"/></svg>
                                                 </div>
-                                                <div>
+                                                <div style="flex: 1;">
                                                     <div style="font-size: 12px; font-weight: 900; color: #b91c1c;">НЕ ЇСТЬ ЦЮ СТРАВУ</div>
                                                     <div style="font-size: 10px; color: #ef4444; margin-top: 1px;">Потрібна заміна або пропустити</div>
+                                                </div>
+                                                <div class="no-print">
+                                                    <button type="button" wire:click="mountAction('forceApproveDish', { order_id: {{ $card['order_id'] }}, dish_id: {{ $dishRow['dish_id'] }} })" style="color: #16a34a; font-size: 10px; cursor: pointer; border: 1px solid #16a34a; background: #f0fdf4; border-radius: 4px; padding: 3px 8px; font-weight: 700; white-space: nowrap;">✓ Одобрити</button>
                                                 </div>
                                             </div>
 

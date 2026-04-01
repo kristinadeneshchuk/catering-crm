@@ -49,8 +49,8 @@
             display: flex;
             flex-wrap: wrap;
             align-content: flex-start;
-            justify-content: center;
-            padding: 1.5mm 0 0 0;
+            justify-content: flex-start;
+            padding: 1.5mm 0 0 4.5mm;
         }
 
         .sticker {
@@ -58,7 +58,7 @@
             height: 42mm;
             position: relative;
             overflow: hidden;
-            padding: 3mm 3mm 2mm 5.5mm;
+            padding: 1.5mm 2mm 1.5mm 5.5mm;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -89,6 +89,7 @@
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
+            flex-shrink: 0;
         }
 
         .date-badge {
@@ -102,29 +103,32 @@
         }
 
         .project-logo {
-            height: 10mm;
-            max-width: 18mm;
+            height: 7mm;
+            max-width: 16mm;
             object-fit: contain;
         }
 
         /* Клієнт */
         .sticker-client {
             border-bottom: 1.5px solid #0f172a;
-            padding-bottom: 1.5mm;
+            padding-bottom: 1mm;
+            overflow: hidden;
+            flex-shrink: 1;
+            min-height: 0;
         }
 
         .label-receiver {
-            font-size: 5.5pt;
+            font-size: 5pt;
             color: #9ca3af;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.3px;
             display: block;
-            margin-bottom: 0.5mm;
+            margin-bottom: 0.3mm;
         }
 
         .client-name {
-            font-size: 13pt;
+            font-size: 11pt;
             font-weight: 900;
             text-transform: uppercase;
             line-height: 1;
@@ -136,8 +140,8 @@
         .sticker-tags {
             display: flex;
             align-items: center;
-            gap: 2mm;
-            margin-top: 1mm;
+            gap: 1.5mm;
+            margin-top: 0.5mm;
             flex-wrap: nowrap;
             overflow: hidden;
         }
@@ -177,14 +181,14 @@
         .tag-slot.evening { background: #1e293b; color: #94a3b8; }
 
         .tag-address {
-            font-size: 6pt;
+            font-size: 5.5pt;
             color: #6b7280;
             font-style: italic;
             font-weight: 600;
             white-space: normal;
             word-break: break-word;
-            line-height: 1.3;
-            margin-top: 1mm;
+            line-height: 1.2;
+            margin-top: 0.5mm;
             display: block;
         }
 
@@ -193,6 +197,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-shrink: 0;
         }
 
         .qr-placeholder img,

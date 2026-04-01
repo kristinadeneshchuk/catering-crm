@@ -50,8 +50,8 @@
             display: flex;
             flex-wrap: wrap;
             align-content: flex-start;
-            justify-content: center;
-            padding: 1.5mm 0 0 0;
+            justify-content: flex-start;
+            padding: 1.5mm 0 0 4.5mm;
         }
 
         .sticker {

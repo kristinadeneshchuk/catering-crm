@@ -189,6 +189,60 @@ public function form(Form $form): Form
             });
     }
 
+    // === ЕКШН: Примусово одобрити інгредієнт ===
+    public function forceApproveIngredientAction(): Action
+    {
+        return Action::make('forceApproveIngredient')
+            ->label('Одобрити')
+            ->requiresConfirmation()
+            ->modalHeading('Примусово дозволити інгредієнт?')
+            ->modalDescription('Інгредієнт буде додано до порції незважаючи на виключення клієнта.')
+            ->action(function (array $arguments) {
+                OrderReplacement::updateOrCreate(
+                    [
+                        'order_id'            => $arguments['order_id'],
+                        'dish_id'             => $arguments['dish_id'],
+                        'original_product_id' => $arguments['product_id'],
+                    ],
+                    [
+                        'replacement_product_id' => null,
+                        'replacement_dish_id'    => null,
+                        'force_approved'         => true,
+                        'comment'                => 'Примусово одобрено',
+                    ]
+                );
+                Notification::make()->title('Інгредієнт одобрено')->success()->send();
+                $this->calculate();
+            });
+    }
+
+    // === ЕКШН: Примусово одобрити страву ===
+    public function forceApproveDishAction(): Action
+    {
+        return Action::make('forceApproveDish')
+            ->label('Одобрити страву')
+            ->requiresConfirmation()
+            ->modalHeading('Примусово дозволити страву?')
+            ->modalDescription('Страва буде додана до виробництва незважаючи на виключення клієнта.')
+            ->action(function (array $arguments) {
+                OrderReplacement::updateOrCreate(
+                    [
+                        'order_id'            => $arguments['order_id'],
+                        'dish_id'             => $arguments['dish_id'],
+                        'original_product_id' => null,
+                    ],
+                    [
+                        'replacement_product_id' => null,
+                        'replacement_dish_id'    => null,
+                        'force_approved'         => true,
+                        'comment'                => 'Примусово одобрено',
+                    ]
+                );
+                Notification::make()->title('Страву одобрено')->success()->send();
+                $this->calculate();
+            });
+    }
+
     // === ЕКШН 1: ЗАМІНА ІНГРЕДІЄНТА ===
     public function replaceIngredientAction(): Action
     {
@@ -713,8 +767,14 @@ public function form(Form $form): Form
 
     private function buildCustomCard($dish, $order, float $scale): array
     {
-        $dishExclusion = $order->client->dishExclusions->contains('id', $dish->id);
-        $dishReplacement = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
+        $dishForcedApproval = $order->replacements
+            ->where('dish_id', $dish->id)
+            ->whereNull('original_product_id')
+            ->where('force_approved', true)
+            ->first();
+
+        $dishExclusion = !$dishForcedApproval && $order->client->dishExclusions->contains('id', $dish->id);
+        $dishReplacement = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->where('force_approved', false)->first();
 
         $replacementDishName = null;
         $replacementDishId = null;
@@ -807,25 +867,36 @@ public function form(Form $form): Form
                         ->where('original_product_id', $ingId)
                         ->first();
 
-                    if ($rep && $rep->replacementProduct) {
-                        $newYield = (float)($rep->replacementProduct->yield_percent ?: 100);
-                        if ($newYield <= 0) $newYield = 100;
+                    if ($rep && $rep->force_approved) {
+                        // Примусово одобрено — показуємо як одобрений
+                        $conflictData = [
+                            'is_resolved'      => true,
+                            'is_force_approved' => true,
+                            'replacement'      => null,
+                            'original_ing_id'  => $ingId,
+                            'allergen'         => null,
+                        ];
+                    } else {
+                        if ($rep && $rep->replacementProduct) {
+                            $newYield = (float)($rep->replacementProduct->yield_percent ?: 100);
+                            if ($newYield <= 0) $newYield = 100;
 
-                        $replacementInfo = [
-                            'name' => $rep->replacementProduct->name,
-                            'netto' => round($nettoTotalRaw, 1),
-                            'brutto' => round(($nettoTotalRaw * 100) / $newYield, 1),
-                            'unit' => $rep->replacementProduct->unit ?? 'г',
-                            'product_id' => (int)$rep->replacementProduct->id,
+                            $replacementInfo = [
+                                'name' => $rep->replacementProduct->name,
+                                'netto' => round($nettoTotalRaw, 1),
+                                'brutto' => round(($nettoTotalRaw * 100) / $newYield, 1),
+                                'unit' => $rep->replacementProduct->unit ?? 'г',
+                                'product_id' => (int)$rep->replacementProduct->id,
+                            ];
+                        }
+
+                        $conflictData = [
+                            'is_resolved'     => (bool)$replacementInfo,
+                            'replacement'     => $replacementInfo,
+                            'original_ing_id' => $ingId,
+                            'allergen'        => $di->ingredient->allergens->pluck('name')->join(', ') ?: null,
                         ];
                     }
-
-                    $conflictData = [
-                        'is_resolved'     => (bool)$replacementInfo,
-                        'replacement'     => $replacementInfo,
-                        'original_ing_id' => $ingId,
-                        'allergen'        => $di->ingredient->allergens->pluck('name')->join(', ') ?: null,
-                    ];
                 }
             }
 
