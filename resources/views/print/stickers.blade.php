@@ -41,7 +41,7 @@
             background: #475569;
         }
 
-        /* A4 page with 70x42mm labels, 3 cols x 7 rows = 21 per sheet */
+        /* A4 page with 69x41mm labels, 3 cols x 7 rows = 21 per sheet */
         .label-sheet {
             width: 210mm;
             min-height: 297mm;
@@ -51,27 +51,19 @@
             flex-wrap: wrap;
             align-content: flex-start;
             justify-content: flex-start;
-            padding: 1.5mm 0 0 4.5mm;
+            padding: 1.5mm 0 0 1.5mm;
         }
 
         .sticker {
-            width: 67mm;
-            height: 42mm;
+            width: 69mm;
+            height: 41mm;
             position: relative;
             overflow: hidden;
-            padding: 2mm 2.5mm 2mm 4.5mm;
+            padding: 2mm 2.5mm 2mm 2.5mm;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            border: 0.5px solid #cbd5e1;
-        }
-
-        .sticker-bar {
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 3px;
+            border: none;
         }
 
         .sticker-header {
@@ -79,7 +71,6 @@
             justify-content: space-between;
             align-items: flex-start;
             padding-bottom: 1mm;
-            border-bottom: 0.5px solid #e5e7eb;
             margin-bottom: 1mm;
         }
 
@@ -262,7 +253,6 @@
             @endphp
 
             <div class="sticker">
-                <div class="sticker-bar" style="background-color: {{ $brandColor }};"></div>
 
                 <div>
                     <div class="sticker-header">

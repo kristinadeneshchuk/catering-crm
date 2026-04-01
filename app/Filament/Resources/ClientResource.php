@@ -267,6 +267,15 @@ class ClientResource extends Resource
                     ->color(function ($record) {
                         $order = $record->orders()->latest('id')->first();
                         return $order?->projectData?->color ?? 'gray';
+                    })
+                    ->sortable(query: function ($query, string $direction) {
+                        return $query->orderBy(
+                            \App\Models\Order::select('project')
+                                ->whereColumn('client_id', 'clients.id')
+                                ->latest('id')
+                                ->limit(1),
+                            $direction
+                        );
                     }),
 
                 Tables\Columns\TextColumn::make('active_order_progress')
@@ -382,7 +391,7 @@ class ClientResource extends Resource
                     ->sortable()
                     ->toggleable(),
             ])
-            ->defaultSort('active_order_progress', 'asc') 
+            ->defaultSort('active_order_progress', 'asc')
             ->actions([
                 Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
                 Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),

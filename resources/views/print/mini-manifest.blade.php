@@ -40,7 +40,7 @@
 
         .no-print button:hover { background: #475569; }
 
-        /* A4: 210×297mm, 70×42mm стікери — 3 колонки × 7 рядків = 21 шт */
+        /* A4: 210×297mm, 69×41mm стікери — 3 колонки × 7 рядків = 21 шт */
         .label-sheet {
             width: 210mm;
             min-height: 297mm;
@@ -50,38 +50,23 @@
             flex-wrap: wrap;
             align-content: flex-start;
             justify-content: flex-start;
-            padding: 1.5mm 0 0 4.5mm;
+            padding: 1.5mm 0 0 1.5mm;
         }
 
         .sticker {
-            width: 67mm;
-            height: 42mm;
+            width: 69mm;
+            height: 41mm;
             position: relative;
             overflow: hidden;
-            padding: 1.5mm 2mm 1.5mm 5.5mm;
+            padding: 1.5mm 2mm 1.5mm 2mm;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
             border: none;
         }
 
-        /* Кольорова ліва смуга */
-        .sticker::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-            background: var(--brand-color, #000);
-        }
-
-        /* Тонка рамка для вирівнювання */
         .sticker-border {
-            position: absolute;
-            inset: 0;
-            border: 0.3px solid #d1d5db;
-            pointer-events: none;
+            display: none;
         }
 
         /* Верх: дата + лого */
@@ -110,7 +95,6 @@
 
         /* Клієнт */
         .sticker-client {
-            border-bottom: 1.5px solid #0f172a;
             padding-bottom: 1mm;
             overflow: hidden;
             flex-shrink: 1;
@@ -323,7 +307,7 @@
             <div class="sticker-footer">
                 <span class="footer-text">Смачного від {{ $project?->name ?? 'BRAND' }}!</span>
                 @if(!empty($man['menu_token']))
-                    <div class="qr-placeholder" data-url="{{ url('/menu/' . $man['menu_token']) }}" style="width:50px;height:50px;flex-shrink:0;"></div>
+                    <div class="qr-placeholder" data-url="{{ url('/menu/' . $man['menu_token']) }}" style="width:50px;height:50px;flex-shrink:0;margin-right:1.5mm;margin-bottom:1mm;"></div>
                 @endif
             </div>
         </div>
