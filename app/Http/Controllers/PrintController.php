@@ -1033,4 +1033,14 @@ class PrintController extends Controller
         }
         return $components;
     }
+
+    public function cycleMenu()
+    {
+        $menus = DailyMenu::with([
+            'menuItems.dish',
+            'menuItems.mealType',
+        ])->orderBy('day_number')->get();
+
+        return view('print.cycle-menu', compact('menus'));
+    }
 }

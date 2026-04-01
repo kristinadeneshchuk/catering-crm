@@ -292,6 +292,13 @@ class DailyMenuResource extends Resource
             ])
             ->defaultSort('day_number', 'asc')
             ->headerActions([
+                Tables\Actions\Action::make('print_cycle_menu')
+                    ->label('Друкувати меню')
+                    ->icon('heroicon-o-printer')
+                    ->color('gray')
+                    ->url(fn () => route('print.cycle-menu'))
+                    ->openUrlInNewTab(),
+
                 Tables\Actions\Action::make('recalculate_all')
                     ->label('Перерахувати всі')
                     ->icon('heroicon-o-arrow-path')

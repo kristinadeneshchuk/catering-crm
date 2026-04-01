@@ -86,6 +86,7 @@ Route::get('/print/production-report', [PrintController::class, 'productionRepor
 Route::get('/print/stock-list', [PrintController::class, 'stockList'])->name('print.stock-list');
 Route::get('/print/shopping-list', [PrintController::class, 'shoppingList'])->name('print.shopping-list');
 Route::get('/print/mini-manifest', [\App\Http\Controllers\PrintController::class, 'miniManifest'])->name('print.mini-manifest');
+Route::get('/print/cycle-menu', [PrintController::class, 'cycleMenu'])->name('print.cycle-menu');
 
 // 🔥 НОВИЙ МАРШРУТ АНАЛІТИКИ (закритий авторизацією)
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index')->middleware('auth');
