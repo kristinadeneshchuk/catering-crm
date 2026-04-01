@@ -234,11 +234,40 @@
 </head>
 <body>
 
-<div class="no-print">
-    <button onclick="window.print()">
-        ДРУКУВАТИ НАКЛЕЙКИ НА ПАКЕТ ({{ count($manifests) }} шт.)
+<div class="no-print" style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
+    <div style="display:flex;gap:6px;background:#1e293b;padding:6px;border-radius:12px;">
+        <button onclick="filterSlot('all')"   id="btn-all"     class="filter-btn active">Всі (<span id="count-all">{{ count($manifests) }}</span>)</button>
+        <button onclick="filterSlot('morning')" id="btn-morning" class="filter-btn">Ранок (<span id="count-morning">{{ collect($manifests)->where('is_evening', false)->count() }}</span>)</button>
+        <button onclick="filterSlot('evening')" id="btn-evening" class="filter-btn evening-btn">Вечір (<span id="count-evening">{{ collect($manifests)->where('is_evening', true)->count() }}</span>)</button>
+    </div>
+    <button onclick="window.print()" style="background:#334155;color:white;border:none;padding:14px 36px;border-radius:12px;font-size:15px;font-weight:900;cursor:pointer;letter-spacing:2px;text-transform:uppercase;">
+        ДРУКУВАТИ (<span id="print-count">{{ count($manifests) }}</span> шт.)
     </button>
 </div>
+
+<style>
+.filter-btn {
+    background: transparent;
+    color: #94a3b8;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 900;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.15s;
+}
+.filter-btn.active {
+    background: #fde047;
+    color: #000;
+}
+.filter-btn.evening-btn.active {
+    background: #1e3a5f;
+    color: #94a3b8;
+}
+</style>
 
 <div class="label-sheet">
     @foreach($manifests as $man)
@@ -261,7 +290,7 @@
             $deliveryDate = \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y');
         @endphp
 
-        <div class="sticker" style="--brand-color: {{ $brandColor }};">
+        <div class="sticker" style="--brand-color: {{ $brandColor }};" data-slot="{{ $man['is_evening'] ? 'evening' : 'morning' }}">
             <div class="sticker-border"></div>
 
             {{-- Верх: дата + лого --}}
@@ -302,6 +331,20 @@
 </div>
 
 <script>
+function filterSlot(slot) {
+    var stickers = document.querySelectorAll('.sticker');
+    var visible = 0;
+    stickers.forEach(function(s) {
+        var show = slot === 'all' || s.dataset.slot === slot;
+        s.style.display = show ? '' : 'none';
+        if (show) visible++;
+    });
+    document.getElementById('print-count').textContent = visible;
+
+    document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.getElementById('btn-' + slot).classList.add('active');
+}
+
 window.addEventListener('load', function () {
     document.querySelectorAll('.qr-placeholder').forEach(function (el) {
         var url = el.dataset.url;
