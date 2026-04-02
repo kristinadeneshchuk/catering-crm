@@ -27,6 +27,7 @@ class PackagingList extends Page implements HasForms
 
     public ?array $data = [];
     public array $report = [];
+    public array $clientComments = [];
     public ?string $debugMessage = null;
 
     /** @var array<int, array{items: array, totals?: array}> */
@@ -186,6 +187,21 @@ class PackagingList extends Page implements HasForms
             return;
         }
 
+        // Збираємо глобальні коментарі клієнтів окремо
+        $this->clientComments = [];
+        foreach ($orders as $order) {
+            $comment = trim($order->client->production_comment ?? '');
+            if (!empty($comment)) {
+                $this->clientComments[] = [
+                    'id'      => $order->client->id,
+                    'name'    => $order->client->name,
+                    'project' => $order->projectData?->name ?? ucfirst($order->project ?? ''),
+                    'calories'=> (int)($order->calories ?? 0),
+                    'text'    => $comment,
+                ];
+            }
+        }
+
         foreach ($orders as $order) {
             $this->orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
         }
@@ -298,13 +314,7 @@ class PackagingList extends Page implements HasForms
             'calories'     => (int)($order->calories ?? 0),
         ];
 
-        // 1. Коментарі
-        $comment = trim($order->client->production_comment ?? '');
-        if (!empty($comment)) {
-            $notes[] = array_merge($clientMeta, ['text' => $comment]);
-        }
-
-        // 2. Виключення цілої страви
+        // 1. Виключення цілої страви
         if ($order->client->dishExclusions->contains('id', $dish->id)) {
             $rep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
             if ($rep && $rep->replacementDish) {

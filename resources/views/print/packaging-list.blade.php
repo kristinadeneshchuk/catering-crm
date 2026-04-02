@@ -91,6 +91,17 @@
     <h2>Фасувальний лист</h2>
     <p>Дата: <strong>{{ $date }}</strong></p>
 
+    @if(!empty($clientComments))
+        <div style="background:#fefce8; border:1px dashed #ca8a04; padding:8px 10px; margin-bottom:20px; font-size:11px;">
+            <div style="font-weight:bold; text-transform:uppercase; margin-bottom:5px; color:#92400e;">Коментарі клієнтів:</div>
+            @foreach($clientComments as $c)
+                <div style="margin-bottom:2px; color:#78350f;">
+                    • #{{ $c['id'] }} {{ $c['name'] }} ({{ $c['project'] }}, {{ $c['calories'] }} ккал): {{ $c['text'] }}
+                </div>
+            @endforeach
+        </div>
+    @endif
+
     @foreach($report as $table)
         @php
             $mealLower = mb_strtolower(trim($table['meal']));

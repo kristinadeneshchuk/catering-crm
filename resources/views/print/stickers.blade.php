@@ -97,11 +97,11 @@
         }
 
         .calories {
-            font-size: 8px;
-            font-weight: 700;
+            font-size: 10px;
+            font-weight: 900;
             background: #f1f5f9;
-            color: #64748b;
-            padding: 1px 4px;
+            color: #1e293b;
+            padding: 2px 5px;
             border-radius: 2px;
             white-space: nowrap;
         }

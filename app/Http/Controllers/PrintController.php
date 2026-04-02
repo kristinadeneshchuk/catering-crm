@@ -316,13 +316,7 @@ class PrintController extends Controller
                     'calories'     => (int)($order->calories ?? 0),
                 ];
 
-                // 1. Коментар клієнта
-                $comment = trim($order->client->production_comment ?? '');
-                if (!empty($comment)) {
-                    $tableData['individual_notes'][] = array_merge($clientMeta, ['text' => $comment]);
-                }
-
-                // 2. Виключення/заміна цілої страви
+                // 1. Виключення/заміна цілої страви
                 if ($order->client->dishExclusions->contains('id', $dish->id)) {
                     $dishRep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
                     if ($dishRep && $dishRep->replacementDish) {
@@ -396,9 +390,23 @@ class PrintController extends Controller
             $report[] = $tableData;
         }
 
-        // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату
-        $date = $inputDate; 
-        return view('print.packaging-list', compact('report', 'date'));
+        // Збираємо глобальні коментарі клієнтів окремо
+        $clientComments = [];
+        foreach ($orders as $order) {
+            $comment = trim($order->client->production_comment ?? '');
+            if (!empty($comment)) {
+                $clientComments[] = [
+                    'id'      => $order->client->id,
+                    'name'    => $order->client->name,
+                    'project' => $order->projectData?->name ?? ucfirst($order->project ?? ''),
+                    'calories'=> (int)($order->calories ?? 0),
+                    'text'    => $comment,
+                ];
+            }
+        }
+
+        $date = $inputDate;
+        return view('print.packaging-list', compact('report', 'date', 'clientComments'));
     }
 
     public function productionReport(Request $request)
