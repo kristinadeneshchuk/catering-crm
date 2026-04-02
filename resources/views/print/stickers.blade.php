@@ -42,21 +42,25 @@
         }
 
         /* A4 page with 69x41mm labels, 3 cols x 7 rows = 21 per sheet */
+        /* A4: 210×297mm. Відступ: зліва 5mm, зверху 1mm.
+           Стікер: 68.33mm × 42mm. 3×7 = 21 шт/лист */
         .label-sheet {
             width: 210mm;
-            min-height: 297mm;
+            height: 297mm;
+            padding-left: 5mm;
+            padding-top: 1mm;
             margin: 10px auto;
             background: white;
-            display: flex;
-            flex-wrap: wrap;
-            align-content: flex-start;
-            justify-content: flex-start;
-            padding: 1.5mm 0 0 1.5mm;
+            display: grid;
+            grid-template-columns: repeat(3, 68.33mm);
+            grid-template-rows: repeat(7, 42mm);
+            align-content: start;
+            justify-content: start;
         }
 
         .sticker {
-            width: 69mm;
-            height: 41mm;
+            width: 68.33mm;
+            height: 42mm;
             position: relative;
             overflow: hidden;
             padding: 2mm 2.5mm 2mm 2.5mm;
@@ -210,10 +214,9 @@
             body { background: white !important; }
 
             .label-sheet {
-                margin: 0;
-                padding: 1.5mm 0 0 0;
-                min-height: auto;
+                margin: 0 !important;
                 page-break-after: always;
+                break-after: page;
             }
 
             .label-sheet:last-child {
