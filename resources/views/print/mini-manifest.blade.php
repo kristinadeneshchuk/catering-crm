@@ -63,6 +63,8 @@
             flex-direction: column;
             justify-content: space-between;
             border: none;
+            break-inside: avoid;
+            page-break-inside: avoid;
         }
 
         .sticker-border {

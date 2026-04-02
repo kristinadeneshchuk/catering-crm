@@ -290,33 +290,38 @@ class PackagingList extends Page implements HasForms
         $notes = [];
         if (!$order->client) return $notes;
 
-        $clientInfo = $order->client->name . ' (' . (int)($order->calories ?? 0) . ' ккал)';
+        $clientMeta = [
+            'id'           => $order->client->id,
+            'name'         => $order->client->name,
+            'project'      => $order->projectData?->name ?? ucfirst($order->project ?? ''),
+            'project_slug' => $order->project ?? 'none',
+            'calories'     => (int)($order->calories ?? 0),
+        ];
 
         // 1. Коментарі
         $comment = trim($order->client->production_comment ?? '');
         if (!empty($comment)) {
-            $notes[] = "{$clientInfo}: {$comment}";
+            $notes[] = array_merge($clientMeta, ['text' => $comment]);
         }
 
         // 2. Виключення цілої страви
         if ($order->client->dishExclusions->contains('id', $dish->id)) {
             $rep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
             if ($rep && $rep->replacementDish) {
-                $notes[] = "{$clientInfo}: Страву повністю замінено на «{$rep->replacementDish->name}»";
+                $notes[] = array_merge($clientMeta, ['text' => "Страву повністю замінено на «{$rep->replacementDish->name}»"]);
             } else {
-                $notes[] = "{$clientInfo}: Страву повністю ВИКЛЮЧЕНО";
+                $notes[] = array_merge($clientMeta, ['text' => "Страву повністю ВИКЛЮЧЕНО"]);
             }
-            // Якщо страва виключена, не перевіряємо інгредієнти
             return $notes;
         }
 
         // 3. Виключення інгредієнтів (рекурсивно)
-        $this->checkIngredientsForNotes($dish, $order, $dish->id, $clientInfo, $notes);
+        $this->checkIngredientsForNotes($dish, $order, $dish->id, $clientMeta, $notes);
 
         return $notes;
     }
 
-    private function checkIngredientsForNotes($dish, $order, $rootDishId, $clientInfo, array &$notes): void
+    private function checkIngredientsForNotes($dish, $order, $rootDishId, array $clientMeta, array &$notes): void
     {
         if (!$dish || !$dish->dishIngredients) return;
 
@@ -324,15 +329,17 @@ class PackagingList extends Page implements HasForms
             // Звичайний продукт
             if ($di->ingredient_id && $order->client->ingredientExclusions->contains('id', $di->ingredient_id)) {
                 $rep = $order->replacements->where('dish_id', $rootDishId)->where('original_product_id', $di->ingredient_id)->first();
-                if ($rep && $rep->replacementProduct) {
-                    $notes[] = "{$clientInfo}: «{$di->ingredient->name}» замінено на «{$rep->replacementProduct->name}»";
+                if ($rep && $rep->force_approved) {
+                    // Одобрено — нічого не показуємо
+                } elseif ($rep && $rep->replacementProduct) {
+                    $notes[] = array_merge($clientMeta, ['text' => "«{$di->ingredient->name}» замінено на «{$rep->replacementProduct->name}»"]);
                 } else {
-                    $notes[] = "{$clientInfo}: Без «{$di->ingredient->name}»";
+                    $notes[] = array_merge($clientMeta, ['text' => "Без «{$di->ingredient->name}»"]);
                 }
             }
             // Якщо це ПФ - йдемо вглиб
             if ($di->child_dish_id && $di->childDish) {
-                $this->checkIngredientsForNotes($di->childDish, $order, $rootDishId, $clientInfo, $notes);
+                $this->checkIngredientsForNotes($di->childDish, $order, $rootDishId, $clientMeta, $notes);
             }
         }
     }

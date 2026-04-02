@@ -59,6 +59,31 @@
             color: #c2410c;
         }
         .notes-header { font-weight: bold; margin-bottom: 4px; }
+        .note-row { margin-bottom: 3px; }
+        .note-id { font-weight: bold; color: #374151; }
+        .note-name { font-weight: bold; }
+        .note-badge {
+            display: inline-block;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+            margin: 0 2px;
+            background-color: #6b7280;
+            color: white;
+        }
+        .note-badge-avocado { background-color: #16a34a; }
+        .note-badge-ufit    { background-color: #7c3aed; }
+        .note-kcal {
+            display: inline-block;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+            background-color: #fbbf24;
+            color: white;
+            margin: 0 2px;
+        }
     </style>
 </head>
 <body>
@@ -136,7 +161,9 @@
             <div class="notes-box">
                 <div class="notes-header">Індивідуальні заміни:</div>
                 @foreach($table['individual_notes'] as $note)
-                    <div>{{ $note }}</div>
+                    <div class="note-row">
+                        • #{{ $note['id'] }} {{ $note['name'] }} ({{ $note['project'] }}, {{ $note['calories'] }} ккал): {{ $note['text'] }}
+                    </div>
                 @endforeach
             </div>
         @endif
