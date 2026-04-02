@@ -43,14 +43,14 @@
         /* A4: 210×297mm, 69×41mm стікери — 3 колонки × 7 рядків = 21 шт */
         .label-sheet {
             width: 210mm;
-            min-height: 297mm;
+            height: 297mm;
             margin: 10px auto;
             background: white;
-            display: flex;
-            flex-wrap: wrap;
-            align-content: flex-start;
-            justify-content: flex-start;
-            padding: 1.5mm 0 0 1.5mm;
+            display: grid;
+            grid-template-columns: repeat(3, 69mm);
+            grid-auto-rows: 41mm;
+            justify-content: space-between;
+            align-content: space-between;
         }
 
         .sticker {
@@ -93,6 +93,8 @@
             height: 7mm;
             max-width: 16mm;
             object-fit: contain;
+            margin-right: 2mm;
+            margin-top: 1mm;
         }
 
         /* Клієнт */
@@ -186,6 +188,11 @@
             flex-shrink: 0;
         }
 
+        .qr-placeholder {
+            margin-right: 2mm;
+            margin-bottom: 1.5mm;
+        }
+
         .qr-placeholder img,
         .qr-placeholder canvas {
             display: block;
@@ -206,8 +213,7 @@
             body { background: white !important; }
             .no-print { display: none !important; }
             .label-sheet {
-                margin: 0 !important;
-                padding: 1.5mm 0 0 0 !important;
+                margin: 0 auto !important;
             }
             .sticker-border { border-color: transparent !important; }
         }

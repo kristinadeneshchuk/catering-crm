@@ -30,6 +30,19 @@
             <div class="bg-white p-6 rounded-xl border text-black">
                 <h3 class="font-bold text-lg mb-6">Попередній перегляд на екрані:</h3>
 
+                @if(!empty($clientComments))
+                    <div class="replacements-container" style="margin-bottom: 24px; background:#fefce8; border:1px dashed #ca8a04;">
+                        <div style="font-weight:900; text-transform:uppercase; margin-bottom:6px; font-size:11px; color:#92400e;">
+                            Коментарі клієнтів:
+                        </div>
+                        @foreach($clientComments as $c)
+                            <div style="margin-bottom:2px; font-weight:700; color:#78350f;">
+                                • #{{ $c['id'] }} {{ $c['name'] }} ({{ $c['project'] }}, {{ $c['calories'] }} ккал): {{ $c['text'] }}
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+
                 @foreach($report as $table)
                     <div class="meal-section">
                         <div class="meal-badge">
