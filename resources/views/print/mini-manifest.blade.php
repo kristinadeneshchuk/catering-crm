@@ -164,6 +164,18 @@
         .tag-slot.morning { background: #fde047; color: #000; }
         .tag-slot.evening { background: #1e293b; color: #94a3b8; }
 
+        .tag-route {
+            font-size: 6pt;
+            font-weight: 900;
+            padding: 1px 4px;
+            border-radius: 3px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            background: #e0f2fe;
+            color: #0369a1;
+            letter-spacing: 0.2px;
+        }
+
         .tag-address {
             font-size: 5.5pt;
             color: #6b7280;
@@ -295,6 +307,12 @@
                     <span class="tag-slot {{ $man['is_evening'] ? 'evening' : 'morning' }}">
                         {{ $man['delivery_slot'] }}
                     </span>
+                    @if(!empty($man['ant_route_num']))
+                        <span class="tag-route">М{{ $man['ant_route_num'] }}
+                            @if(!empty($man['ant_route_pos']))-{{ $man['ant_route_pos'] }}@endif
+                            @if(!empty($man['ant_driver'])) · {{ $man['ant_driver'] }}@endif
+                        </span>
+                    @endif
                 </div>
                 @if(($man['address'] ?? 'Самовивіз') !== 'Самовивіз')
                     <span class="tag-address">{{ $man['address'] }}</span>

@@ -8,8 +8,10 @@ use App\Filament\Resources\ClientResource\RelationManagers\AddressesRelationMana
 use App\Models\Client;
 use App\Models\MealType;
 use App\Models\MealPlan;
+use App\Services\AntLogisticsService;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -390,8 +392,66 @@ class ClientResource extends Resource
                     ->boolean()
                     ->sortable()
                     ->toggleable(),
+
+                Tables\Columns\TextColumn::make('ant_comp_id')
+                    ->label('Ant ID')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('active_order_progress', 'asc')
+            ->headerActions([
+                Tables\Actions\Action::make('sync_to_ant')
+                    ->label('Синхронізувати в Ant')
+                    ->icon('heroicon-o-arrow-up-circle')
+                    ->color('info')
+                    ->requiresConfirmation()
+                    ->modalHeading('Синхронізація клієнтів в Ant Logistics')
+                    ->modalDescription('Всі активні клієнти будуть відправлені в Ant як Торгові точки. Продовжити?')
+                    ->action(function () {
+                        try {
+                            app(AntLogisticsService::class)->syncAllClients();
+                            Notification::make()
+                                ->success()
+                                ->title('Клієнтів синхронізовано в Ant')
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->danger()
+                                ->title('Помилка синхронізації')
+                                ->body($e->getMessage())
+                                ->send();
+                        }
+                    }),
+
+                Tables\Actions\Action::make('pull_routes_from_ant')
+                    ->label('Завантажити маршрути')
+                    ->icon('heroicon-o-arrow-down-circle')
+                    ->color('success')
+                    ->modalHeading('Завантажити маршрути з Ant')
+                    ->modalDescription('Підтягнемо розподіл маршрутів і курʼєрів з Ant Logistics для вибраної дати.')
+                    ->form([
+                        Forms\Components\DatePicker::make('date')
+                            ->label('Дата доставки')
+                            ->default(now()->addDay()->format('Y-m-d'))
+                            ->required(),
+                    ])
+                    ->action(function (array $data) {
+                        try {
+                            $count = app(AntLogisticsService::class)->pullRouteAssignments($data['date']);
+                            Notification::make()
+                                ->success()
+                                ->title('Маршрути завантажено')
+                                ->body("Оновлено точок: {$count}")
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->danger()
+                                ->title('Помилка завантаження маршрутів')
+                                ->body($e->getMessage())
+                                ->send();
+                        }
+                    }),
+            ])
             ->actions([
                 Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
                 Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),

@@ -98,14 +98,18 @@ class PrintController extends Controller
                       || str_contains((string) $order->schedule_type, 'evening');
 
             $manifests[] = [
-                'client_id'     => $order->client?->id ?? '---',
-                'project'       => $order->project,
-                'client'        => $order->client?->name ?? 'Без імені',
-                'address'       => $address,
-                'calories'      => (int) $order->calories,
-                'is_evening'    => $isEvening,
-                'delivery_slot' => $isEvening ? 'Вечір' : 'Ранок',
-                'menu_token'    => $order->menu_token,
+                'client_id'          => $order->client?->id ?? '---',
+                'project'            => $order->project,
+                'client'             => $order->client?->name ?? 'Без імені',
+                'address'            => $address,
+                'calories'           => (int) $order->calories,
+                'is_evening'         => $isEvening,
+                'delivery_slot'      => $isEvening ? 'Вечір' : 'Ранок',
+                'menu_token'         => $order->menu_token,
+                'ant_route_num'      => $orderDay?->ant_route_num,
+                'ant_route_pos'      => $orderDay?->ant_route_pos,
+                'ant_driver'         => $orderDay?->ant_driver,
+                'ant_delivery_group' => $orderDay?->ant_delivery_group,
             ];
         }
 

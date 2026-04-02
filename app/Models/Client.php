@@ -31,6 +31,7 @@ class Client extends Authenticatable
         'balance',
         'has_cutlery',
         'manager_comment',
+        'ant_comp_id',
     ];
 
     protected $hidden = [

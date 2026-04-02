@@ -14,6 +14,7 @@ class OrderDay extends Model
         'order_id', 'date', 'is_completed',
         'address', 'address_entrance', 'address_apartment', 'address_floor', 'delivery_comment',
         'discount_type', 'discount_value', 'discount_amount',
+        'ant_route_num', 'ant_route_pos', 'ant_driver', 'ant_delivery_group',
     ];
 
     protected $casts = [
