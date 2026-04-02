@@ -267,7 +267,9 @@ class PrintController extends Controller
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',
+                'client.dishExclusions',
                 'replacements.replacementProduct',
+                'replacements.replacementDish',
                 'replacements.originalProduct',
                 'projectData',
             ])
@@ -302,26 +304,42 @@ class PrintController extends Controller
                 $realW = (float)($plannedDish['weight'] ?? 0);
                 $dishScale = ($baseW > 0) ? ($realW / $baseW) : 0.0;
 
-                $replacements = $order->replacements
-                    ->where('dish_id', $dish->id)
-                    ->whereNotNull('original_product_id');
+                $clientMeta = [
+                    'id'           => $order->client->id,
+                    'name'         => $order->client->name,
+                    'project'      => $order->projectData?->name ?? ucfirst($order->project ?? ''),
+                    'project_slug' => $order->project ?? 'none',
+                    'calories'     => (int)($order->calories ?? 0),
+                ];
 
-                $conflicts = [];
-                if ($order->client->ingredientExclusions->isNotEmpty()) {
-                    $conflicts = $this->getConflictingIngredients($dish, $order->client->ingredientExclusions);
-                }
-
-                $noteParts = [];
-                foreach ($replacements as $r) {
-                    $noteParts[] = ($r->originalProduct->name ?? '?') . " → " . ($r->replacementProduct->name ?? '?');
-                }
-                foreach ($conflicts as $conflictName) {
-                    $noteParts[] = "Без: {$conflictName}";
+                // 1. Коментар клієнта
+                $comment = trim($order->client->production_comment ?? '');
+                if (!empty($comment)) {
+                    $tableData['individual_notes'][] = array_merge($clientMeta, ['text' => $comment]);
                 }
 
-                if (!empty($noteParts)) {
-                    $tableData['individual_notes'][] = "• (#{$order->client->id}) {$order->client->name}: " . implode(', ', $noteParts);
+                // 2. Виключення/заміна цілої страви
+                if ($order->client->dishExclusions->contains('id', $dish->id)) {
+                    $dishRep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
+                    if ($dishRep && $dishRep->replacementDish) {
+                        $tableData['individual_notes'][] = array_merge($clientMeta, ['text' => "Страву замінено на «{$dishRep->replacementDish->name}»"]);
+                    } else {
+                        $tableData['individual_notes'][] = array_merge($clientMeta, ['text' => "Страву повністю ВИКЛЮЧЕНО"]);
+                    }
+                    // Якщо страва виключена — інгредієнти не перевіряємо
+                    goto next_order_packaging;
                 }
+
+                // 3. Заміни інгредієнтів + конфлікти (з урахуванням force_approved)
+                {
+                    $noteParts = [];
+                    $this->collectIngredientNoteParts($dish, $order, $dish->id, $noteParts);
+                    if (!empty($noteParts)) {
+                        $tableData['individual_notes'][] = array_merge($clientMeta, ['text' => implode(', ', $noteParts)]);
+                    }
+                }
+
+                next_order_packaging:
 
                 $colKey   = (string)(int)($order->calories ?? 0);
                 $projSlug = $order->project ?? 'none';
@@ -904,6 +922,30 @@ class PrintController extends Controller
         }
 
         return $changes;
+    }
+
+    private function collectIngredientNoteParts($dish, $order, $rootDishId, array &$parts): void
+    {
+        if (!$dish || !$dish->dishIngredients) return;
+
+        foreach ($dish->dishIngredients as $di) {
+            if ($di->ingredient_id && $order->client->ingredientExclusions->contains('id', $di->ingredient_id)) {
+                $rep = $order->replacements
+                    ->where('dish_id', $rootDishId)
+                    ->where('original_product_id', $di->ingredient_id)
+                    ->first();
+                if ($rep && $rep->force_approved) {
+                    // Одобрено — не показуємо
+                } elseif ($rep && $rep->replacementProduct) {
+                    $parts[] = ($di->ingredient->name ?? '?') . " → " . $rep->replacementProduct->name;
+                } else {
+                    $parts[] = "Без: " . ($di->ingredient->name ?? '?');
+                }
+            }
+            if ($di->child_dish_id && $di->childDish) {
+                $this->collectIngredientNoteParts($di->childDish, $order, $rootDishId, $parts);
+            }
+        }
     }
 
     private function getConflictingIngredients($dish, $exclusions, $prefix = ''): array
