@@ -40,23 +40,24 @@
 
         .no-print button:hover { background: #475569; }
 
-        /* A4: 210×297mm. Принтер не друкує ліві 7mm.
-           Доступна ширина: 203mm. Стікер: 67.67mm × 42mm. 3×7 = 21 шт/лист */
+        /* A4: 210×297mm. Відступ: зліва 5mm, зверху 1mm.
+           Доступна ширина: 205mm. Стікер: 68.33mm × 42mm. 3×7 = 21 шт/лист */
         .label-sheet {
             width: 210mm;
             height: 297mm;
-            padding-left: 7mm;
+            padding-left: 5mm;
+            padding-top: 1mm;
             margin: 0 auto;
             background: white;
             display: grid;
-            grid-template-columns: repeat(3, 67.67mm);
+            grid-template-columns: repeat(3, 68.33mm);
             grid-template-rows: repeat(7, 42mm);
             align-content: start;
             justify-content: start;
         }
 
         .sticker {
-            width: 67.67mm;
+            width: 68.33mm;
             height: 42mm;
             position: relative;
             overflow: hidden;
