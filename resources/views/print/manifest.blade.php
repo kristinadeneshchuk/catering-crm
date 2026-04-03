@@ -69,10 +69,22 @@
         </select>
     </div>
 
+    <div style="display:flex;gap:6px;background:#1e293b;padding:6px;border-radius:12px;">
+        <button onclick="filterSlot('all')"     id="btn-all"     class="mf-filter active">Всі (<span id="count-all">{{ count($manifests) }}</span>)</button>
+        <button onclick="filterSlot('morning')" id="btn-morning" class="mf-filter">Ранок (<span id="count-morning">{{ collect($manifests)->where('is_evening', false)->count() }}</span>)</button>
+        <button onclick="filterSlot('evening')" id="btn-evening" class="mf-filter evening-btn">Вечір (<span id="count-evening">{{ collect($manifests)->where('is_evening', true)->count() }}</span>)</button>
+    </div>
+
     <button onclick="window.print()" class="bg-slate-900 text-white px-10 py-3 rounded-xl font-black uppercase tracking-widest shadow-xl hover:bg-slate-800 transition">
-        ДРУКУВАТИ ({{ count($manifests) }} шт)
+        ДРУКУВАТИ (<span id="print-count">{{ count($manifests) }}</span> шт)
     </button>
 </div>
+
+<style>
+.mf-filter { background:transparent;color:#94a3b8;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:900;cursor:pointer;text-transform:uppercase;letter-spacing:1px;transition:all 0.15s; }
+.mf-filter.active { background:#fde047;color:#000; }
+.mf-filter.evening-btn.active { background:#1e3a5f;color:#94a3b8; }
+</style>
 
 <div class="sticker-grid">
     @foreach($manifests as $man)
@@ -98,7 +110,7 @@
             $isCompact = $itemCount >= 5 || ($itemCount == 4 && strlen($man['comment'] ?? '') > 40);
         @endphp
         
-        <div class="sticker-box {{ $layout === '105x99' && $isCompact ? 'is-compact' : '' }}" style="border-color: {{ $brandColor }} !important;">
+        <div class="sticker-box {{ $layout === '105x99' && $isCompact ? 'is-compact' : '' }}" data-slot="{{ $man['is_evening'] ? 'evening' : 'morning' }}" style="border-color: {{ $brandColor }} !important;">
             <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background-color: {{ $brandColor }};"></div>
             
             <div class="pl-3 flex flex-col h-full w-full justify-between">
@@ -118,10 +130,10 @@
                     <div class="border-b-2 border-slate-900 pb-1.5 mb-2">
                         <span class="text-[9px] text-gray-400 font-bold uppercase block tracking-tighter mb-0.5">Отримувач:</span>
                         <h2 class="client-name text-[17px] font-black uppercase leading-none tracking-tighter mb-1">{{ $man['client'] }}</h2>
-                        <div class="flex justify-between items-center text-[10px] font-bold uppercase">
-                            <span class="bg-slate-900 text-white px-1.5 py-0.5 rounded font-black">ID: {{ $man['client_id'] }}</span>
-                            <span class="truncate min-w-0 ml-2 italic text-slate-500">{{ $man['address'] ?? 'Самовивіз' }}</span>
+                        <div class="flex items-center text-[10px] font-bold uppercase">
+                            <span class="bg-slate-900 text-white px-1.5 py-0.5 rounded font-black shrink-0">ID: {{ $man['client_id'] }}</span>
                         </div>
+                        <div class="text-[9px] italic text-slate-500 mt-0.5 leading-tight">{{ $man['address'] ?? 'Самовивіз' }}</div>
                     </div>
                 </div>
 
@@ -145,10 +157,25 @@
                 </div>
 
                 <div class="flex flex-col mt-auto pt-1">
-                    <div class="flex items-center gap-1 mb-1">
+                    <div class="flex items-center gap-2 mb-1 flex-wrap">
                         <span class="text-[10px] font-bold text-slate-500 uppercase">
                             {{ $man['has_cutlery'] ? 'З приборами' : 'Без приборів' }}
                         </span>
+                        @if(!empty($man['water_option']))
+                            <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded"
+                                  style="background:#fef3c7;color:#92400e;">
+                                {{ $man['water_option'] }}
+                            </span>
+                        @endif
+                        @if(!empty($man['circles']))
+                            <div class="flex items-center gap-1 ml-1">
+                                @foreach($man['circles'] as $circle)
+                                    <div style="width:16px;height:16px;border-radius:50%;background:{{ $circle['color'] }};display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:900;color:white;flex-shrink:0;line-height:1;">
+                                        {{ $circle['letter'] }}
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
                     </div>
 
                     @if($hasComment)
@@ -166,5 +193,19 @@
         </div>
     @endforeach
 </div>
+<script>
+function filterSlot(slot) {
+    var boxes = document.querySelectorAll('.sticker-box');
+    var visible = 0;
+    boxes.forEach(function(b) {
+        var show = slot === 'all' || b.dataset.slot === slot;
+        b.style.display = show ? '' : 'none';
+        if (show) visible++;
+    });
+    document.getElementById('print-count').textContent = visible;
+    document.querySelectorAll('.mf-filter').forEach(function(b) { b.classList.remove('active'); });
+    document.getElementById('btn-' + slot).classList.add('active');
+}
+</script>
 </body>
 </html>

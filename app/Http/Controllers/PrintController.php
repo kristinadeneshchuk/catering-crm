@@ -25,10 +25,25 @@ class PrintController extends Controller
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
-            ->with(['client.mealTypes', 'projectData', 'orderDays' => fn($q) => $q->where('date', $targetDate)])
+            ->with([
+                'client.mealTypes',
+                'client.dishExclusions',
+                'client.ingredientExclusions',
+                'projectData',
+                'orderDays' => fn($q) => $q->where('date', $targetDate),
+                'replacements.replacementDish',
+                'replacements.replacementProduct',
+            ])
             ->get();
 
         $manifests = [];
+
+        // Палітра кружечків (колір + літера) по id прийому їжі
+        $mealPalette = \App\Models\MealType::all()->keyBy('id')->map(fn($mt) => [
+            'color'      => $mt->color ?: '#94a3b8',
+            'letter'     => $mt->short_letter ?: '?',
+            'sort_order' => $mt->sort_order ?? 99,
+        ])->toArray();
 
         foreach ($orders as $order) {
             $calc = $this->calculateOrderPlan($order, $menu);
@@ -37,24 +52,84 @@ class PrintController extends Controller
                 continue;
             }
 
+            // Підставляємо замінені страви + визначаємо кружечки ТОЧНО як у стикерах
+            $items                = $calc['items'];
+            $circles              = [];
+            $addedCircleMealTypes = [];
+
+            foreach ($items as &$item) {
+                $dishId     = $item['dish_id'];
+                $mealTypeId = $item['meal_type_id'];
+
+                // Знаходимо об'єкт страви з меню (там вже завантажені dishIngredients)
+                $menuItem = $menu->menuItems->first(
+                    fn($mi) => (int)$mi->dish_id === $dishId && (int)$mi->meal_type_id === $mealTypeId
+                );
+                $dish = $menuItem?->dish;
+
+                // Заміна страви цілком
+                $dishRep = $order->replacements
+                    ->where('dish_id', $dishId)
+                    ->whereNull('original_product_id')
+                    ->first();
+                $dishForceApproved = $dishRep && $dishRep->force_approved;
+
+                if ($dishRep && $dishRep->replacementDish) {
+                    $item['original_dish']  = $item['dish'];
+                    $item['dish']           = $dishRep->replacementDish->name;
+                    $item['is_replacement'] = true;
+                }
+
+                // Та сама логіка що і в стикерах
+                $hasChanges = false;
+                if ($dishRep && $dishRep->replacementDish) {
+                    $hasChanges = true;
+                } elseif (!$dishForceApproved && $order->client?->dishExclusions?->contains('id', $dishId)) {
+                    $hasChanges = true;
+                } elseif ($dish) {
+                    $hasChanges = !empty($this->findIngredientChanges($dish, $order, $dishId));
+                }
+
+                if ($hasChanges && isset($mealPalette[$mealTypeId]) && !in_array($mealTypeId, $addedCircleMealTypes)) {
+                    $circles[]              = $mealPalette[$mealTypeId];
+                    $addedCircleMealTypes[] = $mealTypeId;
+                }
+            }
+            unset($item);
+
+            // Сортуємо кружечки за порядком прийомів їжі
+            usort($circles, fn($a, $b) => $a['sort_order'] <=> $b['sort_order']);
+
             $orderDay = $order->orderDays->first();
             $address = $orderDay?->address
                 ?? $order->client?->addresses()->where('is_default', true)->first()?->address
                 ?? $order->client?->address
                 ?? 'Самовивіз';
 
+            $waterOption = match($order->client?->water_option) {
+                'without_water'       => 'Без води',
+                'water_without_lemon' => 'Вода без лимону',
+                default               => null,
+            };
+
+            $isEvening = str_contains((string) $order->delivery_time, 'evening')
+                      || str_contains((string) $order->schedule_type, 'evening');
+
             $manifests[] = [
-                'client_id'   => $order->client?->id ?? '---',
-                'has_cutlery' => (bool) ($order->client?->has_cutlery ?? true),
-                'project'     => $order->project,
-                'client'      => $order->client?->name ?? 'Без імені',
-                'address'     => $address,
-                'calories'    => (int) $order->calories,
-                'comment'     => $order->client?->production_comment,
-                'items'       => $calc['items'],
-                'date'        => $targetDate,
-                'menu_token'  => $order->menu_token,
-                'nutrition'   => [
+                'client_id'    => $order->client?->id ?? '---',
+                'has_cutlery'  => (bool) ($order->client?->has_cutlery ?? true),
+                'water_option' => $waterOption,
+                'circles'      => $circles,
+                'project'      => $order->project,
+                'client'       => $order->client?->name ?? 'Без імені',
+                'address'      => $address,
+                'calories'     => (int) $order->calories,
+                'comment'      => $order->client?->production_comment,
+                'items'        => $items,
+                'date'         => $targetDate,
+                'menu_token'   => $order->menu_token,
+                'is_evening'   => $isEvening,
+                'nutrition'    => [
                     'b' => round($calc['totals']['prot']),
                     'j' => round($calc['totals']['fat']),
                     'u' => round($calc['totals']['carb']),
@@ -63,9 +138,10 @@ class PrintController extends Controller
         }
 
         usort($manifests, function ($a, $b) {
-            if ($a['calories'] === $b['calories']) {
-                return strcmp($a['client'], $b['client']);
-            }
+            // 1. За проєктом
+            $projectCmp = strcmp($a['project'] ?? '', $b['project'] ?? '');
+            if ($projectCmp !== 0) return $projectCmp;
+            // 2. За калоріями
             return $a['calories'] <=> $b['calories'];
         });
 
@@ -123,8 +199,8 @@ class PrintController extends Controller
             if ($projectCmp !== 0) {
                 return $projectCmp;
             }
-            // 3. Всередині проєкту — за іменем
-            return strcmp($a['client'], $b['client']);
+            // 3. Всередині проєкту — за калоріями
+            return $a['calories'] <=> $b['calories'];
         });
 
         // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату
@@ -245,8 +321,8 @@ class PrintController extends Controller
             // 2. За проєктом
             $projectCmp = strcmp($a['project'] ?? '', $b['project'] ?? '');
             if ($projectCmp !== 0) return $projectCmp;
-            // 3. За іменем клієнта
-            return strcmp($a['client'], $b['client']);
+            // 3. За калоріями
+            return $a['calories'] <=> $b['calories'];
         });
 
         // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату

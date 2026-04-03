@@ -116,7 +116,16 @@ class ClientResource extends Resource
                             ->onIcon('heroicon-m-check')
                             ->offIcon('heroicon-m-x-mark')
                             ->onColor('success'),
-                        
+
+                        Select::make('water_option')
+                            ->label('Вода')
+                            ->options([
+                                'with_water'         => 'З водою',
+                                'without_water'      => 'Без води',
+                                'water_without_lemon' => 'Вода без лимону',
+                            ])
+                            ->default('with_water'),
+
                         CheckboxList::make('mealTypes')
                             ->label('Активні прийоми їжі')
                             ->relationship('mealTypes', 'name')
@@ -393,6 +402,24 @@ class ClientResource extends Resource
                     ->sortable()
                     ->toggleable(),
 
+                Tables\Columns\TextColumn::make('water_option')
+                    ->label('Вода')
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => match ($state) {
+                        'with_water'          => 'З водою',
+                        'without_water'       => 'Без води',
+                        'water_without_lemon' => 'Вода без лимону',
+                        default               => '—',
+                    })
+                    ->color(fn ($state) => match ($state) {
+                        'with_water'          => 'info',
+                        'without_water'       => 'gray',
+                        'water_without_lemon' => 'warning',
+                        default               => 'gray',
+                    })
+                    ->sortable()
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('ant_comp_id')
                     ->label('Ant ID')
                     ->sortable()
@@ -418,6 +445,44 @@ class ClientResource extends Resource
                             Notification::make()
                                 ->danger()
                                 ->title('Помилка синхронізації')
+                                ->body($e->getMessage())
+                                ->send();
+                        }
+                    }),
+
+                Tables\Actions\Action::make('push_orders_to_ant')
+                    ->label('Відправити замовлення')
+                    ->icon('heroicon-o-paper-airplane')
+                    ->color('warning')
+                    ->modalHeading('Відправити замовлення в Ant')
+                    ->modalDescription('Замовлення на вибрану дату будуть відправлені в Ant Logistics як заявка.')
+                    ->form([
+                        Forms\Components\DatePicker::make('date')
+                            ->label('Дата доставки')
+                            ->default(now()->addDay()->format('Y-m-d'))
+                            ->required(),
+                        Forms\Components\Select::make('shift')
+                            ->label('Зміна')
+                            ->options([
+                                'all'     => 'Всі',
+                                'morning' => 'Ранок',
+                                'evening' => 'Вечір',
+                            ])
+                            ->default('all')
+                            ->required(),
+                    ])
+                    ->action(function (array $data) {
+                        try {
+                            $count = app(AntLogisticsService::class)->pushDailyOrders($data['date'], $data['shift']);
+                            Notification::make()
+                                ->success()
+                                ->title('Замовлення відправлено')
+                                ->body("Відправлено точок: {$count}")
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->danger()
+                                ->title('Помилка відправки замовлень')
                                 ->body($e->getMessage())
                                 ->send();
                         }

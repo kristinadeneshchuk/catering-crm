@@ -30,6 +30,7 @@ class Client extends Authenticatable
         'production_comment',
         'balance',
         'has_cutlery',
+        'water_option',
         'manager_comment',
         'ant_comp_id',
     ];
