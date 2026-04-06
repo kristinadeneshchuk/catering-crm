@@ -199,9 +199,9 @@
         }
 
         .brand-logo {
-            height: 14mm;
+            height: 9mm;
             width: auto;
-            max-width: 22mm;
+            max-width: 16mm;
             object-fit: contain;
             object-position: right center;
             display: block;
