@@ -61,15 +61,20 @@
         .sticker {
             width: 68.33mm;
             height: 42mm;
+            max-height: 42mm;
             position: relative;
             overflow: hidden;
-            padding: 2mm 2.5mm 2mm 2.5mm;
+            padding: 2mm 2.5mm 1.5mm 2.5mm;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
             border: none;
             break-inside: avoid;
             page-break-inside: avoid;
+        }
+
+        .sticker > div {
+            min-height: 0;
+            flex-shrink: 1;
         }
 
         .sticker-header {
@@ -87,6 +92,10 @@
             color: #0f172a;
             line-height: 1.1;
             max-width: 70%;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
         }
 
         .client-id {
@@ -149,6 +158,8 @@
             border-radius: 2px;
             padding: 1px 3px;
             margin-top: 1mm;
+            overflow: hidden;
+            max-height: 12mm;
         }
 
         .change-item {
@@ -182,12 +193,13 @@
         .weight-row {
             text-align: right;
             margin-top: auto;
-            padding-top: 1mm;
+            padding-top: 0.5mm;
             border-top: 0.5px dashed #e5e7eb;
+            flex-shrink: 0;
         }
 
         .weight-value {
-            font-size: 16px;
+            font-size: 13px;
             font-weight: 900;
         }
 
@@ -269,17 +281,15 @@
                             <div class="client-name">{{ $sticker['client'] }}</div>
                             <span class="client-id">ID: {{ $sticker['client_id'] }}</span>
                         </div>
-                        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
-                            @if($logoBase64)
-                                <img src="{{ $logoBase64 }}" class="brand-logo" alt="logo">
-                            @endif
-                            <span class="calories">{{ $sticker['calories'] }}</span>
-                        </div>
+                        @if($logoBase64)
+                            <img src="{{ $logoBase64 }}" class="brand-logo" alt="logo">
+                        @endif
                     </div>
 
                     <div class="meal-row">
                         <span class="meal-type" style="color: {{ $brandColor }};">{{ $sticker['meal'] }}</span>
                         <span class="meal-date">{{ \Carbon\Carbon::parse($date)->addDay()->format('d.m') }}</span>
+                        <span class="calories">{{ $sticker['calories'] }}</span>
                     </div>
 
                     <div class="dish-name">{{ $sticker['dish'] }}</div>
@@ -311,5 +321,22 @@
     </div>
 @endforeach
 
+<script>
+    // Автоматично зменшує шрифт стікера якщо контент не влізає
+    document.addEventListener('DOMContentLoaded', function () {
+        const PX_PER_MM = 3.7795;
+        const maxHeightPx = 42 * PX_PER_MM;
+
+        document.querySelectorAll('.sticker > div').forEach(function (inner) {
+            let fontSize = 10; // початковий розмір в px
+            inner.style.fontSize = fontSize + 'px';
+
+            while (inner.scrollHeight > maxHeightPx && fontSize > 6) {
+                fontSize -= 0.5;
+                inner.style.fontSize = fontSize + 'px';
+            }
+        });
+    });
+</script>
 </body>
 </html>
