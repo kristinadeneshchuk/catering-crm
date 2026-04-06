@@ -20,13 +20,14 @@ class ClientMenuController extends Controller
             ->firstOrFail();
 
         $client = $order->client;
-        $today = now()->startOfDay();
+        $today   = now()->startOfDay();
+        $maxDate = $today->copy()->addDays(2); // дозволяємо сьогодні + 2 дні вперед
         $date = $request->input('date')
             ? Carbon::parse($request->input('date'))->startOfDay()
             : $today;
 
-        // Клієнт не може переглядати майбутні дні
-        if ($date->greaterThan($today)) {
+        // Клієнт не може переглядати далі ніж +2 дні
+        if ($date->greaterThan($maxDate)) {
             $date = $today;
         }
 
@@ -65,7 +66,7 @@ class ClientMenuController extends Controller
             ->whereHas('orderDays', fn($q) => $q->where('date', $prevDate->format('Y-m-d')))
             ->exists();
 
-        $hasNext = !$nextDate->greaterThan($today) && Order::where('client_id', $client->id)
+        $hasNext = !$nextDate->greaterThan($maxDate) && Order::where('client_id', $client->id)
             ->whereHas('orderDays', fn($q) => $q->where('date', $nextDate->format('Y-m-d')))
             ->exists();
 
