@@ -499,10 +499,19 @@ class ClientResource extends Resource
                             ->label('Дата доставки')
                             ->default(now()->addDay()->format('Y-m-d'))
                             ->required(),
+                        Forms\Components\Select::make('shift')
+                            ->label('Зміна')
+                            ->options([
+                                'all'     => 'Всі',
+                                'morning' => 'Ранок',
+                                'evening' => 'Вечір',
+                            ])
+                            ->default('all')
+                            ->required(),
                     ])
                     ->action(function (array $data) {
                         try {
-                            $count = app(AntLogisticsService::class)->pullRouteAssignments($data['date']);
+                            $count = app(AntLogisticsService::class)->pullRouteAssignments($data['date'], $data['shift']);
                             Notification::make()
                                 ->success()
                                 ->title('Маршрути завантажено')

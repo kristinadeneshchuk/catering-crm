@@ -54,6 +54,7 @@
                                 <tr class="header-top">
                                     <th rowspan="2" class="row-label">{{ $table['dish_name'] }}</th>
                                     <th colspan="{{ count($table['columns']) }}">Програма (ккал / Клієнт)</th>
+                                    <th rowspan="2" style="font-size:13px; font-weight:900; width:80px; vertical-align:middle;">ЗАГАЛОМ</th>
                                 </tr>
                                 <tr class="header-kcal">
                                     @foreach($table['columns'] as $label => $info)
@@ -71,7 +72,7 @@
                                         <td>
                                             {{ $info['count'] }}
                                             @if(!empty($info['projects']))
-                                                <div style="font-size:10px; font-weight:500; opacity:.75; margin-top:2px;">
+                                                <div style="font-size:10px; font-weight:700; color:#111827; margin-top:2px;">
                                                     @foreach($info['projects'] as $p)
                                                         {{ $p['name'] }}: {{ $p['count'] }}<br>
                                                     @endforeach
@@ -79,20 +80,30 @@
                                             @endif
                                         </td>
                                     @endforeach
+                                    @php $totalPortions = array_sum(array_column($table['columns'], 'count')); @endphp
+                                    <td style="font-size:16px; font-weight:900;">
+                                        {{ $totalPortions }}
+                                    </td>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach($table['rows'] as $row)
                                     <tr>
                                         <td class="row-label">{{ $row['original_name'] }}</td>
+                                        @php $rowTotal = 0; @endphp
                                         @foreach($table['columns'] as $colKey => $info)
+                                            @php
+                                                $cell = $row['cells'][$colKey] ?? 0;
+                                                $val  = is_array($cell) ? ($cell['val'] ?? 0) : $cell;
+                                                $rowTotal += $val * ($info['count'] ?? 1);
+                                            @endphp
                                             <td>
-                                                <span style="font-weight: 800;">
-                                                    @php $cell = $row['cells'][$colKey] ?? 0; @endphp
-                                                    {{ is_array($cell) ? ($cell['val'] ?? 0) : $cell }} г
-                                                </span>
+                                                <span style="font-weight: 800;">{{ $val }} г</span>
                                             </td>
                                         @endforeach
+                                        <td style="font-size:14px; font-weight:900;">
+                                            {{ round($rowTotal) }} г
+                                        </td>
                                     </tr>
                                 @endforeach
                             </tbody>

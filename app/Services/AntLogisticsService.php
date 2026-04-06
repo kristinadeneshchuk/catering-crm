@@ -149,9 +149,16 @@ class AntLogisticsService
     {
         $this->ensureAuthenticated();
 
-        $targetDate   = Carbon::parse($date)->format('Y-m-d');
+        // Дата доставки (фізично везуть)
+        $deliveryDate = Carbon::parse($date)->format('Y-m-d');
         $dateFmt      = Carbon::parse($date)->format('d.m.Y'); // формат Ant: dd.MM.yyyy
-        $extIdent     = 'crm_' . $targetDate . ($shift !== 'all' ? '_' . $shift : '');
+
+        // Дата їжі: ранок — їжа на той самий день, вечір — їжа на наступний день
+        $targetDate = $shift === 'evening'
+            ? Carbon::parse($date)->addDay()->format('Y-m-d')
+            : $deliveryDate;
+
+        $extIdent = 'crm_' . $deliveryDate . ($shift !== 'all' ? '_' . $shift : '');
 
         // --- 1. Отримуємо замовлення ---
         $query = Order::query()
@@ -264,21 +271,28 @@ class AntLogisticsService
     // GET /Routes/get            — водій по маршруту
     // -------------------------------------------------------------------------
 
-    public function pullRouteAssignments(string $date): int
+    public function pullRouteAssignments(string $date, string $shift = 'all'): int
     {
         $this->ensureAuthenticated();
 
-        $targetDate = Carbon::parse($date)->format('Y-m-d');
-        $dateFmt    = Carbon::parse($date)->format('d.m.Y');
+        // Дата доставки — по ній шукаємо маршрути в Ant
+        $deliveryDate = Carbon::parse($date)->format('Y-m-d');
+        $dateFmt      = Carbon::parse($date)->format('d.m.Y');
 
-        // 1. Отримуємо всі маршрути на дату
+        // Дата їжі — по ній оновлюємо order_days
+        // Ранок: їжа на той самий день; Вечір: їжа на наступний день
+        $targetDate = $shift === 'evening'
+            ? Carbon::parse($date)->addDay()->format('Y-m-d')
+            : $deliveryDate;
+
+        // 1. Отримуємо всі маршрути на дату доставки
         $routesData = $this->fetchAllPages(
             "{$this->baseUrl}/Routes/get",
             ['Date_Data' => $dateFmt]
         );
 
         if (empty($routesData)) {
-            Log::info('[AntLogistics] No routes found — routes may not be built yet in Ant', ['date' => $targetDate]);
+            Log::info('[AntLogistics] No routes found — routes may not be built yet in Ant', ['date' => $deliveryDate]);
             return 0;
         }
 
@@ -305,6 +319,7 @@ class AntLogisticsService
 
                 $routePos = (int) ($comp['Pos_Id'] ?? 0) ?: null;
 
+                // Оновлюємо order_days по даті ЇЖІ (не доставки)
                 $affected = \App\Models\OrderDay::query()
                     ->whereHas('order', fn ($q) => $q->where('client_id', $clientId))
                     ->where('date', $targetDate)
@@ -312,7 +327,7 @@ class AntLogisticsService
                         'ant_route_num'      => $routeNum,
                         'ant_route_pos'      => $routePos,
                         'ant_driver'         => $driver,
-                        'ant_delivery_group' => null, // заповнюється якщо Ant підтримає
+                        'ant_delivery_group' => null,
                     ]);
 
                 $updated  += $affected;
@@ -321,10 +336,12 @@ class AntLogisticsService
         }
 
         Log::info('[AntLogistics] Route assignments pulled', [
-            'date'    => $targetDate,
-            'routes'  => count($routesData),
-            'comps'   => $totalComps,
-            'updated' => $updated,
+            'delivery_date' => $deliveryDate,
+            'food_date'     => $targetDate,
+            'shift'         => $shift,
+            'routes'        => count($routesData),
+            'comps'         => $totalComps,
+            'updated'       => $updated,
         ]);
 
         return $updated;

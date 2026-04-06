@@ -107,6 +107,7 @@ class PrintController extends Controller
                 ?? 'Самовивіз';
 
             $waterOption = match($order->client?->water_option) {
+                'with_water'          => 'З водою',
                 'without_water'       => 'Без води',
                 'water_without_lemon' => 'Вода без лимону',
                 default               => null,

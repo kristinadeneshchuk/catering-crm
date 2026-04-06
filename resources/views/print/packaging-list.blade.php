@@ -127,6 +127,7 @@
                 <tr>
                     <th rowspan="2" style="width: 200px; vertical-align: middle;">{{ $table['dish_name'] }}</th>
                     <th colspan="{{ count($table['columns']) }}" class="header-green">ПРОГРАМА (ККАЛ / КЛІЄНТ)</th>
+                    <th rowspan="2" style="width:80px; vertical-align:middle; font-size:12px; font-weight:bold;">ЗАГАЛОМ</th>
                 </tr>
                 <tr>
                     @foreach($table['columns'] as $colKey => $colData)
@@ -143,7 +144,7 @@
                         <td class="portions-cell">
                             {{ $colData['count'] }}
                             @if(!empty($colData['projects']))
-                                <div style="font-size:10px; font-weight:400; margin-top:2px; opacity:.85;">
+                                <div style="font-size:10px; font-weight:600; margin-top:2px; color:#111827 !important;">
                                     @foreach($colData['projects'] as $p)
                                         {{ $p['name'] }}: {{ $p['count'] }}<br>
                                     @endforeach
@@ -151,18 +152,32 @@
                             @endif
                         </td>
                     @endforeach
+                    @php
+                        $totalPortions = array_sum(array_column($table['columns'], 'count'));
+                    @endphp
+                    <td style="font-size:16px; font-weight:bold;">
+                        {{ $totalPortions }}
+                    </td>
                 </tr>
             </thead>
             <tbody>
                 @foreach($table['rows'] as $row)
                     <tr>
                         <td class="text-left" style="font-weight: bold;">{{ $row['original_name'] }}</td>
+                        @php $rowTotal = 0; @endphp
                         @foreach($table['columns'] as $colKey => $colData)
+                            @php
+                                $cell = $row['cells'][$colKey] ?? 0;
+                                $val  = is_array($cell) ? ($cell['val'] ?? 0) : $cell;
+                                $rowTotal += $val * ($colData['count'] ?? 1);
+                            @endphp
                             <td style="font-weight: bold; font-size: 13px;">
-                                @php $cell = $row['cells'][$colKey] ?? 0; @endphp
-                                {{ is_array($cell) ? ($cell['val'] ?? 0) : $cell }} г
+                                {{ $val }} г
                             </td>
                         @endforeach
+                        <td style="font-size:14px; font-weight:bold;">
+                            {{ round($rowTotal) }} г
+                        </td>
                     </tr>
                 @endforeach
             </tbody>

@@ -21,32 +21,32 @@
         
         @if($layout === '105x99')
             /* 📄 ФІКСОВАНИЙ РОЗМІР 105x99 мм НА АРКУШІ А4 */
-            .sticker-grid { 
-                display: flex; 
-                flex-wrap: wrap; 
-                width: 210mm; /* Ширина аркуша А4 */
-                margin: 0 auto; 
+            .sticker-grid {
+                display: flex;
+                flex-wrap: wrap;
+                width: 210mm;
+                margin: 0 auto;
                 background: white;
             }
-            .sticker-box { 
-                width: 105mm; /* Половина ширини А4 */
-                height: 99mm; /* Жорстко фіксована висота */
-                overflow: hidden; /* Забороняємо розтягуватися */
-                border: 1px dashed #cbd5e1 !important; /* Пунктир для вирізання */
+            .sticker-box {
+                width: 105mm;
+                height: 99mm;
+                overflow: hidden;
+                border: 1px dashed #cbd5e1 !important;
             }
 
-            /* 🔥 КОМПАКТНИЙ РЕЖИМ ДЛЯ ДУЖЕ ВЕЛИКИХ ЗАМОВЛЕНЬ (5+ страв) 🔥 */
             .sticker-box.is-compact { padding: 8px !important; }
             .sticker-box.is-compact .logo-wrap { min-height: 24px !important; height: 24px !important; }
-            .sticker-box.is-compact h2.client-name { font-size: 14px !important; line-height: 1.1 !important; } 
-            
+            .sticker-box.is-compact h2.client-name { font-size: 14px !important; line-height: 1.1 !important; }
+
             @media print {
                 @page { size: A4; margin: 0; }
                 .sticker-grid { width: 100% !important; max-width: 210mm !important; }
-                .sticker-box { page-break-inside: avoid; } 
+                .sticker-box { page-break-inside: avoid; }
             }
+
         @else
-            /* 📄 СТИЛІ ДЛЯ СТАНДАРТНОГО А4 (Звичайні) */
+            /* 📄 СТАНДАРТНИЙ А4 */
             .sticker-grid { display: grid; grid-template-columns: repeat(2, 480px); gap: 15px; justify-content: center; margin: 0 auto; }
             .sticker-box { border: 2px solid black !important; }
             @media print {

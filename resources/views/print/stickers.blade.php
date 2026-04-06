@@ -198,15 +198,14 @@
             margin-left: 1px;
         }
 
-        .brand-watermark {
-            position: absolute;
-            bottom: 1mm;
-            left: 5mm;
-            font-size: 6px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: -0.3px;
-            opacity: 0.08;
+        .brand-logo {
+            height: 14mm;
+            width: auto;
+            max-width: 22mm;
+            object-fit: contain;
+            object-position: right center;
+            display: block;
+            flex-shrink: 0;
         }
 
         @media print {
@@ -255,6 +254,11 @@
                     'danger'  => '#ef4444',
                     default   => '#000000',
                 };
+
+                // Логотип — точно так само як у маніфестах
+                $logoBase64 = ($project?->logo && file_exists(storage_path('app/public/' . $project->logo)))
+                    ? 'data:image/png;base64,' . base64_encode(file_get_contents(storage_path('app/public/' . $project->logo)))
+                    : null;
             @endphp
 
             <div class="sticker">
@@ -265,7 +269,12 @@
                             <div class="client-name">{{ $sticker['client'] }}</div>
                             <span class="client-id">ID: {{ $sticker['client_id'] }}</span>
                         </div>
-                        <span class="calories">{{ $sticker['calories'] }}</span>
+                        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
+                            @if($logoBase64)
+                                <img src="{{ $logoBase64 }}" class="brand-logo" alt="logo">
+                            @endif
+                            <span class="calories">{{ $sticker['calories'] }}</span>
+                        </div>
                     </div>
 
                     <div class="meal-row">

@@ -69,8 +69,9 @@ class RetentionBoard extends KanbanBoard
                       ->orWhere('order_calls.updated_at', '>=', now()->subDay());
             })
             
-            // СОРТУВАННЯ: Спочатку ті, що закінчуються (+3, +2, +1, 0), потім ті, хто відвалилися (-1, -2)
-            ->orderBy('orders.end_date', 'desc')
+            // СОРТУВАННЯ: Спочатку майбутні/сьогодні (0, 1, 2, 3 дн.), потім вже прострочені (-1, -2...)
+            ->orderByRaw('CASE WHEN orders.end_date >= CURDATE() THEN 0 ELSE 1 END ASC')
+            ->orderByRaw('CASE WHEN orders.end_date >= CURDATE() THEN DATEDIFF(orders.end_date, CURDATE()) ELSE DATEDIFF(CURDATE(), orders.end_date) END ASC')
             ->get();
     }
 
