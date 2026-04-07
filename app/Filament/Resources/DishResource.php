@@ -17,6 +17,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Grid;
+use Filament\Forms\Components\RichEditor;
 
 class DishResource extends Resource
 {
@@ -197,6 +198,30 @@ class DishResource extends Resource
                                 );
                             })
                             ->live(),
+                    ]),
+
+                Section::make('Рецепт приготування')
+                    ->description('Опис технології приготування, подачі та нотатки шеф-кухаря')
+                    ->collapsible()
+                    ->collapsed()
+                    ->schema([
+                        RichEditor::make('description')
+                            ->label('')
+                            ->toolbarButtons([
+                                'bold',
+                                'italic',
+                                'underline',
+                                'strike',
+                                'bulletList',
+                                'orderedList',
+                                'h2',
+                                'h3',
+                                'blockquote',
+                                'undo',
+                                'redo',
+                            ])
+                            ->placeholder('Опишіть покроковий рецепт, техніку приготування, температурний режим, особливості подачі...')
+                            ->columnSpanFull(),
                     ]),
 
                 Section::make('Економіка та Поживність (Підсумок)')

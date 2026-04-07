@@ -975,6 +975,29 @@ class PrintController extends Controller
         return ($totalKcal / $baseW) * 100.0;
     }
 
+    public function kitchenMenu(Request $request)
+    {
+        $date = $request->input('date', now()->format('Y-m-d'));
+
+        [$menu, $globalDay] = $this->getMenuForTargetDate($date);
+
+        if (!$menu) {
+            return "Меню на цю дату не знайдено (День циклу №{$globalDay}).";
+        }
+
+        $dishes = $menu->menuItems
+            ->sortBy(fn($item) => $item->mealType?->sort_order ?? 99)
+            ->filter(fn($item) => $item->dish)
+            ->groupBy(fn($item) => $item->mealType?->name ?? 'Інше');
+
+        return view('print.kitchen-menu', [
+            'dishes'    => $dishes,
+            'date'      => Carbon::parse($date)->format('d.m.Y'),
+            'rawDate'   => $date,
+            'globalDay' => $globalDay,
+        ]);
+    }
+
     private function getMenuForTargetDate(string $targetDate): array
     {
         $cycleDays    = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;

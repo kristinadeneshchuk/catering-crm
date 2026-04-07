@@ -4,12 +4,15 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\PackagingResource\Pages;
 use App\Models\Packaging;
+use App\Models\Project;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Tables\Actions;
+use Filament\Tables\Filters\SelectFilter;
 
 class PackagingResource extends Resource
 {
@@ -34,12 +37,17 @@ class PackagingResource extends Resource
                 ->default('шт')
                 ->required(),
 
-            // 👇 Добавили поле для ввода цены
             TextInput::make('price')
                 ->label('Ціна за одиницю (₴)')
                 ->numeric()
                 ->default(0)
                 ->step(0.01),
+
+            Select::make('project')
+                ->label('Проєкт / Бізнес')
+                ->options(fn () => Project::where('is_active', true)->pluck('name', 'slug'))
+                ->placeholder('Загальне (всі проєкти)')
+                ->nullable(),
         ]);
     }
 
@@ -48,6 +56,12 @@ class PackagingResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('name')->label('Назва')->searchable()->sortable(),
+                TextColumn::make('projectData.name')
+                    ->label('Проєкт')
+                    ->badge()
+                    ->color(fn ($record) => $record->projectData?->color ?? 'gray')
+                    ->placeholder('—')
+                    ->sortable(),
                 TextColumn::make('unit')->label('Од. виміру'),
                 TextColumn::make('stock')
                     ->label('Поточний залишок')
@@ -60,6 +74,12 @@ class PackagingResource extends Resource
                     ->label('Ціна (₴)')
                     ->money('UAH')
                     ->sortable(),
+            ])
+            ->filters([
+                SelectFilter::make('project')
+                    ->label('Проєкт')
+                    ->options(fn () => Project::where('is_active', true)->pluck('name', 'slug'))
+                    ->placeholder('Всі проєкти'),
             ])
             ->actions([
                 Actions\EditAction::make()->label('')->tooltip('Змінити'),

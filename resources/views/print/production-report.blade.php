@@ -73,14 +73,29 @@
     @endphp
 
     {{-- КНОПКА ДРУКУ --}}
-    <div class="no-print mb-6 flex justify-between items-center max-w-5xl mx-auto bg-white p-4 rounded-xl shadow">
+    @php
+        $kitchenUrl = url('/kitchen?date=' . $targetDate);
+        $qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' . urlencode($kitchenUrl);
+    @endphp
+    <div class="no-print mb-6 flex justify-between items-center max-w-5xl mx-auto bg-white p-4 rounded-xl shadow" style="gap:16px; flex-wrap:wrap;">
         <div>
             <h1 class="text-xl font-bold">План виробництва</h1>
             <p class="text-sm text-gray-500">Готуємо сьогодні ({{ $date }}) на завтра ({{ \Carbon\Carbon::parse($targetDate)->format('d.m.Y') }})</p>
         </div>
-        <button onclick="window.print()" class="bg-yellow-500 hover:bg-yellow-600 text-black px-6 py-2 rounded-lg font-bold shadow transition">
-            Роздрукувати звіт
-        </button>
+        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+            {{-- QR code --}}
+            <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+                <img src="{{ $qrUrl }}" alt="QR Меню кухні"
+                     style="width:80px; height:80px; border:2px solid #e5e7eb; border-radius:8px;">
+                <a href="{{ $kitchenUrl }}" target="_blank"
+                   style="font-size:10px; color:#6b7280; text-decoration:none;">
+                    Меню кухні
+                </a>
+            </div>
+            <button onclick="window.print()" class="bg-yellow-500 hover:bg-yellow-600 text-black px-6 py-2 rounded-lg font-bold shadow transition">
+                Роздрукувати звіт
+            </button>
+        </div>
     </div>
 
     {{-- ГОЛОВНИЙ КОНТЕЙНЕР --}}

@@ -49,6 +49,7 @@ class EmployeeResource extends Resource
                                 'courier' => 'Кур\'єр',
                                 'manager' => 'Менеджер',
                                 'packer' => 'Пакувальник',
+                                'cleaner' => 'Прибиральниця',
                                 'admin' => 'Адміністратор',
                             ])
                             ->required()
@@ -94,6 +95,7 @@ class EmployeeResource extends Resource
                         'courier' => 'Кур\'єр',
                         'manager' => 'Менеджер',
                         'packer' => 'Пакувальник',
+                        'cleaner' => 'Прибиральниця',
                         'admin' => 'Адмін',
                         default => $state,
                     })
@@ -126,6 +128,7 @@ class EmployeeResource extends Resource
                     'cook' => 'Кухар',
                     'courier' => 'Кур\'єр',
                     'manager' => 'Менеджер',
+                    'cleaner' => 'Прибиральниця',
                 ]),
             ])
             ->actions([
