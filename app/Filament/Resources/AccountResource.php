@@ -113,6 +113,21 @@ class AccountResource extends Resource
             ]);
     }
 
+    public static function canCreate(): bool
+    {
+        return auth()->user()->role === 'admin';
+    }
+
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return auth()->user()->role === 'admin';
+    }
+
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return auth()->user()->role === 'admin';
+    }
+
     public static function getPages(): array
     {
         return [

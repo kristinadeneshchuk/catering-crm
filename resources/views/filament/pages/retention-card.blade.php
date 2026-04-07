@@ -57,9 +57,19 @@
     class="rc-card"
     style="border-left: 3px solid {{ $color }}; background: {{ $bgAlpha }};"
 >
-    {{-- Row 1: Client name + urgency badge --}}
+    {{-- Row 1: Client name + profile link + urgency badge --}}
     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px;">
-        <span class="rc-name">{{ $client->name ?? 'Без імені' }}</span>
+        <div style="display: flex; align-items: center; gap: 5px; min-width: 0; flex: 1;">
+            <a href="/admin/clients/{{ $client->id }}/edit" @click.stop target="_blank"
+               style="display:flex; align-items:center; flex-shrink:0; color:#6b7280; transition:color 0.15s;"
+               onmouseover="this.style.color='#3b82f6'" onmouseout="this.style.color='#6b7280'"
+               title="Відкрити картку клієнта">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+                </svg>
+            </a>
+            <span class="rc-name">{{ $client->name ?? 'Без імені' }}</span>
+        </div>
         <span style="background: {{ $badgeBg }}; color: {{ $badgeColor }}; border: 1px solid {{ $badgeColor }}; border-radius: 20px; font-size: 10px; font-weight: 600; padding: 2px 7px; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.01em;">
             {{ $badgeText }}
         </span>
@@ -72,10 +82,22 @@
         </a>
     </div>
 
-    {{-- Row 3: Kcal + end date --}}
-    <div style="display: flex; gap: 12px;">
+    {{-- Row 3: Kcal + shift + end date --}}
+    <div style="display: flex; gap: 12px; align-items: center;">
         <span class="rc-meta">{{ $order->calories ?? '—' }} ккал</span>
         <span class="rc-sep">|</span>
+        @php
+            $scheduleType = $order->schedule_type ?? '';
+            $isEvening = str_contains($scheduleType, 'evening') || str_contains($scheduleType, 'вечір');
+            $isMorning = str_contains($scheduleType, 'morning') || str_contains($scheduleType, 'ранок');
+        @endphp
+        @if($isEvening)
+            <span style="font-size:11px; color:#7c3aed; font-weight:600;">Вечір</span>
+            <span class="rc-sep">|</span>
+        @elseif($isMorning)
+            <span style="font-size:11px; color:#d97706; font-weight:600;">Ранок</span>
+            <span class="rc-sep">|</span>
+        @endif
         <span class="rc-meta">до {{ $endDate->format('d.m.Y') }}</span>
     </div>
 

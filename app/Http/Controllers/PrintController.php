@@ -553,13 +553,29 @@ class PrintController extends Controller
                     ];
                 }
 
-                $isCustom =
-                    $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
-                    || $order->client->dishExclusions->contains('id', $dish->id)
+                // Dish-level change: person doesn't eat this dish as-is (excluded or replaced with another dish)
+                $dishForcedApprovalCheck = $order->replacements
+                    ->where('dish_id', $dish->id)
+                    ->whereNull('original_product_id')
+                    ->where('force_approved', true)
+                    ->first();
+
+                $hasDishLevelChange =
+                    (!$dishForcedApprovalCheck && $order->client->dishExclusions->contains('id', $dish->id))
+                    || $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->where('force_approved', false)->isNotEmpty();
+
+                $hasIngredientLevelChange =
+                    $order->replacements->where('dish_id', $dish->id)->whereNotNull('original_product_id')->isNotEmpty()
                     || !empty($this->getConflictingIngredients($dish, $order->client->ingredientExclusions));
+
+                $isCustom = $hasDishLevelChange || $hasIngredientLevelChange;
 
                 if ($isCustom) {
                     $custom[] = ['order' => $order, 'scale' => $dishScale];
+                    // Ingredient-only changes: person still eats this dish, their portion counts toward base totals
+                    if (!$hasDishLevelChange) {
+                        $standard[] = ['order' => $order, 'scale' => $dishScale];
+                    }
                 } else {
                     $standard[] = ['order' => $order, 'scale' => $dishScale];
                 }

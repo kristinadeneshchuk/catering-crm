@@ -19,7 +19,7 @@ class TransactionResource extends Resource
 {
     protected static ?string $model = Transaction::class;
 
-    protected static ?string $navigationGroup = 'Система'; 
+    protected static ?string $navigationGroup = 'Система';
     protected static ?int $navigationSort = 3; // Буде після Користувачів
     protected static ?string $navigationLabel = 'Журнал транзакцій';
     protected static ?string $pluralModelLabel = 'Транзакції';
@@ -144,7 +144,7 @@ class TransactionResource extends Resource
                     ->limit(30)
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->defaultSort('created_at', 'desc') // Останні транзакції зверху
+            ->defaultSort('created_at', 'desc')
             ->filters([
                 SelectFilter::make('type')
                     ->label('Тип')
@@ -162,6 +162,7 @@ class TransactionResource extends Resource
                         'Виплата ЗП'         => 'Виплата ЗП',
                         'Закупівля'          => 'Закупівля',
                         'Списання зі складу' => 'Списання зі складу',
+                        'Корекція балансу'   => 'Корекція балансу',
                     ]),
                 SelectFilter::make('account_id')
                     ->label('Рахунок')
@@ -170,15 +171,16 @@ class TransactionResource extends Resource
             ->actions([
                 Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
 
-                // 🔥 КНОПКА ВИДАЛЕННЯ (ВІДКОТ)
                 DeleteAction::make()
                     ->label('Скасувати')
                     ->modalHeading('Видалити транзакцію?')
-                    ->modalDescription('Увага: Гроші повернуться на рахунок, а борг співробітника (якщо це була ЗП) знову з’явиться в системі.'),
+                    ->modalDescription('Увага: Гроші повернуться на рахунок, а борг співробітника (якщо це була ЗП) знову зʼявиться в системі.')
+                    ->hidden(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->hidden(),
                 ]),
             ]);
     }
