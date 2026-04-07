@@ -156,11 +156,27 @@ class PrintController extends Controller
         $inputDate  = $request->input('date', now()->format('Y-m-d'));
         $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
 
+        [$menu, $globalDay] = $this->getMenuForTargetDate($targetDate);
+
         $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
-            ->with(['client', 'projectData', 'orderDays' => fn($q) => $q->where('date', $targetDate)])
+            ->with([
+                'client.dishExclusions',
+                'client.ingredientExclusions',
+                'projectData',
+                'replacements.replacementProduct',
+                'replacements.replacementDish',
+                'orderDays' => fn($q) => $q->where('date', $targetDate),
+            ])
             ->get();
+
+        // Палітра кружечків по id прийому їжі
+        $mealPalette = \App\Models\MealType::all()->keyBy('id')->map(fn($mt) => [
+            'color'      => $mt->color ?: '#94a3b8',
+            'letter'     => $mt->short_letter ?: '?',
+            'sort_order' => $mt->sort_order ?? 99,
+        ])->toArray();
 
         $manifests = [];
 
@@ -173,6 +189,45 @@ class PrintController extends Controller
 
             $isEvening = str_contains((string) $order->delivery_time, 'evening')
                       || str_contains((string) $order->schedule_type, 'evening');
+
+            // Будуємо кружечки замін
+            $circles = [];
+            $addedCircleMealTypes = [];
+
+            if ($menu) {
+                $calc = $this->calculateOrderPlan($order, $menu);
+                foreach ($calc['items'] as $item) {
+                    $dishId     = $item['dish_id'] ?? null;
+                    $mealTypeId = $item['meal_type_id'] ?? null;
+                    if (!$dishId) continue;
+
+                    $menuItem = $menu->menuItems->first(
+                        fn($mi) => (int)$mi->dish_id === $dishId && (int)$mi->meal_type_id === $mealTypeId
+                    );
+                    $dish = $menuItem?->dish;
+
+                    $dishRep = $order->replacements
+                        ->where('dish_id', $dishId)
+                        ->whereNull('original_product_id')
+                        ->first();
+                    $dishForceApproved = $dishRep && $dishRep->force_approved;
+
+                    $hasChanges = false;
+                    if ($dishRep && $dishRep->replacementDish) {
+                        $hasChanges = true;
+                    } elseif (!$dishForceApproved && $order->client?->dishExclusions?->contains('id', $dishId)) {
+                        $hasChanges = true;
+                    } elseif ($dish) {
+                        $hasChanges = !empty($this->findIngredientChanges($dish, $order, $dishId));
+                    }
+
+                    if ($hasChanges && isset($mealPalette[$mealTypeId]) && !in_array($mealTypeId, $addedCircleMealTypes)) {
+                        $circles[]              = $mealPalette[$mealTypeId];
+                        $addedCircleMealTypes[] = $mealTypeId;
+                    }
+                }
+                usort($circles, fn($a, $b) => $a['sort_order'] <=> $b['sort_order']);
+            }
 
             $manifests[] = [
                 'client_id'          => $order->client?->id ?? '---',
@@ -187,6 +242,9 @@ class PrintController extends Controller
                 'ant_route_pos'      => $orderDay?->ant_route_pos,
                 'ant_driver'         => $orderDay?->ant_driver,
                 'ant_delivery_group' => $orderDay?->ant_delivery_group,
+                'circles'            => $circles,
+                'has_cutlery'        => (bool) ($order->client?->has_cutlery ?? true),
+                'water_option'       => $order->client?->water_option,
             ];
         }
 

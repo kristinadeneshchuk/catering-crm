@@ -223,6 +223,45 @@
             letter-spacing: 1.5px;
         }
 
+        .circles-row {
+            display: flex;
+            gap: 2px;
+            margin-top: 1mm;
+            flex-wrap: wrap;
+        }
+
+        .meal-circle {
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 6px;
+            font-weight: 900;
+            color: #fff;
+            flex-shrink: 0;
+        }
+
+        .no-icons-row {
+            display: flex;
+            gap: 3px;
+            margin-top: 1.5mm;
+            align-items: center;
+        }
+
+        .no-icon-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            background: #fff1f2;
+            border: 1px solid #fecdd3;
+            flex-shrink: 0;
+        }
+
         /* Друк */
         @media print {
             body { background: white !important; }
@@ -331,6 +370,55 @@
                     <span class="tag-address">{{ $man['address'] }}</span>
                 @else
                     <span class="tag-address" style="color:#94a3b8;">Самовивіз</span>
+                @endif
+
+                @if(!empty($man['circles']))
+                    <div class="circles-row">
+                        @foreach($man['circles'] as $circle)
+                            <div class="meal-circle" style="background-color: {{ $circle['color'] }};">{{ $circle['letter'] }}</div>
+                        @endforeach
+                    </div>
+                @endif
+
+                @php
+                    $noCutlery = !($man['has_cutlery'] ?? true);
+                    $noWater   = ($man['water_option'] ?? '') === 'without_water';
+                    $noLemon   = ($man['water_option'] ?? '') === 'water_without_lemon';
+                @endphp
+                @if($noCutlery || $noWater || $noLemon)
+                    <div class="no-icons-row">
+                        @if($noCutlery)
+                            <div class="no-icon-badge" title="Без приборів">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/>
+                                    <line x1="7" y1="2" x2="7" y2="22"/>
+                                    <line x1="21" y1="15" x2="21" y2="22"/>
+                                    <path d="M21 2v4a4 4 0 0 1-4 4h0v9"/>
+                                    <line x1="2" y1="2" x2="22" y2="22" stroke="#dc2626" stroke-width="2.5"/>
+                                </svg>
+                            </div>
+                        @endif
+                        @if($noWater)
+                            <div class="no-icon-badge" title="Без води">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+                                    <line x1="2" y1="2" x2="22" y2="22" stroke="#dc2626" stroke-width="2.5"/>
+                                </svg>
+                            </div>
+                        @endif
+                        @if($noLemon)
+                            <div class="no-icon-badge" title="Вода без лимону">
+                                {{-- Цитрус-зріз: коло + 3 лінії сегментів — одразу видно що лимон --}}
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ca8a04" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="9"/>
+                                    <line x1="12" y1="3" x2="12" y2="21"/>
+                                    <line x1="3.5" y1="7.5" x2="20.5" y2="16.5"/>
+                                    <line x1="3.5" y1="16.5" x2="20.5" y2="7.5"/>
+                                    <line x1="2" y1="2" x2="22" y2="22" stroke="#dc2626" stroke-width="2.5"/>
+                                </svg>
+                            </div>
+                        @endif
+                    </div>
                 @endif
             </div>
 
