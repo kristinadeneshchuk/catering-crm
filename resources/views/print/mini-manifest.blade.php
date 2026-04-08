@@ -101,6 +101,12 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+        .route-driver {
+            color: #1e293b;
+            font-size: 7pt;
+            font-weight: 800;
+            flex-shrink: 0;
+        }
 
         /* Основний контент */
         .sticker-body {
@@ -149,7 +155,7 @@
             padding-bottom: 0.5mm;
             flex-shrink: 1;
             min-height: 0;
-            overflow: visible;
+            overflow: hidden;
         }
 
         .label-receiver {
@@ -328,10 +334,10 @@
             height: 99mm;
             padding: 0;
         }
-        body.fmt-large .sticker-route  { display: flex; height: 24mm; padding: 3mm 3mm 2mm 3mm; align-items: center; justify-content: center; transform: rotate(180deg); border-bottom: 1px dashed #cbd5e1; flex-shrink: 0; }
-        body.fmt-large .sticker-route-inner { font-size: 9pt; gap: 5px; }
-        body.fmt-large .route-badge    { font-size: 10pt; padding: 2px 7px; }
-        body.fmt-large .route-address  { font-size: 7.5pt; }
+        body.fmt-large .sticker-route  { display: flex; height: 24mm; padding: 3mm 4mm 2mm 4mm; align-items: center; justify-content: center; transform: rotate(180deg); border-bottom: 1px dashed #cbd5e1; flex-shrink: 0; }
+        body.fmt-large .sticker-route-inner { font-size: 11pt; gap: 6px; }
+        body.fmt-large .route-badge    { font-size: 16pt; padding: 3px 10px; border-radius: 5px; }
+        body.fmt-large .route-driver   { font-size: 12pt; }
         body.fmt-large .sticker-body   { padding: 2mm 3mm 1.5mm 3mm; }
         body.fmt-large .date-badge       { font-size: 9pt; padding: 2px 6px; }
         body.fmt-large .project-logo     { height: 10mm; max-width: 22mm; }
@@ -343,6 +349,7 @@
         body.fmt-large .tag-route        { font-size: 8pt; padding: 2px 5px; }
         body.fmt-large .tag-address      { font-size: 8pt; margin-top: 1.5mm; }
         body.fmt-large .sticker-tags     { gap: 2mm; margin-top: 1.5mm; }
+        body.fmt-large .tag-route        { display: none; } /* вже показано у загині зверху */
         body.fmt-large .circles-row      { gap: 4px; margin-top: 2mm; }
         body.fmt-large .meal-circle      { width: 20px; height: 20px; font-size: 9px; }
         body.fmt-large .no-icons-row     { gap: 5px; margin-top: 2mm; }
@@ -441,16 +448,13 @@
         <div class="sticker" style="--brand-color: {{ $brandColor }};" data-slot="{{ $man['is_evening'] ? 'evening' : 'morning' }}">
             <div class="sticker-border"></div>
 
-            {{-- Маршрут зверху (перевернутий) --}}
+            {{-- Маршрут зверху (перевернутий) — тільки великий формат --}}
             <div class="sticker-route">
                 <div class="sticker-route-inner">
                     @if(!empty($man['ant_route_num']))
                         <span class="route-badge">М{{ $man['ant_route_num'] }}{{ !empty($man['ant_route_pos']) ? '-'.$man['ant_route_pos'] : '' }}</span>
                         @if(!empty($man['ant_driver']))
-                            <span style="color:#64748b; font-size:5.5pt; font-weight:700; flex-shrink:0;">{{ $man['ant_driver'] }}</span>
-                        @endif
-                        @if(($man['address'] ?? 'Самовивіз') !== 'Самовивіз')
-                            <span class="route-address">{{ $man['address'] }}</span>
+                            <span class="route-driver">{{ $man['ant_driver'] }}</span>
                         @endif
                     @endif
                 </div>
