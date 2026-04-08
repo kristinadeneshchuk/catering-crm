@@ -110,6 +110,8 @@ class ShoppingList extends Page implements HasForms
             $dish = $item->dish;
 
             foreach ($orders as $order) {
+                if ($order->menu_type === 'individual') continue; // індивідуальні — окремо
+
                 $plan = $orderPlans[$order->id] ?? null;
                 if (!$plan) continue;
 

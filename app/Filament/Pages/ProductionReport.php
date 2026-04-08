@@ -621,6 +621,8 @@ public function form(Form $form): Form
             $commentClients = []; // клієнти лише з коментарем, без реальних змін
 
             foreach ($this->activeOrders as $order) {
+                if ($order->menu_type === 'individual') continue; // індивідуальні — окремо
+
                 $plan = $this->orderPlans[$order->id] ?? null;
                 if (!$plan) continue;
 

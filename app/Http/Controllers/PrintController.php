@@ -645,6 +645,8 @@ class PrintController extends Controller
             $commentClients = [];
 
             foreach ($orders as $order) {
+                if ($order->menu_type === 'individual') continue; // індивідуальні — окремо
+
                 $plan = $orderPlans[$order->id] ?? null;
                 if (!$plan) continue;
 
@@ -810,6 +812,8 @@ class PrintController extends Controller
                 $dish = $item->dish;
 
                 foreach ($orders as $order) {
+                    if ($order->menu_type === 'individual') continue; // індивідуальні — окремо
+
                     $plan = $orderPlans[$order->id] ?? null;
                     if (!$plan) continue;
 
@@ -979,6 +983,8 @@ class PrintController extends Controller
             $custom = [];
 
             foreach ($orders as $order) {
+                if ($order->menu_type === 'individual') continue; // індивідуальні — окремо
+
                 $plan = $orderPlans[$order->id] ?? null;
                 if (!$plan) continue;
 
