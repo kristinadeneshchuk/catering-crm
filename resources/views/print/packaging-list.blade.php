@@ -102,39 +102,35 @@
         </div>
     @endif
 
-    @foreach($report as $table)
+    @php
+        $cyclicTables     = array_filter($report, fn($t) => empty($t['is_individual']));
+        $individualTables = array_filter($report, fn($t) => !empty($t['is_individual']));
+    @endphp
+
+    {{-- ЦИКЛІЧНІ СТРАВИ --}}
+    @foreach($cyclicTables as $table)
         @php
             $mealLower = mb_strtolower(trim($table['meal']));
             $mealClass = 'meal-default';
-            
-            if (str_contains($mealLower, 'сніданок')) {
-                $mealClass = 'meal-snidanok';
-            } elseif (str_contains($mealLower, 'перекус 1')) {
-                $mealClass = 'meal-perekus-1';
-            } elseif (str_contains($mealLower, 'обід')) {
-                $mealClass = 'meal-obid';
-            } elseif (str_contains($mealLower, 'перекус 2')) {
-                $mealClass = 'meal-perekus-2';
-            } elseif (str_contains($mealLower, 'вечеря')) {
-                $mealClass = 'meal-vecherya';
-            }
+            if (str_contains($mealLower, 'сніданок'))      $mealClass = 'meal-snidanok';
+            elseif (str_contains($mealLower, 'перекус 1')) $mealClass = 'meal-perekus-1';
+            elseif (str_contains($mealLower, 'обід'))      $mealClass = 'meal-obid';
+            elseif (str_contains($mealLower, 'перекус 2')) $mealClass = 'meal-perekus-2';
+            elseif (str_contains($mealLower, 'вечеря'))    $mealClass = 'meal-vecherya';
         @endphp
 
         <div class="meal-title {{ $mealClass }}">{{ $table['meal'] }}: {{ $table['dish_name'] }}</div>
-
         <table>
             <thead>
                 <tr>
-                    <th rowspan="2" style="width: 200px; vertical-align: middle;">{{ $table['dish_name'] }}</th>
+                    <th rowspan="2" style="width:200px;vertical-align:middle;">{{ $table['dish_name'] }}</th>
                     <th colspan="{{ count($table['columns']) }}" class="header-green">ПРОГРАМА (ККАЛ / КЛІЄНТ)</th>
-                    <th rowspan="2" style="width:80px; vertical-align:middle; font-size:12px; font-weight:bold;">ЗАГАЛОМ</th>
+                    <th rowspan="2" style="width:80px;vertical-align:middle;font-size:12px;font-weight:bold;">ЗАГАЛОМ</th>
                 </tr>
                 <tr>
                     @foreach($table['columns'] as $colKey => $colData)
-                        @php $kcalClass = 'kcal-' . trim($colKey); @endphp
-                        <th class="{{ $kcalClass }}">
-                            {{ $colKey }}
-                            <span style="font-size:11px; font-weight:400; opacity:.85;">({{ $colData['count'] }})</span>
+                        <th class="kcal-{{ trim($colKey) }}">
+                            {{ $colKey }} <span style="font-size:11px;font-weight:400;opacity:.85;">({{ $colData['count'] }})</span>
                         </th>
                     @endforeach
                 </tr>
@@ -144,40 +140,25 @@
                         <td class="portions-cell">
                             {{ $colData['count'] }}
                             @if(!empty($colData['projects']))
-                                <div style="font-size:10px; font-weight:600; margin-top:2px; color:#111827 !important;">
-                                    @foreach($colData['projects'] as $p)
-                                        {{ $p['name'] }}: {{ $p['count'] }}<br>
-                                    @endforeach
+                                <div style="font-size:10px;font-weight:600;margin-top:2px;color:#111827 !important;">
+                                    @foreach($colData['projects'] as $p){{ $p['name'] }}: {{ $p['count'] }}<br>@endforeach
                                 </div>
                             @endif
                         </td>
                     @endforeach
-                    @php
-                        $totalPortions = array_sum(array_column($table['columns'], 'count'));
-                    @endphp
-                    <td style="font-size:16px; font-weight:bold;">
-                        {{ $totalPortions }}
-                    </td>
+                    <td style="font-size:16px;font-weight:bold;">{{ array_sum(array_column($table['columns'],'count')) }}</td>
                 </tr>
             </thead>
             <tbody>
                 @foreach($table['rows'] as $row)
                     <tr>
-                        <td class="text-left" style="font-weight: bold;">{{ $row['original_name'] }}</td>
+                        <td class="text-left" style="font-weight:bold;">{{ $row['original_name'] }}</td>
                         @php $rowTotal = 0; @endphp
                         @foreach($table['columns'] as $colKey => $colData)
-                            @php
-                                $cell = $row['cells'][$colKey] ?? 0;
-                                $val  = is_array($cell) ? ($cell['val'] ?? 0) : $cell;
-                                $rowTotal += $val * ($colData['count'] ?? 1);
-                            @endphp
-                            <td style="font-weight: bold; font-size: 13px;">
-                                {{ $val }} г
-                            </td>
+                            @php $cell=$row['cells'][$colKey]??0; $val=is_array($cell)?($cell['val']??0):$cell; $rowTotal+=$val*($colData['count']??1); @endphp
+                            <td style="font-weight:bold;font-size:13px;">{{ $val }} г</td>
                         @endforeach
-                        <td style="font-size:14px; font-weight:bold;">
-                            {{ round($rowTotal) }} г
-                        </td>
+                        <td style="font-size:14px;font-weight:bold;">{{ round($rowTotal) }} г</td>
                     </tr>
                 @endforeach
             </tbody>
@@ -187,14 +168,69 @@
             <div class="notes-box">
                 <div class="notes-header">Індивідуальні заміни:</div>
                 @foreach($table['individual_notes'] as $note)
-                    <div class="note-row">
-                        • #{{ $note['id'] }} {{ $note['name'] }} ({{ $note['project'] }}, {{ $note['calories'] }} ккал): {{ $note['text'] }}
-                    </div>
+                    <div class="note-row">• #{{ $note['id'] }} {{ $note['name'] }} ({{ $note['project'] }}, {{ $note['calories'] }} ккал): {{ $note['text'] }}</div>
                 @endforeach
             </div>
         @endif
-
     @endforeach
+
+    {{-- ІНДИВІДУАЛЬНІ КЛІЄНТИ — одна картка на клієнта з усіма раціонами --}}
+    @if(!empty($individualTables))
+        <div style="margin-top:24px; page-break-before:auto;">
+            <div style="background:#7c3aed; color:white; padding:6px 10px; font-weight:900; font-size:13px; text-transform:uppercase; margin-bottom:10px; border-radius:4px; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
+                ★ Індивідуальні клієнти
+            </div>
+            @foreach(array_values($individualTables) as $table)
+                <div style="border:2px solid #7c3aed; border-radius:6px; overflow:hidden; margin-bottom:14px; page-break-inside:avoid;">
+                    {{-- Заголовок клієнта --}}
+                    <div style="background:#7c3aed; color:white; padding:6px 12px; font-size:13px; font-weight:900; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
+                        {{ $table['client_label'] }}
+                        <span style="margin-left:10px; font-size:11px; font-weight:500; opacity:0.85;">{{ $table['project'] }}</span>
+                        <span style="margin-left:8px; font-size:11px; font-weight:700; background:rgba(255,255,255,0.2); padding:1px 6px; border-radius:3px;">{{ $table['calories'] }} ккал</span>
+                    </div>
+                    {{-- Прийоми їжі в рядок --}}
+                    <table style="width:100%; border-collapse:collapse; margin:0;">
+                        <tbody>
+                            <tr style="vertical-align:top;">
+                                @foreach($table['meals'] as $meal)
+                                    @php
+                                        $mealLower = mb_strtolower(trim($meal['meal']));
+                                        $mealColor = '#94a3b8';
+                                        if (str_contains($mealLower, 'сніданок'))      $mealColor = '#14b8a6';
+                                        elseif (str_contains($mealLower, 'перекус 1')) $mealColor = '#84cc16';
+                                        elseif (str_contains($mealLower, 'обід'))      $mealColor = '#fb923c';
+                                        elseif (str_contains($mealLower, 'перекус 2')) $mealColor = '#f472b6';
+                                        elseif (str_contains($mealLower, 'вечеря'))    $mealColor = '#38bdf8';
+                                    @endphp
+                                    <td style="vertical-align:top; padding:0; border:1px solid #e5e7eb; width:{{ round(100 / count($table['meals'])) }}%;">
+                                        {{-- Прийом їжі --}}
+                                        <div style="background:{{ $mealColor }}; color:white; padding:4px 8px; font-weight:900; font-size:10px; text-transform:uppercase; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
+                                            {{ $meal['meal'] }}
+                                        </div>
+                                        {{-- Назва страви --}}
+                                        <div style="background:#dcfce7; padding:4px 8px; border-bottom:1px solid #bbf7d0; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
+                                            <div style="font-weight:900; font-size:11px; color:#052e16;">{{ $meal['dish_name'] }}</div>
+                                        </div>
+                                        {{-- Інгредієнти --}}
+                                        <table style="width:100%; border-collapse:collapse; margin:0; font-size:10px;">
+                                            <tbody>
+                                                @foreach($meal['rows'] as $row)
+                                                    <tr>
+                                                        <td style="padding:2px 6px; border-bottom:1px solid #f3f4f6; color:#374151;">{{ $row['name'] }}</td>
+                                                        <td style="padding:2px 6px; border-bottom:1px solid #f3f4f6; background:#e5e7eb; font-weight:800; text-align:center; color:#111827; width:45px; -webkit-print-color-adjust:exact; print-color-adjust:exact;">{{ $row['weight'] }} г</td>
+                                                    </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </td>
+                                @endforeach
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            @endforeach
+        </div>
+    @endif
 
     <script>
         setTimeout(function() {

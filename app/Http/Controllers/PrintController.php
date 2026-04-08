@@ -5,11 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\DailyMenu;
 use App\Models\Order;
 use App\Models\Setting;
+use App\Traits\CalculatesOrderPlan;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 
 class PrintController extends Controller
 {
+    use CalculatesOrderPlan;
     public function manifest(Request $request)
     {
         $inputDate  = $request->input('date', now()->format('Y-m-d'));
@@ -46,7 +48,7 @@ class PrintController extends Controller
         ])->toArray();
 
         foreach ($orders as $order) {
-            $calc = $this->calculateOrderPlan($order, $menu);
+            $calc = $this->calculateOrderPlan($order, $menu, $targetDate);
 
             if (empty($calc['items'])) {
                 continue;
@@ -195,7 +197,7 @@ class PrintController extends Controller
             $addedCircleMealTypes = [];
 
             if ($menu) {
-                $calc = $this->calculateOrderPlan($order, $menu);
+                $calc = $this->calculateOrderPlan($order, $menu, $targetDate);
                 foreach ($calc['items'] as $item) {
                     $dishId     = $item['dish_id'] ?? null;
                     $mealTypeId = $item['meal_type_id'] ?? null;
@@ -294,7 +296,7 @@ class PrintController extends Controller
         $stickers = [];
 
         foreach ($orders as $order) {
-            $calc = $this->calculateOrderPlan($order, $menu);
+            $calc = $this->calculateOrderPlan($order, $menu, $targetDate);
 
             if (empty($calc['items'])) {
                 continue;
@@ -431,7 +433,7 @@ class PrintController extends Controller
             ];
 
             foreach ($orders as $order) {
-                $calc = $this->calculateOrderPlan($order, $menu);
+                $calc = $this->calculateOrderPlan($order, $menu, $targetDate);
 
                 $plannedDish = collect($calc['items'])->first(function ($it) use ($dish, $mItem) {
                     return (int)$it['dish_id'] === (int)$dish->id && (int)$it['meal_type_id'] === (int)$mItem->meal_type_id;
@@ -540,6 +542,56 @@ class PrintController extends Controller
             }
         }
 
+        // === ІНДИВІДУАЛЬНІ КЛІЄНТИ — одна картка на клієнта ===
+        $individualByOrder = [];
+
+        foreach ($orders as $order) {
+            if ($order->menu_type !== 'individual') continue;
+
+            $calc = $this->calculateOrderPlan($order, $menu, $targetDate);
+            if (empty($calc['items'])) continue;
+
+            $oid = $order->id;
+            if (!isset($individualByOrder[$oid])) {
+                $individualByOrder[$oid] = [
+                    'is_individual' => true,
+                    'client_label'  => '#' . $order->client->id . ' ' . $order->client->name,
+                    'calories'      => (int)($order->calories ?? 0),
+                    'project'       => $order->projectData?->name ?? ucfirst($order->project ?? ''),
+                    'meals'         => [],
+                ];
+            }
+
+            foreach ($calc['items'] as $item) {
+                $dish = \App\Models\Dish::with('dishIngredients.ingredient', 'dishIngredients.childDish')
+                    ->find($item['dish_id']);
+                if (!$dish) continue;
+
+                $weight = (int)$item['weight'];
+                $baseW  = (float)($dish->base_weight_g ?? 0);
+                $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
+
+                $rows = [];
+                foreach ($dish->dishIngredients as $di) {
+                    $name = $di->ingredient
+                        ? $di->ingredient->name
+                        : ($di->childDish ? '[НФ] ' . $di->childDish->name : '???');
+                    $val  = round((float)($di->net_weight_g ?? 0) * $scale);
+                    if ($val > 0) $rows[] = ['name' => $name, 'weight' => $val];
+                }
+
+                $individualByOrder[$oid]['meals'][] = [
+                    'meal'      => $item['meal'],
+                    'dish_name' => $dish->name,
+                    'rows'      => $rows,
+                ];
+            }
+        }
+
+        foreach ($individualByOrder as $clientData) {
+            $report[] = $clientData;
+        }
+
         $date = $inputDate;
         return view('print.packaging-list', compact('report', 'date', 'clientComments'));
     }
@@ -564,6 +616,7 @@ class PrintController extends Controller
                 'client.dishExclusions',
                 'replacements.replacementProduct',
                 'replacements.replacementDish.dishIngredients.ingredient',
+                'projectData',
             ])
             ->get();
 
@@ -573,7 +626,7 @@ class PrintController extends Controller
 
         $orderPlans = [];
         foreach ($orders as $order) {
-            $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
+            $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu, $targetDate);
         }
 
         $report = [];
@@ -662,9 +715,52 @@ class PrintController extends Controller
             ];
         }
 
+        // === ІНДИВІДУАЛЬНІ КЛІЄНТИ ===
+        $individualClients = [];
+        foreach ($orders as $order) {
+            if ($order->menu_type !== 'individual') continue;
+
+            $plan = $orderPlans[$order->id] ?? null;
+            if (!$plan || empty($plan['items'])) continue;
+
+            $oid = $order->id;
+            $meals = [];
+
+            foreach ($plan['items'] as $item) {
+                $dish = \App\Models\Dish::with(
+                    'dishIngredients.ingredient',
+                    'dishIngredients.childDish.dishIngredients.ingredient'
+                )->find($item['dish_id']);
+                if (!$dish) continue;
+
+                $weight = (int)$item['weight'];
+                $baseW  = (float)($dish->base_weight_g ?? 0);
+                $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
+
+                $components = $this->getHierarchicalIngredients($dish, $scale, 1.0, null, false, null);
+                $totals     = $this->calculateStructureTotals($components);
+
+                $meals[] = [
+                    'meal'         => $item['meal'],
+                    'dish_name'    => $dish->name,
+                    'components'   => $components,
+                    'total_netto'  => $totals['netto'],
+                    'total_brutto' => $totals['brutto'],
+                ];
+            }
+
+            $individualClients[$oid] = [
+                'client_label' => '#' . $order->client->id . ' ' . $order->client->name,
+                'calories'     => (int)($order->calories ?? 0),
+                'project'      => $order->projectData?->name ?? ucfirst($order->project ?? ''),
+                'meals'        => $meals,
+            ];
+        }
+
         return view('print.production-report', [
             'report' => $report,
-            'date' => Carbon::parse($inputDate)->format('d.m.Y'),       
+            'individualClients' => $individualClients,
+            'date' => Carbon::parse($inputDate)->format('d.m.Y'),
             'targetDateFormatted' => Carbon::parse($targetDate)->format('d.m.Y'),
             'targetDate' => $targetDate,
             'dayNumber' => $globalDay
@@ -702,7 +798,7 @@ class PrintController extends Controller
 
             $orderPlans = [];
             foreach ($orders as $order) {
-                $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
+                $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu, $targetDate);
             }
 
             $bruttoByIng = [];
@@ -733,6 +829,28 @@ class PrintController extends Controller
                     if ($order->client->dishExclusions->contains('id', $dish->id) && !$dishReplacement && !$dishForceApproved) continue;
 
                     $this->collectBruttoForShopping($activeDish, $dishScale, 1.0, $order, (int)$dish->id, $bruttoByIng);
+                }
+            }
+
+            // === ІНДИВІДУАЛЬНІ КЛІЄНТИ ===
+            foreach ($orders as $order) {
+                if ($order->menu_type !== 'individual') continue;
+
+                $plan = $orderPlans[$order->id] ?? null;
+                if (!$plan || empty($plan['items'])) continue;
+
+                foreach ($plan['items'] as $item) {
+                    $dish = \App\Models\Dish::with(
+                        'dishIngredients.ingredient',
+                        'dishIngredients.childDish.dishIngredients.ingredient'
+                    )->find($item['dish_id']);
+                    if (!$dish) continue;
+
+                    $weight = (int)$item['weight'];
+                    $baseW  = (float)($dish->base_weight_g ?? 0);
+                    $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
+
+                    $this->collectBruttoForShopping($dish, $scale, 1.0, null, (int)$dish->id, $bruttoByIng);
                 }
             }
 
@@ -833,7 +951,7 @@ class PrintController extends Controller
 
         $orderPlans = [];
         foreach ($orders as $order) {
-            $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
+            $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu, $targetDate);
         }
 
         $summaryIngredients = [];
@@ -895,6 +1013,29 @@ class PrintController extends Controller
             }
         }
 
+        // === ІНДИВІДУАЛЬНІ КЛІЄНТИ ===
+        foreach ($orders as $order) {
+            if ($order->menu_type !== 'individual') continue;
+
+            $plan = $orderPlans[$order->id] ?? null;
+            if (!$plan || empty($plan['items'])) continue;
+
+            foreach ($plan['items'] as $item) {
+                $dish = \App\Models\Dish::with(
+                    'dishIngredients.ingredient',
+                    'dishIngredients.childDish.dishIngredients.ingredient'
+                )->find($item['dish_id']);
+                if (!$dish) continue;
+
+                $weight = (int)$item['weight'];
+                $baseW  = (float)($dish->base_weight_g ?? 0);
+                $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
+
+                $components = $this->getHierarchicalIngredients($dish, $scale, 1.0, null, false, null);
+                $collectSummary($components);
+            }
+        }
+
         ksort($summaryIngredients);
 
         return view('print.stock-list', [
@@ -923,115 +1064,6 @@ class PrintController extends Controller
         return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\LogisticsExport($date, $shift), $fileName);
     }
 
-    private function calculateOrderPlan(Order $order, DailyMenu $menu): array
-    {
-        $targetKcal = (float) ($order->calories ?? 0);
-        if ($targetKcal <= 0) {
-            return ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
-        }
-
-        $clientMealTypeIds = $order->client?->mealTypes?->pluck('id')->toArray() ?? [];
-
-        $availableItems = $menu->menuItems
-            ->filter(fn($item) => $item->dish && in_array($item->meal_type_id, $clientMealTypeIds, true))
-            ->sortBy(fn($item) => $item->mealType?->sort_order ?? 99)
-            ->values();
-
-        if ($availableItems->isEmpty()) {
-            return ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
-        }
-
-        $allowedSortOrders = \App\Models\MealPlan::getAllowedSortOrders((int)$targetKcal);
-        $selectedItems = $availableItems->filter(
-            fn ($item) => in_array($item->mealType?->sort_order, $allowedSortOrders)
-        )->values();
-
-        if ($selectedItems->isEmpty()) {
-            return ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
-        }
-
-        $byMeal = $selectedItems->groupBy('meal_type_id');
-
-        // Нормалізація відсотків до 100% для вибраних страв
-        $rawPct = [];
-        foreach ($byMeal as $mealTypeId => $items) {
-            $fi = $items->first();
-            $rawPct[$mealTypeId] = $fi->custom_energy_percent !== null
-                ? (float) $fi->custom_energy_percent
-                : (float) ($fi->mealType?->energy_percent ?? 0);
-        }
-        $totalPct = array_sum($rawPct);
-        $normFactor = ($totalPct > 0.5 && abs($totalPct - 100) > 0.5) ? (100.0 / $totalPct) : 1.0;
-
-        $totals = ['kcal' => 0.0, 'prot' => 0.0, 'fat' => 0.0, 'carb' => 0.0];
-        $resultItems = [];
-
-        foreach ($byMeal as $mealTypeId => $items) {
-            $firstItem = $items->first();
-            $mealType = $firstItem->mealType;
-
-            $p = ($rawPct[$mealTypeId] ?? 0) * $normFactor;
-
-            $mealKcal = ($p > 0)
-                ? $targetKcal * ($p / 100.0)
-                : $targetKcal * (1.0 / max(1, $byMeal->count()));
-
-            $countInMeal = max(1, $items->count());
-            $kcalPerDish = $mealKcal / $countInMeal;
-
-            foreach ($items as $item) {
-                $dish = $item->dish;
-                if (!$dish) continue;
-
-                $kcalPer100 = $this->dishKcalPer100g($dish);
-                $weight = ($kcalPer100 > 0)
-                    ? (int) round(($kcalPerDish / $kcalPer100) * 100.0)
-                    : 0;
-
-                $baseW = (float) ($dish->base_weight_g ?? 0);
-                $protPerG = ($baseW > 0) ? ((float)($dish->total_prot ?? 0) / $baseW) : 0.0;
-                $fatPerG  = ($baseW > 0) ? ((float)($dish->total_fat  ?? 0) / $baseW) : 0.0;
-                $carbPerG = ($baseW > 0) ? ((float)($dish->total_carb ?? 0) / $baseW) : 0.0;
-
-                $totals['kcal'] += ($weight * $kcalPer100 / 100.0);
-                $totals['prot'] += ($weight * $protPerG);
-                $totals['fat']  += ($weight * $fatPerG);
-                $totals['carb'] += ($weight * $carbPerG);
-
-                $resultItems[] = [
-                    'meal' => $mealType?->name ?? '-',
-                    'dish' => $dish->name,
-                    'weight' => $weight,
-                    'dish_id' => (int) $dish->id,
-                    'meal_type_id' => (int) $mealTypeId,
-                ];
-            }
-        }
-
-        usort($resultItems, function ($a, $b) use ($menu) {
-            $aSort = $menu->menuItems->firstWhere('meal_type_id', $a['meal_type_id'])?->mealType?->sort_order ?? 99;
-            $bSort = $menu->menuItems->firstWhere('meal_type_id', $b['meal_type_id'])?->mealType?->sort_order ?? 99;
-            return $aSort <=> $bSort;
-        });
-
-        return [
-            'items' => $resultItems,
-            'totals' => $totals,
-        ];
-    }
-
-
-    private function dishKcalPer100g($dish): float
-    {
-        $baseW = (float) ($dish->base_weight_g ?? 0);
-        $totalKcal = (float) ($dish->total_kcal ?? 0);
-
-        if ($baseW <= 0 || $totalKcal <= 0) {
-            return 0.0;
-        }
-
-        return ($totalKcal / $baseW) * 100.0;
-    }
 
     public function kitchenMenu(Request $request)
     {

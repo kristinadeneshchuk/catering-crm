@@ -187,6 +187,8 @@
             font-size: 5.5pt;
             color: #6b7280;
             font-style: italic;
+            max-height: 8mm;
+            overflow: hidden;
             font-weight: 600;
             white-space: normal;
             word-break: break-word;
@@ -371,22 +373,24 @@
                 @else
                     <span class="tag-address" style="color:#94a3b8;">Самовивіз</span>
                 @endif
+            </div>
 
+            {{-- Кружечки та іконки — окремий flex-елемент, не стискається --}}
+            @php
+                $noCutlery = !($man['has_cutlery'] ?? true);
+                $noWater   = ($man['water_option'] ?? '') === 'without_water';
+                $noLemon   = ($man['water_option'] ?? '') === 'water_without_lemon';
+            @endphp
+            <div style="flex-shrink:0; display:flex; flex-direction:column; gap:1.5px;">
                 @if(!empty($man['circles']))
-                    <div class="circles-row">
+                    <div class="circles-row" style="margin-top:0;">
                         @foreach($man['circles'] as $circle)
                             <div class="meal-circle" style="background-color: {{ $circle['color'] }};">{{ $circle['letter'] }}</div>
                         @endforeach
                     </div>
                 @endif
-
-                @php
-                    $noCutlery = !($man['has_cutlery'] ?? true);
-                    $noWater   = ($man['water_option'] ?? '') === 'without_water';
-                    $noLemon   = ($man['water_option'] ?? '') === 'water_without_lemon';
-                @endphp
                 @if($noCutlery || $noWater || $noLemon)
-                    <div class="no-icons-row">
+                    <div class="no-icons-row" style="margin-top:0;">
                         @if($noCutlery)
                             <div class="no-icon-badge" title="Без приборів">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -408,7 +412,6 @@
                         @endif
                         @if($noLemon)
                             <div class="no-icon-badge" title="Вода без лимону">
-                                {{-- Цитрус-зріз: коло + 3 лінії сегментів — одразу видно що лимон --}}
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ca8a04" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <circle cx="12" cy="12" r="9"/>
                                     <line x1="12" y1="3" x2="12" y2="21"/>

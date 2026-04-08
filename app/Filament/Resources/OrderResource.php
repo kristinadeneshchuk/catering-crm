@@ -138,6 +138,16 @@ class OrderResource extends Resource
                             ->readOnly()
                             ->live(), 
 
+                        Select::make('menu_type')
+                            ->label('Тип меню')
+                            ->options([
+                                'cyclic'     => 'Циклічне (стандарт)',
+                                'individual' => 'Персональне (індивідуальник)',
+                            ])
+                            ->default('cyclic')
+                            ->required()
+                            ->columnSpan(2),
+
                         Select::make('schedule_type')
                             ->label('Графік доставки')
                             ->options(ScheduleService::getScheduleTypes())
@@ -231,7 +241,7 @@ class OrderResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('id')->label('ID')->sortable(),
+                TextColumn::make('id')->label('ID')->sortable()->searchable(),
 
                 // 🔥 Динамічна колонка проєкту (тягне назву і колір з БД)
                 TextColumn::make('projectData.name')
@@ -243,7 +253,7 @@ class OrderResource extends Resource
                 TextColumn::make('client.name')
                     ->label('Клієнт')
                     ->description(fn ($record) => "ID: {$record->client_id}")
-                    ->searchable()
+                    ->searchable(['clients.name', 'orders.client_id'])
                     ->sortable(),
 
 

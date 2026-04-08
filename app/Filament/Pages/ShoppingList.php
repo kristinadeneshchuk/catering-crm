@@ -12,10 +12,11 @@ use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Carbon\Carbon;
+use App\Traits\CalculatesOrderPlan;
 
 class ShoppingList extends Page implements HasForms
 {
-    use InteractsWithForms;
+    use InteractsWithForms, CalculatesOrderPlan;
 
     protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';
     protected static ?string $navigationLabel = 'Список покупок';
@@ -97,7 +98,7 @@ class ShoppingList extends Page implements HasForms
         // Для кожного замовлення рахуємо план (калорійне масштабування)
         $orderPlans = [];
         foreach ($orders as $order) {
-            $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
+            $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu, $date);
         }
 
         // Збираємо брутто по всіх інгредієнтах
@@ -143,6 +144,28 @@ class ShoppingList extends Page implements HasForms
             }
         }
 
+        // === ІНДИВІДУАЛЬНІ КЛІЄНТИ ===
+        foreach ($orders as $order) {
+            if ($order->menu_type !== 'individual') continue;
+
+            $plan = $orderPlans[$order->id] ?? null;
+            if (!$plan || empty($plan['items'])) continue;
+
+            foreach ($plan['items'] as $item) {
+                $dish = \App\Models\Dish::with(
+                    'dishIngredients.ingredient',
+                    'dishIngredients.childDish.dishIngredients.ingredient'
+                )->find($item['dish_id']);
+                if (!$dish) continue;
+
+                $weight = (int)$item['weight'];
+                $baseW  = (float)($dish->base_weight_g ?? 0);
+                $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
+
+                $this->collectBrutto($dish, $scale, 1.0, null, (int)$dish->id, $bruttoByIngredient);
+            }
+        }
+
         // Порівнюємо з залишками на складі
         $finalList = [];
         foreach ($bruttoByIngredient as $id => $info) {
@@ -178,67 +201,6 @@ class ShoppingList extends Page implements HasForms
     // =============================================
     // Калорійне масштабування (як в ProductionReport)
     // =============================================
-    private function calculateOrderPlan(Order $order, DailyMenu $menu): array
-    {
-        $targetKcal = (float)($order->calories ?? 0);
-        if ($targetKcal <= 0) {
-            return ['items' => [], 'totals' => []];
-        }
-
-        $clientMealTypeIds = $order->client?->mealTypes?->pluck('id')->toArray() ?? [];
-
-        $availableItems = $menu->menuItems
-            ->filter(fn ($item) => $item->dish && in_array($item->meal_type_id, $clientMealTypeIds, true))
-            ->sortBy(fn ($item) => $item->mealType?->sort_order ?? 99)
-            ->values();
-
-        if ($availableItems->isEmpty()) return ['items' => [], 'totals' => []];
-
-        $expectedDishes = $this->expectedDishCount((int)$targetKcal);
-        $selected = $availableItems->take($expectedDishes);
-        if ($selected->isEmpty()) return ['items' => [], 'totals' => []];
-
-        $byMeal = $selected->groupBy('meal_type_id');
-        $itemsOut = [];
-
-        foreach ($byMeal as $mealTypeId => $items) {
-            $firstItem = $items->first();
-            $p = $firstItem->custom_energy_percent !== null
-                ? (float)$firstItem->custom_energy_percent
-                : (float)($firstItem->mealType?->energy_percent ?? 0);
-
-            $mealKcal    = $p > 0 ? $targetKcal * ($p / 100.0) : $targetKcal / max(1, $byMeal->count());
-            $countInMeal = max(1, $items->count());
-            $kcalPerDish = $mealKcal / $countInMeal;
-
-            foreach ($items as $mi) {
-                $dish = $mi->dish;
-                if (!$dish) continue;
-
-                $dt     = $dish->calculated_totals;
-                $outW   = (float)($dt['output_weight'] ?? ($dish->base_weight_g ?? 0));
-                $kcal   = (float)($dt['kcal'] ?? 0);
-                $kp100  = $outW > 0 && $kcal > 0 ? ($kcal / $outW) * 100.0 : 0;
-                $weight = $kp100 > 0 ? (int)round(($kcalPerDish / $kp100) * 100.0) : 0;
-
-                $itemsOut[] = [
-                    'dish_id'      => (int)$dish->id,
-                    'meal_type_id' => (int)$mealTypeId,
-                    'weight'       => $weight,
-                ];
-            }
-        }
-
-        return ['items' => $itemsOut, 'totals' => []];
-    }
-
-    private function expectedDishCount(int $kcal): int
-    {
-        if ($kcal < 1200) return 3;
-        if ($kcal < 1500) return 4;
-        return 5;
-    }
-
     // Рекурсивний збір брутто по інгредієнтах
     private function collectBrutto($dish, float $scale, float $subRatio, $order, int $rootDishId, array &$acc): void
     {

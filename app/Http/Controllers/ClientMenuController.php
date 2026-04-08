@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DailyMenu;
 use App\Models\Order;
+use App\Models\OrderDayDish;
 use App\Models\Setting;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -50,11 +51,17 @@ class ClientMenuController extends Controller
         $totals = ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0];
 
         if ($activeOrder) {
-            [$menu] = $this->getMenuForDate($date);
-            if ($menu) {
-                $result = $this->buildDayPlan($activeOrder, $menu);
-                $items = $result['items'];
+            if ($activeOrder->menu_type === 'individual') {
+                $result = $this->buildIndividualDayPlan($activeOrder, $date->format('Y-m-d'));
+                $items  = $result['items'];
                 $totals = $result['totals'];
+            } else {
+                [$menu] = $this->getMenuForDate($date);
+                if ($menu) {
+                    $result = $this->buildDayPlan($activeOrder, $menu);
+                    $items  = $result['items'];
+                    $totals = $result['totals'];
+                }
             }
         }
 
@@ -114,6 +121,46 @@ class ClientMenuController extends Controller
                 'replacements.replacementProduct',
                 'replacements.replacementDish.dishIngredients.ingredient',
             ]);
+
+        // Індивідуальний клієнт — беремо страву з персонального меню
+        if ($activeOrder->menu_type === 'individual') {
+            $pd = OrderDayDish::where('order_id', $activeOrder->id)
+                ->where('date', $date->format('Y-m-d'))
+                ->where('dish_id', $dishId)
+                ->with(['dish.dishIngredients.ingredient.allergens', 'dish.dishIngredients.childDish.dishIngredients.ingredient.allergens', 'mealType'])
+                ->first();
+
+            if (!$pd || !$pd->dish) abort(404);
+
+            $dish      = $pd->dish;
+            $baseW     = (float)($dish->base_weight_g ?? 0);
+            $totalKcal = (float)($dish->total_kcal ?? 0);
+            $kcalPer100 = ($baseW > 0 && $totalKcal > 0) ? ($totalKcal / $baseW) * 100.0 : 0;
+
+            $result      = $this->buildIndividualDayPlan($activeOrder, $date->format('Y-m-d'));
+            $plannedDish = collect($result['items'])->firstWhere('dish_id', $dishId);
+            $weight      = $plannedDish['weight'] ?? (int)$baseW;
+            $k           = $baseW > 0 ? $weight / $baseW : 1.0;
+
+            $dishKcal    = $weight * $kcalPer100 / 100.0;
+            $dailyTarget = (float)$activeOrder->calories;
+
+            return view('menu.dish', [
+                'token'        => $token,
+                'date'         => $date,
+                'order'        => $activeOrder,
+                'dish'         => $dish,
+                'meal'         => $pd->mealType?->name ?? 'Прийом їжі',
+                'weight'       => $weight,
+                'kcal'         => round($dishKcal),
+                'prot'         => round($plannedDish['prot'] ?? 0, 1),
+                'fat'          => round($plannedDish['fat']  ?? 0, 1),
+                'carb'         => round($plannedDish['carb'] ?? 0, 1),
+                'pct_of_daily' => $dailyTarget > 0 ? round(($dishKcal / $dailyTarget) * 100) : 0,
+                'ingredients'  => $this->getIngredientsWithReplacements($dish, $k, $activeOrder, $dish->id),
+                'allergens'    => $this->collectAllergens($dish),
+            ]);
+        }
 
         [$menu] = $this->getMenuForDate($date);
         if (! $menu) abort(404);
@@ -175,6 +222,69 @@ class ClientMenuController extends Controller
             ->first();
 
         return [$menu, $globalDay];
+    }
+
+    private function buildIndividualDayPlan(Order $order, string $date): array
+    {
+        $empty = ['items' => [], 'totals' => ['kcal' => 0.0, 'prot' => 0.0, 'fat' => 0.0, 'carb' => 0.0]];
+
+        $personalDishes = OrderDayDish::where('order_id', $order->id)
+            ->where('date', $date)
+            ->with(['dish.dishIngredients.ingredient', 'mealType'])
+            ->get();
+
+        if ($personalDishes->isEmpty()) return $empty;
+
+        $targetKcal = (float)($order->calories ?? 0);
+        $count      = $personalDishes->count();
+        $totals     = ['kcal' => 0.0, 'prot' => 0.0, 'fat' => 0.0, 'carb' => 0.0];
+        $items      = [];
+
+        foreach ($personalDishes as $pd) {
+            $dish     = $pd->dish;
+            $mealType = $pd->mealType;
+            if (!$dish) continue;
+
+            $baseW     = (float)($dish->base_weight_g ?? 0);
+            $totalKcal = (float)($dish->total_kcal ?? 0);
+            $kcalPer100 = ($baseW > 0 && $totalKcal > 0) ? ($totalKcal / $baseW) * 100.0 : 0;
+
+            if ($pd->weight_grams) {
+                $weight = (int)$pd->weight_grams;
+            } else {
+                $kcalForMeal = $count > 0 ? $targetKcal / $count : 0;
+                $weight = ($kcalPer100 > 0)
+                    ? (int)round(($kcalForMeal / $kcalPer100) * 100.0)
+                    : (int)$baseW;
+            }
+
+            $dishKcal = $weight * $kcalPer100 / 100.0;
+            $protPerG = $baseW > 0 ? (float)($dish->total_prot ?? 0) / $baseW : 0.0;
+            $fatPerG  = $baseW > 0 ? (float)($dish->total_fat  ?? 0) / $baseW : 0.0;
+            $carbPerG = $baseW > 0 ? (float)($dish->total_carb ?? 0) / $baseW : 0.0;
+
+            $totals['kcal'] += $dishKcal;
+            $totals['prot'] += $weight * $protPerG;
+            $totals['fat']  += $weight * $fatPerG;
+            $totals['carb'] += $weight * $carbPerG;
+
+            $items[] = [
+                'meal'         => $mealType?->name ?? '-',
+                'meal_type_id' => (int)$pd->meal_type_id,
+                'meal_sort'    => $mealType?->sort_order ?? 99,
+                'dish_id'      => (int)$dish->id,
+                'dish_name'    => $dish->name,
+                'weight'       => $weight,
+                'kcal'         => $dishKcal,
+                'prot'         => $weight * $protPerG,
+                'fat'          => $weight * $fatPerG,
+                'carb'         => $weight * $carbPerG,
+            ];
+        }
+
+        usort($items, fn($a, $b) => $a['meal_sort'] <=> $b['meal_sort']);
+
+        return ['items' => $items, 'totals' => $totals];
     }
 
     private function buildDayPlan(Order $order, DailyMenu $menu): array

@@ -19,7 +19,7 @@ class Order extends Model
         'client_id', 'tariff_id', 'project', 'is_paid',
         'start_date', 'end_date', 'duration', 'status',
         'calories', 'scale_factor', 'total_price',
-        'comment', 'menu_token', 'schedule_type', 'delivery_time',
+        'comment', 'menu_token', 'schedule_type', 'menu_type', 'delivery_time',
         'discount_type', 'discount_value', 'discount_reason',
         'discount_amount', 'final_price',
     ];
@@ -202,6 +202,9 @@ class Order extends Model
     public function replacements(): HasMany { return $this->hasMany(OrderReplacement::class); }
     public function transactions(): HasMany { return $this->hasMany(Transaction::class); }
     public function orderDays(): HasMany { return $this->hasMany(OrderDay::class); }
+    public function personalDishes(): HasMany { return $this->hasMany(OrderDayDish::class); }
+
+    public function isIndividual(): bool { return $this->menu_type === 'individual'; }
 
     // =========================================================
     // ✅ ГОЛОВНА ФУНКЦІЯ: ДЕННИЙ scale_factor (а не “раз і назавжди”)

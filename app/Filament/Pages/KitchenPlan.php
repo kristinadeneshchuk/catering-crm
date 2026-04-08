@@ -13,11 +13,11 @@ use Filament\Pages\Page;
 
 class KitchenPlan extends Page
 {
-    protected static ?string $navigationIcon  = 'heroicon-o-clipboard-document-list';
-    protected static ?string $navigationLabel = 'План кухні';
-    protected static ?string $title           = 'План кухні';
-    protected static ?int    $navigationSort  = 3;
-    protected static string  $view            = 'filament.pages.kitchen-plan';
+    protected static ?string $navigationIcon        = 'heroicon-o-clipboard-document-list';
+    protected static ?string $navigationLabel       = 'План кухні';
+    protected static ?string $title                 = 'План кухні';
+    protected static string  $view                  = 'filament.pages.kitchen-plan';
+    protected static bool    $shouldRegisterNavigation = false;
 
     /** Дата для якої відображаємо план (завтра) */
     public string $planDate;

@@ -331,5 +331,73 @@
                 Замовлень немає
             </div>
         @endforelse
+
+    {{-- ІНДИВІДУАЛЬНІ КЛІЄНТИ --}}
+    @if(!empty($individualClients))
+        <div style="margin-top:32px; border-top:3px solid #7c3aed; padding-top:20px;">
+            <div style="background:#7c3aed; color:white; display:inline-block; padding:6px 18px; border-radius:8px; font-size:14px; font-weight:900; text-transform:uppercase; margin-bottom:18px;">
+                ★ Індивідуальні клієнти
+            </div>
+            <div style="display:flex; flex-direction:column; gap:16px;">
+                @foreach($individualClients as $client)
+                    <div style="border:2px solid #7c3aed; border-radius:10px; overflow:hidden; background:white;">
+                        {{-- Шапка клієнта --}}
+                        <div style="background:#7c3aed; color:white; padding:8px 16px; display:flex; align-items:center; gap:12px;">
+                            <span style="font-weight:900; font-size:15px;">{{ $client['client_label'] }}</span>
+                            <span style="background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:4px; font-size:12px;">{{ $client['project'] }}</span>
+                            <span style="background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:4px; font-size:12px; font-weight:700;">{{ $client['calories'] }} ккал</span>
+                        </div>
+                        {{-- Прийоми їжі --}}
+                        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:0;">
+                            @foreach($client['meals'] as $meal)
+                                @php
+                                    $ml = mb_strtolower(trim($meal['meal']));
+                                    $mc = '#94a3b8';
+                                    if (str_contains($ml, 'сніданок'))      $mc = '#14b8a6';
+                                    elseif (str_contains($ml, 'перекус 1')) $mc = '#84cc16';
+                                    elseif (str_contains($ml, 'обід'))      $mc = '#fb923c';
+                                    elseif (str_contains($ml, 'перекус 2')) $mc = '#f472b6';
+                                    elseif (str_contains($ml, 'вечеря'))    $mc = '#38bdf8';
+                                @endphp
+                                <div style="border:1px solid #e5e7eb;">
+                                    <div style="background:{{ $mc }}; color:white; padding:5px 10px; font-weight:900; font-size:11px; text-transform:uppercase;">
+                                        {{ $meal['meal'] }}
+                                    </div>
+                                    <div style="background:#dcfce7; padding:5px 10px; border-bottom:1px solid #bbf7d0;">
+                                        <div style="font-weight:900; font-size:13px; color:#052e16;">{{ $meal['dish_name'] }}</div>
+                                        <div style="font-size:10px; color:#065f46; margin-top:1px;">Нетто: {{ $meal['total_netto'] }}г / Брутто: {{ $meal['total_brutto'] }}г</div>
+                                    </div>
+                                    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                                        <tbody>
+                                            @foreach($meal['components'] as $comp)
+                                                @if(($comp['type'] ?? '') === 'pf')
+                                                    <tr style="background:#f3f4f6;">
+                                                        <td colspan="2" style="padding:3px 10px; color:#6b7280; font-style:italic; font-size:11px; border-bottom:1px solid #e5e7eb;">
+                                                            НФ: {{ $comp['name'] }} ({{ round($comp['weight_output'] ?? 0) }}г)
+                                                        </td>
+                                                    </tr>
+                                                    @foreach($comp['sub_ingredients'] ?? [] as $sub)
+                                                        <tr>
+                                                            <td style="padding:3px 10px 3px 20px; border-bottom:1px solid #f3f4f6; color:#374151; font-size:12px;">{{ $sub['name'] }}</td>
+                                                            <td style="padding:3px 8px; border-bottom:1px solid #f3f4f6; background:#e5e7eb; font-weight:800; text-align:center; color:#111827; width:60px;">{{ round($sub['weight_brutto'] ?? 0) }} г</td>
+                                                        </tr>
+                                                    @endforeach
+                                                @else
+                                                    <tr>
+                                                        <td style="padding:4px 10px; border-bottom:1px solid #f3f4f6; color:#111827;">{{ $comp['name'] }}</td>
+                                                        <td style="padding:4px 8px; border-bottom:1px solid #f3f4f6; background:#e5e7eb; font-weight:800; text-align:center; color:#111827; width:60px;">{{ round($comp['weight_brutto'] ?? 0) }} г</td>
+                                                    </tr>
+                                                @endif
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
     </div>
 </x-filament-panels::page>

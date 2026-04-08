@@ -15,10 +15,11 @@ use Filament\Forms\Form;
 use Filament\Actions\Action;
 use Carbon\Carbon;
 use Illuminate\Support\HtmlString;
+use App\Traits\CalculatesOrderPlan;
 
 class PackagingList extends Page implements HasForms
 {
-    use InteractsWithForms;
+    use InteractsWithForms, CalculatesOrderPlan;
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
     protected static ?string $navigationLabel = 'Фасувальний лист';
@@ -203,7 +204,7 @@ class PackagingList extends Page implements HasForms
         }
 
         foreach ($orders as $order) {
-            $this->orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu);
+            $this->orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu, $targetDate);
         }
 
         $sortedMenuItems = $menu->menuItems->sortBy(fn ($i) => $i->mealType?->sort_order ?? 99);
@@ -295,6 +296,56 @@ class PackagingList extends Page implements HasForms
 
             $this->report[] = $tableData;
         }
+
+        // === ІНДИВІДУАЛЬНІ КЛІЄНТИ — одна картка на клієнта з усіма стравами ===
+        $individualByOrder = [];
+
+        foreach ($orders as $order) {
+            if ($order->menu_type !== 'individual') continue;
+
+            $plan = $this->orderPlans[$order->id] ?? null;
+            if (!$plan || empty($plan['items'])) continue;
+
+            $oid = $order->id;
+            if (!isset($individualByOrder[$oid])) {
+                $individualByOrder[$oid] = [
+                    'is_individual' => true,
+                    'client_label'  => '#' . $order->client->id . ' ' . $order->client->name,
+                    'calories'      => (int)($order->calories ?? 0),
+                    'project'       => $order->projectData?->name ?? ucfirst($order->project ?? ''),
+                    'meals'         => [],
+                ];
+            }
+
+            foreach ($plan['items'] as $item) {
+                $dish = \App\Models\Dish::with('dishIngredients.ingredient', 'dishIngredients.childDish')
+                    ->find($item['dish_id']);
+                if (!$dish) continue;
+
+                $weight = (int)$item['weight'];
+                $baseW  = (float)($dish->base_weight_g ?? 0);
+                $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
+
+                $rows = [];
+                foreach ($dish->dishIngredients as $di) {
+                    $name = $di->ingredient
+                        ? $di->ingredient->name
+                        : ($di->childDish ? '[НФ] ' . $di->childDish->name : '???');
+                    $val  = round((float)($di->net_weight_g ?? 0) * $scale);
+                    if ($val > 0) $rows[] = ['name' => $name, 'weight' => $val];
+                }
+
+                $individualByOrder[$oid]['meals'][] = [
+                    'meal'      => $item['meal'],
+                    'dish_name' => $dish->name,
+                    'rows'      => $rows,
+                ];
+            }
+        }
+
+        foreach ($individualByOrder as $clientData) {
+            $this->report[] = $clientData;
+        }
     }
 
     // =========================================================
@@ -368,81 +419,4 @@ class PackagingList extends Page implements HasForms
         return null;
     }
 
-    private function calculateOrderPlan(Order $order, DailyMenu $menu): array
-    {
-        $targetKcal = (float)($order->calories ?? 0);
-        if ($targetKcal <= 0) return ['items' => []];
-
-        $clientMealTypeIds = $order->client?->mealTypes?->pluck('id')->toArray() ?? [];
-
-        $availableItems = $menu->menuItems
-            ->filter(fn ($item) => $item->dish && in_array($item->meal_type_id, $clientMealTypeIds, true))
-            ->sortBy(fn ($item) => $item->mealType?->sort_order ?? 99)
-            ->values();
-
-        if ($availableItems->isEmpty()) return ['items' => []];
-
-        $allowedSortOrders = \App\Models\MealPlan::getAllowedSortOrders((int)$targetKcal);
-        $selected = $availableItems->filter(
-            fn ($item) => in_array($item->mealType?->sort_order, $allowedSortOrders)
-        )->values();
-        if ($selected->isEmpty()) return ['items' => []];
-
-        $byMeal = $selected->groupBy('meal_type_id');
-
-        // Нормалізація відсотків до 100% для вибраних страв
-        $rawPct = [];
-        foreach ($byMeal as $mealTypeId => $items) {
-            $fi = $items->first();
-            $rawPct[$mealTypeId] = $fi->custom_energy_percent !== null
-                ? (float) $fi->custom_energy_percent
-                : (float) ($fi->mealType?->energy_percent ?? 0);
-        }
-        $totalPct = array_sum($rawPct);
-        $normFactor = ($totalPct > 0.5 && abs($totalPct - 100) > 0.5) ? (100.0 / $totalPct) : 1.0;
-
-        $itemsOut = [];
-
-        foreach ($byMeal as $mealTypeId => $items) {
-            $firstItem = $items->first();
-
-            $p = ($rawPct[$mealTypeId] ?? 0) * $normFactor;
-
-            $mealKcal = ($p > 0)
-                ? $targetKcal * ($p / 100.0)
-                : $targetKcal * (1.0 / max(1, $byMeal->count()));
-
-            $countInMeal = max(1, $items->count());
-            $kcalPerDish = $mealKcal / $countInMeal;
-
-            foreach ($items as $mi) {
-                $dish = $mi->dish;
-                if (!$dish) continue;
-
-                $kcalPer100 = $this->dishKcalPer100g($dish);
-                $weight = ($kcalPer100 > 0)
-                    ? (int) round(($kcalPerDish / $kcalPer100) * 100.0)
-                    : 0;
-
-                $itemsOut[] = [
-                    'dish_id' => (int)$dish->id,
-                    'meal_type_id' => (int)$mealTypeId,
-                    'weight' => $weight,
-                ];
-            }
-        }
-
-        return ['items' => $itemsOut];
-    }
-
-
-    private function dishKcalPer100g($dish): float
-    {
-        $baseW = (float)($dish->base_weight_g ?? 0);
-        $totalKcal = (float)($dish->total_kcal ?? 0);
-
-        if ($baseW <= 0 || $totalKcal <= 0) return 0.0;
-
-        return ($totalKcal / $baseW) * 100.0;
-    }
 }
