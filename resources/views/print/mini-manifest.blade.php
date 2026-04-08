@@ -60,14 +60,58 @@
             width: 68.33mm;
             height: 42mm;
             position: relative;
-            overflow: hidden;
-            padding: 1.5mm 2mm 1.5mm 2mm;
+            overflow: visible;
+            padding: 0;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
             border: none;
             break-inside: avoid;
             page-break-inside: avoid;
+        }
+
+        /* Перевернутий блок маршруту зверху */
+        .sticker-route {
+            display: none;
+        }
+        .sticker-route-inner {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 6.5pt;
+            font-weight: 900;
+            color: #1e293b;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+        .route-badge {
+            background: #0f172a;
+            color: #fde047;
+            font-size: 7pt;
+            font-weight: 900;
+            padding: 1px 5px;
+            border-radius: 3px;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
+        }
+        .route-address {
+            color: #475569;
+            font-size: 5.5pt;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Основний контент */
+        .sticker-body {
+            flex: 1;
+            padding: 1.5mm 2mm 1mm 2mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            gap: 1mm;
+            min-height: 0;
+            overflow: hidden;
         }
 
         .sticker-border {
@@ -102,10 +146,10 @@
 
         /* Клієнт */
         .sticker-client {
-            padding-bottom: 1mm;
-            overflow: hidden;
+            padding-bottom: 0.5mm;
             flex-shrink: 1;
             min-height: 0;
+            overflow: visible;
         }
 
         .label-receiver {
@@ -125,6 +169,9 @@
             line-height: 1;
             letter-spacing: -0.3px;
             color: #000;
+            white-space: nowrap;
+            overflow: visible;
+            display: block;
         }
 
         /* Теги: ID, ккал, адреса */
@@ -133,8 +180,8 @@
             align-items: center;
             gap: 1.5mm;
             margin-top: 0.5mm;
-            flex-wrap: nowrap;
-            overflow: hidden;
+            flex-wrap: wrap;
+            overflow: visible;
         }
 
         .tag-id {
@@ -187,8 +234,6 @@
             font-size: 5.5pt;
             color: #6b7280;
             font-style: italic;
-            max-height: 8mm;
-            overflow: hidden;
             font-weight: 600;
             white-space: normal;
             word-break: break-word;
@@ -208,14 +253,23 @@
         .qr-placeholder {
             margin-right: 2mm;
             margin-bottom: 1.5mm;
+            flex-shrink: 0;
         }
 
-        .qr-placeholder img,
+        /* QRCode.js creates both canvas + img — hide img, show only canvas */
+        .qr-placeholder img { display: none !important; }
         .qr-placeholder canvas {
-            display: block;
+            display: block !important;
             width: 50px !important;
             height: 50px !important;
         }
+        /* After beforeprint swap canvas→img, show the img */
+        .qr-placeholder.print-ready img {
+            display: block !important;
+            width: 50px !important;
+            height: 50px !important;
+        }
+        .qr-placeholder.print-ready canvas { display: none !important; }
 
         .footer-text {
             font-size: 5pt;
@@ -264,6 +318,40 @@
             flex-shrink: 0;
         }
 
+        /* ===== ВЕЛИКИЙ ФОРМАТ 70×99мм (3×3 = 9/аркуш) ===== */
+        body.fmt-large .label-sheet {
+            grid-template-columns: repeat(3, 70mm);
+            grid-template-rows: repeat(3, 99mm);
+        }
+        body.fmt-large .sticker {
+            width: 70mm;
+            height: 99mm;
+            padding: 0;
+        }
+        body.fmt-large .sticker-route  { display: flex; height: 24mm; padding: 3mm 3mm 2mm 3mm; align-items: center; justify-content: center; transform: rotate(180deg); border-bottom: 1px dashed #cbd5e1; flex-shrink: 0; }
+        body.fmt-large .sticker-route-inner { font-size: 9pt; gap: 5px; }
+        body.fmt-large .route-badge    { font-size: 10pt; padding: 2px 7px; }
+        body.fmt-large .route-address  { font-size: 7.5pt; }
+        body.fmt-large .sticker-body   { padding: 2mm 3mm 1.5mm 3mm; }
+        body.fmt-large .date-badge       { font-size: 9pt; padding: 2px 6px; }
+        body.fmt-large .project-logo     { height: 10mm; max-width: 22mm; }
+        body.fmt-large .label-receiver   { font-size: 7pt; margin-bottom: 1mm; }
+        body.fmt-large .client-name      { font-size: 18pt; }
+        body.fmt-large .tag-id           { font-size: 9pt; padding: 2px 6px; }
+        body.fmt-large .tag-kcal         { font-size: 9pt; padding: 2px 6px; }
+        body.fmt-large .tag-slot         { font-size: 8pt; padding: 2px 5px; }
+        body.fmt-large .tag-route        { font-size: 8pt; padding: 2px 5px; }
+        body.fmt-large .tag-address      { font-size: 8pt; margin-top: 1.5mm; }
+        body.fmt-large .sticker-tags     { gap: 2mm; margin-top: 1.5mm; }
+        body.fmt-large .circles-row      { gap: 4px; margin-top: 2mm; }
+        body.fmt-large .meal-circle      { width: 20px; height: 20px; font-size: 9px; }
+        body.fmt-large .no-icons-row     { gap: 5px; margin-top: 2mm; }
+        body.fmt-large .no-icon-badge    { width: 24px; height: 24px; }
+        body.fmt-large .no-icon-badge svg { width: 16px; height: 16px; }
+        body.fmt-large .footer-text      { font-size: 7pt; }
+        body.fmt-large .qr-placeholder canvas { width: 80px !important; height: 80px !important; }
+        body.fmt-large .qr-placeholder.print-ready img { width: 80px !important; height: 80px !important; }
+
         /* Друк */
         @media print {
             body { background: white !important; }
@@ -285,10 +373,20 @@
 <body>
 
 <div class="no-print" style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
+    {{-- Фільтр за слотом --}}
     <div style="display:flex;gap:6px;background:#1e293b;padding:6px;border-radius:12px;">
-        <button onclick="filterSlot('all')"   id="btn-all"     class="filter-btn active">Всі (<span id="count-all">{{ count($manifests) }}</span>)</button>
+        <button onclick="filterSlot('all')"     id="btn-all"     class="filter-btn active">Всі (<span id="count-all">{{ count($manifests) }}</span>)</button>
         <button onclick="filterSlot('morning')" id="btn-morning" class="filter-btn">Ранок (<span id="count-morning">{{ collect($manifests)->where('is_evening', false)->count() }}</span>)</button>
         <button onclick="filterSlot('evening')" id="btn-evening" class="filter-btn evening-btn">Вечір (<span id="count-evening">{{ collect($manifests)->where('is_evening', true)->count() }}</span>)</button>
+    </div>
+    {{-- Вибір формату --}}
+    <div style="display:flex;gap:6px;background:#1e293b;padding:6px;border-radius:12px;">
+        <button onclick="switchFormat('small')" id="btn-fmt-small" class="filter-btn active" title="68×42мм — 21 шт/аркуш">
+            ▪▪▪ Малий
+        </button>
+        <button onclick="switchFormat('large')" id="btn-fmt-large" class="filter-btn" title="70×99мм — 9 шт/аркуш">
+            ▬▬ Великий
+        </button>
     </div>
     <button onclick="window.print()" style="background:#334155;color:white;border:none;padding:14px 36px;border-radius:12px;font-size:15px;font-weight:900;cursor:pointer;letter-spacing:2px;text-transform:uppercase;">
         ДРУКУВАТИ (<span id="print-count">{{ count($manifests) }}</span> шт.)
@@ -342,6 +440,24 @@
 
         <div class="sticker" style="--brand-color: {{ $brandColor }};" data-slot="{{ $man['is_evening'] ? 'evening' : 'morning' }}">
             <div class="sticker-border"></div>
+
+            {{-- Маршрут зверху (перевернутий) --}}
+            <div class="sticker-route">
+                <div class="sticker-route-inner">
+                    @if(!empty($man['ant_route_num']))
+                        <span class="route-badge">М{{ $man['ant_route_num'] }}{{ !empty($man['ant_route_pos']) ? '-'.$man['ant_route_pos'] : '' }}</span>
+                        @if(!empty($man['ant_driver']))
+                            <span style="color:#64748b; font-size:5.5pt; font-weight:700; flex-shrink:0;">{{ $man['ant_driver'] }}</span>
+                        @endif
+                        @if(($man['address'] ?? 'Самовивіз') !== 'Самовивіз')
+                            <span class="route-address">{{ $man['address'] }}</span>
+                        @endif
+                    @endif
+                </div>
+            </div>
+
+            {{-- Основний контент --}}
+            <div class="sticker-body">
 
             {{-- Верх: дата + лого --}}
             <div class="sticker-top">
@@ -432,11 +548,15 @@
                     <div class="qr-placeholder" data-url="{{ url('/menu/' . $man['menu_token']) }}" style="width:50px;height:50px;flex-shrink:0;margin-right:1.5mm;margin-bottom:1mm;"></div>
                 @endif
             </div>
+
+            </div>{{-- /sticker-body --}}
         </div>
     @endforeach
 </div>
 
 <script>
+var currentFormat = 'small';
+
 function filterSlot(slot) {
     var stickers = document.querySelectorAll('.sticker');
     var visible = 0;
@@ -446,33 +566,81 @@ function filterSlot(slot) {
         if (show) visible++;
     });
     document.getElementById('print-count').textContent = visible;
-
-    document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.querySelectorAll('.filter-btn:not([id^="btn-fmt"])').forEach(function(b) { b.classList.remove('active'); });
     document.getElementById('btn-' + slot).classList.add('active');
+}
+
+function switchFormat(fmt) {
+    currentFormat = fmt;
+    if (fmt === 'large') {
+        document.body.classList.add('fmt-large');
+        // Перемалювати QR більшого розміру
+        document.querySelectorAll('.qr-placeholder').forEach(function(el) {
+            el.innerHTML = '';
+            el.style.width = '80px';
+            el.style.height = '80px';
+            var url = el.dataset.url;
+            if (!url) return;
+            new QRCode(el, { text: url, width: 80, height: 80, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.M });
+        });
+    } else {
+        document.body.classList.remove('fmt-large');
+        // Перемалювати QR малого розміру
+        document.querySelectorAll('.qr-placeholder').forEach(function(el) {
+            el.innerHTML = '';
+            el.style.width = '50px';
+            el.style.height = '50px';
+            var url = el.dataset.url;
+            if (!url) return;
+            new QRCode(el, { text: url, width: 50, height: 50, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.M });
+        });
+    }
+    document.getElementById('btn-fmt-small').classList.toggle('active', fmt === 'small');
+    document.getElementById('btn-fmt-large').classList.toggle('active', fmt === 'large');
+    setTimeout(fitClientNames, 50);
+}
+
+function fitClientNames() {
+    document.querySelectorAll('.client-name').forEach(function(el) {
+        el.style.fontSize = '';
+        var parent = el.parentElement;
+        var maxW = parent.offsetWidth;
+        if (!maxW) return;
+        var sizeNum = 11;
+        var minSize = 6;
+        while (el.scrollWidth > maxW && sizeNum > minSize) {
+            sizeNum -= 0.5;
+            el.style.fontSize = sizeNum + 'pt';
+        }
+    });
 }
 
 window.addEventListener('load', function () {
     document.querySelectorAll('.qr-placeholder').forEach(function (el) {
         var url = el.dataset.url;
         if (!url) return;
-        new QRCode(el, {
-            text: url,
-            width: 50,
-            height: 50,
-            colorDark: '#000000',
-            colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.M
-        });
+        new QRCode(el, { text: url, width: 50, height: 50, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
     });
+    fitClientNames();
 });
 
 window.addEventListener('beforeprint', function () {
-    document.querySelectorAll('.qr-placeholder canvas').forEach(function (canvas) {
-        var img = document.createElement('img');
+    var size = currentFormat === 'large' ? '80px' : '50px';
+    document.querySelectorAll('.qr-placeholder').forEach(function (el) {
+        var canvas = el.querySelector('canvas');
+        if (!canvas) return;
+        var img = el.querySelector('img');
+        if (!img) { img = document.createElement('img'); el.appendChild(img); }
         img.src = canvas.toDataURL('image/png');
-        img.style.width = '50px';
-        img.style.height = '50px';
-        canvas.parentNode.replaceChild(img, canvas);
+        img.style.width = size;
+        img.style.height = size;
+        el.classList.add('print-ready');
+    });
+});
+
+window.addEventListener('afterprint', function () {
+    document.querySelectorAll('.qr-placeholder.print-ready').forEach(function (el) {
+        el.classList.remove('print-ready');
     });
 });
 </script>
