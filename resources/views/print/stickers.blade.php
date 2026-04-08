@@ -92,10 +92,9 @@
             color: #0f172a;
             line-height: 1.1;
             max-width: 70%;
-            overflow: hidden;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
+            white-space: nowrap;
+            overflow: visible;
+            display: block;
         }
 
         .client-id {
@@ -337,6 +336,23 @@
             }
         });
     });
+
+    // Автозменшення шрифту імені якщо не вміщується
+    function fitClientNames() {
+        document.querySelectorAll('.client-name').forEach(function(el) {
+            el.style.fontSize = '';
+            var parent = el.parentElement;
+            var maxW = parent ? parent.offsetWidth : 0;
+            if (!maxW) return;
+            var sizeNum = 9;
+            var minSize = 5;
+            while (el.scrollWidth > maxW && sizeNum > minSize) {
+                sizeNum -= 0.5;
+                el.style.fontSize = sizeNum + 'px';
+            }
+        });
+    }
+    window.addEventListener('load', fitClientNames);
 </script>
 </body>
 </html>
