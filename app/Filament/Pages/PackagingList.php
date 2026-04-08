@@ -222,6 +222,8 @@ class PackagingList extends Page implements HasForms
             ];
 
             foreach ($orders as $order) {
+                if ($order->menu_type === 'individual') continue; // індивідуальні — окремо
+
                 $plan = $this->orderPlans[$order->id] ?? null;
                 if (!$plan) continue;
 

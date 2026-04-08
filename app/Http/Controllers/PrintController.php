@@ -433,6 +433,8 @@ class PrintController extends Controller
             ];
 
             foreach ($orders as $order) {
+                if ($order->menu_type === 'individual') continue; // індивідуальні — окремо
+
                 $calc = $this->calculateOrderPlan($order, $menu, $targetDate);
 
                 $plannedDish = collect($calc['items'])->first(function ($it) use ($dish, $mItem) {
