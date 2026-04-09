@@ -44,6 +44,9 @@ class OrderCalendar extends Component
     public ?string $modalDiscountType = null;
     public ?string $modalDiscountValue = null;
 
+    // Час доставки на конкретний день
+    public ?string $modalDeliveryTime = null;
+
     public function mount(?Order $order = null)
     {
         $this->order = $order;
@@ -154,6 +157,7 @@ class OrderCalendar extends Component
         $this->modalComment       = $day->delivery_comment  ?? '';
         $this->modalDiscountType  = $day->discount_type;
         $this->modalDiscountValue = $day->discount_value ? (string) $day->discount_value : null;
+        $this->modalDeliveryTime  = $day->delivery_time ?? null;
         $this->addressSearch  = '';
         $this->addressResults = [];
         // Завантажуємо адреси клієнта
@@ -203,6 +207,7 @@ class OrderCalendar extends Component
         $this->addressResults = [];
         $this->modalDiscountType = null;
         $this->modalDiscountValue = null;
+        $this->modalDeliveryTime = null;
     }
 
     public function searchAddress(): void
@@ -240,6 +245,7 @@ class OrderCalendar extends Component
             'address_apartment'=> $this->modalApartment ?: null,
             'address_floor'    => $this->modalFloor ?: null,
             'delivery_comment' => $this->modalComment ?: null,
+            'delivery_time'    => $this->modalDeliveryTime ?: null,
             'discount_type'    => $this->modalDiscountType ?: null,
             'discount_value'   => ($this->modalDiscountType && $this->modalDiscountValue !== null && $this->modalDiscountValue !== '')
                 ? (float) $this->modalDiscountValue
@@ -380,7 +386,9 @@ class OrderCalendar extends Component
             'daysInGrid' => $daysInGrid,
             'calendarMonth' => $calendarMonth,
             'events' => $events,
-            'activeDays' => $activeDays, 
+            'activeDays' => $activeDays,
+            'morningSlots' => ScheduleService::getTimeSlots('every_day_morning'),
+            'eveningSlots'  => ScheduleService::getTimeSlots('every_day_evening'),
         ]);
     }
 }

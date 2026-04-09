@@ -197,7 +197,10 @@ class AntLogisticsService
                          'будинок','буд.','буд','квартира','кв.','кв','місто','м.',"під'їзд","під.",'код','домофон'];
             $clean    = preg_replace('/[^a-zа-яіїєґ0-9]/u', '', str_replace($garbage, '', $address));
 
-            return $clean . '_' . ($order->delivery_time ?? 'no_time');
+            // Час: override на конкретний день має пріоритет
+            $deliveryTime = $order->orderDays->first()?->delivery_time ?? $order->delivery_time ?? 'no_time';
+
+            return $clean . '_' . $deliveryTime;
         });
 
         // --- 3. Створюємо заявку на дату (Request header) ---
@@ -221,7 +224,9 @@ class AntLogisticsService
             $client    = $mainOrder->client;
             $orderDay  = $mainOrder->orderDays->first();
 
-            [$workBeg, $workEnd] = $this->parseDeliveryTimeWindow($mainOrder->delivery_time ?? '');
+            // Час: override на конкретний день → інакше час замовлення
+            $effectiveTime = $orderDay?->delivery_time ?? $mainOrder->delivery_time ?? '';
+            [$workBeg, $workEnd] = $this->parseDeliveryTimeWindow($effectiveTime);
 
             // Additional_Info — всі замовлення групи
             $infoParts = $group->map(fn ($o) => $this->buildAdditionalInfo($o, $orderDay))->filter()->join(' | ');
@@ -232,6 +237,7 @@ class AntLogisticsService
                 'TimeWork_Beg_Req' => $workBeg . ':00',
                 'TimeWork_End_Req' => $workEnd . ':00',
                 'Unload_Time_Qty'  => 7,
+                'Qty'              => $group->count(), // кількість раціонів на цю адресу
             ];
         }
 

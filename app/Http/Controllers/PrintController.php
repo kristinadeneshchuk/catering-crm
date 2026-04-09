@@ -24,7 +24,8 @@ class PrintController extends Controller
             return "На День циклу №{$globalDay} меню ще не створено.";
         }
 
-        $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
+        $orders = Order::whereIn('status', ['new', 'active'])
+            ->whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
             ->with([
@@ -115,8 +116,16 @@ class PrintController extends Controller
                 default               => null,
             };
 
-            $isEvening = str_contains((string) $order->delivery_time, 'evening')
-                      || str_contains((string) $order->schedule_type, 'evening');
+            // Ефективний час доставки: override дня → інакше час замовлення
+            $effectiveDeliveryTime = $orderDay?->delivery_time ?? $order->delivery_time ?? '';
+            // Визначаємо зміну: якщо є override — дивимося на годину (>=12 = вечір)
+            // Якщо override немає — використовуємо schedule_type замовлення
+            if ($orderDay?->delivery_time) {
+                $hour = (int) explode(':', $orderDay->delivery_time)[0];
+                $isEvening = $hour >= 12;
+            } else {
+                $isEvening = \App\Services\ScheduleService::isEvening($order->schedule_type);
+            }
 
             $manifests[] = [
                 'client_id'    => $order->client?->id ?? '---',
@@ -160,7 +169,8 @@ class PrintController extends Controller
 
         [$menu, $globalDay] = $this->getMenuForTargetDate($targetDate);
 
-        $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
+        $orders = Order::whereIn('status', ['new', 'active'])
+            ->whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
             ->with([
@@ -189,8 +199,13 @@ class PrintController extends Controller
                 ?? $order->client?->address
                 ?? 'Самовивіз';
 
-            $isEvening = str_contains((string) $order->delivery_time, 'evening')
-                      || str_contains((string) $order->schedule_type, 'evening');
+            // Ефективний час: override дня → інакше schedule_type замовлення
+            if ($orderDay?->delivery_time) {
+                $hour = (int) explode(':', $orderDay->delivery_time)[0];
+                $isEvening = $hour >= 12;
+            } else {
+                $isEvening = \App\Services\ScheduleService::isEvening($order->schedule_type);
+            }
 
             // Будуємо кружечки замін
             $circles = [];
@@ -238,6 +253,7 @@ class PrintController extends Controller
                 'address'            => $address,
                 'calories'           => (int) $order->calories,
                 'is_evening'         => $isEvening,
+                'is_individual'      => $order->menu_type === 'individual',
                 'delivery_slot'      => $isEvening ? 'Вечір' : 'Ранок',
                 'menu_token'         => $order->menu_token,
                 'ant_route_num'      => $orderDay?->ant_route_num,
@@ -251,16 +267,20 @@ class PrintController extends Controller
         }
 
         usort($manifests, function ($a, $b) {
-            // 1. Спочатку ранок, потім вечір
+            // 1. Індивідуальні — спочатку
+            if ($a['is_individual'] !== $b['is_individual']) {
+                return $a['is_individual'] ? -1 : 1;
+            }
+            // 2. Спочатку ранок, потім вечір
             if ($a['is_evening'] !== $b['is_evening']) {
                 return $a['is_evening'] ? 1 : -1;
             }
-            // 2. Всередині — за проєктом
+            // 3. Всередині — за проєктом
             $projectCmp = strcmp($a['project'] ?? '', $b['project'] ?? '');
             if ($projectCmp !== 0) {
                 return $projectCmp;
             }
-            // 3. Всередині проєкту — за калоріями
+            // 4. Всередині проєкту — за калоріями
             return $a['calories'] <=> $b['calories'];
         });
 
@@ -280,14 +300,15 @@ class PrintController extends Controller
             return "Меню не створено на завтра ({$targetDate}).";
         }
 
-        $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
+        $orders = Order::whereIn('status', ['new', 'active'])
+            ->whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
-                'projectData', 
+                'projectData',
                 'replacements.replacementProduct',
                 'replacements.replacementDish',
             ])
@@ -402,7 +423,8 @@ class PrintController extends Controller
             return "Меню не знайдено на завтра ({$targetDate})";
         }
 
-        $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
+        $orders = Order::whereIn('status', ['new', 'active'])
+            ->whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
             ->with([
@@ -609,7 +631,8 @@ class PrintController extends Controller
             return "Меню не знайдено на завтра ({$targetDate})";
         }
 
-        $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
+        $orders = Order::whereIn('status', ['new', 'active'])
+            ->whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
             ->with([
@@ -939,7 +962,8 @@ class PrintController extends Controller
             return "Меню не знайдено на завтра ({$targetDate})";
         }
 
-        $orders = Order::whereHas('orderDays', function ($query) use ($targetDate) {
+        $orders = Order::whereIn('status', ['new', 'active'])
+            ->whereHas('orderDays', function ($query) use ($targetDate) {
                 $query->where('date', $targetDate);
             })
             ->with([

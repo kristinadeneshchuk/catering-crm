@@ -236,6 +236,19 @@
             letter-spacing: 0.2px;
         }
 
+        .tag-individual {
+            font-size: 6pt;
+            font-weight: 900;
+            padding: 1px 5px;
+            border-radius: 3px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            background: #7c3aed;
+            color: #fff;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
         .tag-address {
             font-size: 5.5pt;
             color: #6b7280;
@@ -350,6 +363,7 @@
         body.fmt-large .tag-address      { font-size: 8pt; margin-top: 1.5mm; }
         body.fmt-large .sticker-tags     { gap: 2mm; margin-top: 1.5mm; }
         body.fmt-large .tag-route        { display: none; } /* вже показано у загині зверху */
+        body.fmt-large .tag-individual   { font-size: 8pt; padding: 2px 6px; }
         body.fmt-large .circles-row      { gap: 4px; margin-top: 2mm; }
         body.fmt-large .meal-circle      { width: 20px; height: 20px; font-size: 9px; }
         body.fmt-large .no-icons-row     { gap: 5px; margin-top: 2mm; }
@@ -445,7 +459,7 @@
             $deliveryDate = \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y');
         @endphp
 
-        <div class="sticker" style="--brand-color: {{ $brandColor }};" data-slot="{{ $man['is_evening'] ? 'evening' : 'morning' }}">
+        <div class="sticker" style="--brand-color: {{ $brandColor }};" data-slot="{{ $man['is_evening'] ? 'evening' : 'morning' }}" data-individual="{{ $man['is_individual'] ? '1' : '0' }}">
             <div class="sticker-border"></div>
 
             {{-- Маршрут зверху (перевернутий) — тільки великий формат --}}
@@ -481,6 +495,9 @@
                     <span class="tag-slot {{ $man['is_evening'] ? 'evening' : 'morning' }}">
                         {{ $man['delivery_slot'] }}
                     </span>
+                    @if($man['is_individual'])
+                        <span class="tag-individual">ІНД</span>
+                    @endif
                     @if(!empty($man['ant_route_num']))
                         <span class="tag-route">М{{ $man['ant_route_num'] }}
                             @if(!empty($man['ant_route_pos']))-{{ $man['ant_route_pos'] }}@endif

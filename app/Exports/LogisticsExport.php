@@ -60,8 +60,11 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
             $cleanAddress = str_replace($garbageWords, '', $address);
             $cleanAddress = preg_replace('/[^a-zа-яіїєґ0-9]/u', '', $cleanAddress);
 
+            // Час: override на конкретний день має пріоритет над часом замовлення
+            $deliveryTime = $order->orderDays->first()?->delivery_time ?? $order->delivery_time ?? 'no_time';
+
             // Групуємо: Адреса + Час
-            return $cleanAddress . '_' . ($order->delivery_time ?? 'no_time');
+            return $cleanAddress . '_' . $deliveryTime;
         });
 
         // 3. Формуємо рядки для Excel
@@ -72,8 +75,11 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
             // Імена всіх клієнтів у групі
             $names = $group->map(fn($o) => $o->client->name)->unique()->join(' + ');
             
-            // ID замовлень або клієнтів
-            $ids = $group->map(fn($o) => $o->client->id)->unique()->join(', ');
+            // ID клієнта — завжди один (основний клієнт групи).
+            // Для сімейних замовлень усі раціони прив'язані до одного клієнта,
+            // тому беремо перший — він і є Comp_Id для ANT.
+            $primaryClientId = $group->first()->client->id;
+            $ids = (string) $primaryClientId;
 
             // Інформація
             $infoParts = [];
@@ -139,7 +145,7 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
                     return implode(', ', $parts);
                 })(),
                 'Additional_Info' => $additionalInfo,
-                'TimeWork_Info' => $mainOrder->delivery_time, // Час доставки
+                'TimeWork_Info' => $mainOrder->orderDays->first()?->delivery_time ?? $mainOrder->delivery_time, // Day override → order default
                 'Unload_Time' => 7,
                 'Qty' => $group->count()
             ];

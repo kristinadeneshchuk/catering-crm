@@ -172,8 +172,9 @@ class PackagingList extends Page implements HasForms
             return;
         }
 
-        // 🔥 ПРИБРАНО ФІЛЬТР ЗА СТАТУСОМ. Тепер беремо всі замовлення, для яких є день фасування.
-        $orders = Order::whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
+        // Беремо активні та нові замовлення (призупинені — не фасуємо)
+        $orders = Order::whereIn('status', ['new', 'active'])
+            ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',

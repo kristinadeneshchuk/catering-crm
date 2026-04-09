@@ -12,7 +12,8 @@ class OrderDay extends Model
 
     protected $fillable = [
         'order_id', 'date', 'is_completed',
-        'address', 'address_entrance', 'address_apartment', 'address_floor', 'delivery_comment',
+        'address', 'address_entrance', 'address_apartment', 'address_floor',
+        'delivery_comment', 'delivery_time',
         'discount_type', 'discount_value', 'discount_amount',
         'ant_route_num', 'ant_route_pos', 'ant_driver', 'ant_delivery_group',
     ];

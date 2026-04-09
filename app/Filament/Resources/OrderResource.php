@@ -28,6 +28,7 @@ use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Carbon\Carbon;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Repeater;
 use Illuminate\Database\Eloquent\Builder;
 
 class OrderResource extends Resource
@@ -224,7 +225,95 @@ class OrderResource extends Resource
                             ->helperText('total_price − всі знижки'),
                     ]),
 
-                // === СЕКЦІЯ 4: КАЛЕНДАР ===
+                // === СЕКЦІЯ 4: ДОДАТКОВІ РАЦІОНИ (сімейні замовлення) ===
+                Section::make('Додаткові раціони')
+                    ->description('Для сімейних замовлень — той самий клієнт, та сама адреса, але різні раціони (чоловік/дружина тощо). Кожен раціон стає окремим замовленням із тими ж датами.')
+                    ->collapsed()
+                    ->schema([
+                        Repeater::make('additional_rations')
+                            ->label('')
+                            ->addActionLabel('+ Додати раціон')
+                            ->defaultItems(0)
+                            ->collapsible()
+                            ->itemLabel(fn (array $state): string =>
+                                collect([
+                                    ($state['status'] ?? 'active') === 'paused' ? '⏸' : '▶',
+                                    $state['tariff_id'] ? (Tariff::find($state['tariff_id'])?->name ?? 'Тариф') : 'Новий раціон',
+                                    $state['calories'] ? $state['calories'] . ' ккал' : null,
+                                    isset($state['price_per_day']) && $state['price_per_day'] > 0
+                                        ? '— ' . number_format($state['price_per_day'], 0, '.', ' ') . ' ₴/день'
+                                        : null,
+                                    ($state['status'] ?? 'active') === 'paused' ? '(на паузі)' : null,
+                                ])->filter()->join(' ')
+                            )
+                            ->schema([
+                                // ID дочірнього замовлення (для редагування)
+                                Hidden::make('order_id'),
+
+                                Select::make('tariff_id')
+                                    ->label('Тариф')
+                                    ->options(fn () => Tariff::where('is_active', true)
+                                        ->get()
+                                        ->mapWithKeys(fn ($t) => [
+                                            $t->id => $t->name . ' (' . ($t->projectData?->name ?? $t->project) . ')'
+                                        ]))
+                                    ->required()
+                                    ->live()
+                                    ->searchable()
+                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                        $tariff = Tariff::find($state);
+                                        if ($tariff) {
+                                            $set('project', $tariff->project);
+                                        }
+                                        static::updateRationPrice($state, (int) $get('calories'), $set);
+                                    }),
+
+                                TextInput::make('calories')
+                                    ->label('Калорії (Ккал)')
+                                    ->numeric()
+                                    ->required()
+                                    ->minValue(500)
+                                    ->maxValue(5000)
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(fn ($state, Set $set, Get $get) =>
+                                        static::updateRationPrice($get('tariff_id'), (int) $state, $set)
+                                    ),
+
+                                Select::make('menu_type')
+                                    ->label('Тип меню')
+                                    ->options([
+                                        'cyclic'     => 'Циклічне (стандарт)',
+                                        'individual' => 'Персональне (індивідуальник)',
+                                    ])
+                                    ->default('cyclic')
+                                    ->required(),
+
+                                TextInput::make('price_per_day')
+                                    ->label('Ціна / день')
+                                    ->prefix('₴')
+                                    ->numeric()
+                                    ->default(0)
+                                    ->readOnly()
+                                    ->dehydrated(false)
+                                    ->helperText('Розраховується автоматично'),
+
+                                Select::make('status')
+                                    ->label('Статус раціону')
+                                    ->options([
+                                        'active' => '▶ Активний',
+                                        'paused' => '⏸ На паузі',
+                                    ])
+                                    ->default('active')
+                                    ->required()
+                                    ->helperText('На паузі — не їде в логістику і не фасується'),
+
+                                Hidden::make('project'),
+                            ])
+                            ->columns(5)
+                            ->dehydrated(false),
+                    ]),
+
+                // === СЕКЦІЯ 5: КАЛЕНДАР ===
                 Section::make('Календар харчування')
                     ->schema([
                         TextInput::make('selected_days_buffer')
@@ -252,7 +341,10 @@ class OrderResource extends Resource
 
                 TextColumn::make('client.name')
                     ->label('Клієнт')
-                    ->description(fn ($record) => "ID: {$record->client_id}")
+                    ->description(fn ($record) => collect(array_filter([
+                        "ID: {$record->client_id}",
+                        $record->parent_order_id ? "📦 Раціон до #{$record->parent_order_id}" : null,
+                    ]))->join(' · '))
                     ->searchable(['clients.name', 'orders.client_id'])
                     ->sortable(),
 
@@ -353,6 +445,41 @@ class OrderResource extends Resource
             ->defaultSort('status', 'asc')
             ->actions([
                 Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
+
+                // Призупинити — прибирає з логістики, виробничого і фасовочного
+                Tables\Actions\Action::make('pause')
+                    ->label('')
+                    ->tooltip('Призупинити замовлення')
+                    ->icon('heroicon-o-pause-circle')
+                    ->color('warning')
+                    ->visible(fn ($record) => in_array($record->status, ['new', 'active']))
+                    ->requiresConfirmation()
+                    ->modalHeading(fn ($record) => "Призупинити замовлення #{$record->id}?")
+                    ->modalDescription(fn ($record) =>
+                        "Клієнт: {$record->client->name}\n" .
+                        "Раціон: " . ($record->projectData?->name ?? $record->project) . ", {$record->calories} ккал\n\n" .
+                        "Замовлення зникне з логістики, виробничого та фасовочного."
+                    )
+                    ->modalSubmitActionLabel('Призупинити')
+                    ->action(fn ($record) => $record->update(['status' => 'paused'])),
+
+                // Відновити — повертає замовлення у роботу
+                Tables\Actions\Action::make('resume')
+                    ->label('')
+                    ->tooltip('Відновити замовлення')
+                    ->icon('heroicon-o-play-circle')
+                    ->color('success')
+                    ->visible(fn ($record) => $record->status === 'paused')
+                    ->requiresConfirmation()
+                    ->modalHeading(fn ($record) => "Відновити замовлення #{$record->id}?")
+                    ->modalDescription(fn ($record) =>
+                        "Клієнт: {$record->client->name}\n" .
+                        "Раціон: " . ($record->projectData?->name ?? $record->project) . ", {$record->calories} ккал\n\n" .
+                        "Замовлення знову з'явиться в логістиці, виробничому та фасовочному."
+                    )
+                    ->modalSubmitActionLabel('Відновити')
+                    ->action(fn ($record) => $record->update(['status' => 'active'])),
+
                 Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
             ]);
     }
@@ -362,6 +489,30 @@ class OrderResource extends Resource
         return [
             TransactionsRelationManager::class,
         ];
+    }
+
+    /**
+     * Розраховує ціну/день для одного додаткового раціону і встановлює її у поле price_per_day.
+     */
+    protected static function updateRationPrice($tariffId, int $calories, Set $set): void
+    {
+        $pricePerDay = 0;
+
+        if ($tariffId && $calories > 0) {
+            $range = CalorieRange::where('min_kcal', '<=', $calories)
+                ->where('max_kcal', '>=', $calories)->first();
+
+            if ($range) {
+                $entry = TariffPrice::where('tariff_id', $tariffId)
+                    ->where('calorie_range_id', $range->id)->first();
+
+                if ($entry) {
+                    $pricePerDay = (float) $entry->price_per_day;
+                }
+            }
+        }
+
+        $set('price_per_day', $pricePerDay);
     }
 
     protected static function updateOrderTotals(Set $set, Get $get)

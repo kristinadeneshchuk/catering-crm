@@ -17,6 +17,9 @@ class CreateOrder extends CreateRecord
     // Змінна для зберігання днів між етапами збереження
     protected array $customSelectedDays = [];
 
+    // Додаткові раціони для сімейних замовлень
+    protected array $additionalRations = [];
+
     public function mount(): void
     {
         parent::mount();
@@ -57,6 +60,12 @@ class CreateOrder extends CreateRecord
 
         // 2. Видаляємо буфер, щоб не було помилки SQL (такої колонки немає в БД)
         unset($data['selected_days_buffer']);
+
+        // 2а. Витягуємо додаткові раціони (сімейні замовлення) — їх зберігаємо окремо
+        if (!empty($data['additional_rations']) && is_array($data['additional_rations'])) {
+            $this->additionalRations = array_values(array_filter($data['additional_rations'], fn ($r) => !empty($r['tariff_id'])));
+        }
+        unset($data['additional_rations']);
 
         // 3. Рахуємо ціну (Server-Side страховка)
         $calories = (int) ($data['calories'] ?? 0);
@@ -115,6 +124,84 @@ class CreateOrder extends CreateRecord
         }
         
         $this->updateOrderStatus($order);
+
+        // 🔥 Створюємо дочірні замовлення для додаткових раціонів (сімейні замовлення)
+        if (!empty($this->additionalRations)) {
+            $this->createChildOrders($order);
+        }
+    }
+
+    /**
+     * Створює дочірні замовлення для кожного додаткового раціону.
+     * Той самий клієнт, ті самі дати/адреса/доставка — але різний тариф/калораж.
+     */
+    private function createChildOrders(\App\Models\Order $parentOrder): void
+    {
+        foreach ($this->additionalRations as $ration) {
+            $tariffId = $ration['tariff_id'] ?? null;
+            $calories = (int) ($ration['calories'] ?? 0);
+            $menuType = $ration['menu_type'] ?? 'cyclic';
+            $project  = $ration['project'] ?? null;
+
+            if (!$tariffId || !$calories) {
+                continue;
+            }
+
+            // Рахуємо ціну для цього раціону
+            $pricePerDay = 0;
+            $range = \App\Models\CalorieRange::where('min_kcal', '<=', $calories)
+                ->where('max_kcal', '>=', $calories)->first();
+            if ($range) {
+                $priceEntry = \App\Models\TariffPrice::where('tariff_id', $tariffId)
+                    ->where('calorie_range_id', $range->id)->first();
+                if ($priceEntry) {
+                    $pricePerDay = (float) $priceEntry->price_per_day;
+                }
+            }
+
+            $duration    = $parentOrder->duration ?: count($this->customSelectedDays);
+            $totalPrice  = $pricePerDay * $duration;
+
+            // Автоматично визначаємо проєкт із тарифу якщо не передали явно
+            if (!$project) {
+                $project = \App\Models\Tariff::find($tariffId)?->project;
+            }
+
+            $childOrder = \App\Models\Order::create([
+                'client_id'       => $parentOrder->client_id,
+                'parent_order_id' => $parentOrder->id,
+                'tariff_id'       => $tariffId,
+                'project'         => $project,
+                'calories'        => $calories,
+                'menu_type'       => $menuType,
+                'start_date'      => $parentOrder->start_date,
+                'end_date'        => $parentOrder->end_date,
+                'duration'        => $duration,
+                'schedule_type'   => $parentOrder->schedule_type,
+                'delivery_time'   => $parentOrder->delivery_time,
+                'comment'         => $parentOrder->comment,
+                'status'          => $parentOrder->status,
+                'total_price'     => $totalPrice,
+                'final_price'     => $totalPrice,
+                'scale_factor'    => 1.0,
+            ]);
+
+            // Створюємо ті самі дні що й для батьківського замовлення
+            $dates = !empty($this->customSelectedDays)
+                ? $this->customSelectedDays
+                : collect(range(0, $duration - 1))
+                    ->map(fn ($i) => Carbon::parse($parentOrder->start_date)->addDays($i)->format('Y-m-d'))
+                    ->toArray();
+
+            foreach ($dates as $date) {
+                OrderDay::firstOrCreate([
+                    'order_id' => $childOrder->id,
+                    'date'     => $date,
+                ]);
+            }
+
+            $this->updateOrderStatus($childOrder);
+        }
     }
 
     private function updateOrderStatus($order)

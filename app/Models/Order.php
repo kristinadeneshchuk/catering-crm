@@ -16,7 +16,7 @@ class Order extends Model
     use HasFactory;
 
     protected $fillable = [
-        'client_id', 'tariff_id', 'project', 'is_paid',
+        'client_id', 'parent_order_id', 'tariff_id', 'project', 'is_paid',
         'start_date', 'end_date', 'duration', 'status',
         'calories', 'scale_factor', 'total_price',
         'comment', 'menu_token', 'schedule_type', 'menu_type', 'delivery_time',
@@ -203,6 +203,10 @@ class Order extends Model
     public function transactions(): HasMany { return $this->hasMany(Transaction::class); }
     public function orderDays(): HasMany { return $this->hasMany(OrderDay::class); }
     public function personalDishes(): HasMany { return $this->hasMany(OrderDayDish::class); }
+
+    // Сімейні замовлення: батьківський та дочірні раціони
+    public function parentOrder(): BelongsTo { return $this->belongsTo(Order::class, 'parent_order_id'); }
+    public function childOrders(): HasMany { return $this->hasMany(Order::class, 'parent_order_id'); }
 
     public function isIndividual(): bool { return $this->menu_type === 'individual'; }
 

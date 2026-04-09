@@ -6,6 +6,7 @@ use Livewire\Component;
 use App\Models\Order;
 use App\Models\OrderDay;
 use App\Models\ClientAddress;
+use App\Services\ScheduleService;
 use Carbon\Carbon;
 use Filament\Notifications\Notification;
 
@@ -25,6 +26,9 @@ class OrderDeliveryCalendar extends Component
     public string $address_apartment = '';
     public string $address_floor = '';
     public string $delivery_comment = '';
+
+    // Час доставки на конкретний день (override)
+    public ?string $delivery_time = null;
 
     // Знижка на день
     public ?string $discount_type = null;
@@ -84,6 +88,7 @@ class OrderDeliveryCalendar extends Component
         $this->address_floor    = $day->address_floor    ?? $defaultAddr?->address_floor ?? '';
         $this->delivery_comment = $day->delivery_comment ?? $defaultAddr?->delivery_comment ?? $client?->delivery_comment ?? '';
         $this->selectedAddressId = null;
+        $this->delivery_time    = $day->delivery_time; // null = використовує час замовлення
         $this->discount_type    = $day->discount_type;
         $this->discount_value   = $day->discount_value !== null ? (string) $day->discount_value : null;
     }
@@ -114,6 +119,7 @@ class OrderDeliveryCalendar extends Component
             'address_apartment'=> $this->address_apartment ?: null,
             'address_floor'    => $this->address_floor ?: null,
             'delivery_comment' => $this->delivery_comment ?: null,
+            'delivery_time'    => $this->delivery_time ?: null,
             'discount_type'    => $this->discount_type ?: null,
             'discount_value'   => ($this->discount_type && $this->discount_value !== null && $this->discount_value !== '')
                 ? (float) $this->discount_value
@@ -174,11 +180,17 @@ class OrderDeliveryCalendar extends Component
             ? $this->order->client->addresses()->orderByDesc('is_default')->get()
             : collect();
 
+        // Всі слоти: ранкові + вечірні (для вибору override)
+        $morningSlots = ScheduleService::getTimeSlots('every_day_morning');
+        $eveningSlots = ScheduleService::getTimeSlots('every_day_evening');
+
         return view('livewire.order-delivery-calendar', [
             'daysInGrid'      => $daysInGrid,
             'calendarMonth'   => $calendarMonth,
             'orderDays'       => $orderDays,
             'clientAddresses' => $clientAddresses,
+            'morningSlots'    => $morningSlots,
+            'eveningSlots'    => $eveningSlots,
         ]);
     }
 }
