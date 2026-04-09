@@ -140,6 +140,69 @@ class AntLogisticsService
     }
 
     // -------------------------------------------------------------------------
+    // Ensure "Раціон" product exists in ANT, return its Product_Id
+    // -------------------------------------------------------------------------
+
+    public function ensureRationProduct(): ?string
+    {
+        $this->ensureAuthenticated();
+
+        // Check if we already have it saved
+        $productId = Setting::where('key', 'ant_ration_product_id')->value('value');
+        if ($productId) {
+            return $productId;
+        }
+
+        // Try to find existing product named "Раціон" in ANT
+        $response = $this->http()->get("{$this->baseUrl}/Directory/Products/get", [
+            'Session_Ident' => $this->sessionIdent,
+        ]);
+
+        if ($response->ok()) {
+            $rows = $response->json('rows') ?? [];
+            foreach ($rows as $row) {
+                if (str_contains(mb_strtolower($row['Product_Name'] ?? ''), 'раціон')
+                    || str_contains(mb_strtolower($row['Product_Name'] ?? ''), 'racion')
+                    || str_contains(mb_strtolower($row['Product_Name'] ?? ''), 'ration')) {
+                    $id = (string) $row['Product_Id'];
+                    Setting::updateOrCreate(['key' => 'ant_ration_product_id'], ['value' => $id]);
+                    Log::info('[AntLogistics] Found existing ration product', ['id' => $id]);
+                    return $id;
+                }
+            }
+        }
+
+        // Create new product "Раціон"
+        $createResp = $this->http()->post(
+            "{$this->baseUrl}/Directory/Products/edit?Session_Ident={$this->sessionIdent}",
+            ['rows' => [['Product_Id' => '0', 'Product_Name' => 'Раціон', 'UM' => 'шт']]]
+        );
+
+        if ($createResp->failed()) {
+            Log::error('[AntLogistics] Failed to create ration product', ['body' => $createResp->body()]);
+            return null;
+        }
+
+        // Fetch again to get the assigned ID
+        $response2 = $this->http()->get("{$this->baseUrl}/Directory/Products/get", [
+            'Session_Ident' => $this->sessionIdent,
+        ]);
+
+        $rows2 = $response2->json('rows') ?? [];
+        foreach ($rows2 as $row) {
+            if (str_contains(mb_strtolower($row['Product_Name'] ?? ''), 'раціон')) {
+                $id = (string) $row['Product_Id'];
+                Setting::updateOrCreate(['key' => 'ant_ration_product_id'], ['value' => $id]);
+                Log::info('[AntLogistics] Created ration product', ['id' => $id]);
+                return $id;
+            }
+        }
+
+        Log::error('[AntLogistics] Could not resolve ration product ID after creation');
+        return null;
+    }
+
+    // -------------------------------------------------------------------------
     // Push daily orders as Заявки
     // Крок 1: POST /Request/edit  — створити заявку на дату
     // Крок 2: POST /Request/Comps/edit — додати точки доставки
@@ -216,6 +279,8 @@ class AntLogisticsService
         Log::info('[AntLogistics] Request created', ['date' => $dateFmt, 'ext_ident' => $extIdent]);
 
         // --- 4. Додаємо точки доставки до заявки ---
+        $rationProductId = $this->ensureRationProduct();
+
         $compRows = [];
 
         foreach ($grouped as $group) {
@@ -231,14 +296,22 @@ class AntLogisticsService
             // Additional_Info — всі замовлення групи
             $infoParts = $group->map(fn ($o) => $this->buildAdditionalInfo($o, $orderDay))->filter()->join(' | ');
 
-            $compRows[] = [
+            $row = [
                 'Comp_Id'          => (string) $client->id,
                 'Note'             => $infoParts,
                 'TimeWork_Beg_Req' => $workBeg . ':00',
                 'TimeWork_End_Req' => $workEnd . ':00',
                 'Unload_Time_Qty'  => 7,
-                'Qty'              => $group->count(), // кількість раціонів на цю адресу
             ];
+
+            // Кількість раціонів через Products (єдиний спосіб по API ANT)
+            if ($rationProductId) {
+                $row['Products'] = [
+                    ['Product_Id' => $rationProductId, 'Qty' => (float) $group->count()],
+                ];
+            }
+
+            $compRows[] = $row;
         }
 
         // Відправляємо по 100
@@ -257,7 +330,7 @@ class AntLogisticsService
                     'body'   => $compsResp->body(),
                 ]);
             } else {
-                Log::info('[AntLogistics] Request comps added', ['count' => count($chunk)]);
+                Log::info('[AntLogistics] Request comps added', ['count' => count($chunk), 'response' => $compsResp->json()]);
             }
         }
 
