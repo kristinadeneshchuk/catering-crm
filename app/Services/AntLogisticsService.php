@@ -143,75 +143,16 @@ class AntLogisticsService
     // Ensure "Раціон" product exists in ANT, return its Product_Id
     // -------------------------------------------------------------------------
 
-    public function ensureRationProduct(): ?string
+    public function ensureRationProduct(): string
     {
-        $this->ensureAuthenticated();
+        // ANT має сервісний продукт "Раціон" з ID=0 (підтверджено з логів)
+        $productId = Setting::where('key', 'ant_ration_product_id')->value('value') ?? '0';
 
-        // Check if we already have it saved
-        $productId = Setting::where('key', 'ant_ration_product_id')->value('value');
-        if ($productId) {
-            return $productId;
+        if (!Setting::where('key', 'ant_ration_product_id')->exists()) {
+            Setting::create(['key' => 'ant_ration_product_id', 'value' => '0']);
         }
 
-        // Try to find existing product named "Раціон" in ANT
-        $response = $this->http()->get("{$this->baseUrl}/Directory/Products/get", [
-            'Session_Ident' => $this->sessionIdent,
-        ]);
-
-        if ($response->ok()) {
-            $rows = $response->json('rows') ?? [];
-            foreach ($rows as $row) {
-                if (str_contains(mb_strtolower($row['Product_Name'] ?? ''), 'раціон')
-                    || str_contains(mb_strtolower($row['Product_Name'] ?? ''), 'racion')
-                    || str_contains(mb_strtolower($row['Product_Name'] ?? ''), 'ration')) {
-                    $id = (string) $row['Product_Id'];
-                    Setting::updateOrCreate(['key' => 'ant_ration_product_id'], ['value' => $id]);
-                    Log::info('[AntLogistics] Found existing ration product', ['id' => $id]);
-                    return $id;
-                }
-            }
-        }
-
-        // Create new product "Раціон"
-        $createResp = $this->http()->post(
-            "{$this->baseUrl}/Directory/Products/edit?Session_Ident={$this->sessionIdent}",
-            ['rows' => [['Product_Id' => '0', 'Product_Name' => 'Раціон', 'UM' => 'шт']]]
-        );
-
-        // ANT повертає HTTP 200 навіть при помилці — перевіряємо тіло
-        $createJson = $createResp->json();
-        $errorMsg   = $createJson['ErrorResponse']['msg'] ?? '';
-
-        if ($createResp->failed() || $errorMsg) {
-            Log::error('[AntLogistics] Failed to create ration product', ['body' => $createResp->body()]);
-
-            // Витягуємо ID з повідомлення: "service record (0 "Раціон")"
-            if (preg_match('/\((\d+)\s+/', $errorMsg, $m)) {
-                $id = $m[1];
-                Setting::updateOrCreate(['key' => 'ant_ration_product_id'], ['value' => $id]);
-                Log::info('[AntLogistics] Using existing service ration product', ['id' => $id]);
-                return $id;
-            }
-            return null;
-        }
-
-        // Fetch again to get the assigned ID
-        $response2 = $this->http()->get("{$this->baseUrl}/Directory/Products/get", [
-            'Session_Ident' => $this->sessionIdent,
-        ]);
-
-        $rows2 = $response2->json('rows') ?? [];
-        foreach ($rows2 as $row) {
-            if (str_contains(mb_strtolower($row['Product_Name'] ?? ''), 'раціон')) {
-                $id = (string) $row['Product_Id'];
-                Setting::updateOrCreate(['key' => 'ant_ration_product_id'], ['value' => $id]);
-                Log::info('[AntLogistics] Created ration product', ['id' => $id]);
-                return $id;
-            }
-        }
-
-        Log::error('[AntLogistics] Could not resolve ration product ID after creation');
-        return null;
+        return $productId;
     }
 
     // -------------------------------------------------------------------------
