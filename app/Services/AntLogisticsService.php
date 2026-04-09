@@ -179,7 +179,16 @@ class AntLogisticsService
         );
 
         if ($createResp->failed()) {
-            Log::error('[AntLogistics] Failed to create ration product', ['body' => $createResp->body()]);
+            $body = $createResp->body();
+            Log::error('[AntLogistics] Failed to create ration product', ['body' => $body]);
+
+            // ANT каже "service record (0 "Раціон")" — продукт вже існує з ID з помилки
+            if (preg_match('/\((\d+)\s+"[^"]*"\)/', $body, $m)) {
+                $id = $m[1];
+                Setting::updateOrCreate(['key' => 'ant_ration_product_id'], ['value' => $id]);
+                Log::info('[AntLogistics] Using existing service ration product', ['id' => $id]);
+                return $id;
+            }
             return null;
         }
 
