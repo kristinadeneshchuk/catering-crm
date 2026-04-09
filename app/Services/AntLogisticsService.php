@@ -182,8 +182,9 @@ class AntLogisticsService
             $body = $createResp->body();
             Log::error('[AntLogistics] Failed to create ration product', ['body' => $body]);
 
-            // ANT каже "service record (0 "Раціон")" — продукт вже існує з ID з помилки
-            if (preg_match('/\((\d+)\s+"[^"]*"\)/', $body, $m)) {
+            // ANT каже "service record (0 "Раціон")" — парсимо msg з JSON і витягуємо ID
+            $msg = $createResp->json('ErrorResponse.msg') ?? '';
+            if (preg_match('/\((\d+)\s+/', $msg, $m)) {
                 $id = $m[1];
                 Setting::updateOrCreate(['key' => 'ant_ration_product_id'], ['value' => $id]);
                 Log::info('[AntLogistics] Using existing service ration product', ['id' => $id]);
