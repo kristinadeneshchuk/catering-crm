@@ -258,7 +258,8 @@ class AntLogisticsService
             ];
 
             // Кількість раціонів через Products (єдиний спосіб по API ANT)
-            if ($rationProductId) {
+            // Увага: "0" є falsy в PHP, тому перевіряємо !== null
+            if ($rationProductId !== null) {
                 $row['Products'] = [
                     ['Product_Id' => $rationProductId, 'Qty' => (float) $group->count()],
                 ];
@@ -266,6 +267,13 @@ class AntLogisticsService
 
             $compRows[] = $row;
         }
+
+        // Дебаг: логуємо що відправляємо
+        Log::info('[AntLogistics] DEBUG compRows sample', [
+            'ration_product_id' => $rationProductId,
+            'total_groups'      => count($compRows),
+            'first_row'         => $compRows[0] ?? null,
+        ]);
 
         // Відправляємо по 100
         foreach (array_chunk($compRows, 100) as $chunk) {
