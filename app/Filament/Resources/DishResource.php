@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\DishResource\Pages;
 use App\Models\Dish;
+use App\Models\Packaging;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -85,6 +86,13 @@ class DishResource extends Resource
                                     ->label('Це напівфабрикат (НФ)')
                                     ->helperText('Дозволяє використовувати цю страву як інгредієнт в інших техкартах')
                                     ->default(false),
+
+                                Select::make('packaging_type')
+                                    ->label('Тип упаковки для страви')
+                                    ->options(Packaging::DISH_TYPES)
+                                    ->placeholder('— Не вказано —')
+                                    ->nullable()
+                                    ->helperText('Що використовується для пакування цієї страви: бокс чи пляшка'),
                             ])->columnSpan(2),
                     ])->columns(3),
 
@@ -332,6 +340,17 @@ class DishResource extends Resource
                 Tables\Columns\IconColumn::make('is_semi_finished')
                     ->label('НФ')
                     ->boolean(),
+
+                Tables\Columns\TextColumn::make('packaging_type')
+                    ->label('Упаковка')
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => Packaging::DISH_TYPES[$state] ?? '—')
+                    ->color(fn ($state) => match($state) {
+                        'бокс'   => 'success',
+                        'пляшка' => 'info',
+                        default  => 'gray',
+                    })
+                    ->placeholder('—'),
             ])
             ->filters([
                 Tables\Filters\Filter::make('is_semi_finished')

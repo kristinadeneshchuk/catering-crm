@@ -7,6 +7,7 @@ use App\Http\Controllers\ClientAuthController;
 use App\Http\Controllers\ClientPaymentController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\KitchenPlanController;
+use App\Http\Controllers\PackagingAssemblyController;
 use App\Http\Controllers\ClientMenuController;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\LogisticsExport;
@@ -97,4 +98,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/kitchen-plan', [KitchenPlanController::class, 'index'])->name('kitchen.plan');
     Route::post('/kitchen-plan/generate', [KitchenPlanController::class, 'generate'])->name('kitchen.plan.generate');
     Route::get('/kitchen-plan/status', [KitchenPlanController::class, 'status'])->name('kitchen.plan.status');
+
+    // Список пакування на день для менеджера
+    Route::get('/packaging-assembly', [PackagingAssemblyController::class, 'index'])->name('packaging.assembly');
 });

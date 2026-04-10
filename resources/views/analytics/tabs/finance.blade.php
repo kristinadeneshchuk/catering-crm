@@ -48,13 +48,13 @@
                         <svg class="w-4 h-4 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path></svg>
                         Основні витрати
                     </td>
-                    @foreach($dates as $ymd => $dm) 
-                        @php 
-                            $dailyBasicExp = ($foodCostCount[$ymd] ?? 0) + ($fopCount[$ymd] ?? 0); 
+                    @foreach($dates as $ymd => $dm)
+                        @php
+                            $dailyBasicExp = ($foodCostCount[$ymd] ?? 0) + ($fopCount[$ymd] ?? 0) + ($packagingCount[$ymd] ?? 0);
                         @endphp
-                        <td class="font-medium text-rose-300">{{ number_format($dailyBasicExp, 0, '.', ' ') }} ₴</td> 
+                        <td class="font-medium text-rose-300">{{ number_format($dailyBasicExp, 0, '.', ' ') }} ₴</td>
                     @endforeach
-                    <td class="text-rose-400">{{ number_format(($totalFoodCost + $totalFop), 0, '.', ' ') }} ₴</td>
+                    <td class="text-rose-400">{{ number_format(($totalFoodCost + $totalFop + $totalPackagingCost), 0, '.', ' ') }} ₴</td>
                 </tr>
                 
                 <tr class="row-hover sub-row">
@@ -72,8 +72,10 @@
                 </tr>
                 <tr class="row-hover sub-row">
                     <td>Витрати на пакування</td>
-                    @foreach($dates as $ymd => $dm) <td>0 ₴</td> @endforeach
-                    <td>0 ₴</td>
+                    @foreach($dates as $ymd => $dm)
+                        <td>{{ number_format($packagingCount[$ymd] ?? 0, 0, '.', ' ') }} ₴</td>
+                    @endforeach
+                    <td>{{ number_format($totalPackagingCost ?? 0, 0, '.', ' ') }} ₴</td>
                 </tr>
                 <tr class="row-hover sub-row text-zinc-300">
                     <td class="font-medium">Фонд оплати праці (ФОП)</td>
@@ -90,13 +92,13 @@
                         <svg class="w-5 h-5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08-.402-2.599-1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         Операційний прибуток
                     </td>
-                    @foreach($dates as $ymd => $dm) 
-                        @php $opProfit = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0); @endphp
+                    @foreach($dates as $ymd => $dm)
+                        @php $opProfit = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0) - ($packagingCount[$ymd] ?? 0); @endphp
                         <td class="font-bold text-[15px] {{ $opProfit < 0 ? 'text-rose-500' : 'text-emerald-400' }}">
                             {{ number_format($opProfit, 0, '.', ' ') }} ₴
-                        </td> 
+                        </td>
                     @endforeach
-                    <td class="text-emerald-400">{{ number_format(($totalRevenue - $totalFoodCost - $totalFop), 0, '.', ' ') }} ₴</td>
+                    <td class="text-emerald-400">{{ number_format(($totalRevenue - $totalFoodCost - $totalFop - $totalPackagingCost), 0, '.', ' ') }} ₴</td>
                 </tr>
 
                 <tr class="row-hover text-zinc-300">
@@ -138,19 +140,19 @@
                 <tr class="row-hover text-white bg-gradient-to-r from-emerald-600/20 to-transparent">
                     <td class="font-bold text-base text-emerald-300">Чистий прибуток</td>
                     @foreach($dates as $ymd => $dm) 
-                        @php 
+                        @php
                             $dailySpoilage = ($revenueCount[$ymd] ?? 0) * ($spoilagePercent / 100);
-                            $dailyNet = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0) - $dailySpoilage - $otherExpenses; 
+                            $dailyNet = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0) - ($packagingCount[$ymd] ?? 0) - $dailySpoilage - $otherExpenses;
                         @endphp
                         <td class="font-bold text-base {{ $dailyNet < 0 ? 'text-rose-400' : 'text-emerald-300' }}">
                             {{ number_format($dailyNet, 0, '.', ' ') }} ₴
                         </td> 
                     @endforeach
                     <td class="text-emerald-400">
-                        @php 
+                        @php
                             $totalSpoilage = $totalRevenue * ($spoilagePercent / 100);
-                            $totalOther = count($dates) * $otherExpenses;
-                            $totalNet = ($totalRevenue - $totalFoodCost - $totalFop - $totalSpoilage - $totalOther); 
+                            $totalOther    = count($dates) * $otherExpenses;
+                            $totalNet      = $totalRevenue - $totalFoodCost - $totalFop - $totalPackagingCost - $totalSpoilage - $totalOther;
                         @endphp
                         {{ number_format($totalNet, 0, '.', ' ') }} ₴
                     </td>
@@ -158,9 +160,9 @@
                 <tr class="row-hover text-avocado-500">
                     <td class="font-semibold text-sm uppercase tracking-wider">Маржинальність</td>
                     @foreach($dates as $ymd => $dm) 
-                        @php 
+                        @php
                             $dailySpoilage = ($revenueCount[$ymd] ?? 0) * ($spoilagePercent / 100);
-                            $profit = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0) - $dailySpoilage - $otherExpenses;
+                            $profit = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0) - ($packagingCount[$ymd] ?? 0) - $dailySpoilage - $otherExpenses;
                             $margin = ($revenueCount[$ymd] ?? 0) > 0 ? ($profit / $revenueCount[$ymd]) * 100 : 0;
                         @endphp
                         <td class="font-semibold {{ $margin < 20 ? 'text-rose-400' : 'text-avocado-500' }}">

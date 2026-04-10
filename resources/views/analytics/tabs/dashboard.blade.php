@@ -45,6 +45,43 @@
     </div>
 </div>
 
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 p-4 rounded-2xl border border-amber-500/20 bg-amber-500/5">
+    <div class="md:col-span-4 flex items-center gap-2 mb-1">
+        <svg class="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+        <span class="text-amber-400 text-xs font-bold uppercase tracking-widest">Касовий розрив — за обраний період</span>
+    </div>
+
+    <div class="bg-zinc-900/60 border border-white/5 p-4 rounded-xl">
+        <p class="text-zinc-500 text-[11px] font-bold uppercase tracking-widest mb-1">Виручка (раціони)</p>
+        <h3 class="text-2xl font-black text-emerald-400">{{ number_format($totalRevenue ?? 0, 0, '.', ' ') }} ₴</h3>
+        <p class="text-zinc-600 text-xs mt-1">По доставлених раціонах за період</p>
+    </div>
+
+    <div class="bg-zinc-900/60 border border-white/5 p-4 rounded-xl">
+        <p class="text-zinc-500 text-[11px] font-bold uppercase tracking-widest mb-1">Отримано коштів</p>
+        <h3 class="text-2xl font-black text-blue-400">{{ number_format($cashReceivedPeriod ?? 0, 0, '.', ' ') }} ₴</h3>
+        <p class="text-zinc-600 text-xs mt-1">Оплати від клієнтів за період</p>
+    </div>
+
+    <div class="bg-zinc-900/60 border border-white/5 p-4 rounded-xl">
+        <p class="text-zinc-500 text-[11px] font-bold uppercase tracking-widest mb-1">Залишок на рахунках</p>
+        <h3 class="text-2xl font-black text-violet-400">{{ number_format($cashBalance ?? 0, 0, '.', ' ') }} ₴</h3>
+        <p class="text-zinc-600 text-xs mt-1">Поточний залишок (зараз)</p>
+    </div>
+
+    <div class="bg-zinc-900/60 border border-white/5 p-4 rounded-xl">
+        @php $gapRisk = ($cashBalance ?? 0) < ($prepaidValue ?? 0); @endphp
+        <p class="text-zinc-500 text-[11px] font-bold uppercase tracking-widest mb-1">Передоплачені раціони</p>
+        <h3 class="text-2xl font-black {{ $gapRisk ? 'text-rose-400' : 'text-orange-400' }}">{{ number_format($prepaidValue ?? 0, 0, '.', ' ') }} ₴</h3>
+        <p class="text-zinc-600 text-xs mt-1">
+            Оплачено, ще не доставлено
+            @if($gapRisk)
+                &nbsp;<span class="text-rose-400 font-semibold">— ризик розриву!</span>
+            @endif
+        </p>
+    </div>
+</div>
+
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
     <div class="lg:col-span-2 bg-zinc-900 border border-white/5 p-5 rounded-2xl shadow-lg">
         <h3 class="text-white font-semibold mb-1">Динаміка: Виручка vs Собівартість</h3>

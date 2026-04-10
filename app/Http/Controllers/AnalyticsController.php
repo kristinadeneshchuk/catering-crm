@@ -4,22 +4,28 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use App\Models\Account;
 use App\Models\OrderDay;
 use App\Models\Setting;
 use App\Models\DailyMenu;
 use App\Models\Ingredient;
 use App\Models\Client;
-use App\Models\EmployeeShift; // 🔥 Для ФОП
+use App\Models\EmployeeShift;
+use App\Models\Packaging;
+use App\Models\Transaction;
 use App\Services\FoodCostService;
+use App\Services\PackagingService;
 use Illuminate\Support\Collection;
 
 class AnalyticsController extends Controller
 {
     protected $foodCostService;
+    protected $packagingService;
 
-    public function __construct(FoodCostService $foodCostService)
+    public function __construct(FoodCostService $foodCostService, PackagingService $packagingService)
     {
-        $this->foodCostService = $foodCostService;
+        $this->foodCostService  = $foodCostService;
+        $this->packagingService = $packagingService;
     }
 
     public function index(Request $request)
@@ -79,12 +85,16 @@ class AnalyticsController extends Controller
         
         $allIngredients = Ingredient::all()->keyBy('id');
 
+        // Завантаження пакувальних матеріалів (тільки з проставленим типом)
+        $allPackaging = Packaging::whereNotNull('packaging_type')->get()->keyBy('id');
+
         // Ініціалізація підсумкових змінних
         $rationsCount = []; $totalRations = 0;
         $revenueCount = []; $totalRevenue = 0;
         $foodCostCount = []; $totalFoodCost = 0;
         $fopCount = []; $totalFop = 0;
-        $discountCount = []; $totalDiscount = 0;  // 🔥 Трекінг знижок
+        $discountCount = []; $totalDiscount = 0;
+        $packagingCount = []; $totalPackagingCost = 0;
 
         $unitEconomics = [];
         $marketingStats = [];
@@ -105,7 +115,8 @@ class AnalyticsController extends Controller
 
             $dailyRevenue = 0;
             $dailyFoodCost = 0;
-            $dailyDiscount = 0;  // 🔥
+            $dailyDiscount = 0;
+            $dailyPackaging = 0;
 
             if ($count > 0) {
                 $diff = abs(Carbon::parse($ymd)->diffInDays($anchorDate));
@@ -120,21 +131,26 @@ class AnalyticsController extends Controller
 
                     $duration = max(1, (int) $order->duration);
 
-                    // 🔥 Виручка по final_price (net)
-                    // Базова ціна дня мінус частка знижки замовлення мінус знижка цього дня
+                    // Виручка по final_price (net)
                     $basePricePerDay     = (float) $order->total_price / $duration;
                     $orderDiscountPerDay = (float) $order->discount_amount / $duration;
                     $dayDiscount         = (float) $orderDay->discount_amount;
                     $netPricePerDay      = max(0, $basePricePerDay - $orderDiscountPerDay - $dayDiscount);
 
                     $dailyRevenue  += $netPricePerDay;
-                    $dailyDiscount += $orderDiscountPerDay + $dayDiscount;  // 🔥
+                    $dailyDiscount += $orderDiscountPerDay + $dayDiscount;
 
                     // Food Cost
                     $orderCost = 0;
                     if ($menu) {
                         $orderCost = $this->foodCostService->calculateOrderFoodCost($order, $menu, $allIngredients);
                         $dailyFoodCost += $orderCost;
+                    }
+
+                    // Packaging Cost
+                    if ($menu && $allPackaging->isNotEmpty()) {
+                        $packagingCost = $this->packagingService->calculateOrderPackagingCost($order, $menu, $allPackaging);
+                        $dailyPackaging += $packagingCost;
                     }
 
                     // Юніт-економіка
@@ -161,12 +177,14 @@ class AnalyticsController extends Controller
                 }
             }
 
-            $revenueCount[$ymd]  = round($dailyRevenue);
-            $totalRevenue        += round($dailyRevenue);
-            $foodCostCount[$ymd] = round($dailyFoodCost);
-            $totalFoodCost       += round($dailyFoodCost);
-            $discountCount[$ymd] = round($dailyDiscount);  // 🔥
-            $totalDiscount       += round($dailyDiscount); // 🔥
+            $revenueCount[$ymd]    = round($dailyRevenue);
+            $totalRevenue          += round($dailyRevenue);
+            $foodCostCount[$ymd]   = round($dailyFoodCost);
+            $totalFoodCost         += round($dailyFoodCost);
+            $discountCount[$ymd]   = round($dailyDiscount);
+            $totalDiscount         += round($dailyDiscount);
+            $packagingCount[$ymd]  = round($dailyPackaging);
+            $totalPackagingCost    += round($dailyPackaging);
         }
 
         // 4. ПІДРАХУНОК ЮНІТ-ЕКОНОМІКИ (Агрегація)
@@ -202,6 +220,8 @@ class AnalyticsController extends Controller
         $retentionStats = [
             'total_clients' => 0, 'active_now' => 0, 'churned' => 0,
             'avg_lifetime_days' => 0, 'avg_ltv' => 0, 'churn_rate' => 0,
+            'new_clients' => 0, 'new_clients_percent' => 0,
+            'churned_period' => 0, 'churned_period_percent' => 0,
             'segments' => [
                 'trial' => ['count' => 0, 'label' => 'Пробні (1-3 дні)', 'color' => 'bg-rose-500'],
                 'regular' => ['count' => 0, 'label' => 'Постійні (4-14 днів)', 'color' => 'bg-blue-500'],
@@ -216,7 +236,7 @@ class AnalyticsController extends Controller
             $totalLtv = 0;
 
             foreach ($clients as $client) {
-                $clientDays = 0; $clientRevenue = 0; $lastOrderEndDate = null;
+                $clientDays = 0; $clientRevenue = 0; $lastOrderEndDate = null; $firstOrderStartDate = null;
 
                 foreach ($client->orders as $o) {
                     if ($o->total_price > 0 && !in_array($o->status, ['cancelled'])) {
@@ -226,6 +246,9 @@ class AnalyticsController extends Controller
                         if (!$lastOrderEndDate || $o->end_date > $lastOrderEndDate) {
                             $lastOrderEndDate = $o->end_date;
                         }
+                        if (!$firstOrderStartDate || $o->start_date < $firstOrderStartDate) {
+                            $firstOrderStartDate = $o->start_date;
+                        }
                     }
                 }
 
@@ -233,10 +256,19 @@ class AnalyticsController extends Controller
                 $totalLtv += $clientRevenue;
                 $retentionStats['total_clients']++;
 
+                // Новий клієнт: перше замовлення (за всю історію) починається в обраному періоді
+                if ($firstOrderStartDate && $firstOrderStartDate >= $startDate && $firstOrderStartDate <= $endDate) {
+                    $retentionStats['new_clients']++;
+                }
+
                 if ($lastOrderEndDate && $lastOrderEndDate >= $today) {
                     $retentionStats['active_now']++;
                 } else {
                     $retentionStats['churned']++;
+                    // Відпав у цьому періоді: остання підписка закінчилась у межах обраного діапазону
+                    if ($lastOrderEndDate && $lastOrderEndDate >= $startDate && $lastOrderEndDate <= $endDate) {
+                        $retentionStats['churned_period']++;
+                    }
                 }
 
                 if ($clientDays <= 3) {
@@ -252,10 +284,39 @@ class AnalyticsController extends Controller
                 $retentionStats['avg_lifetime_days'] = $totalLifetimeDays / $retentionStats['total_clients'];
                 $retentionStats['avg_ltv'] = $totalLtv / $retentionStats['total_clients'];
                 $retentionStats['churn_rate'] = ($retentionStats['churned'] / $retentionStats['total_clients']) * 100;
+                $retentionStats['new_clients_percent'] = ($retentionStats['new_clients'] / $retentionStats['total_clients']) * 100;
+                $retentionStats['churned_period_percent'] = ($retentionStats['churned_period'] / $retentionStats['total_clients']) * 100;
             }
         }
 
-        // 7. Повернення у View
+        // 7. КАСОВИЙ РОЗРИВ за обраний період
+        $cashReceivedPeriod = round(Transaction::where('type', 'income')
+            ->whereBetween('date', [$startDate, $endDate])
+            ->sum('amount'));
+
+        $cashBalance = round(Account::sum('balance'));
+
+        // Передоплачені, але ще не доставлені раціони (поточний момент)
+        $today = Carbon::now()->format('Y-m-d');
+        $paidFutureOrderDays = OrderDay::where('date', '>', $today)
+            ->whereHas('order', fn($q) => $q->whereIn('status', ['active', 'new'])->where('is_paid', true))
+            ->with('order')
+            ->get();
+
+        $prepaidValue = 0;
+        foreach ($paidFutureOrderDays as $od) {
+            $order = $od->order;
+            if (!$order) continue;
+            $dur = max(1, (int) $order->duration);
+            $prepaidValue += max(0,
+                (float) $order->total_price / $dur
+                - (float) $order->discount_amount / $dur
+                - (float) $od->discount_amount
+            );
+        }
+        $prepaidValue = round($prepaidValue);
+
+        // 8. Повернення у View
         return view('analytics.index', compact(
             'dates', 'startDate', 'endDate',
             'rationsCount', 'totalRations',
@@ -264,7 +325,9 @@ class AnalyticsController extends Controller
             'fopCount', 'totalFop',
             'discountCount', 'totalDiscount',  // 🔥 Знижки
             'spoilagePercent', 'otherExpenses', 'activeTab',
-            'unitEconomics', 'marketingStats', 'retentionStats'
+            'unitEconomics', 'marketingStats', 'retentionStats',
+            'cashReceivedPeriod', 'cashBalance', 'prepaidValue',
+            'packagingCount', 'totalPackagingCost'
         ));
     }
 

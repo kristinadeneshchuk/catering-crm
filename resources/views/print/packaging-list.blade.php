@@ -74,6 +74,9 @@
         }
         .note-badge-avocado { background-color: #16a34a; }
         .note-badge-ufit    { background-color: #7c3aed; }
+        @media print {
+            a[href*="packaging-assembly"] { display: none !important; }
+        }
         .note-kcal {
             display: inline-block;
             padding: 1px 5px;
@@ -88,8 +91,16 @@
 </head>
 <body>
 
-    <h2>Фасувальний лист</h2>
-    <p>Дата: <strong>{{ $date }}</strong></p>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+        <div>
+            <h2 style="margin:0 0 2px 0;">Фасувальний лист</h2>
+            <p style="margin:0;">Дата: <strong>{{ $date }}</strong></p>
+        </div>
+        <a href="{{ route('packaging.assembly', ['date' => $date]) }}"
+           style="display:inline-flex; align-items:center; gap:8px; background:#16a34a; color:white; text-decoration:none; padding:8px 16px; border-radius:8px; font-weight:700; font-size:13px; no-print;">
+            📦 Список упаковки по клієнтах →
+        </a>
+    </div>
 
     @if(!empty($clientComments))
         <div style="background:#fefce8; border:1px dashed #ca8a04; padding:8px 10px; margin-bottom:20px; font-size:11px;">

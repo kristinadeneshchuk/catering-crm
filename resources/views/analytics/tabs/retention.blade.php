@@ -1,3 +1,36 @@
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <div class="bg-zinc-900 border border-white/5 p-6 rounded-2xl shadow-xl relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-32 h-32 bg-teal-500/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
+        <p class="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
+            <svg class="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+            Нові клієнти
+        </p>
+        <h3 class="text-4xl font-black text-white mb-1">{{ $retentionStats['new_clients'] ?? 0 }}</h3>
+        <p class="text-zinc-500 text-sm">
+            Вперше замовили у цьому періоді
+            @if(($retentionStats['new_clients_percent'] ?? 0) > 0)
+                &nbsp;&mdash;&nbsp;<span class="text-teal-400 font-semibold">{{ round($retentionStats['new_clients_percent'], 1) }}%</span> від усіх клієнтів
+            @endif
+        </p>
+    </div>
+
+    <div class="bg-zinc-900 border border-white/5 p-6 rounded-2xl shadow-xl relative overflow-hidden">
+        @php $churnedPeriodPct = $retentionStats['churned_period_percent'] ?? 0; @endphp
+        <div class="absolute top-0 right-0 w-32 h-32 {{ $churnedPeriodPct > 30 ? 'bg-rose-500/10' : 'bg-orange-500/10' }} rounded-full blur-3xl -mr-10 -mt-10"></div>
+        <p class="text-zinc-500 text-xs font-bold uppercase tracking-widest mb-2 flex items-center gap-2">
+            <svg class="w-4 h-4 {{ $churnedPeriodPct > 30 ? 'text-rose-400' : 'text-orange-400' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+            Відпали клієнти
+        </p>
+        <h3 class="text-4xl font-black {{ $churnedPeriodPct > 30 ? 'text-rose-400' : 'text-orange-400' }} mb-1">{{ $retentionStats['churned_period'] ?? 0 }}</h3>
+        <p class="text-zinc-500 text-sm">
+            Підписка закінчилась у цьому періоді
+            @if($churnedPeriodPct > 0)
+                &nbsp;&mdash;&nbsp;<span class="{{ $churnedPeriodPct > 30 ? 'text-rose-400' : 'text-orange-400' }} font-semibold">{{ round($churnedPeriodPct, 1) }}%</span> від усіх клієнтів
+            @endif
+        </p>
+    </div>
+</div>
+
 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
     <div class="bg-zinc-900 border border-white/5 p-6 rounded-2xl shadow-xl relative overflow-hidden">
         <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-10 -mt-10"></div>

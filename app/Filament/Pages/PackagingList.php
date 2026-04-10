@@ -71,6 +71,16 @@ class PackagingList extends Page implements HasForms
             ->button()
             ->color('gray'),
 
+            // 📦 Список упаковки по клієнтах
+            Action::make('packaging_assembly')
+                ->label('Список упаковки')
+                ->icon('heroicon-o-archive-box')
+                ->color('success')
+                ->url(fn () => route('packaging.assembly', [
+                    'date' => Carbon::parse($this->data['date'] ?? now()->format('Y-m-d'))->addDay()->format('Y-m-d')
+                ]))
+                ->openUrlInNewTab(),
+
             // 🔥 ДРУГИЙ ВИПАДАЮЧИЙ СПИСОК: Логістика
             \Filament\Actions\ActionGroup::make([
                 Action::make('download_logistics_evening')
