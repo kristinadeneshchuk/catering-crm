@@ -90,11 +90,11 @@ class PackagingResource extends Resource
                     Select::make('pair_id')
                         ->label('Пара (кришка / ковпачок)')
                         ->helperText('Вкажіть кришку або ковпачок, що йде в комплекті. Система списуватиме їх разом автоматично.')
-                        ->options(fn () => Packaging::whereIn('packaging_type', ['кришка', 'ковпачок', 'кришка-супник'])
+                        ->options(fn () => Packaging::whereIn('packaging_type', ['кришка', 'ковпачок', 'кришка-супник', 'кришка-десерт'])
                             ->orderBy('name')
                             ->pluck('name', 'id')
                             ->toArray())
-                        ->getSearchResultsUsing(fn (string $search) => Packaging::whereIn('packaging_type', ['кришка', 'ковпачок', 'кришка-супник'])
+                        ->getSearchResultsUsing(fn (string $search) => Packaging::whereIn('packaging_type', ['кришка', 'ковпачок', 'кришка-супник', 'кришка-десерт'])
                             ->where('name', 'like', "%{$search}%")
                             ->orderBy('name')
                             ->limit(50)
@@ -131,6 +131,7 @@ class PackagingResource extends Resource
                         'пляшка'        => 'info',
                         'ковпачок'      => 'gray',
                         'стакан-десерт' => 'primary',
+                        'кришка-десерт' => 'gray',
                         'пакет'         => 'warning',
                         'наклейка'      => 'purple',
                         'прибори'       => 'primary',
