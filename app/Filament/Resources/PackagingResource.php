@@ -78,13 +78,13 @@ class PackagingResource extends Resource
                             ->numeric()
                             ->step(0.01)
                             ->placeholder('Наприклад: 550')
-                            ->visible(fn (Get $get) => in_array($get('packaging_type'), ['бокс', 'супник', 'пляшка', 'стакан-десерт'])),
+                            ->visible(fn (Get $get) => in_array($get('packaging_type'), ['бокс', 'супник', 'пляшка', 'стакан-десерт', 'соусник'])),
 
                         Select::make('capacity_unit')
                             ->label('Одиниця ємності')
                             ->options(['мл' => 'мл', 'г' => 'г'])
                             ->default('мл')
-                            ->visible(fn (Get $get) => in_array($get('packaging_type'), ['бокс', 'супник', 'пляшка', 'стакан-десерт'])),
+                            ->visible(fn (Get $get) => in_array($get('packaging_type'), ['бокс', 'супник', 'пляшка', 'стакан-десерт', 'соусник'])),
                     ]),
 
                     Select::make('pair_id')
@@ -104,7 +104,7 @@ class PackagingResource extends Resource
                         ->searchable()
                         ->nullable()
                         ->placeholder('— Без пари —')
-                        ->visible(fn (Get $get) => in_array($get('packaging_type'), ['бокс', 'супник', 'пляшка', 'стакан-десерт']))
+                        ->visible(fn (Get $get) => in_array($get('packaging_type'), ['бокс', 'супник', 'пляшка', 'стакан-десерт', 'соусник']))
                         ->columnSpanFull(),
                 ]),
         ]);
@@ -132,6 +132,7 @@ class PackagingResource extends Resource
                         'ковпачок'      => 'gray',
                         'стакан-десерт' => 'primary',
                         'кришка-десерт' => 'gray',
+                        'соусник'       => 'warning',
                         'пакет'         => 'warning',
                         'наклейка'      => 'purple',
                         'прибори'       => 'primary',
