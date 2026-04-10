@@ -89,9 +89,10 @@
             {{ $freeCash >= 0 ? '' : '−' }}{{ number_format(abs($freeCash), 0, '.', ' ') }} ₴
         </h3>
         <p class="text-zinc-600 text-xs mt-1">
-            Залишок − зобов'язання
-            @if($freeCash < 0)
-                &nbsp;<span class="text-rose-400 font-semibold">— дефіцит!</span>
+            @if($freeCash >= 0)
+                Гроші що вже ваші, без урахування авансів клієнтів
+            @else
+                <span class="text-rose-400 font-semibold">Авансів клієнтів більше ніж є на рахунках — дефіцит!</span>
             @endif
         </p>
     </div>
