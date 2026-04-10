@@ -297,22 +297,42 @@ class AnalyticsController extends Controller
         $cashBalance = round(Account::sum('balance'));
 
         // Передоплачені, але ще не доставлені раціони (поточний момент)
+        // Враховуємо часткові оплати через client.balance
+        // Формула: prepaid = max(0, min(future_value, future_value + client.balance))
+        // balance = total_income - refunds - all_orders_cost
+        // Якщо balance = -200 і future = 500 → клієнт сплатив 300 з 500 майбутніх раціонів
         $today = Carbon::now()->format('Y-m-d');
-        $paidFutureOrderDays = OrderDay::where('date', '>', $today)
-            ->whereHas('order', fn($q) => $q->whereIn('status', ['active', 'new'])->where('is_paid', true))
+
+        $futureOrderDays = OrderDay::where('date', '>', $today)
+            ->whereHas('order', fn($q) => $q->whereIn('status', ['active', 'new', 'paused']))
             ->with('order')
             ->get();
 
-        $prepaidValue = 0;
-        foreach ($paidFutureOrderDays as $od) {
+        // Рахуємо вартість майбутніх раціонів по кожному клієнту
+        $futureValueByClient = [];
+        foreach ($futureOrderDays as $od) {
             $order = $od->order;
             if (!$order) continue;
             $dur = max(1, (int) $order->duration);
-            $prepaidValue += max(0,
+            $dayValue = max(0,
                 (float) $order->total_price / $dur
                 - (float) $order->discount_amount / $dur
                 - (float) $od->discount_amount
             );
+            $futureValueByClient[$order->client_id] = ($futureValueByClient[$order->client_id] ?? 0) + $dayValue;
+        }
+
+        // Завантажуємо баланси клієнтів одним запитом
+        $clientBalances = Client::whereIn('id', array_keys($futureValueByClient))
+            ->pluck('balance', 'id');
+
+        // Розраховуємо передоплачену суму з урахуванням часткових оплат
+        $prepaidValue = 0;
+        foreach ($futureValueByClient as $clientId => $futureValue) {
+            $balance = (float) ($clientBalances[$clientId] ?? 0);
+            // balance >= 0 → всі майбутні раціони покриті (є надлишок)
+            // balance < 0  → покрита лише частина майбутніх раціонів
+            $prepaidValue += max(0, min($futureValue, $futureValue + $balance));
         }
         $prepaidValue = round($prepaidValue);
 

@@ -78,23 +78,23 @@ class PackagingResource extends Resource
                             ->numeric()
                             ->step(0.01)
                             ->placeholder('Наприклад: 550')
-                            ->visible(fn (Get $get) => in_array($get('packaging_type'), ['бокс', 'пляшка'])),
+                            ->visible(fn (Get $get) => in_array($get('packaging_type'), ['бокс', 'супник', 'пляшка', 'стакан-десерт'])),
 
                         Select::make('capacity_unit')
                             ->label('Одиниця ємності')
                             ->options(['мл' => 'мл', 'г' => 'г'])
                             ->default('мл')
-                            ->visible(fn (Get $get) => in_array($get('packaging_type'), ['бокс', 'пляшка'])),
+                            ->visible(fn (Get $get) => in_array($get('packaging_type'), ['бокс', 'супник', 'пляшка', 'стакан-десерт'])),
                     ]),
 
                     Select::make('pair_id')
                         ->label('Пара (кришка / ковпачок)')
                         ->helperText('Вкажіть кришку або ковпачок, що йде в комплекті. Система списуватиме їх разом автоматично.')
-                        ->options(fn () => Packaging::whereIn('packaging_type', ['кришка', 'ковпачок'])
+                        ->options(fn () => Packaging::whereIn('packaging_type', ['кришка', 'ковпачок', 'кришка-супник'])
                             ->orderBy('name')
                             ->pluck('name', 'id')
                             ->toArray())
-                        ->getSearchResultsUsing(fn (string $search) => Packaging::whereIn('packaging_type', ['кришка', 'ковпачок'])
+                        ->getSearchResultsUsing(fn (string $search) => Packaging::whereIn('packaging_type', ['кришка', 'ковпачок', 'кришка-супник'])
                             ->where('name', 'like', "%{$search}%")
                             ->orderBy('name')
                             ->limit(50)
@@ -104,7 +104,7 @@ class PackagingResource extends Resource
                         ->searchable()
                         ->nullable()
                         ->placeholder('— Без пари —')
-                        ->visible(fn (Get $get) => in_array($get('packaging_type'), ['бокс', 'пляшка']))
+                        ->visible(fn (Get $get) => in_array($get('packaging_type'), ['бокс', 'супник', 'пляшка', 'стакан-десерт']))
                         ->columnSpanFull(),
                 ]),
         ]);
@@ -124,15 +124,18 @@ class PackagingResource extends Resource
                     ->badge()
                     ->formatStateUsing(fn ($state) => Packaging::TYPES[$state] ?? '—')
                     ->color(fn ($state) => match($state) {
-                        'бокс'     => 'success',
-                        'кришка'   => 'gray',
-                        'пляшка'   => 'info',
-                        'ковпачок' => 'gray',
-                        'пакет'    => 'warning',
-                        'наклейка' => 'purple',
-                        'прибори'  => 'primary',
-                        'серветка' => 'secondary',
-                        default    => 'gray',
+                        'бокс'          => 'success',
+                        'кришка'        => 'gray',
+                        'супник'        => 'warning',
+                        'кришка-супник' => 'gray',
+                        'пляшка'        => 'info',
+                        'ковпачок'      => 'gray',
+                        'стакан-десерт' => 'primary',
+                        'пакет'         => 'warning',
+                        'наклейка'      => 'purple',
+                        'прибори'       => 'primary',
+                        'серветка'      => 'secondary',
+                        default         => 'gray',
                     })
                     ->placeholder('Госптовар'),
 
