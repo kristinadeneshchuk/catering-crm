@@ -588,8 +588,7 @@ class AntLogisticsService
         $dateFormatted = Carbon::parse($date)->format('d.m.Y');
 
         $routes = $this->fetchAllPages("{$this->baseUrl}/Routes/get", [
-            'DateRoute_B' => $dateFormatted,
-            'DateRoute_E' => $dateFormatted,
+            'Date_Data' => $dateFormatted,
         ]);
 
         if (empty($routes)) {
