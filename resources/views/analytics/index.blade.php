@@ -62,6 +62,7 @@
             <button onclick="switchTab('marketing')" id="btn-marketing" class="tab-btn pb-3 font-bold text-[13px] uppercase tracking-wider tab-inactive">Маркетинг та Джерела</button>
             <button onclick="switchTab('retention')" id="btn-retention" class="tab-btn pb-3 font-bold text-[13px] uppercase tracking-wider tab-inactive">Утримання (Retention)</button>
             <button onclick="switchTab('finance')" id="btn-finance" class="tab-btn pb-3 font-bold text-[13px] uppercase tracking-wider tab-inactive">Фінанси (P&L)</button>
+            <button onclick="switchTab('projects')" id="btn-projects" class="tab-btn pb-3 font-bold text-[13px] uppercase tracking-wider tab-inactive">Проєкти</button>
         </div>
 
         <form id="analytics-form" method="GET" action="{{ route('analytics.index') }}" class="bg-zinc-900/50 backdrop-blur-xl border border-white/10 p-2 rounded-2xl mb-8 flex flex-wrap items-center gap-2 shadow-xl">
@@ -83,6 +84,7 @@
         <div id="content-marketing" class="tab-content hidden">@include('analytics.tabs.marketing')</div>
         <div id="content-retention" class="tab-content hidden">@include('analytics.tabs.retention')</div>
         <div id="content-finance" class="tab-content hidden">@include('analytics.tabs.finance')</div>
+        <div id="content-projects" class="tab-content hidden">@include('analytics.tabs.projects')</div>
     </div>
 
 <script>

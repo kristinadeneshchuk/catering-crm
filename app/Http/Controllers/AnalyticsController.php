@@ -60,6 +60,7 @@ class AnalyticsController extends Controller
         $validDays = OrderDay::whereBetween('date', [$startDate, $endDate])
             ->with([
                 'order.client.mealTypes',
+                'order.projectData',
                 'order.replacements.replacementProduct',
                 'order.replacements.replacementDish.dishIngredients.ingredient'
             ])
@@ -111,6 +112,7 @@ class AnalyticsController extends Controller
 
         $unitEconomics = [];
         $marketingStats = [];
+        $projectStats = [];
         $uniqueClientIds = [];
 
         // 3. ОСНОВНИЙ ЦИКЛ ПО ДНЯХ
@@ -187,6 +189,27 @@ class AnalyticsController extends Controller
                     $marketingStats[$source]['revenue']     += $netPricePerDay;
                     $marketingStats[$source]['orders_count'] += 1;
                     $marketingStats[$source]['clients_count'][$order->client->id] = true;
+
+                    // Проєкти
+                    $projectSlug = $order->project ?: 'unknown';
+                    $projectName = $order->projectData?->name ?? $projectSlug;
+                    if (!isset($projectStats[$projectSlug])) {
+                        $projectStats[$projectSlug] = [
+                            'name'          => $projectName,
+                            'rations'       => 0,
+                            'revenue'       => 0,
+                            'food_cost'     => 0,
+                            'packaging'     => 0,
+                            'clients'       => [],
+                        ];
+                    }
+                    $projectStats[$projectSlug]['rations']   += 1;
+                    $projectStats[$projectSlug]['revenue']   += $netPricePerDay;
+                    $projectStats[$projectSlug]['food_cost'] += $orderCost;
+                    $projectStats[$projectSlug]['packaging'] += $menu && $allPackaging->isNotEmpty()
+                        ? $this->packagingService->calculateOrderPackagingCost($order, $menu, $allPackaging)
+                        : 0;
+                    $projectStats[$projectSlug]['clients'][$order->client->id] = true;
                 }
             }
 
@@ -219,6 +242,17 @@ class AnalyticsController extends Controller
             $data['avg_duration'] = $orderCount > 0 ? $totalDuration / $orderCount : 0;
         }
         unset($data);
+
+        // 5а. АГРЕГАЦІЯ ПРОЄКТІВ
+        foreach ($projectStats as $slug => &$ps) {
+            $ps['unique_clients'] = count($ps['clients']);
+            unset($ps['clients']);
+            $ps['profit']  = $ps['revenue'] - $ps['food_cost'] - $ps['packaging'];
+            $ps['margin']  = $ps['revenue'] > 0 ? ($ps['profit'] / $ps['revenue']) * 100 : 0;
+            $ps['revenue_share'] = $totalRevenue > 0 ? ($ps['revenue'] / $totalRevenue) * 100 : 0;
+        }
+        unset($ps);
+        uasort($projectStats, fn ($a, $b) => $b['revenue'] <=> $a['revenue']);
 
         // 5. ПІДРАХУНОК МАРКЕТИНГУ (Агрегація)
         foreach ($marketingStats as $source => &$stats) {
@@ -383,7 +417,8 @@ class AnalyticsController extends Controller
             'cashReceivedPeriod', 'cashBalance', 'prepaidValue',
             'totalClientDebt', 'debtorClientsCount',
             'packagingCount', 'totalPackagingCost',
-            'deliveryCostByDate', 'totalDeliveryCost'
+            'deliveryCostByDate', 'totalDeliveryCost',
+            'projectStats'
         ));
     }
 

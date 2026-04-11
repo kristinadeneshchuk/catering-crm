@@ -216,7 +216,9 @@ class PackagingService
             ];
         }
 
-        // +1 комплект приборів (всі позиції з типом 'прибори')
+        // +1 комплект приборів — тільки якщо клієнт замовляє прибори
+        if (!($order->client?->has_cutlery ?? true)) return $result;
+
         $cutlery = $allPackaging->filter(fn ($p) => $p->packaging_type === 'прибори');
         foreach ($cutlery as $item) {
             $result[] = [
