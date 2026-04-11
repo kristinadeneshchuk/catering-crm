@@ -45,8 +45,8 @@
     </div>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6 p-4 rounded-2xl border border-amber-500/20 bg-amber-500/5">
-    <div class="md:col-span-5 flex items-center gap-2 mb-1">
+<div class="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6 p-4 rounded-2xl border border-amber-500/20 bg-amber-500/5">
+    <div class="md:col-span-6 flex items-center gap-2 mb-1">
         <svg class="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
         <span class="text-amber-400 text-xs font-bold uppercase tracking-widest">Касовий розрив — за обраний період</span>
     </div>
@@ -93,6 +93,21 @@
                 Гроші що вже ваші, без урахування авансів клієнтів
             @else
                 <span class="text-rose-400 font-semibold">Авансів клієнтів більше ніж є на рахунках — дефіцит!</span>
+            @endif
+        </p>
+    </div>
+
+    <div class="bg-zinc-900/60 border {{ ($totalClientDebt ?? 0) > 0 ? 'border-rose-500/30' : 'border-white/5' }} p-4 rounded-xl relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-20 h-20 {{ ($totalClientDebt ?? 0) > 0 ? 'bg-rose-500/10' : 'bg-zinc-500/5' }} rounded-full blur-2xl -mr-8 -mt-8"></div>
+        <p class="text-zinc-500 text-[11px] font-bold uppercase tracking-widest mb-1">Борг клієнтів</p>
+        <h3 class="text-2xl font-black {{ ($totalClientDebt ?? 0) > 0 ? 'text-rose-400' : 'text-zinc-400' }}">
+            {{ number_format($totalClientDebt ?? 0, 0, '.', ' ') }} ₴
+        </h3>
+        <p class="text-zinc-600 text-xs mt-1">
+            @if(($totalClientDebt ?? 0) > 0)
+                <span class="text-rose-400">{{ $debtorClientsCount ?? 0 }} {{ $debtorClientsCount === 1 ? 'клієнт' : ($debtorClientsCount < 5 ? 'клієнти' : 'клієнтів') }} з'їли, не заплатили</span>
+            @else
+                Всі клієнти без боргу
             @endif
         </p>
     </div>

@@ -336,6 +336,27 @@ class AnalyticsController extends Controller
         }
         $prepaidValue = round($prepaidValue);
 
+        // Борг клієнтів — дні вже доставлені але не оплачені
+        // Формула: борг = max(0, -balance - future_undelivered)
+        // Якщо balance = -700, future = 400 → борг = 300 (3 дні з'їли, не заплатили)
+        $debtorClientsCount = 0;
+        $totalClientDebt    = 0;
+
+        $debtorClients = Client::where('balance', '<', 0)
+            ->select('id', 'balance')
+            ->get();
+
+        foreach ($debtorClients as $client) {
+            $balance     = (float) $client->balance;
+            $futureValue = $futureValueByClient[$client->id] ?? 0;
+            $debt        = max(0, -$balance - $futureValue);
+            if ($debt > 0.01) {
+                $debtorClientsCount++;
+                $totalClientDebt += $debt;
+            }
+        }
+        $totalClientDebt = round($totalClientDebt);
+
         // 8. Повернення у View
         return view('analytics.index', compact(
             'dates', 'startDate', 'endDate',
@@ -347,6 +368,7 @@ class AnalyticsController extends Controller
             'spoilagePercent', 'otherExpenses', 'activeTab',
             'unitEconomics', 'marketingStats', 'retentionStats',
             'cashReceivedPeriod', 'cashBalance', 'prepaidValue',
+            'totalClientDebt', 'debtorClientsCount',
             'packagingCount', 'totalPackagingCost'
         ));
     }
