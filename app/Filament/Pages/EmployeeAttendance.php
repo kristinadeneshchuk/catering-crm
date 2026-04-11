@@ -30,7 +30,7 @@ class EmployeeAttendance extends Page
 
     public function loadAttendance()
     {
-        $employees = Employee::where('is_active', true)->get();
+        $employees = Employee::where('is_active', true)->where('position', '!=', 'courier')->get();
         
         // Отримуємо всі збережені зміни за цей день
         $existingShifts = EmployeeShift::where('date', $this->date)->get();

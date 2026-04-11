@@ -42,6 +42,12 @@ class EmployeeResource extends Resource
                             ->required()
                             ->placeholder('Іванов Іван'),
 
+                        TextInput::make('ant_driver_name')
+                            ->label('Ім\'я в ANT Logistics')
+                            ->placeholder('Точно як у АНТ, напр. "Іванов І.І."')
+                            ->helperText('Заповни для кур\'єрів — система автоматично зв\'яже маршрути з цим співробітником')
+                            ->nullable(),
+
                         Select::make('position')
                             ->label('Посада')
                             ->options([

@@ -1,0 +1,71 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use App\Models\Setting;
+
+class DeliveryRoute extends Model
+{
+    protected $fillable = [
+        'date', 'shift',
+        'ant_route_id', 'ant_route_num',
+        'driver_name', 'employee_id', 'auto_name', 'model_auto', 'registration_number',
+        'count_comps', 'distance_calc', 'distance_fact', 'fuel_city',
+        'route_time_b', 'route_time_e',
+        'ant_cost_route', 'calculated_cost',
+    ];
+
+    public function employee(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
+    }
+
+    protected $casts = [
+        'date'          => 'date',
+        'ant_cost_route'  => 'decimal:2',
+        'calculated_cost' => 'decimal:2',
+    ];
+
+    /**
+     * Розраховує вартість маршруту по ставці кур'єра.
+     * База: base_rate до base_stops точок.
+     * Доплата: extra_per_stop за кожну точку понад base_stops.
+     */
+    public static function calculateCourierCost(int $stops): float
+    {
+        $baseRate      = (float) (Setting::where('key', 'courier_base_rate')->value('value') ?: 700);
+        $baseStops     = (int)   (Setting::where('key', 'courier_base_stops')->value('value') ?: 12);
+        $extraPerStop  = (float) (Setting::where('key', 'courier_extra_per_stop')->value('value') ?: 50);
+
+        if ($stops <= $baseStops) {
+            return $baseRate;
+        }
+
+        return $baseRate + ($stops - $baseStops) * $extraPerStop;
+    }
+
+    /**
+     * Відстань факт (з fallback на план).
+     */
+    public function getDistanceAttribute(): ?float
+    {
+        return $this->distance_fact ?? $this->distance_calc;
+    }
+
+    /**
+     * Тривалість маршруту у хвилинах.
+     */
+    public function getDurationMinutesAttribute(): ?int
+    {
+        if (!$this->route_time_b || !$this->route_time_e) return null;
+
+        try {
+            $start = \Carbon\Carbon::createFromFormat('d.m.Y H:i', $this->route_time_b);
+            $end   = \Carbon\Carbon::createFromFormat('d.m.Y H:i', $this->route_time_e);
+            return (int) $start->diffInMinutes($end);
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+}

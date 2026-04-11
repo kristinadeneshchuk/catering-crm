@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Client;
+use App\Models\DeliveryRoute;
 use App\Models\Order;
 use App\Models\OrderDay;
 use App\Models\Setting;
@@ -80,41 +81,72 @@ class AntLogisticsService
             return 0;
         }
 
-        $rows = $clients->map(function (Client $client) {
-            $addrRecord = $client->addresses->firstWhere('is_default', true)
-                ?? $client->addresses->first();
+        $rows   = [];
+        $compMap = []; // ant_comp_id => address_id (для збереження в БД)
 
-            $address = $this->buildClientAddressFromRecord($addrRecord, $client);
+        $activeOrder = null;
 
+        foreach ($clients as $client) {
             $activeOrder = $client->orders->sortByDesc('id')->first();
-
             [$workBeg, $workEnd] = $this->parseDeliveryTimeWindow($activeOrder?->delivery_time ?? '');
 
-            $deliveryComment = $addrRecord?->delivery_comment
-                ?? $client->delivery_comment
-                ?? '';
-
-            $row = [
-                'Comp_Id'         => (string) $client->id,
-                'Comp_Name'       => $client->name,
-                'Address'         => $address,
-                'Phone'           => $client->phone ?? '',
-                'Additional_Info' => $deliveryComment,
-                'TimeWork_Beg'    => $workBeg . ':00',
-                'TimeWork_End'    => $workEnd . ':00',
-                'Unload_Time'     => 7,
-            ];
-
-            // Якщо є координати — передаємо, Ant не буде геокодувати
-            if (!empty($addrRecord?->lat) && !empty($addrRecord?->lng)) {
-                $row['lat'] = (float) $addrRecord->lat;
-                $row['lng'] = (float) $addrRecord->lng;
+            $addresses = $client->addresses;
+            if ($addresses->isEmpty()) {
+                // Клієнт без збережених адрес — синхронізуємо як раніше
+                $compId  = (string) $client->id;
+                $address = $client->address ?? '';
+                $rows[] = [
+                    'Comp_Id'         => $compId,
+                    'Comp_Name'       => $client->name,
+                    'Address'         => $address,
+                    'Phone'           => $client->phone ?? '',
+                    'Additional_Info' => $client->delivery_comment ?? '',
+                    'TimeWork_Beg'    => $workBeg . ':00',
+                    'TimeWork_End'    => $workEnd . ':00',
+                    'Unload_Time'     => 7,
+                ];
+                continue;
             }
 
-            return $row;
-        })->values()->toArray();
+            foreach ($addresses as $addrRecord) {
+                // Default адреса: Comp_Id = client_id
+                // Решта: Comp_Id = client_id_a{address_id}
+                $compId = $addrRecord->is_default
+                    ? (string) $client->id
+                    : "{$client->id}_a{$addrRecord->id}";
 
-        // API приймає масивами по 100 (rate limit)
+                $address = $this->buildClientAddressFromRecord($addrRecord, $client);
+                $deliveryComment = $addrRecord->delivery_comment ?? $client->delivery_comment ?? '';
+                $label = $addrRecord->label ? " ({$addrRecord->label})" : '';
+
+                $row = [
+                    'Comp_Id'         => $compId,
+                    'Comp_Name'       => $client->name . $label,
+                    'Address'         => $address,
+                    'Phone'           => $client->phone ?? '',
+                    'Additional_Info' => $deliveryComment,
+                    'TimeWork_Beg'    => $workBeg . ':00',
+                    'TimeWork_End'    => $workEnd . ':00',
+                    'Unload_Time'     => 7,
+                ];
+
+                if (!empty($addrRecord->lat) && !empty($addrRecord->lng)) {
+                    $row['lat'] = (float) $addrRecord->lat;
+                    $row['lng'] = (float) $addrRecord->lng;
+                }
+
+                $rows[] = $row;
+                $compMap[$addrRecord->id] = $compId;
+            }
+        }
+
+        // Зберігаємо ant_comp_id в БД для кожної адреси
+        foreach ($compMap as $addressId => $compId) {
+            \App\Models\ClientAddress::where('id', $addressId)
+                ->update(['ant_comp_id' => $compId]);
+        }
+
+        // API приймає масивами по 100
         $chunks = array_chunk($rows, 100);
         $synced = 0;
 
@@ -242,6 +274,18 @@ class AntLogisticsService
             $client    = $mainOrder->client;
             $orderDay  = $mainOrder->orderDays->first();
 
+            // Вибираємо правильний Comp_Id:
+            // Якщо на цей день є override адреса — шукаємо відповідний ant_comp_id
+            $compId = (string) $client->id; // default
+            if ($orderDay?->address) {
+                $matchedAddr = $client->addresses->first(
+                    fn ($a) => trim($a->address) === trim($orderDay->address)
+                );
+                if ($matchedAddr?->ant_comp_id) {
+                    $compId = $matchedAddr->ant_comp_id;
+                }
+            }
+
             // Час: override на конкретний день → інакше час замовлення
             $effectiveTime = $orderDay?->delivery_time ?? $mainOrder->delivery_time ?? '';
             [$workBeg, $workEnd] = $this->parseDeliveryTimeWindow($effectiveTime);
@@ -250,7 +294,7 @@ class AntLogisticsService
             $infoParts = $group->map(fn ($o) => $this->buildAdditionalInfo($o, $orderDay))->filter()->join(' | ');
 
             $row = [
-                'Comp_Id'          => (string) $client->id,
+                'Comp_Id'          => $compId,
                 'Note'             => $infoParts,
                 'TimeWork_Beg_Req' => $workBeg . ':00',
                 'TimeWork_End_Req' => $workEnd . ':00',
@@ -530,6 +574,89 @@ class AntLogisticsService
         }
 
         return implode('; ', array_filter($parts));
+    }
+
+    // -------------------------------------------------------------------------
+    // Pull Route Details — GET /Routes/get
+    // Тягне дані маршрутів: км, точки, паливо, авто, розраховує ставку кур'єра
+    // -------------------------------------------------------------------------
+
+    public function pullRouteDetails(string $date, string $shift = 'all'): int
+    {
+        $this->ensureAuthenticated();
+
+        $dateFormatted = Carbon::parse($date)->format('d.m.Y');
+
+        $routes = $this->fetchAllPages("{$this->baseUrl}/Routes/get", [
+            'DateRoute_B' => $dateFormatted,
+            'DateRoute_E' => $dateFormatted,
+        ]);
+
+        if (empty($routes)) {
+            Log::info("[AntLogistics] pullRouteDetails: no routes for {$date}");
+            return 0;
+        }
+
+        $saved = 0;
+
+        // Завантажуємо всіх кур'єрів з ant_driver_name одним запитом
+        $employeesByAntName = \App\Models\Employee::whereNotNull('ant_driver_name')
+            ->get()
+            ->keyBy(fn ($e) => mb_strtolower(trim($e->ant_driver_name)));
+
+        foreach ($routes as $route) {
+            $routeId  = $route['Route_Id'] ?? null;
+            $driver   = $route['Driver'] ?? null;
+
+            // Фільтр по зміні якщо потрібно
+            if ($shift !== 'all' && $driver) {
+                $routeTimeB = $route['RouteTime_B'] ?? '';
+                if ($shift === 'morning' && str_contains($routeTimeB, ' ')) {
+                    $hour = (int) explode(' ', $routeTimeB)[1];
+                    if ($hour >= 14) continue;
+                } elseif ($shift === 'evening' && str_contains($routeTimeB, ' ')) {
+                    $hour = (int) explode(' ', $routeTimeB)[1];
+                    if ($hour < 14) continue;
+                }
+            }
+
+            // Автоматичний матч водія → Employee
+            $employeeId = null;
+            if ($driver) {
+                $key = mb_strtolower(trim($driver));
+                $employeeId = $employeesByAntName->get($key)?->id;
+            }
+
+            $countComps = (int) ($route['Count_Comps'] ?? 0);
+            $antCost    = (float) ($route['Cost_Route'] ?? 0);
+            $ourCost    = DeliveryRoute::calculateCourierCost($countComps);
+
+            DeliveryRoute::updateOrCreate(
+                ['date' => $date, 'ant_route_id' => $routeId],
+                [
+                    'shift'               => $shift,
+                    'ant_route_num'       => $route['Route_Num'] ?? null,
+                    'driver_name'         => $driver,
+                    'employee_id'         => $employeeId,
+                    'auto_name'           => $route['Auto_Name'] ?? null,
+                    'model_auto'          => $route['ModelAuto'] ?? null,
+                    'registration_number' => $route['Registration_Number'] ?? null,
+                    'count_comps'         => $countComps,
+                    'distance_calc'       => $route['distance_calc'] ?? null,
+                    'distance_fact'       => $route['distance_fact'] ?? null,
+                    'fuel_city'           => $route['Fuel_City'] ?? null,
+                    'route_time_b'        => $route['RouteTime_B'] ?? null,
+                    'route_time_e'        => $route['RouteTime_E'] ?? null,
+                    'ant_cost_route'      => $antCost,
+                    'calculated_cost'     => $ourCost,
+                ]
+            );
+
+            $saved++;
+        }
+
+        Log::info("[AntLogistics] pullRouteDetails: saved {$saved} routes for {$date}");
+        return $saved;
     }
 
     private function parseDeliveryTimeWindow(string $deliveryTime): array

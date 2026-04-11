@@ -18,6 +18,7 @@ class ClientAddress extends Model
         'address_floor',
         'delivery_comment',
         'is_default',
+        'ant_comp_id',
     ];
 
     protected $casts = [

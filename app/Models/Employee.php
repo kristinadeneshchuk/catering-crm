@@ -6,10 +6,15 @@ use Illuminate\Database\Eloquent\Model;
 
 class Employee extends Model
 {
-    protected $fillable = ['name', 'position', 'base_rate', 'balance', 'is_active'];
+    protected $fillable = ['name', 'ant_driver_name', 'position', 'base_rate', 'balance', 'is_active'];
 
-    public function shifts()
-{
-    return $this->hasMany(EmployeeShift::class);
-}
+    public function shifts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(EmployeeShift::class);
+    }
+
+    public function deliveryRoutes(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(DeliveryRoute::class);
+    }
 }

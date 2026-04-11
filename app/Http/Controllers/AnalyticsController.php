@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use App\Models\Account;
+use App\Models\DeliveryRoute;
 use App\Models\OrderDay;
 use App\Models\Setting;
 use App\Models\DailyMenu;
@@ -84,6 +85,18 @@ class AnalyticsController extends Controller
         ])->get()->keyBy('day_number');
         
         $allIngredients = Ingredient::all()->keyBy('id');
+
+        // Витрати на доставку по датах (з таблиці delivery_routes)
+        $deliveryRoutes = DeliveryRoute::whereBetween('date', [$startDate, $endDate])
+            ->get()
+            ->groupBy(fn ($r) => \Carbon\Carbon::parse($r->date)->format('Y-m-d'));
+        $deliveryCostByDate = [];
+        $totalDeliveryCost  = 0;
+        foreach ($deliveryRoutes as $ymd => $dayRoutes) {
+            $cost = round((float) $dayRoutes->sum('calculated_cost'));
+            $deliveryCostByDate[$ymd] = $cost;
+            $totalDeliveryCost += $cost;
+        }
 
         // Завантаження пакувальних матеріалів (тільки з проставленим типом)
         $allPackaging = Packaging::whereNotNull('packaging_type')->get()->keyBy('id');
@@ -369,7 +382,8 @@ class AnalyticsController extends Controller
             'unitEconomics', 'marketingStats', 'retentionStats',
             'cashReceivedPeriod', 'cashBalance', 'prepaidValue',
             'totalClientDebt', 'debtorClientsCount',
-            'packagingCount', 'totalPackagingCost'
+            'packagingCount', 'totalPackagingCost',
+            'deliveryCostByDate', 'totalDeliveryCost'
         ));
     }
 

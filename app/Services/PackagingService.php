@@ -156,6 +156,47 @@ class PackagingService
                         ];
                     }
                 }
+
+                // Упаковка НФ-інгредієнтів страви
+                $dish->loadMissing('ingredients.childDish');
+                foreach ($dish->ingredients as $ingr) {
+                    $nf = $ingr->childDish;
+                    if (!$nf || !$nf->packaging_type) continue;
+
+                    $nfWeight    = (float)($ingr->net_weight_g ?? 0);
+                    $nfContainer = $this->findContainer($allPackaging, $nf->packaging_type, $nfWeight, $orderProject);
+                    if (!$nfContainer) continue;
+
+                    $result[] = [
+                        'packaging_id'   => $nfContainer->id,
+                        'name'           => $nfContainer->name,
+                        'packaging_type' => $nfContainer->packaging_type,
+                        'dish_name'      => $nf->name,
+                        'actual_weight'  => $nfWeight > 0 ? round($nfWeight) : null,
+                        'qty'            => 1,
+                        'unit_price'     => (float) $nfContainer->price,
+                        'total_price'    => (float) $nfContainer->price,
+                        'auto_pair'      => false,
+                    ];
+
+                    // Пара для НФ-контейнера (наприклад, кришка для соусника)
+                    if ($nfContainer->pair_id) {
+                        $nfPair = $allPackaging->get($nfContainer->pair_id);
+                        if ($nfPair) {
+                            $result[] = [
+                                'packaging_id'   => $nfPair->id,
+                                'name'           => $nfPair->name,
+                                'packaging_type' => $nfPair->packaging_type,
+                                'dish_name'      => $nf->name,
+                                'actual_weight'  => null,
+                                'qty'            => 1,
+                                'unit_price'     => (float) $nfPair->price,
+                                'total_price'    => (float) $nfPair->price,
+                                'auto_pair'      => true,
+                            ];
+                        }
+                    }
+                }
             }
         }
 
