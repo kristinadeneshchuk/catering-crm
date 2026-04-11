@@ -235,20 +235,12 @@ class AntLogisticsService
             return 0;
         }
 
-        // --- 2. Групуємо по адресі + час (як у LogisticsExport) ---
-        $grouped = $orders->groupBy(function (Order $order) use ($targetDate) {
-            $dayAddr  = $order->orderDays->first()?->address;
-            $defAddr  = $order->client->addresses->firstWhere('is_default', true);
-            $address  = mb_strtolower($dayAddr ?? $defAddr?->address ?? $order->client->address ?? '');
-
-            $garbage  = ['вулиця','вул.','вул','проспект','просп.','просп','провулок','пров.',
-                         'будинок','буд.','буд','квартира','кв.','кв','місто','м.',"під'їзд","під.",'код','домофон'];
-            $clean    = preg_replace('/[^a-zа-яіїєґ0-9]/u', '', str_replace($garbage, '', $address));
-
-            // Час: override на конкретний день має пріоритет
+        // --- 2. Групуємо по client_id + час ---
+        // Два окремих клієнти на одній адресі → окремі точки доставки
+        // Два раціони одного клієнта (додатковий раціон) → одна точка з qty=2
+        $grouped = $orders->groupBy(function (Order $order) {
             $deliveryTime = $order->orderDays->first()?->delivery_time ?? $order->delivery_time ?? 'no_time';
-
-            return $clean . '_' . $deliveryTime;
+            return $order->client_id . '_' . $deliveryTime;
         });
 
         // --- 3. Створюємо заявку на дату (Request header) ---
