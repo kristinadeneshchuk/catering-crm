@@ -91,12 +91,21 @@
                     </td>
 
                     <td style="padding:14px 16px;">
+                        @if($data['position'] !== 'courier')
                         <div style="display:flex;align-items:center;gap:8px;">
                             <span style="color:#52525b;font-size:13px;">₴</span>
                             <input type="number" wire:model="attendance.{{ $id }}.rate"
                                 class="attend-rate"
                                 {{ !$data['present'] ? 'disabled' : '' }}>
                         </div>
+                        @else
+                            @if(($data['courier_earned'] ?? 0) > 0)
+                                <span style="color:#60a5fa;font-weight:700;font-size:14px;">{{ number_format($data['courier_earned'], 0, '.', ' ') }} ₴</span>
+                                <span style="display:block;color:#3f3f46;font-size:10px;margin-top:2px;">з маршрутів</span>
+                            @else
+                                <span style="color:#3f3f46;font-size:13px;">немає маршрутів</span>
+                            @endif
+                        @endif
                     </td>
 
                     <td style="padding:14px 20px;text-align:center;">

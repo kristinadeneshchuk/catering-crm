@@ -596,6 +596,11 @@ class AntLogisticsService
             return 0;
         }
 
+        // DEBUG: логуємо перший об'єкт щоб побачити всі ключі від ANT
+        if (!empty($routes[0])) {
+            Log::info('[AntLogistics] DEBUG route fields', ['keys' => array_keys($routes[0]), 'first_route' => $routes[0]]);
+        }
+
         $saved = 0;
 
         // Завантажуємо всіх кур'єрів з ant_driver_name одним запитом

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\DeliveryRoute;
 use App\Models\Employee;
 use App\Models\EmployeeShift;
 use Filament\Pages\Page;
@@ -30,11 +31,18 @@ class EmployeeAttendance extends Page
 
     public function loadAttendance()
     {
-        $employees = Employee::where('is_active', true)->where('position', '!=', 'courier')->get();
-        
+        $employees = Employee::where('is_active', true)->get();
+
+        // Витрати з маршрутів по кур'єрах за цей день
+        $courierEarnings = DeliveryRoute::where('date', $this->date)
+            ->whereNotNull('employee_id')
+            ->selectRaw('employee_id, SUM(calculated_cost) as total')
+            ->groupBy('employee_id')
+            ->pluck('total', 'employee_id');
+
         // Отримуємо всі збережені зміни за цей день
         $existingShifts = EmployeeShift::where('date', $this->date)->get();
-        
+
         // Рахуємо суму для "зеленої панелі"
         $this->dailyTotal = $existingShifts->sum('rate');
 
@@ -43,11 +51,20 @@ class EmployeeAttendance extends Page
 
         foreach ($employees as $emp) {
             $shift = $shiftsMap->get($emp->id);
+
+            if ($emp->position === 'courier') {
+                $earned = (float) ($courierEarnings[$emp->id] ?? 0);
+                $rate   = $shift ? $shift->rate : $earned;
+            } else {
+                $rate = $shift ? $shift->rate : $emp->base_rate;
+            }
+
             $this->attendance[$emp->id] = [
-                'present' => (bool)$shift,
-                'rate' => $shift ? $shift->rate : $emp->base_rate,
-                'name' => $emp->name,
-                'position' => $emp->position,
+                'present'          => (bool) $shift,
+                'rate'             => $rate,
+                'name'             => $emp->name,
+                'position'         => $emp->position,
+                'courier_earned'   => $emp->position === 'courier' ? (float) ($courierEarnings[$emp->id] ?? 0) : null,
             ];
         }
     }
