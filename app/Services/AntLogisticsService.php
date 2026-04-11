@@ -639,7 +639,7 @@ class AntLogisticsService
                     'registration_number' => $route['Registration_Number'] ?? null,
                     'count_comps'         => $countComps,
                     'distance_calc'       => $route['distance_calc'] ?? null,
-                    'distance_fact'       => $route['distance_fact'] ?? null,
+                    'distance_fact'       => isset($route['distance']) && $route['distance'] > 0 ? round($route['distance'] / 1000, 2) : ($route['distance_fact'] ?? null),
                     'fuel_city'           => $route['Fuel_City'] ?? null,
                     'route_time_b'        => $route['RouteTime_B'] ?? null,
                     'route_time_e'        => $route['RouteTime_E'] ?? null,
