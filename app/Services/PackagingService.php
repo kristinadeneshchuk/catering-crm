@@ -158,8 +158,8 @@ class PackagingService
                 }
 
                 // Упаковка НФ-інгредієнтів страви
-                $dish->loadMissing('ingredients.childDish');
-                foreach ($dish->ingredients as $ingr) {
+                $dish->loadMissing('dishIngredients.childDish');
+                foreach ($dish->dishIngredients as $ingr) {
                     $nf = $ingr->childDish;
                     if (!$nf || !$nf->packaging_type) continue;
 
