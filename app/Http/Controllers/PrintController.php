@@ -1097,6 +1097,140 @@ class PrintController extends Controller
     }
 
 
+    public function assemblySheet(Request $request)
+    {
+        $inputDate  = $request->input('date', now()->format('Y-m-d'));
+        $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
+
+        [$menu, $globalDay] = $this->getMenuForTargetDate($targetDate);
+
+        $orders = Order::whereIn('status', ['new', 'active'])
+            ->whereHas('orderDays', fn($q) => $q->where('date', $targetDate))
+            ->with([
+                'client.dishExclusions',
+                'client.ingredientExclusions',
+                'orderDays' => fn($q) => $q->where('date', $targetDate),
+                'replacements.replacementDish',
+                'replacements.replacementProduct',
+            ])
+            ->get();
+
+        $rows = [];
+
+        foreach ($orders as $order) {
+            $orderDay = $order->orderDays->first();
+
+            // Визначаємо зміну (ранок/вечір)
+            if ($orderDay?->delivery_time) {
+                $hour      = (int) explode(':', $orderDay->delivery_time)[0];
+                $isEvening = $hour >= 12;
+            } else {
+                $isEvening = \App\Services\ScheduleService::isEvening($order->schedule_type);
+            }
+
+            // Формуємо текст змін для цього замовлення
+            $changeParts = [];
+
+            if ($menu) {
+                foreach ($menu->menuItems as $menuItem) {
+                    if (!$menuItem->dish) continue;
+                    $dish   = $menuItem->dish;
+                    $dishId = $dish->id;
+
+                    // Повна заміна страви
+                    $dishRep = $order->replacements
+                        ->where('dish_id', $dishId)
+                        ->whereNull('original_product_id')
+                        ->where('force_approved', false)
+                        ->first();
+
+                    if ($dishRep && $dishRep->replacementDish) {
+                        $changeParts[] = '→ ' . $dishRep->replacementDish->name;
+                        continue;
+                    }
+
+                    // Виключення страви
+                    $dishForceApproved = $order->replacements
+                        ->where('dish_id', $dishId)
+                        ->whereNull('original_product_id')
+                        ->where('force_approved', true)
+                        ->isNotEmpty();
+
+                    if (!$dishForceApproved && $order->client->dishExclusions->contains('id', $dishId)) {
+                        $changeParts[] = 'без ' . $dish->name;
+                        continue;
+                    }
+
+                    // Зміни інгредієнтів
+                    $ingParts = [];
+                    $this->collectIngredientNoteParts($dish, $order, $dishId, $ingParts);
+                    foreach ($ingParts as $p) {
+                        $changeParts[] = $p;
+                    }
+                }
+            }
+
+            // Виробничий коментар
+            $comment = trim($order->client?->production_comment ?? '');
+
+            $hasChanges = !empty($changeParts) || $comment !== '';
+
+            $rows[] = [
+                'client_id'  => $order->client?->id,
+                'calories'   => (int) $order->calories,
+                'is_evening' => $isEvening,
+                'changes'    => implode('; ', array_unique($changeParts)),
+                'comment'    => $comment,
+                'has_changes'=> $hasChanges,
+            ];
+        }
+
+        // Сортуємо за калоражем
+        usort($rows, fn($a, $b) => $a['calories'] <=> $b['calories']);
+
+        // Зведена статистика по калоражу
+        $calorieLevels = collect($rows)->pluck('calories')->unique()->sort()->values()->toArray();
+
+        $stats = [];
+        foreach ($calorieLevels as $cal) {
+            $group         = collect($rows)->where('calories', $cal);
+            $evening       = $group->where('is_evening', true);
+            $morning       = $group->where('is_evening', false);
+            $stats[$cal]   = [
+                'total'           => $group->count(),
+                'total_ind'       => $group->where('has_changes', true)->count(),
+                'evening'         => $evening->count(),
+                'evening_ind'     => $evening->where('has_changes', true)->count(),
+                'morning'         => $morning->count(),
+                'morning_ind'     => $morning->where('has_changes', true)->count(),
+            ];
+        }
+
+        $totalAll     = count($rows);
+        $totalInd     = collect($rows)->where('has_changes', true)->count();
+        $totalEvening = collect($rows)->where('is_evening', true)->count();
+        $totalEveningInd = collect($rows)->where('is_evening', true)->where('has_changes', true)->count();
+        $totalMorning = collect($rows)->where('is_evening', false)->count();
+        $totalMorningInd = collect($rows)->where('is_evening', false)->where('has_changes', true)->count();
+
+        $eveningRows = collect($rows)->where('is_evening', true)->where('has_changes', true)->values();
+        $morningRows = collect($rows)->where('is_evening', false)->where('has_changes', true)->values();
+
+        return view('print.assembly-sheet', [
+            'date'            => Carbon::parse($targetDate)->format('Y-m-d'),
+            'stats'           => $stats,
+            'calorieLevels'   => $calorieLevels,
+            'totalAll'        => $totalAll,
+            'totalInd'        => $totalInd,
+            'totalEvening'    => $totalEvening,
+            'totalEveningInd' => $totalEveningInd,
+            'totalMorning'    => $totalMorning,
+            'totalMorningInd' => $totalMorningInd,
+            'eveningRows'     => $eveningRows,
+            'morningRows'     => $morningRows,
+        ]);
+    }
+
     public function kitchenMenu(Request $request)
     {
         $date = $request->input('date', now()->format('Y-m-d'));

@@ -47,11 +47,11 @@ class SettingResource extends Resource
                             ->formatStateUsing(fn (?string $state): string => match ($state) {
                                 'menu_cycle_days' => 'Тривалість циклу (днів)',
                                 'menu_cycle_start_date' => 'Дата початку циклу',
+                                'monthly_rent' => 'Оренда (грн/місяць)',
+                                'monthly_utilities' => 'Комунальні послуги (грн/місяць)',
                                 default => (string)$state,
                             })
                             ->disabled()
-                            // 🔥 ВАЖЛИВО: false означає "Не зберігати це поле в базу".
-                            // Це захистить від помилки Duplicate entry.
                             ->dehydrated(false),
 
                         // 2. ЗНАЧЕННЯ (Число)
@@ -70,6 +70,15 @@ class SettingResource extends Resource
                             ->displayFormat('d.m.Y')
                             ->format('Y-m-d')
                             ->visible(fn ($record) => $record && $record->key === 'menu_cycle_start_date'),
+
+                        // 4. ЗНАЧЕННЯ (Оренда / Комунальні)
+                        Forms\Components\TextInput::make('value_money')
+                            ->label('Сума (грн/місяць)')
+                            ->statePath('value')
+                            ->required()
+                            ->numeric()
+                            ->prefix('₴')
+                            ->visible(fn ($record) => $record && in_array($record->key, ['monthly_rent', 'monthly_utilities'])),
                     ])->columns(1),
             ]);
     }
@@ -79,7 +88,7 @@ class SettingResource extends Resource
         return $table
             ->modifyQueryUsing(function (Builder $query) {
                 // Показуємо тільки наші два налаштування
-                return $query->whereIn('key', ['menu_cycle_days', 'menu_cycle_start_date']);
+                return $query->whereIn('key', ['menu_cycle_days', 'menu_cycle_start_date', 'monthly_rent', 'monthly_utilities']);
             })
             ->columns([
                 Tables\Columns\TextColumn::make('key')
@@ -87,6 +96,8 @@ class SettingResource extends Resource
                     ->formatStateUsing(fn (string $state): string => match ($state) {
                         'menu_cycle_days' => 'Тривалість циклу меню (днів)',
                         'menu_cycle_start_date' => 'Дата початку відліку циклу',
+                        'monthly_rent' => 'Оренда (грн/місяць)',
+                        'monthly_utilities' => 'Комунальні послуги (грн/місяць)',
                         default => $state,
                     })
                     ->sortable(),
@@ -98,6 +109,9 @@ class SettingResource extends Resource
                     ->formatStateUsing(function ($state, $record) {
                         if ($record->key === 'menu_cycle_start_date') {
                             return \Carbon\Carbon::parse($state)->format('d.m.Y');
+                        }
+                        if (in_array($record->key, ['monthly_rent', 'monthly_utilities'])) {
+                            return number_format((float)$state, 0, '.', ' ') . ' ₴';
                         }
                         return $state;
                     }),

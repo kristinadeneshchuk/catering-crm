@@ -40,6 +40,10 @@ class AnalyticsController extends Controller
         $otherExpenses = (float) $request->input('other_expenses', 1000);
         $activeTab = $request->input('tab', 'dashboard');
 
+        // Оренда та комунальні: місячне значення (розрахунок по днях — після побудови $dates)
+        $monthlyRent = (float) \App\Models\Setting::where('key', 'monthly_rent')->value('value');
+        $monthlyUtilities = (float) \App\Models\Setting::where('key', 'monthly_utilities')->value('value');
+
         $start = Carbon::parse($startDate);
         $end = Carbon::parse($endDate);
 
@@ -53,6 +57,15 @@ class AnalyticsController extends Controller
         $dates = [];
         for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
             $dates[$date->format('Y-m-d')] = $date->format('d.m');
+        }
+
+        // Денна ставка оренди/комунальних залежить від реальної кількості днів у місяці кожного дня
+        $rentByDay = [];
+        $utilitiesByDay = [];
+        foreach (array_keys($dates) as $ymd) {
+            $daysInMonth = Carbon::parse($ymd)->daysInMonth;
+            $rentByDay[$ymd] = $monthlyRent > 0 ? round($monthlyRent / $daysInMonth, 2) : 0;
+            $utilitiesByDay[$ymd] = $monthlyUtilities > 0 ? round($monthlyUtilities / $daysInMonth, 2) : 0;
         }
 
         // 2. Завантаження даних
@@ -267,7 +280,7 @@ class AnalyticsController extends Controller
         $retentionStats = [
             'total_clients' => 0, 'active_now' => 0, 'churned' => 0,
             'avg_lifetime_days' => 0, 'avg_ltv' => 0, 'churn_rate' => 0,
-            'new_clients' => 0, 'new_clients_percent' => 0,
+            'new_clients' => 0, 'new_clients_percent' => 0, 'new_clients_continued' => 0, 'new_clients_churned' => 0,
             'churned_period' => 0, 'churned_period_percent' => 0,
             'segments' => [
                 'trial' => ['count' => 0, 'label' => 'Пробні (1-3 дні)', 'color' => 'bg-rose-500'],
@@ -304,8 +317,14 @@ class AnalyticsController extends Controller
                 $retentionStats['total_clients']++;
 
                 // Новий клієнт: перше замовлення (за всю історію) починається в обраному періоді
-                if ($firstOrderStartDate && $firstOrderStartDate >= $startDate && $firstOrderStartDate <= $endDate) {
+                $isNewClient = $firstOrderStartDate && $firstOrderStartDate >= $startDate && $firstOrderStartDate <= $endDate;
+                if ($isNewClient) {
                     $retentionStats['new_clients']++;
+                    if ($lastOrderEndDate && $lastOrderEndDate >= $today) {
+                        $retentionStats['new_clients_continued']++;
+                    } else {
+                        $retentionStats['new_clients_churned']++;
+                    }
                 }
 
                 if ($lastOrderEndDate && $lastOrderEndDate >= $today) {
@@ -413,6 +432,7 @@ class AnalyticsController extends Controller
             'fopCount', 'totalFop',
             'discountCount', 'totalDiscount',  // 🔥 Знижки
             'spoilagePercent', 'otherExpenses', 'activeTab',
+            'rentByDay', 'utilitiesByDay', 'monthlyRent', 'monthlyUtilities',
             'unitEconomics', 'marketingStats', 'retentionStats',
             'cashReceivedPeriod', 'cashBalance', 'prepaidValue',
             'totalClientDebt', 'debtorClientsCount',

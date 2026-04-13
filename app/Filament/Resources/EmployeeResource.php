@@ -95,6 +95,7 @@ class EmployeeResource extends Resource
 
                 TextColumn::make('position')
                     ->label('Посада')
+                    ->sortable()
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => match ($state) {
                         'cook' => 'Кухар',

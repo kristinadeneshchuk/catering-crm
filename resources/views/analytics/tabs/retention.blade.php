@@ -6,12 +6,24 @@
             Нові клієнти
         </p>
         <h3 class="text-4xl font-black text-white mb-1">{{ $retentionStats['new_clients'] ?? 0 }}</h3>
-        <p class="text-zinc-500 text-sm">
+        <p class="text-zinc-500 text-sm mb-3">
             Вперше замовили у цьому періоді
             @if(($retentionStats['new_clients_percent'] ?? 0) > 0)
                 &nbsp;&mdash;&nbsp;<span class="text-teal-400 font-semibold">{{ round($retentionStats['new_clients_percent'], 1) }}%</span> від усіх клієнтів
             @endif
         </p>
+        @if(($retentionStats['new_clients'] ?? 0) > 0)
+            <div class="flex gap-4 mt-1">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span>
+                    <span class="text-zinc-400 text-sm">Продовжили&nbsp;<span class="text-emerald-400 font-bold">{{ $retentionStats['new_clients_continued'] ?? 0 }}</span></span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-rose-400 inline-block"></span>
+                    <span class="text-zinc-400 text-sm">Відпали&nbsp;<span class="text-rose-400 font-bold">{{ $retentionStats['new_clients_churned'] ?? 0 }}</span></span>
+                </div>
+            </div>
+        @endif
     </div>
 
     <div class="bg-zinc-900 border border-white/5 p-6 rounded-2xl shadow-xl relative overflow-hidden">

@@ -241,6 +241,129 @@
                                 Індивідуальні замовлення (Заміни)
                             </h4>
 
+                            {{-- ТЕХКАРТИ ПОВНИХ ЗАМІН СТРАВ (згруповані та просумовані) --}}
+                            @php
+                                $replacementGroups = collect($dish['custom_cards'])
+                                    ->filter(fn($c) => !empty($c['dish_replacement']))
+                                    ->groupBy('dish_replacement');
+                            @endphp
+                            @if($replacementGroups->isNotEmpty())
+                                <div class="pf-grid" style="margin-bottom: 12px;">
+                                @foreach($replacementGroups as $replacementName => $repCards)
+                                    @php
+                                        // Сумуємо інгредієнти по всіх клієнтах з однаковою заміною
+                                        $summed = [];
+                                        foreach ($repCards as $rc) {
+                                            foreach ($rc['components'] as $comp) {
+                                                $key = $comp['name'];
+                                                if (!isset($summed[$key])) {
+                                                    $summed[$key] = [
+                                                        'name'   => $comp['name'],
+                                                        'type'   => $comp['type'] ?? 'product',
+                                                        'brutto' => 0,
+                                                        'netto'  => 0,
+                                                        'sub_ingredients' => $comp['sub_ingredients'] ?? [],
+                                                    ];
+                                                }
+                                                $summed[$key]['brutto'] += (float)($comp['weight_brutto_sum'] ?? $comp['weight_brutto'] ?? 0);
+                                                $summed[$key]['netto']  += (float)($comp['weight_netto_sum'] ?? $comp['weight_netto'] ?? $comp['weight_output'] ?? 0);
+                                            }
+                                        }
+                                        $repClientNames = $repCards->pluck('client_name')->join(', ');
+                                        $repCount = $repCards->count();
+
+                                        // PF картки всередині цієї заміни
+                                        $repPFs = collect($summed)->filter(fn($i) => $i['type'] === 'pf')->values();
+                                    @endphp
+
+                                    {{-- Головна картка заміни --}}
+                                    <div class="pf-card" style="border-color: #2563eb;">
+                                        <div class="pf-card-header" style="background: #2563eb; color: white;">
+                                            <span>{{ $replacementName }} > [Заміна]</span>
+                                            <span>{{ $repCount }} шт.</span>
+                                        </div>
+                                        <div style="padding: 3px 8px; font-size: 9px; color: #1e40af; background: #eff6ff; border-bottom: 1px solid #bfdbfe;">
+                                            {{ $repClientNames }}
+                                        </div>
+                                        <table class="table-striped">
+                                            <thead>
+                                                <tr>
+                                                    <th>Інгредієнт/ПФ</th>
+                                                    <th style="width:50px;">Брутто</th>
+                                                    <th style="width:50px;">Нетто</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach($summed as $ing)
+                                                    <tr>
+                                                        <td class="{{ $ing['type'] === 'pf' ? 'font-bold' : '' }}">{{ $ing['name'] }}</td>
+                                                        <td class="text-center font-bold">{{ round($ing['brutto']) }}</td>
+                                                        <td class="text-center">{{ round($ing['netto']) }}</td>
+                                                    </tr>
+                                                @endforeach
+                                                <tr class="sum-row">
+                                                    <td class="text-right">Сумарна вага:</td>
+                                                    <td class="text-center">{{ round(array_sum(array_column($summed, 'brutto'))) }}</td>
+                                                    <td class="text-center">{{ round(array_sum(array_column($summed, 'netto'))) }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {{-- ПФ картки для заміни --}}
+                                    @foreach($repPFs as $repPf)
+                                        @php
+                                            // Сумуємо sub_ingredients цього ПФ по всіх клієнтах
+                                            $pfSummed = [];
+                                            foreach ($repCards as $rc) {
+                                                foreach ($rc['components'] as $comp) {
+                                                    if ($comp['name'] !== $repPf['name'] || ($comp['type'] ?? '') !== 'pf') continue;
+                                                    foreach ($comp['sub_ingredients'] ?? [] as $sub) {
+                                                        $sk = $sub['name'];
+                                                        if (!isset($pfSummed[$sk])) {
+                                                            $pfSummed[$sk] = ['name' => $sub['name'], 'brutto' => 0, 'netto' => 0, 'type' => $sub['type'] ?? 'product'];
+                                                        }
+                                                        $pfSummed[$sk]['brutto'] += (float)($sub['weight_brutto_sum'] ?? $sub['weight_brutto'] ?? 0);
+                                                        $pfSummed[$sk]['netto']  += (float)($sub['weight_netto_sum'] ?? $sub['weight_netto'] ?? $sub['weight_output'] ?? 0);
+                                                    }
+                                                }
+                                            }
+                                        @endphp
+                                        @if(!empty($pfSummed))
+                                        <div class="pf-card" style="border-color: #2563eb;">
+                                            <div class="pf-card-header" style="background: #1d4ed8; color: white;">
+                                                <span>{{ $repPf['name'] }} > [Заміна]</span>
+                                            </div>
+                                            <table class="table-striped">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Інгредієнт/ПФ</th>
+                                                        <th style="width:50px;">Брутто</th>
+                                                        <th style="width:50px;">Нетто</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach($pfSummed as $ps)
+                                                        <tr>
+                                                            <td>{{ $ps['name'] }}</td>
+                                                            <td class="text-center font-bold">{{ round($ps['brutto']) }}</td>
+                                                            <td class="text-center">{{ round($ps['netto']) }}</td>
+                                                        </tr>
+                                                    @endforeach
+                                                    <tr class="sum-row">
+                                                        <td class="text-right">Вихід ПФ:</td>
+                                                        <td class="text-center">-</td>
+                                                        <td class="text-center">{{ round($repPf['netto']) }}</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        @endif
+                                    @endforeach
+                                @endforeach
+                                </div>
+                            @endif
+
                             <table style="width: auto; min-width: 55%; border-collapse: collapse;">
                                 <thead>
                                     <tr>

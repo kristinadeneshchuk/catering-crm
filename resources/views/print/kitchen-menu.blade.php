@@ -173,6 +173,21 @@
                                 </div>
                             @endif
 
+                            {{-- РЕЦЕПТИ Н/Ф --}}
+                            @foreach($dish->dishIngredients ?? [] as $di)
+                                @if($di->childDish && $di->childDish->description)
+                                    <div style="border-top: 2px dashed #e0e7ff; padding: 14px 18px; background: #f8f8ff;">
+                                        <div style="display:flex; align-items:center; gap:8px; margin-bottom: 10px;">
+                                            <span style="font-size:10px; font-weight:700; color:#1d4ed8; text-transform:uppercase; letter-spacing:0.1em;">Рецепт Н/Ф</span>
+                                            <span style="font-size:12px; font-weight:700; color:#1e40af;">{{ $di->childDish->name }}</span>
+                                        </div>
+                                        <div class="recipe-content" style="font-size: 14px; line-height: 1.7;">
+                                            {!! $di->childDish->description !!}
+                                        </div>
+                                    </div>
+                                @endif
+                            @endforeach
+
                         </div>
                     @endforeach
                 </div>

@@ -81,6 +81,7 @@ class PackagingList extends Page implements HasForms
                 ]))
                 ->openUrlInNewTab(),
 
+
             // 🔥 ДРУГИЙ ВИПАДАЮЧИЙ СПИСОК: Логістика
             \Filament\Actions\ActionGroup::make([
                 Action::make('download_logistics_evening')
@@ -141,6 +142,12 @@ class PackagingList extends Page implements HasForms
                         }),
                         
                     \Filament\Forms\Components\Actions::make([
+                        \Filament\Forms\Components\Actions\Action::make('assembly_sheet')
+                            ->label('Збірний лист')
+                            ->icon('heroicon-o-clipboard-document-list')
+                            ->color('gray')
+                            ->url(fn () => route('print.assembly-sheet', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
+                            ->openUrlInNewTab(),
                         \Filament\Forms\Components\Actions\Action::make('print_view')
                             ->label('Відкрити версію для друку')
                             ->color('warning')
