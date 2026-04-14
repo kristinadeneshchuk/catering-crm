@@ -201,37 +201,70 @@ class AntLogisticsService
         $deliveryDate = Carbon::parse($date)->format('Y-m-d');
         $dateFmt      = Carbon::parse($date)->format('d.m.Y'); // формат Ant: dd.MM.yyyy
 
-        // Дата їжі: ранок — їжа на той самий день, вечір — їжа на наступний день
-        $targetDate = $shift === 'evening'
-            ? Carbon::parse($date)->addDay()->format('Y-m-d')
-            : $deliveryDate;
-
-        $extIdent = 'crm_' . $deliveryDate . ($shift !== 'all' ? '_' . $shift : '');
+        $extIdent    = 'crm_' . $deliveryDate . ($shift !== 'all' ? '_' . $shift : '');
+        $eveningDate = Carbon::parse($date)->addDay()->format('Y-m-d'); // день споживання для вечірніх
 
         // --- 1. Отримуємо замовлення ---
-        $query = Order::query()
-            ->with([
-                'client.addresses',
-                'orderDays' => fn ($q) => $q->where('date', $targetDate),
-                'projectData',
-            ])
-            ->whereIn('status', ['active', 'new'])
-            ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate));
+        // ⚠️ Важлива логіка дат:
+        // Ранкові клієнти: доставка вранці D, їдять в день D → orderDay = D
+        // Вечірні клієнти: доставка ввечері D, їдять в день D+1 → orderDay = D+1
+        // Тому для shift='all' потрібно окремо запитувати ранкових (orderDay=D) і вечірніх (orderDay=D+1)
+        if ($shift === 'all') {
+            $morningOrders = Order::query()
+                ->with([
+                    'client.addresses',
+                    'orderDays'  => fn ($q) => $q->where('date', $deliveryDate),
+                    'projectData',
+                ])
+                ->whereIn('status', ['active', 'new'])
+                ->whereHas('orderDays', fn ($q) => $q->where('date', $deliveryDate))
+                ->where(fn ($q) => $q
+                    ->where('schedule_type', 'like', '%morning%')
+                    ->orWhere('schedule_type', 'like', '%ранок%'))
+                ->get();
 
-        if ($shift === 'morning') {
-            $query->where(fn ($q) => $q
-                ->where('schedule_type', 'like', '%morning%')
-                ->orWhere('schedule_type', 'like', '%ранок%'));
-        } elseif ($shift === 'evening') {
-            $query->where(fn ($q) => $q
-                ->where('schedule_type', 'like', '%evening%')
-                ->orWhere('schedule_type', 'like', '%вечір%'));
+            $eveningOrders = Order::query()
+                ->with([
+                    'client.addresses',
+                    'orderDays'  => fn ($q) => $q->where('date', $eveningDate),
+                    'projectData',
+                ])
+                ->whereIn('status', ['active', 'new'])
+                ->whereHas('orderDays', fn ($q) => $q->where('date', $eveningDate))
+                ->where(fn ($q) => $q
+                    ->where('schedule_type', 'like', '%evening%')
+                    ->orWhere('schedule_type', 'like', '%вечір%'))
+                ->get();
+
+            $orders = $morningOrders->merge($eveningOrders);
+        } else {
+            // Для конкретної зміни: ранок = той самий день, вечір = наступний
+            $targetDate = $shift === 'evening' ? $eveningDate : $deliveryDate;
+
+            $query = Order::query()
+                ->with([
+                    'client.addresses',
+                    'orderDays'  => fn ($q) => $q->where('date', $targetDate),
+                    'projectData',
+                ])
+                ->whereIn('status', ['active', 'new'])
+                ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate));
+
+            if ($shift === 'morning') {
+                $query->where(fn ($q) => $q
+                    ->where('schedule_type', 'like', '%morning%')
+                    ->orWhere('schedule_type', 'like', '%ранок%'));
+            } else {
+                $query->where(fn ($q) => $q
+                    ->where('schedule_type', 'like', '%evening%')
+                    ->orWhere('schedule_type', 'like', '%вечір%'));
+            }
+
+            $orders = $query->get();
         }
 
-        $orders = $query->get();
-
         if ($orders->isEmpty()) {
-            Log::info('[AntLogistics] No orders to push', ['date' => $targetDate, 'shift' => $shift]);
+            Log::info('[AntLogistics] No orders to push', ['date' => $deliveryDate, 'shift' => $shift]);
             return 0;
         }
 
