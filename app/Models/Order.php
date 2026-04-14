@@ -152,7 +152,13 @@ class Order extends Model
     {
         if ($order->client_id && $order->isDirty('final_price')) {
             $diff = (float) $order->final_price - (float) $order->getOriginal('final_price');
-            $order->client->decrement('balance', $diff);
+            if ($diff > 0) {
+                // Ціна зросла — знімаємо різницю з балансу
+                $order->client->decrement('balance', $diff);
+            } elseif ($diff < 0) {
+                // Ціна впала (скасування днів) — повертаємо різницю на баланс
+                $order->client->increment('balance', abs($diff));
+            }
         }
         if ($order->client) $order->client->recalculateOrderPaymentStatus();
     }
