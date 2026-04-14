@@ -227,6 +227,9 @@ class PackagingList extends Page implements HasForms
 
         $sortedMenuItems = $menu->menuItems->sortBy(fn ($i) => $i->mealType?->sort_order ?? 99);
 
+        // Накопичувач для замінних страв (повна заміна страви)
+        $replacementDishData = [];
+
         foreach ($sortedMenuItems as $mItem) {
             $dish = $mItem->dish;
             if (!$dish) continue;
@@ -257,6 +260,51 @@ class PackagingList extends Page implements HasForms
                 $notes = $this->collectOrderNotes($order, $dish);
                 if (!empty($notes)) {
                     $tableData['individual_notes'] = array_merge($tableData['individual_notes'], $notes);
+                }
+
+                // ⚠️ Перевірка: клієнт має повне виключення цієї страви
+                // → не враховуємо його в інгредієнтах оригінальної страви
+                if ($order->client->dishExclusions->contains('id', $dish->id)) {
+                    $rep = $order->replacements
+                        ->where('dish_id', $dish->id)
+                        ->whereNull('original_product_id')
+                        ->first();
+
+                    if ($rep && $rep->replacementDish) {
+                        // Є замінна страва — накопичуємо окремо
+                        $repDish   = $rep->replacementDish;
+                        $repDishId = $repDish->id;
+                        $repBaseW  = (float)($repDish->base_weight_g ?? 0);
+                        $repScale  = $repBaseW > 0 ? ((float)$plannedWeight / $repBaseW) : 0.0;
+
+                        $colKey   = (string)(int)($order->calories ?? 0);
+                        $projSlug = $order->project ?? 'none';
+                        $projName = $order->projectData?->name ?? ucfirst($projSlug);
+
+                        if (!isset($replacementDishData[$repDishId])) {
+                            $replacementDishData[$repDishId] = [
+                                'meal'             => $mItem->mealType->name ?? 'Інше',
+                                'dish_name'        => '→ Заміна: ' . $repDish->name,
+                                'dish_obj'         => $repDish,
+                                'columns'          => [],
+                                'rows'             => [],
+                                'individual_notes' => [],
+                            ];
+                        }
+                        if (!isset($replacementDishData[$repDishId]['columns'][$colKey])) {
+                            $replacementDishData[$repDishId]['columns'][$colKey] = [
+                                'count' => 0, 'sum_scale' => 0.0, 'projects' => [],
+                            ];
+                        }
+                        $replacementDishData[$repDishId]['columns'][$colKey]['count']++;
+                        $replacementDishData[$repDishId]['columns'][$colKey]['sum_scale'] += $repScale;
+                        if (!isset($replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug])) {
+                            $replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug] = ['name' => $projName, 'count' => 0];
+                        }
+                        $replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug]['count']++;
+                    }
+                    // У будь-якому разі — пропускаємо оригінальну страву
+                    continue;
                 }
 
                 $baseW = (float)($dish->base_weight_g ?? 0);
@@ -315,6 +363,36 @@ class PackagingList extends Page implements HasForms
             }
 
             $this->report[] = $tableData;
+        }
+
+        // === ЗАМІННІ СТРАВИ — окремі таблиці для страв, якими повністю замінено оригінал ===
+        foreach ($replacementDishData as $repDishId => $repData) {
+            $repDish = $repData['dish_obj'];
+            $repDish->loadMissing(
+                'dishIngredients.ingredient',
+                'dishIngredients.childDish.dishIngredients.ingredient'
+            );
+
+            ksort($repData['columns']);
+
+            foreach ($repDish->dishIngredients as $di) {
+                $name = $di->ingredient
+                    ? $di->ingredient->name
+                    : ($di->childDish ? '[НФ] ' . $di->childDish->name : '???');
+
+                $netWeight = (float)($di->net_weight_g ?? 0);
+                $cells = [];
+                foreach ($repData['columns'] as $key => $col) {
+                    $count           = (int)($col['count'] ?? 1);
+                    $sumScale        = (float)($col['sum_scale'] ?? 0.0);
+                    $onePortionScale = $count > 0 ? ($sumScale / $count) : 0;
+                    $cells[$key]     = round($netWeight * $onePortionScale);
+                }
+                $repData['rows'][] = ['original_name' => $name, 'cells' => $cells];
+            }
+
+            unset($repData['dish_obj']);
+            $this->report[] = $repData;
         }
 
         // === ІНДИВІДУАЛЬНІ КЛІЄНТИ — одна картка на клієнта з усіма стравами ===

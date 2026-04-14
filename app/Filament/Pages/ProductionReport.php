@@ -75,7 +75,7 @@ class ProductionReport extends Page implements HasForms
                 ->disabled($isAlreadyDebited)
                 ->requiresConfirmation(fn () => !$isAlreadyDebited)
                 ->modalHeading('Підтвердити списання залишків?')
-                ->modalDescription('Система автоматично відніме вагу БРУТТО всіх інгредієнтів. Цю дію неможливо скасувати.')
+                ->modalDescription('Система автоматично відніме вагу БРУТТО всіх інгредієнтів та кількість упаковки зі складу. Цю дію неможливо скасувати.')
                 ->action(function () use ($settingKey, $dateParam) {
                     $checkAgain = Setting::where('key', $settingKey)->where('value', '1')->exists();
 
@@ -762,8 +762,11 @@ public function form(Form $form): Form
             return;
         }
 
-        DB::transaction(function () use ($ingredientsToDebit) {
-            // Оптимизация: берем все нужные ингредиенты одним запросом
+        // Збираємо упаковку для списання
+        $packagingToDebit = $this->collectPackagingToDebit();
+
+        DB::transaction(function () use ($ingredientsToDebit, $packagingToDebit) {
+            // --- Інгредієнти ---
             $ingredients = Ingredient::whereIn('id', array_keys($ingredientsToDebit))->get()->keyBy('id');
 
             foreach ($ingredientsToDebit as $id => $totalWeightGrams) {
@@ -773,14 +776,68 @@ public function form(Form $form): Form
                 $unit = mb_strtolower(trim((string)$ingredient->unit));
                 $weightToDebit = $totalWeightGrams;
 
-                // Если в рецептах используются граммы, а на складе КГ или Литры — конвертируем
+                // Якщо на складі КГ або Літри — конвертуємо з грамів
                 if (in_array($unit, ['кг', 'kg', 'л', 'l'], true)) {
                     $weightToDebit = $totalWeightGrams / 1000.0;
                 }
 
                 $ingredient->decrement('stock', $weightToDebit);
             }
+
+            // --- Упаковка ---
+            if (!empty($packagingToDebit)) {
+                $packagings = \App\Models\Packaging::whereIn('id', array_keys($packagingToDebit))->get()->keyBy('id');
+                foreach ($packagingToDebit as $packagingId => $qty) {
+                    $packaging = $packagings->get($packagingId);
+                    if (!$packaging) continue;
+                    $packaging->decrement('stock', $qty);
+                }
+            }
         });
+    }
+
+    /**
+     * Розраховує кількість кожного виду упаковки для поточного дня
+     * на основі активних замовлень (використовує PackagingService).
+     */
+    private function collectPackagingToDebit(): array
+    {
+        if (!$this->activeOrders || $this->activeOrders->isEmpty()) return [];
+
+        $selectedDate  = $this->data['date'] ?? now()->format('Y-m-d');
+        $targetDateObj = Carbon::parse($selectedDate)->addDay();
+
+        $cycleDays    = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
+        $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
+        $anchorDate   = Carbon::parse($startDateStr);
+
+        $diff   = abs($targetDateObj->diffInDays($anchorDate));
+        $dayNum = ($diff % $cycleDays) + 1;
+
+        // Меню з мінімально необхідними зв'язками для PackagingService
+        $menu = DailyMenu::with([
+            'menuItems.dish.dishIngredients.childDish',
+            'menuItems.mealType',
+        ])->where('day_number', $dayNum)->first();
+
+        if (!$menu) return [];
+
+        $allPackaging = \App\Models\Packaging::whereNotNull('packaging_type')->get()->keyBy('id');
+
+        // $this->activeOrders вже завантажено з усіма потрібними зв'язками
+        // (client.mealTypes, client.dishExclusions, replacements.replacementDish, projectData)
+        $summary = (new \App\Services\PackagingService())
+            ->getDailyPackagingSummary($this->activeOrders, $menu, $allPackaging);
+
+        $toDebit = [];
+        foreach ($summary as $packagingId => $item) {
+            $qty = (int) round($item['total_qty'] ?? 0);
+            if ($qty > 0) {
+                $toDebit[$packagingId] = $qty;
+            }
+        }
+
+        return $toDebit;
     }
 
     private function collectIngredientsRecursive(array $component, array &$accumulator): void

@@ -115,23 +115,46 @@ class PackagingService
 
             foreach ($items as $mi) {
                 $dish = $mi->dish;
-                if (!$dish || !$dish->packaging_type) continue;
+                if (!$dish) continue;
 
-                // Фактична вага порції
-                $baseW      = (float)($dish->base_weight_g ?? 0);
-                $totalKcal  = (float)($dish->total_kcal ?? 0);
+                // ⚠️ Перевірка повної заміни/виключення страви для цього клієнта
+                $clientDishExclusions = $order->client?->dishExclusions ?? collect();
+                $isExcluded = $clientDishExclusions->contains('id', $dish->id);
+
+                $actualDish = $dish;
+                if ($isExcluded) {
+                    $fullRep = ($order->replacements ?? collect())
+                        ->whereNull('original_product_id')
+                        ->where('dish_id', $dish->id)
+                        ->first();
+
+                    if ($fullRep && $fullRep->replacementDish) {
+                        // Є замінна страва — використовуємо її для вибору упаковки
+                        $actualDish = $fullRep->replacementDish;
+                        $actualDish->loadMissing('dishIngredients.childDish');
+                    } else {
+                        // Страва повністю виключена без заміни — контейнер не потрібен
+                        continue;
+                    }
+                }
+
+                if (!$actualDish->packaging_type) continue;
+
+                // Фактична вага порції (на основі реальної страви)
+                $baseW      = (float)($actualDish->base_weight_g ?? 0);
+                $totalKcal  = (float)($actualDish->total_kcal ?? 0);
                 $kcalPer100 = ($baseW > 0 && $totalKcal > 0) ? ($totalKcal / $baseW) * 100.0 : 0;
                 $actualWeight = ($kcalPer100 > 0) ? ($kcalPerDish / $kcalPer100) * 100.0 : $baseW;
 
-                // Підбираємо контейнер
-                $container = $this->findContainer($allPackaging, $dish->packaging_type, $actualWeight, $orderProject);
+                // Підбираємо контейнер для actualDish
+                $container = $this->findContainer($allPackaging, $actualDish->packaging_type, $actualWeight, $orderProject);
                 if (!$container) continue;
 
                 $result[] = [
                     'packaging_id'   => $container->id,
                     'name'           => $container->name,
                     'packaging_type' => $container->packaging_type,
-                    'dish_name'      => $dish->name,
+                    'dish_name'      => $actualDish->name,
                     'actual_weight'  => round($actualWeight),
                     'qty'            => 1,
                     'unit_price'     => (float) $container->price,
@@ -147,7 +170,7 @@ class PackagingService
                             'packaging_id'   => $pair->id,
                             'name'           => $pair->name,
                             'packaging_type' => $pair->packaging_type,
-                            'dish_name'      => $dish->name,
+                            'dish_name'      => $actualDish->name,
                             'actual_weight'  => null,
                             'qty'            => 1,
                             'unit_price'     => (float) $pair->price,
@@ -157,9 +180,9 @@ class PackagingService
                     }
                 }
 
-                // Упаковка НФ-інгредієнтів страви
-                $dish->loadMissing('dishIngredients.childDish');
-                foreach ($dish->dishIngredients as $ingr) {
+                // Упаковка НФ-інгредієнтів страви (реальної страви після заміни)
+                $actualDish->loadMissing('dishIngredients.childDish');
+                foreach ($actualDish->dishIngredients as $ingr) {
                     $nf = $ingr->childDish;
                     if (!$nf || !$nf->packaging_type) continue;
 

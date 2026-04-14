@@ -28,7 +28,7 @@ class PackagingAssemblyController extends Controller
         $dayNum       = ($diff % $cycleDays) + 1;
 
         $menu = DailyMenu::with([
-            'menuItems.dish',
+            'menuItems.dish.dishIngredients.childDish',
             'menuItems.mealType',
         ])->where('day_number', $dayNum)->first();
 
@@ -47,6 +47,8 @@ class PackagingAssemblyController extends Controller
             ->whereHas('orderDays', fn ($q) => $q->where('date', $date))
             ->with([
                 'client.mealTypes',
+                'client.dishExclusions',
+                'replacements.replacementDish',
                 'orderDays' => fn ($q) => $q->where('date', $date),
                 'projectData',
             ])
