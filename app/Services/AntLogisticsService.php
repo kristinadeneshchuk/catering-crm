@@ -366,7 +366,7 @@ class AntLogisticsService
 
         $pushed = count($compRows);
         Log::info('[AntLogistics] pushDailyOrders done', [
-            'date'   => $targetDate,
+            'date'   => $deliveryDate,
             'shift'  => $shift,
             'pushed' => $pushed,
         ]);
