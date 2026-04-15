@@ -95,7 +95,7 @@
                 @endforeach
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                 @foreach($retentionStats['segments'] as $key => $segment)
                     <div class="flex items-center gap-3 p-4 bg-zinc-800/50 rounded-xl border border-white/5">
                         <div class="w-4 h-4 rounded-full {{ $segment['color'] }} flex-shrink-0 shadow-lg"></div>

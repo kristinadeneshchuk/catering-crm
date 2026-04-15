@@ -128,6 +128,10 @@ class AnalyticsController extends Controller
         $projectStats = [];
         $uniqueClientIds = [];
 
+        // Individual vs Cyclic tracking
+        $indClientIds = []; $indRevenue = 0.0; $indFoodCost = 0.0; $indRations = 0; $indCalories = [];
+        $cyclicClientIds = []; $cyclicRevenue = 0.0; $cyclicFoodCost = 0.0; $cyclicRations = 0;
+
         // 3. ОСНОВНИЙ ЦИКЛ ПО ДНЯХ
         foreach ($dates as $ymd => $dm) {
             $days = $groupedDays->get($ymd, collect());
@@ -179,6 +183,27 @@ class AnalyticsController extends Controller
                     if ($menu && $allPackaging->isNotEmpty()) {
                         $packagingCost = $this->packagingService->calculateOrderPackagingCost($order, $menu, $allPackaging);
                         $dailyPackaging += $packagingCost;
+                    }
+
+                    // Individual / Cyclic split
+                    if ($order->menu_type === 'individual') {
+                        $indClientIds[$order->client->id] = true;
+                        $indRevenue   += $netPricePerDay;
+                        $indFoodCost  += $orderCost;
+                        $indRations++;
+                        $indCal = (int) $order->calories;
+                        if (!isset($indCalories[$indCal])) {
+                            $indCalories[$indCal] = ['count' => 0, 'revenue' => 0.0, 'food_cost' => 0.0, 'clients' => []];
+                        }
+                        $indCalories[$indCal]['count']++;
+                        $indCalories[$indCal]['revenue']   += $netPricePerDay;
+                        $indCalories[$indCal]['food_cost'] += $orderCost;
+                        $indCalories[$indCal]['clients'][$order->client->id] = true;
+                    } else {
+                        $cyclicClientIds[$order->client->id] = true;
+                        $cyclicRevenue  += $netPricePerDay;
+                        $cyclicFoodCost += $orderCost;
+                        $cyclicRations++;
                     }
 
                     // Юніт-економіка
@@ -283,9 +308,10 @@ class AnalyticsController extends Controller
             'new_clients' => 0, 'new_clients_percent' => 0, 'new_clients_continued' => 0, 'new_clients_churned' => 0,
             'churned_period' => 0, 'churned_period_percent' => 0,
             'segments' => [
-                'trial' => ['count' => 0, 'label' => 'Пробні (1-3 дні)', 'color' => 'bg-rose-500'],
+                'trial'   => ['count' => 0, 'label' => 'Пробні (1-3 дні)',    'color' => 'bg-rose-500'],
                 'regular' => ['count' => 0, 'label' => 'Постійні (4-14 днів)', 'color' => 'bg-blue-500'],
-                'vip' => ['count' => 0, 'label' => 'VIP (15+ днів)', 'color' => 'bg-avocado-500'],
+                'vip'     => ['count' => 0, 'label' => 'VIP (15-29 днів)',     'color' => 'bg-avocado-500'],
+                'elite'   => ['count' => 0, 'label' => 'Еліт (30+ днів)',      'color' => 'bg-violet-500'],
             ]
         ];
 
@@ -341,8 +367,10 @@ class AnalyticsController extends Controller
                     $retentionStats['segments']['trial']['count']++;
                 } elseif ($clientDays <= 14) {
                     $retentionStats['segments']['regular']['count']++;
-                } else {
+                } elseif ($clientDays <= 29) {
                     $retentionStats['segments']['vip']['count']++;
+                } else {
+                    $retentionStats['segments']['elite']['count']++;
                 }
             }
 
@@ -354,6 +382,140 @@ class AnalyticsController extends Controller
                 $retentionStats['churned_period_percent'] = ($retentionStats['churned_period'] / $retentionStats['total_clients']) * 100;
             }
         }
+
+        // 6б. INDIVIDUAL CLIENTS ANALYTICS
+        ksort($indCalories);
+        foreach ($indCalories as $indCal => &$cData) {
+            $cData['unique_clients'] = count($cData['clients']);
+            unset($cData['clients']);
+            $cData['profit']          = $cData['revenue'] - $cData['food_cost'];
+            $cData['margin']          = $cData['revenue'] > 0 ? ($cData['profit'] / $cData['revenue']) * 100 : 0;
+            $cData['revenue_share']   = $indRevenue > 0 ? ($cData['revenue'] / $indRevenue) * 100 : 0;
+            $cData['avg_per_ration']  = $cData['count'] > 0 ? $cData['revenue'] / $cData['count'] : 0;
+        }
+        unset($cData);
+
+        // Unique orders for avg_check / avg_duration
+        $indOrdersInPeriod   = $validDays->filter(fn($od) => $od->order && $od->order->menu_type === 'individual')->pluck('order')->unique('id');
+        $cyclicOrdersInPeriod = $validDays->filter(fn($od) => $od->order && $od->order->menu_type !== 'individual')->pluck('order')->unique('id');
+        $indOrderCount   = $indOrdersInPeriod->count();
+        $cyclicOrderCount = $cyclicOrdersInPeriod->count();
+
+        // Retention for individual clients
+        $indRetention = [
+            'total_clients' => 0, 'active_now' => 0, 'churned' => 0,
+            'avg_lifetime_days' => 0, 'avg_ltv' => 0, 'churn_rate' => 0,
+            'new_clients' => 0, 'new_clients_continued' => 0, 'new_clients_churned' => 0,
+            'churned_period' => 0, 'churned_period_percent' => 0,
+            'segments' => [
+                'trial'   => ['count' => 0, 'label' => 'Пробні (1-3 дні)',    'color' => 'bg-rose-500'],
+                'regular' => ['count' => 0, 'label' => 'Постійні (4-14 днів)', 'color' => 'bg-blue-500'],
+                'vip'     => ['count' => 0, 'label' => 'VIP (15-29 днів)',     'color' => 'bg-avocado-500'],
+                'elite'   => ['count' => 0, 'label' => 'Еліт (30+ днів)',      'color' => 'bg-violet-500'],
+            ],
+        ];
+        $indLtvTotal = 0; $indLifetimeDaysTotal = 0;
+
+        if (!empty($indClientIds)) {
+            $indClients = Client::whereIn('id', array_keys($indClientIds))->with('orders')->get();
+            $todayInd   = Carbon::now()->format('Y-m-d');
+
+            foreach ($indClients as $client) {
+                $clientDays = 0; $clientRevenue = 0; $lastEnd = null; $firstStart = null;
+                foreach ($client->orders as $o) {
+                    if ($o->total_price > 0 && !in_array($o->status, ['cancelled'])) {
+                        $clientDays    += max(1, (int) $o->duration);
+                        $clientRevenue += (float) ($o->final_price > 0 ? $o->final_price : $o->total_price);
+                        if (!$lastEnd   || $o->end_date   > $lastEnd)   $lastEnd   = $o->end_date;
+                        if (!$firstStart || $o->start_date < $firstStart) $firstStart = $o->start_date;
+                    }
+                }
+                $indLtvTotal          += $clientRevenue;
+                $indLifetimeDaysTotal += $clientDays;
+                $indRetention['total_clients']++;
+
+                if ($firstStart && $firstStart >= $startDate && $firstStart <= $endDate) {
+                    $indRetention['new_clients']++;
+                    if ($lastEnd && $lastEnd >= $todayInd) $indRetention['new_clients_continued']++;
+                    else $indRetention['new_clients_churned']++;
+                }
+                if ($lastEnd && $lastEnd >= $todayInd) {
+                    $indRetention['active_now']++;
+                } else {
+                    $indRetention['churned']++;
+                    if ($lastEnd && $lastEnd >= $startDate && $lastEnd <= $endDate) $indRetention['churned_period']++;
+                }
+                if ($clientDays <= 3)      $indRetention['segments']['trial']['count']++;
+                elseif ($clientDays <= 14) $indRetention['segments']['regular']['count']++;
+                elseif ($clientDays <= 29) $indRetention['segments']['vip']['count']++;
+                else                       $indRetention['segments']['elite']['count']++;
+            }
+            if ($indRetention['total_clients'] > 0) {
+                $indRetention['avg_lifetime_days']     = $indLifetimeDaysTotal / $indRetention['total_clients'];
+                $indRetention['avg_ltv']               = $indLtvTotal / $indRetention['total_clients'];
+                $indRetention['churn_rate']            = ($indRetention['churned'] / $indRetention['total_clients']) * 100;
+                $indRetention['churned_period_percent'] = ($indRetention['churned_period'] / $indRetention['total_clients']) * 100;
+            }
+        }
+
+        // Cyclic-only clients LTV for comparison
+        $cyclicOnlyIds = array_diff_key($uniqueClientIds, $indClientIds);
+        $cyclicCompare = ['avg_ltv' => 0, 'avg_lifetime_days' => 0, 'churn_rate' => 0, 'total_clients' => 0, 'churned' => 0];
+        if (!empty($cyclicOnlyIds)) {
+            $cyclicClients  = Client::whereIn('id', array_keys($cyclicOnlyIds))->with('orders')->get();
+            $cyclicLtvTotal = 0; $cyclicLifeDays = 0; $todayCyc = Carbon::now()->format('Y-m-d');
+            foreach ($cyclicClients as $client) {
+                $cDays = 0; $cRev = 0; $cLast = null;
+                foreach ($client->orders as $o) {
+                    if ($o->total_price > 0 && !in_array($o->status, ['cancelled'])) {
+                        $cDays += max(1, (int) $o->duration);
+                        $cRev  += (float) ($o->final_price > 0 ? $o->final_price : $o->total_price);
+                        if (!$cLast || $o->end_date > $cLast) $cLast = $o->end_date;
+                    }
+                }
+                $cyclicLtvTotal += $cRev;
+                $cyclicLifeDays += $cDays;
+                $cyclicCompare['total_clients']++;
+                if (!$cLast || $cLast < $todayCyc) $cyclicCompare['churned']++;
+            }
+            if ($cyclicCompare['total_clients'] > 0) {
+                $cyclicCompare['avg_ltv']           = $cyclicLtvTotal / $cyclicCompare['total_clients'];
+                $cyclicCompare['avg_lifetime_days'] = $cyclicLifeDays / $cyclicCompare['total_clients'];
+                $cyclicCompare['churn_rate']        = ($cyclicCompare['churned'] / $cyclicCompare['total_clients']) * 100;
+            }
+        }
+
+        $individualStats = [
+            'clients_count'  => count($indClientIds),
+            'revenue'        => round($indRevenue),
+            'revenue_share'  => $totalRevenue > 0 ? ($indRevenue / $totalRevenue) * 100 : 0,
+            'rations_count'  => $indRations,
+            'food_cost'      => round($indFoodCost),
+            'margin'         => $indRevenue > 0 ? (($indRevenue - $indFoodCost) / $indRevenue) * 100 : 0,
+            'avg_check'      => $indOrderCount > 0 ? $indOrdersInPeriod->sum(fn($o) => (float)$o->final_price) / $indOrderCount : 0,
+            'avg_duration'   => $indOrderCount > 0 ? $indOrdersInPeriod->sum('duration') / $indOrderCount : 0,
+            'avg_ltv'        => $indRetention['avg_ltv'],
+            'calories'       => $indCalories,
+            'retention'      => $indRetention,
+            'comparison'     => [
+                'individual' => [
+                    'avg_check'      => $indOrderCount > 0 ? $indOrdersInPeriod->sum(fn($o) => (float)$o->final_price) / $indOrderCount : 0,
+                    'avg_ltv'        => $indRetention['avg_ltv'],
+                    'avg_duration'   => $indOrderCount > 0 ? $indOrdersInPeriod->sum('duration') / $indOrderCount : 0,
+                    'margin'         => $indRevenue > 0 ? (($indRevenue - $indFoodCost) / $indRevenue) * 100 : 0,
+                    'churn_rate'     => $indRetention['churn_rate'],
+                    'clients_count'  => count($indClientIds),
+                ],
+                'cyclic' => [
+                    'avg_check'      => $cyclicOrderCount > 0 ? $cyclicOrdersInPeriod->sum(fn($o) => (float)$o->final_price) / $cyclicOrderCount : 0,
+                    'avg_ltv'        => $cyclicCompare['avg_ltv'],
+                    'avg_duration'   => $cyclicOrderCount > 0 ? $cyclicOrdersInPeriod->sum('duration') / $cyclicOrderCount : 0,
+                    'margin'         => $cyclicRevenue > 0 ? (($cyclicRevenue - $cyclicFoodCost) / $cyclicRevenue) * 100 : 0,
+                    'churn_rate'     => $cyclicCompare['churn_rate'],
+                    'clients_count'  => count($cyclicOnlyIds),
+                ],
+            ],
+        ];
 
         // 7. КАСОВИЙ РОЗРИВ за обраний період
         $cashReceivedPeriod = round(Transaction::where('type', 'income')
@@ -438,7 +600,8 @@ class AnalyticsController extends Controller
             'totalClientDebt', 'debtorClientsCount',
             'packagingCount', 'totalPackagingCost',
             'deliveryCostByDate', 'totalDeliveryCost',
-            'projectStats'
+            'projectStats',
+            'individualStats'
         ));
     }
 
