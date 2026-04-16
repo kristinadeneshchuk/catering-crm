@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\MealTypeResource\Pages;
 use App\Models\MealType;
 use Filament\Forms;
@@ -13,6 +15,7 @@ use Filament\Forms\Components\ColorPicker;
 
 class MealTypeResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = MealType::class;
     protected static ?string $navigationGroup = 'Довідник';
     protected static ?int $navigationSort = 4;

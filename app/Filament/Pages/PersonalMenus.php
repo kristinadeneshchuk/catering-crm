@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Traits\RestrictCookAccess;
 use Filament\Pages\Page;
 use App\Models\Order;
 use App\Models\Dish;
@@ -12,6 +13,8 @@ use Carbon\Carbon;
 
 class PersonalMenus extends Page
 {
+    use RestrictCookAccess;
+
     protected static ?string $navigationIcon  = 'heroicon-o-user-circle';
     protected static ?string $navigationLabel = 'Персональні меню';
     protected static ?string $title           = 'Персональні меню';

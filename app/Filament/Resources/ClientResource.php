@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\ClientResource\Pages;
 use App\Filament\Resources\ClientResource\RelationManagers\OrdersRelationManager;
 use App\Filament\Resources\ClientResource\RelationManagers\AddressesRelationManager;
@@ -26,6 +28,7 @@ use Filament\Forms\Set;
 
 class ClientResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = Client::class;
     protected static ?int $navigationSort = 2;
     protected static ?string $navigationIcon = 'heroicon-o-users';

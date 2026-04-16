@@ -3,6 +3,8 @@
 namespace App\Providers\Filament;
 
 use Filament\Http\Middleware\Authenticate;
+use Filament\Support\Assets\Js;
+use Filament\Support\Facades\FilamentAsset;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
@@ -21,6 +23,15 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
 {
+    public function register(): void
+    {
+        parent::register();
+
+        FilamentAsset::register([
+            Js::make('kitchen-echo', \Illuminate\Support\Facades\Vite::asset('resources/js/app.js')),
+        ]);
+    }
+
     public function panel(Panel $panel): Panel
     {
         return $panel

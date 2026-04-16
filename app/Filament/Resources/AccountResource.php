@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\AccountResource\Pages;
 use App\Models\Account;
 use Filament\Forms;
@@ -18,6 +20,7 @@ use Filament\Tables\Columns\IconColumn;
 
 class AccountResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = Account::class;
 
     protected static ?string $navigationLabel = 'Рахунки';

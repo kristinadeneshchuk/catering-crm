@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\ProjectResource\Pages;
 use App\Models\Project;
 use Filament\Forms;
@@ -13,6 +15,7 @@ use Illuminate\Support\Str;
 
 class ProjectResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = Project::class;
 
     protected static ?string $navigationGroup = 'Система'; // Назва групи має збігатися з існуючою

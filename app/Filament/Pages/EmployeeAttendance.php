@@ -11,6 +11,11 @@ use Illuminate\Support\Facades\DB;
 
 class EmployeeAttendance extends Page
 {
+    public static function canAccess(): bool
+    {
+        return auth()->user()->role === 'admin';
+    }
+
     protected static ?string $navigationLabel = 'Табель змін';
     protected static ?string $title = 'Щоденний табель';
     protected static ?string $navigationGroup = 'Система';

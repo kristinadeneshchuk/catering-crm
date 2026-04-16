@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\DailyMenuResource\Pages;
 use App\Models\DailyMenu;
 use App\Models\MealPlan;
@@ -19,6 +21,7 @@ use Illuminate\Support\HtmlString;
 
 class DailyMenuResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = DailyMenu::class;
     protected static ?string $navigationGroup = 'Довідник';
     protected static ?int $navigationSort = 3;

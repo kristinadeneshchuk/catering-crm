@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\OrderCallResource\Pages;
 use App\Models\OrderCall;
 use Filament\Forms;
@@ -16,6 +18,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class OrderCallResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = OrderCall::class;
 
     // Іконка та назва для лівого меню

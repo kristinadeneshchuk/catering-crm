@@ -34,6 +34,11 @@ class PackagingList extends Page implements HasForms
     /** @var array<int, array{items: array, totals?: array}> */
     private array $orderPlans = [];
 
+    public static function canAccess(): bool
+    {
+        return in_array(auth()->user()->role, ['admin', 'manager', 'cook'], true);
+    }
+
     public function mount(): void
     {
         $this->form->fill(['date' => request()->query('date', now()->format('Y-m-d'))]);

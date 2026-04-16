@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\CalorieRangeResource\Pages;
 use App\Models\CalorieRange;
 use Filament\Forms;
@@ -17,6 +19,7 @@ use Filament\Tables\Columns\TextColumn;
 
 class CalorieRangeResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = CalorieRange::class;
 
     // ГРУПУВАННЯ ТА СОРТУВАННЯ

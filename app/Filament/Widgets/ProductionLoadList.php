@@ -15,10 +15,9 @@ class ProductionLoadList extends Widget
 
     protected int | string | array $columnSpan = 'full';
 
-    // 🔥 ДОДАНО: Перевірка прав доступу (як у твоєму StatsOverview)
     public static function canView(): bool
     {
-        return true; // 🔥 Тимчасово дозволяємо бачити всім, щоб перевірити
+        return in_array(auth()->user()?->role, ['admin', 'manager'], true);
     }
 
     protected function getViewData(): array

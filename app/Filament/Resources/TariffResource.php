@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\TariffResource\Pages;
 use App\Models\Tariff;
 use Filament\Forms;
@@ -14,6 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletingScope; // 🔥 1. Імпорт дл
 
 class TariffResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = Tariff::class;
     protected static ?string $navigationGroup = 'Довідник';
     protected static ?int $navigationSort = 5;

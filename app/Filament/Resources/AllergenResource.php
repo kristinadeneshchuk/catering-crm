@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\AllergenResource\Pages;
 use App\Models\Allergen;
 use App\Models\Ingredient;
@@ -13,6 +15,7 @@ use Filament\Tables\Table;
 
 class AllergenResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = Allergen::class;
     protected static ?string $navigationGroup = 'Довідник';
     protected static ?int $navigationSort = 3;

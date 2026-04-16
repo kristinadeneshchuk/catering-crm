@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\SettingResource\Pages;
 use App\Models\Setting;
 use Filament\Forms;
@@ -13,6 +15,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class SettingResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = Setting::class;
     protected static ?string $navigationGroup = 'Система';
     protected static ?int $navigationSort = 1;

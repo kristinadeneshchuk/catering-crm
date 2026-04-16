@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\WarehouseResource\Pages;
 use App\Models\Warehouse;
 use Filament\Forms\Components\TextInput;
@@ -13,6 +15,7 @@ use Filament\Tables\Actions;
 
 class WarehouseResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = Warehouse::class;
 
     protected static ?string $navigationGroup = 'Довідник';

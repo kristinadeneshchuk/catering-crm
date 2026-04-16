@@ -16,7 +16,7 @@ class CookStats extends BaseWidget
      */
     public static function canView(): bool
     {
-        return auth()->user()->role === 'cook';
+        return false;
     }
 
     protected function getStats(): array

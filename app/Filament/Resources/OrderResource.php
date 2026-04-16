@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\OrderResource\Pages;
 use App\Filament\Resources\OrderResource\RelationManagers\TransactionsRelationManager;
 use App\Filament\Resources\OrderResource\RelationManagers\DeliveryCalendarRelationManager;
@@ -33,6 +35,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class OrderResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = Order::class;
     protected static ?int $navigationSort = 1;
     protected static ?string $navigationIcon = 'heroicon-o-shopping-cart';

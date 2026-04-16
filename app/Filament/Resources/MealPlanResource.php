@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\MealPlanResource\Pages;
 use App\Models\MealPlan;
 use App\Models\MealType;
@@ -18,6 +20,7 @@ use Illuminate\Support\HtmlString;
 
 class MealPlanResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = MealPlan::class;
     protected static ?string $navigationGroup = 'Довідник';
     protected static ?int $navigationSort = 4;

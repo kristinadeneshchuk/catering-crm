@@ -18,7 +18,7 @@ class Order extends Model
     protected $fillable = [
         'client_id', 'parent_order_id', 'tariff_id', 'project', 'is_paid',
         'start_date', 'end_date', 'duration', 'status',
-        'calories', 'scale_factor', 'total_price',
+        'calories', 'scale_factor', 'price_per_day', 'total_price',
         'comment', 'menu_token', 'schedule_type', 'menu_type', 'delivery_time',
         'discount_type', 'discount_value', 'discount_reason',
         'discount_amount', 'final_price',
@@ -50,20 +50,28 @@ class Order extends Model
             }
 
             // --- Розрахунок базової ціни ---
-            $range = CalorieRange::where('min_kcal', '<=', $order->calories)
-                ->where('max_kcal', '>=', $order->calories)
-                ->first();
-
-            if ($range && $order->tariff_id) {
-                $tariffPrice = DB::table('tariff_prices')
-                    ->where('tariff_id', $order->tariff_id)
-                    ->where('calorie_range_id', $range->id)
+            // Для нових замовлень (або якщо price_per_day не встановлено) — беремо з тарифу
+            // Для існуючих замовлень — використовуємо збережену price_per_day (ціна не змінюється при оновленні тарифу)
+            if (!$order->exists || $order->price_per_day === null) {
+                $range = CalorieRange::where('min_kcal', '<=', $order->calories)
+                    ->where('max_kcal', '>=', $order->calories)
                     ->first();
 
-                if ($tariffPrice) {
-                    $days = $order->duration ?: (Carbon::parse($order->start_date)->diffInDays($order->end_date) + 1);
-                    $order->total_price = $tariffPrice->price_per_day * $days;
+                if ($range && $order->tariff_id) {
+                    $tariffPrice = DB::table('tariff_prices')
+                        ->where('tariff_id', $order->tariff_id)
+                        ->where('calorie_range_id', $range->id)
+                        ->first();
+
+                    if ($tariffPrice) {
+                        $order->price_per_day = (float) $tariffPrice->price_per_day;
+                    }
                 }
+            }
+
+            if ($order->price_per_day > 0) {
+                $days = $order->duration ?: (Carbon::parse($order->start_date)->diffInDays($order->end_date) + 1);
+                $order->total_price = $order->price_per_day * $days;
             }
 
             // --- Розрахунок знижки рівня замовлення ---

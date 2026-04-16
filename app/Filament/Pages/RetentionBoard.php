@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Order;
 use App\Models\OrderCall;
+use App\Traits\RestrictCookAccess;
 use Mokhosh\FilamentKanban\Pages\KanbanBoard;
 use Illuminate\Support\Collection;
 use Filament\Actions\Action;
@@ -14,6 +15,8 @@ use Carbon\Carbon;
 
 class RetentionBoard extends KanbanBoard
 {
+    use RestrictCookAccess;
+
     protected static string $model = OrderCall::class;
     
     protected static ?string $navigationIcon = 'heroicon-o-phone-arrow-up-right';

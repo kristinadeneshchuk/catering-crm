@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\UserResource\Pages;
 use App\Models\User;
 use Filament\Forms;
@@ -12,6 +14,7 @@ use Filament\Tables\Table;
 
 class UserResource extends Resource
 {
+    use RestrictCookAccess;
 protected static ?string $model = User::class;
 
     protected static ?string $navigationGroup = 'Система';

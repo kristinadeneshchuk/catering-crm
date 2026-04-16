@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\DeliveryRoute;
 use App\Models\Setting;
+use App\Traits\RestrictCookAccess;
 use App\Services\AntLogisticsService;
 use Carbon\Carbon;
 use Filament\Actions\Action;
@@ -19,7 +20,7 @@ use Filament\Pages\Page;
 
 class LogisticsPage extends Page implements HasForms
 {
-    use InteractsWithForms;
+    use InteractsWithForms, RestrictCookAccess;
 
     protected static ?string $navigationLabel = 'Логістика';
     protected static ?string $title           = 'Логістика — Маршрути та витрати';

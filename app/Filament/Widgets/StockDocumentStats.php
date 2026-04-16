@@ -7,6 +7,11 @@ use Filament\Widgets\Widget;
 
 class StockDocumentStats extends Widget
 {
+    public static function canView(): bool
+    {
+        return in_array(auth()->user()?->role, ['admin', 'manager'], true);
+    }
+
     protected static bool $isLazy = false;
     protected static string $view = 'filament.widgets.stock-document-stats';
     protected int | string | array $columnSpan = 'full';

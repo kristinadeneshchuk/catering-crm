@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Ingredient;
 use App\Models\Packaging;
+use App\Traits\RestrictCookAccess;
 use Filament\Pages\Page;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -14,7 +15,7 @@ use Filament\Tables\Grouping\Group;
 
 class CurrentStock extends Page implements HasTable
 {
-    use InteractsWithTable;
+    use InteractsWithTable, RestrictCookAccess;
 
     protected static ?string $navigationGroup = 'Склад';
     protected static ?int $navigationSort = 2;

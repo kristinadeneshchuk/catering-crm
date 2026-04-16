@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\DishResource\Pages;
 use App\Models\Dish;
 use App\Models\Packaging;
@@ -22,6 +24,7 @@ use Filament\Forms\Components\RichEditor;
 
 class DishResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = Dish::class;
     protected static ?string $navigationGroup = 'Довідник';
     protected static ?int $navigationSort = 1;

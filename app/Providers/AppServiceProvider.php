@@ -9,6 +9,9 @@ use App\Models\StockDocumentItem;
 use App\Observers\PaymentObserver;
 use App\Observers\OrderObserver;
 use App\Observers\StockDocumentItemObserver;
+use Filament\Support\Facades\FilamentView;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Support\Facades\Blade;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -32,5 +35,13 @@ class AppServiceProvider extends ServiceProvider
 
         // Після кожного надходження товару — оновлюємо кеш собівартості меню
         StockDocumentItem::observe(StockDocumentItemObserver::class);
+
+        // Kitchen notification bell — show for all roles in top bar
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::GLOBAL_SEARCH_BEFORE,
+            fn (): string => auth()->check()
+                ? Blade::render('<livewire:kitchen-notification-bell />')
+                : '',
+        );
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+
 use App\Filament\Resources\EmployeeResource\Pages;
 use App\Models\Employee;
 use App\Models\Account;
@@ -24,6 +25,11 @@ use Filament\Notifications\Notification;
 class EmployeeResource extends Resource
 {
     protected static ?string $model = Employee::class;
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()->role === 'admin';
+    }
 
     protected static ?string $navigationLabel = 'Співробітники';
     protected static ?string $pluralModelLabel = 'Співробітники';

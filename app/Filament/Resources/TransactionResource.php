@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\TransactionResource\Pages;
 use App\Models\Transaction;
 use Filament\Forms;
@@ -17,6 +19,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class TransactionResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = Transaction::class;
 
     protected static ?string $navigationGroup = 'Система';

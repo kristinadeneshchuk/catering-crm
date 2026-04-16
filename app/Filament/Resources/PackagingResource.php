@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\PackagingResource\Pages;
 use App\Models\Packaging;
 use App\Models\Project;
@@ -20,6 +22,7 @@ use Filament\Tables\Filters\SelectFilter;
 
 class PackagingResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = Packaging::class;
 
     protected static ?string $navigationGroup = 'Довідник';

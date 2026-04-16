@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Traits\RestrictCookAccess;
+
 use App\Filament\Resources\ReplacementBundleResource\Pages;
 use App\Models\ReplacementBundle;
 use App\Models\Ingredient;
@@ -18,6 +20,7 @@ use Filament\Tables\Table;
 
 class ReplacementBundleResource extends Resource
 {
+    use RestrictCookAccess;
     protected static ?string $model = ReplacementBundle::class;
     protected static ?string $navigationGroup = 'Довідник';
     protected static ?int $navigationSort = 5;
