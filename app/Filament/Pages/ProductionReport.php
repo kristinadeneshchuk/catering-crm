@@ -323,7 +323,16 @@ public function form(Form $form): Form
                     Select::make('replacement_dish_id')
                         ->label('Обрати іншу страву')
                         ->options(function () use ($excludedDishIds) {
-                            return Dish::whereNotIn('id', $excludedDishIds)->limit(50)->pluck('name', 'id');
+                            return Dish::whereNotIn('id', $excludedDishIds)
+                                ->orderBy('name')
+                                ->pluck('name', 'id');
+                        })
+                        ->getSearchResultsUsing(function (string $search) use ($excludedDishIds) {
+                            return Dish::whereNotIn('id', $excludedDishIds)
+                                ->where('name', 'like', "%{$search}%")
+                                ->orderBy('name')
+                                ->limit(50)
+                                ->pluck('name', 'id');
                         })
                         ->searchable()
                         ->required(),
