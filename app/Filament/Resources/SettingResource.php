@@ -52,6 +52,7 @@ class SettingResource extends Resource
                                 'menu_cycle_start_date' => 'Дата початку циклу',
                                 'monthly_rent' => 'Оренда (грн/місяць)',
                                 'monthly_utilities' => 'Комунальні послуги (грн/місяць)',
+                                'rewards_enabled' => 'Подарунки за рейтинги',
                                 default => (string)$state,
                             })
                             ->disabled()
@@ -63,7 +64,8 @@ class SettingResource extends Resource
                             ->statePath('value')
                             ->required()
                             ->numeric()
-                            ->visible(fn ($record) => $record && $record->key === 'menu_cycle_days'),
+                            ->visible(fn ($record) => $record && $record->key === 'menu_cycle_days')
+                            ->dehydrated(fn ($record) => $record && $record->key === 'menu_cycle_days'),
 
                         // 3. ЗНАЧЕННЯ (Дата)
                         Forms\Components\DatePicker::make('value_date')
@@ -72,7 +74,8 @@ class SettingResource extends Resource
                             ->required()
                             ->displayFormat('d.m.Y')
                             ->format('Y-m-d')
-                            ->visible(fn ($record) => $record && $record->key === 'menu_cycle_start_date'),
+                            ->visible(fn ($record) => $record && $record->key === 'menu_cycle_start_date')
+                            ->dehydrated(fn ($record) => $record && $record->key === 'menu_cycle_start_date'),
 
                         // 4. ЗНАЧЕННЯ (Оренда / Комунальні)
                         Forms\Components\TextInput::make('value_money')
@@ -81,7 +84,17 @@ class SettingResource extends Resource
                             ->required()
                             ->numeric()
                             ->prefix('₴')
-                            ->visible(fn ($record) => $record && in_array($record->key, ['monthly_rent', 'monthly_utilities'])),
+                            ->visible(fn ($record) => $record && in_array($record->key, ['monthly_rent', 'monthly_utilities']))
+                            ->dehydrated(fn ($record) => $record && in_array($record->key, ['monthly_rent', 'monthly_utilities'])),
+
+                        // 5. СПИСОК (rewards_enabled)
+                        Forms\Components\Select::make('value')
+                            ->label('Подарунки за рейтинги')
+                            ->helperText('Вимкнено — клієнти бачать лише зірки та коментарі. Увімкнено — з\'являється прогрес-бар і подарунок за заповнені відгуки.')
+                            ->options(['1' => '✅ Увімкнено', '0' => '❌ Вимкнено'])
+                            ->required()
+                            ->visible(fn ($record) => $record && $record->key === 'rewards_enabled')
+                            ->dehydrated(fn ($record) => $record && $record->key === 'rewards_enabled'),
                     ])->columns(1),
             ]);
     }
@@ -90,8 +103,7 @@ class SettingResource extends Resource
     {
         return $table
             ->modifyQueryUsing(function (Builder $query) {
-                // Показуємо тільки наші два налаштування
-                return $query->whereIn('key', ['menu_cycle_days', 'menu_cycle_start_date', 'monthly_rent', 'monthly_utilities']);
+                return $query->whereIn('key', ['menu_cycle_days', 'menu_cycle_start_date', 'monthly_rent', 'monthly_utilities', 'rewards_enabled']);
             })
             ->columns([
                 Tables\Columns\TextColumn::make('key')
@@ -101,6 +113,7 @@ class SettingResource extends Resource
                         'menu_cycle_start_date' => 'Дата початку відліку циклу',
                         'monthly_rent' => 'Оренда (грн/місяць)',
                         'monthly_utilities' => 'Комунальні послуги (грн/місяць)',
+                        'rewards_enabled' => 'Подарунки за рейтинги',
                         default => $state,
                     })
                     ->sortable(),
@@ -115,6 +128,9 @@ class SettingResource extends Resource
                         }
                         if (in_array($record->key, ['monthly_rent', 'monthly_utilities'])) {
                             return number_format((float)$state, 0, '.', ' ') . ' ₴';
+                        }
+                        if ($record->key === 'rewards_enabled') {
+                            return $state ? 'Увімкнено' : 'Вимкнено';
                         }
                         return $state;
                     }),

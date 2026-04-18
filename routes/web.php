@@ -30,6 +30,7 @@ Route::get('/', function () {
  */
 Route::get('/menu/{token}', [ClientMenuController::class, 'show'])->name('menu.show');
 Route::get('/menu/{token}/dish/{dishId}', [ClientMenuController::class, 'dish'])->name('menu.dish');
+Route::post('/menu/{token}/rate', [ClientMenuController::class, 'rate'])->name('menu.rate');
 
 /**
  * 🖨️ БЛОК ДРУКУ

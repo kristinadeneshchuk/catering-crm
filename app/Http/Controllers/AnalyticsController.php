@@ -518,7 +518,10 @@ class AnalyticsController extends Controller
         ];
 
         // 7. КАСОВИЙ РОЗРИВ за обраний період
+        // Тільки реальні платежі від клієнтів (з прив'язкою до рахунку).
+        // Бухгалтерські записи від створення/зміни замовлень не мають account_id → не рахуємо.
         $cashReceivedPeriod = round(Transaction::where('type', 'income')
+            ->whereNotNull('account_id')
             ->whereBetween('date', [$startDate, $endDate])
             ->sum('amount'));
 

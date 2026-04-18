@@ -22,10 +22,13 @@ class Order extends Model
         'comment', 'menu_token', 'schedule_type', 'menu_type', 'delivery_time',
         'discount_type', 'discount_value', 'discount_reason',
         'discount_amount', 'final_price',
+        'reward_unlocked', 'reward_given',
     ];
 
     protected $casts = [
-        'is_paid'         => 'boolean',
+        'is_paid'          => 'boolean',
+        'reward_unlocked'  => 'boolean',
+        'reward_given'     => 'boolean',
         'duration'        => 'integer',
         'start_date'      => 'date',
         'end_date'        => 'date',
@@ -223,6 +226,8 @@ class Order extends Model
     public function childOrders(): HasMany { return $this->hasMany(Order::class, 'parent_order_id'); }
 
     public function isIndividual(): bool { return $this->menu_type === 'individual'; }
+
+    public function dishRatings(): HasMany { return $this->hasMany(DishRating::class); }
 
     // =========================================================
     // ✅ ГОЛОВНА ФУНКЦІЯ: ДЕННИЙ scale_factor (а не “раз і назавжди”)

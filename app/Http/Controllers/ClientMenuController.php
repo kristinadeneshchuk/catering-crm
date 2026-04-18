@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\DailyMenu;
+use App\Models\DishRating;
+use App\Models\KitchenNotification;
 use App\Models\Order;
 use App\Models\OrderDayDish;
 use App\Models\Setting;
@@ -22,17 +24,15 @@ class ClientMenuController extends Controller
 
         $client = $order->client;
         $today   = now()->startOfDay();
-        $maxDate = $today->copy()->addDays(2); // дозволяємо сьогодні + 2 дні вперед
+        $maxDate = $today->copy()->addDays(2);
         $date = $request->input('date')
             ? Carbon::parse($request->input('date'))->startOfDay()
             : $today;
 
-        // Клієнт не може переглядати далі ніж +2 дні
         if ($date->greaterThan($maxDate)) {
             $date = $today;
         }
 
-        // Шукаємо активне замовлення на цю дату (може бути інше замовлення того ж клієнта)
         $activeOrder = Order::where('client_id', $client->id)
             ->whereHas('orderDays', fn($q) => $q->where('date', $date->format('Y-m-d')))
             ->with([
@@ -65,7 +65,6 @@ class ClientMenuController extends Controller
             }
         }
 
-        // Навігація: перевіряємо чи є замовлення на сусідні дні
         $prevDate = $date->copy()->subDay();
         $nextDate = $date->copy()->addDay();
 
@@ -77,18 +76,160 @@ class ClientMenuController extends Controller
             ->whereHas('orderDays', fn($q) => $q->where('date', $nextDate->format('Y-m-d')))
             ->exists();
 
+        // ── Рейтинги поточного дня ──
+        $usedOrder      = $activeOrder ?? $order;
+        $isToday        = $date->isToday();
+        $rewardsEnabled = (bool)(int) Setting::where('key', 'rewards_enabled')->value('value');
+
+        // Завантажуємо збережені оцінки тільки якщо сьогодні
+        $todayRatings = [];
+        if ($isToday && $usedOrder) {
+            $todayRatings = DishRating::where('order_id', $usedOrder->id)
+                ->where('date', $date->format('Y-m-d'))
+                ->get()
+                ->keyBy('dish_id')
+                ->toArray();
+        }
+
+        // ── Прогрес (тільки якщо нагороди увімкнені) ──
+        $progress = $rewardsEnabled ? $this->calculateProgress($usedOrder) : ['goal' => 0, 'completed' => 0, 'reward' => false, 'reward_given' => false];
+
         return view('menu.show', [
-            'token'       => $token,
-            'client'      => $client,
-            'order'       => $activeOrder ?? $order,
-            'date'        => $date,
-            'items'       => $items,
-            'totals'      => $totals,
-            'hasPrev'     => $hasPrev,
-            'hasNext'     => $hasNext,
-            'prevDate'    => $prevDate,
-            'nextDate'    => $nextDate,
+            'token'          => $token,
+            'client'         => $client,
+            'order'          => $usedOrder,
+            'date'           => $date,
+            'items'          => $items,
+            'totals'         => $totals,
+            'hasPrev'        => $hasPrev,
+            'hasNext'        => $hasNext,
+            'prevDate'       => $prevDate,
+            'nextDate'       => $nextDate,
+            'isToday'        => $isToday,
+            'todayRatings'   => $todayRatings,
+            'progress'       => $progress,
+            'rewardsEnabled' => $rewardsEnabled,
         ]);
+    }
+
+    // =====================================================================
+    // Зберегти/оновити рейтинг страви (AJAX)
+    // =====================================================================
+    public function rate(string $token, Request $request)
+    {
+        $request->validate([
+            'dish_id' => 'required|integer|exists:dishes,id',
+            'stars'   => 'required|integer|min:1|max:5',
+            'comment' => 'nullable|string|max:500',
+        ]);
+
+        $order = Order::where('menu_token', $token)->firstOrFail();
+        $today = now()->format('Y-m-d');
+
+        DishRating::updateOrCreate(
+            [
+                'order_id' => $order->id,
+                'dish_id'  => $request->dish_id,
+                'date'     => $today,
+            ],
+            [
+                'stars'   => $request->stars,
+                'comment' => $request->comment,
+            ]
+        );
+
+        // Перевіряємо чи розблокована нагорода (тільки якщо функція увімкнена)
+        $rewardsEnabled     = (bool)(int) Setting::where('key', 'rewards_enabled')->value('value');
+        $progress           = $rewardsEnabled ? $this->calculateProgress($order) : ['goal' => 0, 'completed' => 0, 'reward' => false, 'reward_given' => false];
+        $rewardJustUnlocked = false;
+
+        if ($rewardsEnabled && $progress['completed'] >= $progress['goal'] && $progress['goal'] > 0 && !$order->reward_unlocked) {
+            $order->update(['reward_unlocked' => true]);
+            $rewardJustUnlocked = true;
+
+            // Сповіщення для адміна/менеджера
+            KitchenNotification::create([
+                'message'     => "🎁 Клієнт {$order->client->name} виконав умову рейтингу — {$progress['goal']} дн. оцінено. Потрібно видати нагороду.",
+                'type'        => 'reward',
+                'order_id'    => $order->id,
+                'client_id'   => $order->client_id,
+                'client_name' => $order->client->name,
+            ]);
+        }
+
+        // Оновлюємо прогрес після збереження
+        $progress = $this->calculateProgress($order->fresh());
+
+        return response()->json([
+            'ok'                  => true,
+            'progress'            => $progress,
+            'reward_just_unlocked' => $rewardJustUnlocked,
+            'reward_unlocked'     => $order->fresh()->reward_unlocked,
+        ]);
+    }
+
+    // =====================================================================
+    // Розрахунок прогресу для замовлення
+    // =====================================================================
+    private function calculateProgress(Order $order): array
+    {
+        // Ціль: якщо замовлення > 5 днів — ціль 5, інакше — вся тривалість
+        $goal = $order->duration > 5 ? 5 : max(1, (int) $order->duration);
+
+        // Знаходимо дні де клієнт оцінив ВСІ страви
+        // Спочатку беремо всі унікальні дати з оцінками
+        $ratedDates = DishRating::where('order_id', $order->id)
+            ->select('date')
+            ->groupBy('date')
+            ->pluck('date')
+            ->toArray();
+
+        $completedDays = 0;
+        foreach ($ratedDates as $ratedDate) {
+            // Рахуємо скільки страв мав клієнт в цей день
+            $expectedCount = $this->getDishCountForDate($order, $ratedDate);
+            // Рахуємо скільки оцінок є
+            $ratedCount = DishRating::where('order_id', $order->id)
+                ->where('date', $ratedDate)
+                ->count();
+
+            if ($expectedCount > 0 && $ratedCount >= $expectedCount) {
+                $completedDays++;
+            }
+        }
+
+        return [
+            'goal'        => $goal,
+            'completed'   => min($completedDays, $goal),
+            'reward'      => $order->reward_unlocked,
+            'reward_given' => $order->reward_given,
+        ];
+    }
+
+    // Скільки страв у клієнта на конкретну дату
+    private function getDishCountForDate(Order $order, string $date): int
+    {
+        if ($order->menu_type === 'individual') {
+            return OrderDayDish::where('order_id', $order->id)
+                ->where('date', $date)
+                ->count();
+        }
+
+        // Для циклічного меню — рахуємо страви з меню що відповідають типам клієнта
+        $dateObj = Carbon::parse($date);
+        [$menu] = $this->getMenuForDate($dateObj);
+        if (!$menu) return 0;
+
+        $clientMealTypeIds = $order->client->mealTypes->pluck('id')->toArray();
+        $allowed = \App\Models\MealPlan::getAllowedSortOrders((int) $order->calories);
+
+        return $menu->menuItems
+            ->filter(fn($item) =>
+                $item->dish &&
+                in_array($item->meal_type_id, $clientMealTypeIds) &&
+                in_array($item->mealType?->sort_order, $allowed)
+            )
+            ->count();
     }
 
     // =====================================================================
@@ -122,7 +263,6 @@ class ClientMenuController extends Controller
                 'replacements.replacementDish.dishIngredients.ingredient',
             ]);
 
-        // Індивідуальний клієнт — беремо страву з персонального меню
         if ($activeOrder->menu_type === 'individual') {
             $pd = OrderDayDish::where('order_id', $activeOrder->id)
                 ->where('date', $date->format('Y-m-d'))
@@ -311,8 +451,6 @@ class ClientMenuController extends Controller
         )->values();
         $byMeal = $selectedItems->groupBy('meal_type_id');
 
-        // Нормалізація: якщо вибрані страви мають відсотки що не дають 100%
-        // (наприклад, 3 страви по 20% = 60%), нормалізуємо до 100%
         $rawPct = [];
         foreach ($byMeal as $mealTypeId => $items) {
             $fi = $items->first();
@@ -379,7 +517,6 @@ class ClientMenuController extends Controller
         return ['items' => $resultItems, 'totals' => $totals];
     }
 
-    // Повертає список інгредієнтів з урахуванням замін та виключень клієнта
     private function getIngredientsWithReplacements($dish, float $k, Order $order, int $rootDishId, float $subRatio = 1.0): array
     {
         $list = [];
@@ -393,7 +530,6 @@ class ClientMenuController extends Controller
                 $ing       = $di->ingredient;
                 $netWeight = round((float) ($di->net_weight_g ?? 0) * $currentK, 1);
 
-                // Заміна інгредієнта для цієї страви
                 $replacement = $order->replacements
                     ->where('dish_id', $rootDishId)
                     ->where('original_product_id', $ing->id)
@@ -416,7 +552,6 @@ class ClientMenuController extends Controller
                         'is_replaced'   => false,
                     ];
                 }
-                // Виключені інгредієнти клієнту не показуємо
             } elseif (in_array($type, ['pf', 'пф', 'напівфабрикат', 'п/ф', 'н/ф'], true) && $di->childDish) {
                 $pfTotals = $di->childDish->calculated_totals;
                 $pfOutput = (float) ($pfTotals['output_weight'] ?? 0);
@@ -432,7 +567,6 @@ class ClientMenuController extends Controller
         return $list;
     }
 
-    // Збирає всі алергени страви рекурсивно
     private function collectAllergens($dish, array $seen = []): array
     {
         $allergens = [];
@@ -454,5 +588,4 @@ class ClientMenuController extends Controller
 
         return array_keys($allergens);
     }
-
 }
