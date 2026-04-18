@@ -109,11 +109,11 @@ class AntLogisticsService
             }
 
             foreach ($addresses as $addrRecord) {
-                // Default адреса: Comp_Id = client_id
-                // Решта: Comp_Id = client_id_a{address_id}
+                // Default адреса: Comp_Id = client_id (збігається з ID в CRM)
+                // Додаткова адреса: client_id + address_id (4 цифри), напр. 2200172
                 $compId = $addrRecord->is_default
                     ? (string) $client->id
-                    : "{$client->id}_a{$addrRecord->id}";
+                    : sprintf('%d%04d', $client->id, $addrRecord->id);
 
                 $address = $this->buildClientAddressFromRecord($addrRecord, $client);
                 $deliveryComment = $addrRecord->delivery_comment ?? $client->delivery_comment ?? '';
