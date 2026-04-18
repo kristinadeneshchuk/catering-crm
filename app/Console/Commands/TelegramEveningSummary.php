@@ -116,7 +116,7 @@ class TelegramEveningSummary extends Command
                 $name    = $order->client?->name ?? '—';
                 $phone   = $order->client?->phone ?? '';
                 $endDate = Carbon::parse($order->end_date)->format('d.m');
-                $days    = Carbon::parse($order->end_date)->diffInDays(now());
+                $days    = (int) Carbon::parse($order->end_date)->diffInDays(now());
                 $lines[] = "  • {$name}" . ($phone ? " ({$phone})" : '') . " — {$days} дн. тому";
             }
             if ($inactiveClients->count() > 5) {
