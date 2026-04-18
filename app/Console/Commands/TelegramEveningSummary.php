@@ -9,6 +9,7 @@ use App\Models\Transaction;
 use App\Services\TelegramService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 class TelegramEveningSummary extends Command
 {
@@ -58,6 +59,70 @@ class TelegramEveningSummary extends Command
         $debtFormatted = number_format($salaryDebt, 0, '.', ' ');
         $debtIcon = $salaryDebt > 0 ? "⚠️" : "✅";
         $lines[] = "{$debtIcon} <b>Борг по зарплаті:</b> {$debtFormatted} ₴";
+        $lines[] = "";
+
+        // Не продовжились після закінчення тарифу (закінчились за останні 7 днів, немає нового замовлення)
+        $recentlyExpired = Order::whereBetween('end_date', [now()->subDays(7)->format('Y-m-d'), $today->format('Y-m-d')])
+            ->whereIn('status', ['active', 'completed', 'finished', 'paused'])
+            ->with('client.orders')
+            ->get();
+
+        $notRenewed = $recentlyExpired->filter(function ($order) {
+            return $order->client && $order->client->orders
+                ->where('start_date', '>', $order->end_date)
+                ->isEmpty();
+        });
+
+        $notRenewedIcon = $notRenewed->count() > 0 ? "⚠️" : "✅";
+        $lines[] = "{$notRenewedIcon} <b>Не продовжились після тарифу:</b> {$notRenewed->count()}";
+        if ($notRenewed->isNotEmpty()) {
+            foreach ($notRenewed->take(5) as $order) {
+                $name    = $order->client?->name ?? '—';
+                $endDate = Carbon::parse($order->end_date)->format('d.m');
+                $lines[] = "  • {$name} (до {$endDate})";
+            }
+            if ($notRenewed->count() > 5) {
+                $lines[] = "  ... і ще " . ($notRenewed->count() - 5);
+            }
+        }
+        $lines[] = "";
+
+        // Клієнти без активності 5+ днів (замовлення закінчилось, немає оплати і немає нового замовлення)
+        $cutoff = now()->subDays(5)->format('Y-m-d');
+        $inactiveClients = Order::where('end_date', '<=', $cutoff)
+            ->whereIn('status', ['active', 'completed', 'finished', 'paused'])
+            ->with(['client.orders', 'client.transactions'])
+            ->get()
+            ->filter(function ($order) use ($cutoff) {
+                if (!$order->client) return false;
+
+                $hasNewOrder = $order->client->orders
+                    ->where('start_date', '>', $order->end_date)
+                    ->isNotEmpty();
+
+                $hasRecentPayment = $order->client->transactions()
+                    ->where('type', 'income')
+                    ->where('date', '>', $order->end_date)
+                    ->exists();
+
+                return !$hasNewOrder && !$hasRecentPayment;
+            })
+            ->unique(fn ($o) => $o->client_id);
+
+        $inactiveIcon = $inactiveClients->count() > 0 ? "🔕" : "✅";
+        $lines[] = "{$inactiveIcon} <b>Без активності 5+ днів:</b> {$inactiveClients->count()}";
+        if ($inactiveClients->isNotEmpty()) {
+            foreach ($inactiveClients->take(5) as $order) {
+                $name    = $order->client?->name ?? '—';
+                $phone   = $order->client?->phone ?? '';
+                $endDate = Carbon::parse($order->end_date)->format('d.m');
+                $days    = Carbon::parse($order->end_date)->diffInDays(now());
+                $lines[] = "  • {$name}" . ($phone ? " ({$phone})" : '') . " — {$days} дн. тому";
+            }
+            if ($inactiveClients->count() > 5) {
+                $lines[] = "  ... і ще " . ($inactiveClients->count() - 5);
+            }
+        }
 
         $message = implode("\n", $lines);
         $telegram->sendToOwner($message);

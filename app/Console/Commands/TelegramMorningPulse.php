@@ -63,18 +63,13 @@ class TelegramMorningPulse extends Command
         }
         $lines[] = "";
 
-        // Від'ємні баланси
-        $lines[] = "🔴 <b>Від'ємний баланс:</b> " . $negativeClients->count();
-        if ($negativeClients->isNotEmpty()) {
-            foreach ($negativeClients->take(10) as $client) {
-                $balance = number_format((float) $client->balance, 0, '.', ' ');
-                $lines[] = "  • {$client->name}: <b>{$balance} ₴</b>";
-            }
-            if ($negativeClients->count() > 10) {
-                $lines[] = "  ... і ще " . ($negativeClients->count() - 10);
-            }
+        // Борг (від'ємні баланси) — тільки загальна сума
+        $negativeCount = $negativeClients->count();
+        $negativeTotal = number_format((float) $negativeClients->sum('balance') * -1, 0, '.', ' ');
+        if ($negativeCount > 0) {
+            $lines[] = "🔴 <b>В борг наїли:</b> {$negativeCount} клієнтів на <b>{$negativeTotal} ₴</b>";
         } else {
-            $lines[] = "  ✅ Всі в плюсі";
+            $lines[] = "✅ <b>Боргів немає</b>";
         }
         $lines[] = "";
 
