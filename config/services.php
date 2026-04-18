@@ -39,4 +39,10 @@ return [
         'key' => env('OPENAI_API_KEY'),
     ],
 
+    'telegram' => [
+        'bot_token'       => env('TELEGRAM_BOT_TOKEN'),
+        'owner_chat_id'   => env('TELEGRAM_OWNER_CHAT_ID'),
+        'manager_chat_id' => env('TELEGRAM_MANAGER_CHAT_ID'),
+    ],
+
 ];
