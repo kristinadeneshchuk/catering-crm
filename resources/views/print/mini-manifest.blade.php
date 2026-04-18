@@ -267,6 +267,7 @@
             align-items: center;
             justify-content: space-between;
             flex-shrink: 0;
+            margin-top: auto;
         }
 
         .qr-placeholder {
@@ -564,12 +565,14 @@
 
             {{-- Підпис --}}
             <div class="sticker-footer">
-                <span class="footer-text">Смачного від {{ $project?->name ?? 'BRAND' }}!</span>
+                <div style="display:flex;flex-direction:column;justify-content:flex-end;">
+                    <span class="footer-text">Смачного від {{ $project?->name ?? 'BRAND' }}!</span>
+                    @if(!empty($man['menu_token']))
+                        <span style="font-size:4pt;color:#94a3b8;margin-top:0.8mm;letter-spacing:0.2px;">Відскануй QR щоб побачити меню!</span>
+                    @endif
+                </div>
                 @if(!empty($man['menu_token']))
-                    <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;margin-right:1.5mm;margin-bottom:1mm;">
-                        <div class="qr-placeholder" data-url="{{ url('/menu/' . $man['menu_token']) }}" style="width:50px;height:50px;"></div>
-                        <span style="font-size:4.5pt;color:#555;text-align:center;margin-top:0.5mm;line-height:1.2;">Відскануй щоб<br>побачити меню!</span>
-                    </div>
+                    <div class="qr-placeholder" data-url="{{ url('/menu/' . $man['menu_token']) }}" style="width:50px;height:50px;margin-right:1.5mm;margin-bottom:1mm;"></div>
                 @endif
             </div>
 
