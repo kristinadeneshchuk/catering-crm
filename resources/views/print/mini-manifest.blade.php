@@ -568,7 +568,7 @@
                 <div style="display:flex;flex-direction:column;justify-content:flex-end;">
                     <span class="footer-text">Смачного від {{ $project?->name ?? 'BRAND' }}!</span>
                     @if(!empty($man['menu_token']))
-                        <span style="font-size:4pt;color:#94a3b8;margin-top:0.8mm;letter-spacing:0.2px;">Відскануй QR щоб побачити меню!</span>
+                        <span style="font-size:4pt;color:#dc2626;margin-top:0.8mm;letter-spacing:0.2px;font-weight:700;">Відскануй QR щоб побачити меню!</span>
                     @endif
                 </div>
                 @if(!empty($man['menu_token']))
