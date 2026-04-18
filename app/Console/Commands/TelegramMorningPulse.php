@@ -29,10 +29,37 @@ class TelegramMorningPulse extends Command
             ->with('client')
             ->get();
 
-        // Клієнти з від'ємним балансом
-        $negativeClients = Client::where('balance', '<', 0)
-            ->orderBy('balance')
-            ->get(['name', 'balance', 'phone']);
+        // Борг клієнтів — точна формула як в CRM (борг = -balance - майбутні раціони)
+        $futureOrderDays = OrderDay::where('date', '>', $today->format('Y-m-d'))
+            ->whereHas('order', fn($q) => $q->whereIn('status', ['active', 'new', 'paused']))
+            ->with('order')
+            ->get();
+
+        $futureValueByClient = [];
+        foreach ($futureOrderDays as $od) {
+            $order = $od->order;
+            if (!$order) continue;
+            $dur      = max(1, (int) $order->duration);
+            $dayValue = max(0,
+                (float) $order->total_price / $dur
+                - (float) $order->discount_amount / $dur
+                - (float) $od->discount_amount
+            );
+            $futureValueByClient[$order->client_id] = ($futureValueByClient[$order->client_id] ?? 0) + $dayValue;
+        }
+
+        $debtorClientsCount = 0;
+        $totalClientDebt    = 0;
+
+        Client::where('balance', '<', 0)->select('id', 'balance')->each(function ($client) use (&$debtorClientsCount, &$totalClientDebt, $futureValueByClient) {
+            $balance     = (float) $client->balance;
+            $futureValue = $futureValueByClient[$client->id] ?? 0;
+            $debt        = max(0, -$balance - $futureValue);
+            if ($debt > 0.01) {
+                $debtorClientsCount++;
+                $totalClientDebt += $debt;
+            }
+        });
 
         // Клієнти на паузі більше 7 днів (без дзвінка)
         $longPausedOrders = Order::where('status', 'paused')
@@ -63,11 +90,10 @@ class TelegramMorningPulse extends Command
         }
         $lines[] = "";
 
-        // Борг (від'ємні баланси) — тільки загальна сума
-        $negativeCount = $negativeClients->count();
-        $negativeTotal = number_format((float) $negativeClients->sum('balance') * -1, 0, '.', ' ');
-        if ($negativeCount > 0) {
-            $lines[] = "🔴 <b>В борг наїли:</b> {$negativeCount} клієнтів на <b>{$negativeTotal} ₴</b>";
+        // Борг клієнтів
+        $debtTotal = number_format(round($totalClientDebt), 0, '.', ' ');
+        if ($debtorClientsCount > 0) {
+            $lines[] = "🔴 <b>В борг наїли:</b> {$debtorClientsCount} клієнтів на <b>{$debtTotal} ₴</b>";
         } else {
             $lines[] = "✅ <b>Боргів немає</b>";
         }
