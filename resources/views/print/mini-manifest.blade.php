@@ -566,7 +566,10 @@
             <div class="sticker-footer">
                 <span class="footer-text">Смачного від {{ $project?->name ?? 'BRAND' }}!</span>
                 @if(!empty($man['menu_token']))
-                    <div class="qr-placeholder" data-url="{{ url('/menu/' . $man['menu_token']) }}" style="width:50px;height:50px;flex-shrink:0;margin-right:1.5mm;margin-bottom:1mm;"></div>
+                    <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;margin-right:1.5mm;margin-bottom:1mm;">
+                        <div class="qr-placeholder" data-url="{{ url('/menu/' . $man['menu_token']) }}" style="width:50px;height:50px;"></div>
+                        <span style="font-size:4.5pt;color:#555;text-align:center;margin-top:0.5mm;line-height:1.2;">Відскануй щоб<br>побачити меню!</span>
+                    </div>
                 @endif
             </div>
 
