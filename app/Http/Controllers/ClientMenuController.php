@@ -33,19 +33,29 @@ class ClientMenuController extends Controller
             $date = $today;
         }
 
-        $activeOrder = Order::where('client_id', $client->id)
-            ->whereHas('orderDays', fn($q) => $q->where('date', $date->format('Y-m-d')))
-            ->with([
-                'client.mealTypes',
-                'client.ingredientExclusions',
-                'client.dishExclusions',
-                'replacements.originalProduct',
-                'replacements.replacementProduct',
-                'replacements.replacementDish.dishIngredients.ingredient',
-                'tariff',
-                'projectData',
-            ])
-            ->first();
+        $relations = [
+            'client.mealTypes',
+            'client.ingredientExclusions',
+            'client.dishExclusions',
+            'replacements.originalProduct',
+            'replacements.replacementProduct',
+            'replacements.replacementDish.dishIngredients.ingredient',
+            'tariff',
+            'projectData',
+        ];
+
+        // Спочатку перевіряємо чи є OrderDay у замовленні по токену
+        // (клієнт може мати кілька замовлень з різними калоріями)
+        $tokenOrderHasDay = $order->orderDays()->where('date', $date->format('Y-m-d'))->exists();
+
+        if ($tokenOrderHasDay) {
+            $activeOrder = $order->load($relations);
+        } else {
+            $activeOrder = Order::where('client_id', $client->id)
+                ->whereHas('orderDays', fn($q) => $q->where('date', $date->format('Y-m-d')))
+                ->with($relations)
+                ->first();
+        }
 
         $items = [];
         $totals = ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0];
