@@ -41,6 +41,7 @@ Route::get('/print/packaging-list', [PrintController::class, 'packagingList'])->
 
 Route::get('/print/logistics', [PrintController::class, 'logistics'])->name('print.logistics')->middleware('auth');
 Route::get('/print/dish/{dishId}/tech-card', [PrintController::class, 'dishTechCard'])->name('print.dish.tech-card')->middleware('auth');
+Route::get('/print/daily-menu/{dailyMenuId}/tech-cards', [PrintController::class, 'dailyMenuTechCards'])->name('print.daily-menu.tech-cards')->middleware('auth');
 
 /**
  * 🔐 ОСОБИСТИЙ КАБІНЕТ КЛІЄНТА

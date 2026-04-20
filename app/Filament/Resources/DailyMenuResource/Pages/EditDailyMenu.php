@@ -13,6 +13,12 @@ class EditDailyMenu extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('day_tech_cards')
+                ->label('Техкарти дня (PDF)')
+                ->icon('heroicon-o-arrow-down-tray')
+                ->color('gray')
+                ->url(fn () => route('print.daily-menu.tech-cards', ['dailyMenuId' => $this->record->id]))
+                ->openUrlInNewTab(),
             Actions\DeleteAction::make(),
         ];
     }

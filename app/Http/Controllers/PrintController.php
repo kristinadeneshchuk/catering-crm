@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DailyMenu;
+use App\Models\DailyMenuDish;
 use App\Models\Dish;
 use App\Models\Order;
 use App\Models\Setting;
@@ -1499,6 +1500,32 @@ class PrintController extends Controller
         ])->orderBy('day_number')->get();
 
         return view('print.cycle-menu', compact('menus'));
+    }
+
+    public function dailyMenuTechCards(Request $request, int $dailyMenuId)
+    {
+        $dailyMenu = DailyMenu::with([
+            'menuItems.mealType',
+            'menuItems.dish.dishIngredients.ingredient.allergens',
+            'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient.allergens',
+            'menuItems.dish.dishIngredients.childDish.dishIngredients.childDish.dishIngredients.ingredient',
+        ])->findOrFail($dailyMenuId);
+
+        $dishes = $dailyMenu->menuItems
+            ->sortBy(fn ($item) => $item->mealType?->sort_order ?? 99)
+            ->map(function ($item) {
+                return [
+                    'meal_type' => $item->mealType?->name ?? '—',
+                    'dish'      => $item->dish,
+                    'ingredients' => $item->dish
+                        ? $this->flattenDishIngredients($item->dish, 1.0, 0)
+                        : [],
+                ];
+            })
+            ->filter(fn ($d) => $d['dish'] !== null)
+            ->values();
+
+        return view('print.daily-menu-tech-cards', compact('dailyMenu', 'dishes'));
     }
 
     public function dishTechCard(Request $request, int $dishId)
