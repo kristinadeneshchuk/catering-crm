@@ -28,7 +28,10 @@ class TelegramService
     public function sendToManager(string $text): void
     {
         if ($this->managerChatId) {
-            $this->send($this->managerChatId, $text);
+            foreach (explode(',', $this->managerChatId) as $chatId) {
+                $chatId = trim($chatId);
+                if ($chatId) $this->send($chatId, $text);
+            }
         }
     }
 
