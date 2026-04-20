@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DailyMenu;
+use App\Models\Dish;
 use App\Models\Order;
 use App\Models\Setting;
 use App\Traits\CalculatesOrderPlan;
@@ -1498,5 +1499,110 @@ class PrintController extends Controller
         ])->orderBy('day_number')->get();
 
         return view('print.cycle-menu', compact('menus'));
+    }
+
+    public function dishTechCard(Request $request, int $dishId)
+    {
+        $dish = Dish::with([
+            'dishIngredients.ingredient.allergens',
+            'dishIngredients.childDish.dishIngredients.ingredient.allergens',
+            'dishIngredients.childDish.dishIngredients.childDish.dishIngredients.ingredient',
+        ])->findOrFail($dishId);
+
+        $ingredients = $this->flattenDishIngredients($dish, 1.0, 0);
+
+        return view('print.dish-tech-card', compact('dish', 'ingredients'));
+    }
+
+    private function flattenDishIngredients(Dish $dish, float $ratio, int $level): array
+    {
+        $rows = [];
+
+        foreach ($dish->dishIngredients as $item) {
+            $type      = mb_strtolower(trim((string)($item->type ?? '')));
+            $netWeight = (float)($item->net_weight_g ?? 0) * $ratio;
+            if ($netWeight <= 0) continue;
+
+            $isProduct = in_array($type, ['product', 'продукт'], true);
+            $isPf      = in_array($type, ['pf', 'напівфабрикат', 'п/ф', 'н/ф'], true);
+
+            if ($isProduct && $item->ingredient) {
+                $ing   = $item->ingredient;
+                $yield = (float)($ing->yield_percent ?: 100);
+                if ($yield <= 0) $yield = 100;
+                $grossWeight = $netWeight * 100.0 / $yield;
+
+                $avgPrice  = (float)($ing->average_price ?? 0);
+                $basePrice = (float)($ing->price_per_kg ?? 0);
+                $unitPrice = $avgPrice > 0 ? $avgPrice : $basePrice;
+                $unit      = mb_strtolower(trim((string)($ing->unit ?? 'кг')));
+                $pricePerGram = match(true) {
+                    in_array($unit, ['кг', 'kg', 'л', 'l'])   => $unitPrice / 1000.0,
+                    in_array($unit, ['г',  'g',  'мл', 'ml']) => $unitPrice,
+                    default                                    => $unitPrice / 1000.0,
+                };
+                $cost = $pricePerGram * $grossWeight;
+
+                $prot = (float)($ing->proteins_100g ?? 0) * $netWeight / 100.0;
+                $fat  = (float)($ing->fats_100g     ?? 0) * $netWeight / 100.0;
+                $carb = (float)($ing->carbs_100g    ?? 0) * $netWeight / 100.0;
+                $kcal = $prot * 4.0 + $fat * 9.0 + $carb * 4.0;
+
+                $rows[] = [
+                    'level'     => $level,
+                    'type'      => 'product',
+                    'name'      => $ing->name,
+                    'net'       => round($netWeight, 1),
+                    'gross'     => round($grossWeight, 1),
+                    'yield'     => (int)$yield,
+                    'prot'      => round($prot, 1),
+                    'fat'       => round($fat, 1),
+                    'carb'      => round($carb, 1),
+                    'kcal'      => round($kcal, 1),
+                    'cost'      => round($cost, 2),
+                    'allergens' => $ing->allergens->pluck('name')->join(', '),
+                ];
+
+            } elseif ($isPf && $item->childDish) {
+                $childDish = $item->childDish;
+                $pfTotals  = $childDish->calculated_totals;
+                $pfOutput  = (float)($pfTotals['output_weight'] ?? 0);
+                $pfInput   = (float)($pfTotals['input_weight']  ?? 0);
+                $pfRatio   = $pfOutput > 0 ? $netWeight / $pfOutput : 0;
+
+                $prot = (float)($pfTotals['prot'] ?? 0) * $pfRatio;
+                $fat  = (float)($pfTotals['fat']  ?? 0) * $pfRatio;
+                $carb = (float)($pfTotals['carb'] ?? 0) * $pfRatio;
+                $kcal = $prot * 4.0 + $fat * 9.0 + $carb * 4.0;
+                $cost = (float)($pfTotals['cost'] ?? 0) * $pfRatio;
+
+                $rows[] = [
+                    'level'     => $level,
+                    'type'      => 'pf',
+                    'name'      => $childDish->name,
+                    'net'       => round($netWeight, 1),
+                    'gross'     => round($netWeight, 1),
+                    'yield'     => $pfInput > 0 ? (int)round($pfOutput / $pfInput * 100) : 100,
+                    'prot'      => round($prot, 1),
+                    'fat'       => round($fat, 1),
+                    'carb'      => round($carb, 1),
+                    'kcal'      => round($kcal, 1),
+                    'cost'      => round($cost, 2),
+                    'allergens' => '',
+                    'pf_output' => round($pfOutput, 1),
+                    'pf_input'  => round($pfInput, 1),
+                    'pf_kcal'   => round((float)($pfTotals['kcal'] ?? 0), 1),
+                    'pf_prot'   => round((float)($pfTotals['prot'] ?? 0), 1),
+                    'pf_fat'    => round((float)($pfTotals['fat']  ?? 0), 1),
+                    'pf_carb'   => round((float)($pfTotals['carb'] ?? 0), 1),
+                    'pf_cost'   => round((float)($pfTotals['cost'] ?? 0), 2),
+                ];
+
+                $subRows = $this->flattenDishIngredients($childDish, $pfRatio, $level + 1);
+                $rows    = array_merge($rows, $subRows);
+            }
+        }
+
+        return $rows;
     }
 }
