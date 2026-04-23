@@ -105,8 +105,8 @@ class Client extends Authenticatable
         $orders = $this->orders()->orderBy('start_date', 'asc')->get();
 
         foreach ($orders as $order) {
-            // Реальна сума до сплати — final_price якщо є, інакше total_price
-            $due = (float) ($order->final_price > 0 ? $order->final_price : $order->total_price);
+            // Реальна сума до сплати — завжди final_price (вже враховує знижки)
+            $due = (float) $order->final_price;
 
             if ($due <= 0) {
                 if (!$order->is_paid) $order->updateQuietly(['is_paid' => true]);

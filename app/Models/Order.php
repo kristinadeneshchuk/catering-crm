@@ -150,7 +150,7 @@ class Order extends Model
     // =========================
     private static function handleBalance($order, $op)
     {
-        $price = (float) ($order->final_price > 0 ? $order->final_price : $order->total_price);
+        $price = (float) $order->final_price;
         if ($order->client_id && $price > 0) {
             $op === 'sub'
                 ? $order->client->decrement('balance', $price)
