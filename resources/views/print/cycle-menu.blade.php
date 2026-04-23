@@ -13,6 +13,19 @@
             padding:14px 36px; border-radius:10px; font-size:15px;
             font-weight:900; cursor:pointer; letter-spacing:1.5px; text-transform:uppercase;
         }
+        .meal-filters {
+            display:flex; flex-wrap:wrap; gap:10px; justify-content:center;
+            margin-top:14px;
+        }
+        .meal-filters label {
+            display:flex; align-items:center; gap:6px;
+            background:#f1f5f9; border:1.5px solid #e2e8f0; border-radius:8px;
+            padding:6px 14px; cursor:pointer; font-size:13px; font-weight:600;
+            user-select:none; transition:background 0.15s, border-color 0.15s;
+        }
+        .meal-filters label:hover { background:#e2e8f0; }
+        .meal-filters input[type=checkbox] { width:15px; height:15px; cursor:pointer; accent-color:#1e293b; }
+        .filter-hint { font-size:11px; color:#94a3b8; margin-top:8px; }
 
         .page { width:210mm; margin:16px auto; background:white; padding:12mm 14mm; }
 
@@ -53,6 +66,9 @@
 
 <div class="no-print">
     <button onclick="window.print()">🖨 Друкувати</button>
+
+    <div class="meal-filters" id="mealFilters"></div>
+    <div class="filter-hint">Оберіть прийоми їжі для друку</div>
 </div>
 
 <div class="page">
@@ -84,7 +100,7 @@
                 <tbody>
                     @foreach($grouped as $mealName => $items)
                         @foreach($items as $item)
-                            <tr>
+                            <tr data-meal="{{ $mealName }}">
                                 <td class="meal-name">{{ $mealName }}</td>
                                 <td class="dish-name">{{ $item->dish?->name ?? '—' }}</td>
                             </tr>
@@ -98,5 +114,33 @@
     @endforelse
 </div>
 
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Збираємо всі унікальні прийоми їжі з DOM
+        const rows = document.querySelectorAll('tr[data-meal]');
+        const meals = [...new Set([...rows].map(r => r.dataset.meal))];
+
+        const container = document.getElementById('mealFilters');
+
+        meals.forEach(meal => {
+            const label = document.createElement('label');
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = true;
+            cb.value = meal;
+            cb.addEventListener('change', applyFilters);
+            label.appendChild(cb);
+            label.appendChild(document.createTextNode(meal));
+            container.appendChild(label);
+        });
+
+        function applyFilters() {
+            const checked = [...container.querySelectorAll('input:checked')].map(c => c.value);
+            rows.forEach(row => {
+                row.style.display = checked.includes(row.dataset.meal) ? '' : 'none';
+            });
+        }
+    });
+</script>
 </body>
 </html>
