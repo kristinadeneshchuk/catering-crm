@@ -125,7 +125,7 @@ class TelegramEveningSummary extends Command
         }
 
         $message = implode("\n", $lines);
-        $telegram->sendToOwner($message);
+        $telegram->sendToOwnerAndManager($message);
 
         $this->info('Evening summary sent.');
     }
