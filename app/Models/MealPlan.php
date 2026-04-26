@@ -25,10 +25,14 @@ class MealPlan extends Model
      */
     public static function findForKcal(int $kcal): ?self
     {
-        return self::with('mealTypes')
-            ->where('min_kcal', '<=', $kcal)
-            ->where('max_kcal', '>=', $kcal)
-            ->first();
+        static $cache = [];
+        if (!array_key_exists($kcal, $cache)) {
+            $cache[$kcal] = self::with('mealTypes')
+                ->where('min_kcal', '<=', $kcal)
+                ->where('max_kcal', '>=', $kcal)
+                ->first();
+        }
+        return $cache[$kcal];
     }
 
     /**

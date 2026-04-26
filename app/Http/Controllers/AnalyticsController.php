@@ -73,6 +73,8 @@ class AnalyticsController extends Controller
         $validDays = OrderDay::whereBetween('date', [$startDate, $endDate])
             ->with([
                 'order.client.mealTypes',
+                'order.client.dishExclusions',
+                'order.client.ingredientExclusions',
                 'order.projectData',
                 'order.replacements.replacementProduct',
                 'order.replacements.replacementDish.dishIngredients.ingredient'
@@ -95,6 +97,7 @@ class AnalyticsController extends Controller
 
         $allMenus = DailyMenu::with([
             'menuItems.dish.dishIngredients.ingredient',
+            'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
             'menuItems.mealType'
         ])->get()->keyBy('day_number');
         
@@ -180,6 +183,7 @@ class AnalyticsController extends Controller
                     }
 
                     // Packaging Cost
+                    $packagingCost = 0;
                     if ($menu && $allPackaging->isNotEmpty()) {
                         $packagingCost = $this->packagingService->calculateOrderPackagingCost($order, $menu, $allPackaging);
                         $dailyPackaging += $packagingCost;
@@ -244,9 +248,7 @@ class AnalyticsController extends Controller
                     $projectStats[$projectSlug]['rations']   += 1;
                     $projectStats[$projectSlug]['revenue']   += $netPricePerDay;
                     $projectStats[$projectSlug]['food_cost'] += $orderCost;
-                    $projectStats[$projectSlug]['packaging'] += $menu && $allPackaging->isNotEmpty()
-                        ? $this->packagingService->calculateOrderPackagingCost($order, $menu, $allPackaging)
-                        : 0;
+                    $projectStats[$projectSlug]['packaging'] += $packagingCost;
                     $projectStats[$projectSlug]['clients'][$order->client->id] = true;
                 }
             }
