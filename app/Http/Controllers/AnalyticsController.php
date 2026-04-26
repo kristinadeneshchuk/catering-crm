@@ -31,6 +31,8 @@ class AnalyticsController extends Controller
 
     public function index(Request $request)
     {
+        set_time_limit(120);
+
         // 1. Отримуємо параметри запиту
         $startDate = $request->input('start_date', Carbon::now()->startOfMonth()->format('Y-m-d'));
         $endDate = $request->input('end_date', Carbon::now()->format('Y-m-d'));
@@ -97,7 +99,6 @@ class AnalyticsController extends Controller
 
         $allMenus = DailyMenu::with([
             'menuItems.dish.dishIngredients.ingredient',
-            'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
             'menuItems.mealType'
         ])->get()->keyBy('day_number');
         
@@ -303,6 +304,25 @@ class AnalyticsController extends Controller
         }
         unset($stats);
 
+        // Агрегація даних замовлень по клієнтах (заміняє 3 окремі Client::with('orders'))
+        $clientOrderAggregates = collect();
+        if (!empty($uniqueClientIds)) {
+            $clientOrderAggregates = \Illuminate\Support\Facades\DB::table('orders')
+                ->whereIn('client_id', array_keys($uniqueClientIds))
+                ->where('total_price', '>', 0)
+                ->whereNotIn('status', ['cancelled'])
+                ->selectRaw('
+                    client_id,
+                    SUM(CASE WHEN duration IS NULL OR duration < 1 THEN 1 ELSE duration END) as total_days,
+                    SUM(CASE WHEN final_price > 0 THEN final_price ELSE total_price END) as total_ltv,
+                    MAX(end_date) as last_end_date,
+                    MIN(start_date) as first_start_date
+                ')
+                ->groupBy('client_id')
+                ->get()
+                ->keyBy(fn ($r) => (int) $r->client_id);
+        }
+
         // 6. РОЗРАХУНОК RETENTION (Утримання та LTV за всю історію)
         $retentionStats = [
             'total_clients' => 0, 'active_now' => 0, 'churned' => 0,
@@ -318,33 +338,20 @@ class AnalyticsController extends Controller
         ];
 
         if (!empty($uniqueClientIds)) {
-            $clients = Client::whereIn('id', array_keys($uniqueClientIds))->with('orders')->get();
             $today = Carbon::now()->format('Y-m-d');
             $totalLifetimeDays = 0;
             $totalLtv = 0;
 
-            foreach ($clients as $client) {
-                $clientDays = 0; $clientRevenue = 0; $lastOrderEndDate = null; $firstOrderStartDate = null;
-
-                foreach ($client->orders as $o) {
-                    if ($o->total_price > 0 && !in_array($o->status, ['cancelled'])) {
-                        $clientDays += max(1, (int) $o->duration);
-                        // 🔥 LTV рахуємо по final_price (реально сплачена сума)
-                        $clientRevenue += (float) ($o->final_price > 0 ? $o->final_price : $o->total_price);
-                        if (!$lastOrderEndDate || $o->end_date > $lastOrderEndDate) {
-                            $lastOrderEndDate = $o->end_date;
-                        }
-                        if (!$firstOrderStartDate || $o->start_date < $firstOrderStartDate) {
-                            $firstOrderStartDate = $o->start_date;
-                        }
-                    }
-                }
+            foreach ($clientOrderAggregates as $clientId => $agg) {
+                $clientDays = max(0, (int) ($agg->total_days ?? 0));
+                $clientRevenue = max(0.0, (float) ($agg->total_ltv ?? 0));
+                $lastOrderEndDate = $agg->last_end_date;
+                $firstOrderStartDate = $agg->first_start_date;
 
                 $totalLifetimeDays += $clientDays;
                 $totalLtv += $clientRevenue;
                 $retentionStats['total_clients']++;
 
-                // Новий клієнт: перше замовлення (за всю історію) починається в обраному періоді
                 $isNewClient = $firstOrderStartDate && $firstOrderStartDate >= $startDate && $firstOrderStartDate <= $endDate;
                 if ($isNewClient) {
                     $retentionStats['new_clients']++;
@@ -359,7 +366,6 @@ class AnalyticsController extends Controller
                     $retentionStats['active_now']++;
                 } else {
                     $retentionStats['churned']++;
-                    // Відпав у цьому періоді: остання підписка закінчилась у межах обраного діапазону
                     if ($lastOrderEndDate && $lastOrderEndDate >= $startDate && $lastOrderEndDate <= $endDate) {
                         $retentionStats['churned_period']++;
                     }
@@ -419,19 +425,15 @@ class AnalyticsController extends Controller
         $indLtvTotal = 0; $indLifetimeDaysTotal = 0;
 
         if (!empty($indClientIds)) {
-            $indClients = Client::whereIn('id', array_keys($indClientIds))->with('orders')->get();
-            $todayInd   = Carbon::now()->format('Y-m-d');
+            $todayInd = Carbon::now()->format('Y-m-d');
 
-            foreach ($indClients as $client) {
-                $clientDays = 0; $clientRevenue = 0; $lastEnd = null; $firstStart = null;
-                foreach ($client->orders as $o) {
-                    if ($o->total_price > 0 && !in_array($o->status, ['cancelled'])) {
-                        $clientDays    += max(1, (int) $o->duration);
-                        $clientRevenue += (float) ($o->final_price > 0 ? $o->final_price : $o->total_price);
-                        if (!$lastEnd   || $o->end_date   > $lastEnd)   $lastEnd   = $o->end_date;
-                        if (!$firstStart || $o->start_date < $firstStart) $firstStart = $o->start_date;
-                    }
-                }
+            foreach ($clientOrderAggregates as $clientId => $agg) {
+                if (!isset($indClientIds[$clientId])) continue;
+                $clientDays    = max(0, (int) ($agg->total_days ?? 0));
+                $clientRevenue = max(0.0, (float) ($agg->total_ltv ?? 0));
+                $lastEnd    = $agg->last_end_date;
+                $firstStart = $agg->first_start_date;
+
                 $indLtvTotal          += $clientRevenue;
                 $indLifetimeDaysTotal += $clientDays;
                 $indRetention['total_clients']++;
@@ -453,9 +455,9 @@ class AnalyticsController extends Controller
                 else                       $indRetention['segments']['elite']['count']++;
             }
             if ($indRetention['total_clients'] > 0) {
-                $indRetention['avg_lifetime_days']     = $indLifetimeDaysTotal / $indRetention['total_clients'];
-                $indRetention['avg_ltv']               = $indLtvTotal / $indRetention['total_clients'];
-                $indRetention['churn_rate']            = ($indRetention['churned'] / $indRetention['total_clients']) * 100;
+                $indRetention['avg_lifetime_days']      = $indLifetimeDaysTotal / $indRetention['total_clients'];
+                $indRetention['avg_ltv']                = $indLtvTotal / $indRetention['total_clients'];
+                $indRetention['churn_rate']             = ($indRetention['churned'] / $indRetention['total_clients']) * 100;
                 $indRetention['churned_period_percent'] = ($indRetention['churned_period'] / $indRetention['total_clients']) * 100;
             }
         }
@@ -464,17 +466,12 @@ class AnalyticsController extends Controller
         $cyclicOnlyIds = array_diff_key($uniqueClientIds, $indClientIds);
         $cyclicCompare = ['avg_ltv' => 0, 'avg_lifetime_days' => 0, 'churn_rate' => 0, 'total_clients' => 0, 'churned' => 0];
         if (!empty($cyclicOnlyIds)) {
-            $cyclicClients  = Client::whereIn('id', array_keys($cyclicOnlyIds))->with('orders')->get();
             $cyclicLtvTotal = 0; $cyclicLifeDays = 0; $todayCyc = Carbon::now()->format('Y-m-d');
-            foreach ($cyclicClients as $client) {
-                $cDays = 0; $cRev = 0; $cLast = null;
-                foreach ($client->orders as $o) {
-                    if ($o->total_price > 0 && !in_array($o->status, ['cancelled'])) {
-                        $cDays += max(1, (int) $o->duration);
-                        $cRev  += (float) ($o->final_price > 0 ? $o->final_price : $o->total_price);
-                        if (!$cLast || $o->end_date > $cLast) $cLast = $o->end_date;
-                    }
-                }
+            foreach ($clientOrderAggregates as $clientId => $agg) {
+                if (!isset($cyclicOnlyIds[$clientId])) continue;
+                $cDays = max(0, (int) ($agg->total_days ?? 0));
+                $cRev  = max(0.0, (float) ($agg->total_ltv ?? 0));
+                $cLast = $agg->last_end_date;
                 $cyclicLtvTotal += $cRev;
                 $cyclicLifeDays += $cDays;
                 $cyclicCompare['total_clients']++;
