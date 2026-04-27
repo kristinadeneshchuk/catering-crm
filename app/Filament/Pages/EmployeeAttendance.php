@@ -5,8 +5,9 @@ namespace App\Filament\Pages;
 use App\Models\DeliveryRoute;
 use App\Models\Employee;
 use App\Models\EmployeeShift;
+use App\Models\OrderDay;
+use Carbon\Carbon;
 use Filament\Pages\Page;
-use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 
 class EmployeeAttendance extends Page
@@ -17,102 +18,154 @@ class EmployeeAttendance extends Page
     }
 
     protected static ?string $navigationLabel = 'Табель змін';
-    protected static ?string $title = 'Щоденний табель';
+    protected static ?string $title = 'Табель змін';
     protected static ?string $navigationGroup = 'Система';
-
     protected static string $view = 'filament.pages.employee-attendance';
 
-    public $date;
-    public $attendance = [];
+    public string $startDate = '';
+    public string $endDate = '';
+    public string $roleFilter = 'all';
 
-    public function mount()
+    public function mount(): void
     {
-        // При відкритті ставимо сьогоднішню дату
-        $this->date = now()->format('Y-m-d');
-        $this->loadAttendance();
+        $this->startDate = Carbon::now()->startOfWeek(Carbon::MONDAY)->format('Y-m-d');
+        $this->endDate   = Carbon::now()->format('Y-m-d');
     }
 
-    public $dailyTotal = 0; // Додай цю властивість на початку
-
-    public function loadAttendance()
+    public function getDates(): array
     {
-        $employees = Employee::where('is_active', true)->get();
+        $start = Carbon::parse($this->startDate);
+        $end   = Carbon::parse($this->endDate);
 
-        // Витрати з маршрутів по кур'єрах за цей день
-        $courierEarnings = DeliveryRoute::where('date', $this->date)
-            ->whereNotNull('employee_id')
-            ->selectRaw('employee_id, SUM(calculated_cost) as total')
-            ->groupBy('employee_id')
-            ->pluck('total', 'employee_id');
-
-        // Отримуємо всі збережені зміни за цей день
-        $existingShifts = EmployeeShift::where('date', $this->date)->get();
-
-        // Рахуємо суму для "зеленої панелі"
-        $this->dailyTotal = $existingShifts->sum('rate');
-
-        $shiftsMap = $existingShifts->keyBy('employee_id');
-        $this->attendance = [];
-
-        foreach ($employees as $emp) {
-            $shift = $shiftsMap->get($emp->id);
-
-            if ($emp->position === 'courier') {
-                $earned = (float) ($courierEarnings[$emp->id] ?? 0);
-                $rate   = $shift ? $shift->rate : $earned;
-            } else {
-                $rate = $shift ? $shift->rate : $emp->base_rate;
-            }
-
-            $this->attendance[$emp->id] = [
-                'present'          => (bool) $shift,
-                'rate'             => $rate,
-                'name'             => $emp->name,
-                'position'         => $emp->position,
-                'courier_earned'   => $emp->position === 'courier' ? (float) ($courierEarnings[$emp->id] ?? 0) : null,
-            ];
+        if ($end->lt($start)) {
+            $end = $start->copy();
         }
+        if ($start->diffInDays($end) > 60) {
+            $end = $start->copy()->addDays(60);
+        }
+
+        $dates = [];
+        for ($d = $start->copy(); $d->lte($end); $d->addDay()) {
+            $dates[] = $d->format('Y-m-d');
+        }
+        return $dates;
     }
 
-    // Метод для збереження (викликається з кнопки)
-    public function save()
+    public function toggleShift(int $employeeId, string $date): void
     {
-        DB::transaction(function () {
-            foreach ($this->attendance as $empId => $data) {
-                $employee = Employee::find($empId);
-                $existingShift = EmployeeShift::where('employee_id', $empId)->where('date', $this->date)->first();
+        $employee = Employee::findOrFail($employeeId);
+        $shift = EmployeeShift::where('employee_id', $employeeId)->where('date', $date)->first();
 
-                if ($data['present']) {
-                    // Якщо менеджер поставив галочку "Був"
-                    if (!$existingShift) {
-                        // Створюємо запис про зміну
-                        EmployeeShift::create([
-                            'employee_id' => $empId,
-                            'date' => $this->date,
-                            'rate' => $data['rate'],
-                        ]);
-                        // Плюсуємо борг в основну картку співробітника
-                        $employee->increment('balance', $data['rate']);
-                    } else {
-                        // Якщо зміна була, але ми змінили суму (rate) вручну
-                        if ((float)$existingShift->rate !== (float)$data['rate']) {
-                            $diff = $data['rate'] - $existingShift->rate;
-                            $existingShift->update(['rate' => $data['rate']]);
-                            $employee->increment('balance', $diff);
-                        }
-                    }
+        DB::transaction(function () use ($employee, $shift, $employeeId, $date) {
+            if ($shift) {
+                $employee->decrement('balance', $shift->rate);
+                $shift->delete();
+            } else {
+                if ($employee->position === 'courier') {
+                    $rate = (float) DeliveryRoute::where('date', $date)
+                        ->where('employee_id', $employeeId)
+                        ->sum('calculated_cost');
                 } else {
-                    // Якщо галочку зняли
-                    if ($existingShift) {
-                        // Віднімаємо борг назад і видаляємо зміну
-                        $employee->decrement('balance', $existingShift->rate);
-                        $existingShift->delete();
-                    }
+                    $rate = (float) $employee->base_rate;
                 }
+                EmployeeShift::create(['employee_id' => $employeeId, 'date' => $date, 'rate' => $rate]);
+                $employee->increment('balance', $rate);
             }
         });
+    }
 
-        Notification::make()->title('Табель успішно збережено')->success()->send();
-        $this->loadAttendance(); // Перезавантажуємо дані
+    public function getData(): array
+    {
+        $dates = $this->getDates();
+        if (empty($dates)) {
+            return ['stats' => ['shifts' => 0, 'salary' => 0, 'absent_today' => 0], 'rows' => [], 'portions' => [], 'today' => now()->format('Y-m-d')];
+        }
+
+        $rangeStart = $dates[0];
+        $rangeEnd   = end($dates);
+        $today      = Carbon::now()->format('Y-m-d');
+        $inRange    = $today >= $rangeStart && $today <= $rangeEnd;
+
+        $allShifts   = EmployeeShift::whereBetween('date', [$rangeStart, $rangeEnd])->get();
+        $shiftsByEmp = $allShifts->groupBy('employee_id');
+
+        $shiftsCount = $allShifts->count();
+        $salary      = round($allShifts->sum('rate'));
+
+        $absentToday = 0;
+        if ($inRange) {
+            $activeCount  = Employee::where('is_active', true)->count();
+            $presentToday = $allShifts->where('date', $today)->count();
+            $absentToday  = max(0, $activeCount - $presentToday);
+        }
+
+        $query = Employee::where('is_active', true);
+        if ($this->roleFilter === 'cook') {
+            $query->whereIn('position', ['cook', 'packer', 'cleaner']);
+        } elseif ($this->roleFilter === 'courier') {
+            $query->where('position', 'courier');
+        } elseif ($this->roleFilter === 'manager') {
+            $query->whereIn('position', ['manager', 'admin']);
+        }
+
+        $posOrder  = ['cook' => 1, 'packer' => 2, 'manager' => 3, 'admin' => 4, 'courier' => 5, 'cleaner' => 6];
+        $employees = $query->get()->sortBy(fn ($e) => $posOrder[$e->position] ?? 99)->values();
+
+        $portions = OrderDay::whereBetween('date', [$rangeStart, $rangeEnd])
+            ->selectRaw('date, COUNT(*) as cnt')
+            ->groupBy('date')
+            ->pluck('cnt', 'date');
+
+        $kitchenPositions = ['cook', 'packer', 'cleaner'];
+        $posLabels = [
+            'cook'    => 'Кухар',
+            'manager' => 'Менеджер',
+            'courier' => "Кур'єр",
+            'admin'   => 'Адміністратор',
+            'packer'  => 'Пакувальник',
+            'cleaner' => 'Прибиральниця',
+        ];
+
+        $rows = [];
+        foreach ($employees as $emp) {
+            $empShifts     = $shiftsByEmp->get($emp->id, collect())->keyBy('date');
+            $days          = [];
+            $absentEmployee = false;
+
+            foreach ($dates as $date) {
+                if ($empShifts->has($date)) {
+                    $days[$date] = 'present';
+                } elseif ($date > $today) {
+                    $days[$date] = 'future';
+                } elseif ($date === $today) {
+                    $days[$date] = 'absent_today';
+                    $absentEmployee = true;
+                } else {
+                    $days[$date] = 'off';
+                }
+            }
+
+            $rows[] = [
+                'id'             => $emp->id,
+                'name'           => $emp->name,
+                'position'       => $emp->position,
+                'position_label' => $posLabels[$emp->position] ?? $emp->position,
+                'base_rate'      => $emp->base_rate,
+                'is_kitchen'     => in_array($emp->position, $kitchenPositions),
+                'days'           => $days,
+                'absent_today'   => $absentEmployee && $inRange,
+            ];
+        }
+
+        return [
+            'stats' => [
+                'shifts'       => $shiftsCount,
+                'salary'       => $salary,
+                'absent_today' => $absentToday,
+            ],
+            'rows'     => $rows,
+            'portions' => $portions->toArray(),
+            'today'    => $today,
+        ];
     }
 }

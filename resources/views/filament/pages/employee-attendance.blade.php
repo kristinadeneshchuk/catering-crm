@@ -1,144 +1,277 @@
 <x-filament-panels::page>
 @push('styles')
 <style>
+    .emp-wrap { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif; }
+    .emp-wrap * { box-sizing: border-box; }
+    .emp-btn { cursor: pointer; transition: opacity .15s; }
+    .emp-btn:hover { opacity: .75; }
+    .emp-cell-btn { border: none; cursor: pointer; transition: transform .12s; background: transparent; }
+    .emp-cell-btn:hover { transform: scale(1.12); }
     .fi-page-header { display: none !important; }
-    .attend-row { transition: background .15s; }
-    .attend-row:hover { background: rgba(255,255,255,.04) !important; }
-    .attend-check { width: 22px; height: 22px; border-radius: 6px; cursor: pointer; accent-color: #22c55e; }
-    .attend-rate {
-        width: 110px; background: #27272a; border: 1px solid #3f3f46;
-        border-radius: 8px; padding: 6px 10px; color: #f4f4f5;
-        font-size: 14px; font-weight: 600; outline: none;
-        transition: border-color .15s;
+
+    .emp-date-input {
+        background: #27272a;
+        border: 1.5px solid #3f3f46;
+        border-radius: 10px;
+        padding: 8px 14px;
+        color: #f4f4f5;
+        font-size: 13px;
+        font-weight: 600;
+        outline: none;
+        cursor: pointer;
+        color-scheme: dark;
     }
-    .attend-rate:focus { border-color: #22c55e; }
-    .attend-rate:disabled { opacity: .4; }
+    .emp-date-input:focus { border-color: #3b82f6; }
+
+    /* Sticky left column */
+    .emp-sticky {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        background: #18181b;
+    }
+    .emp-sticky-head {
+        position: sticky;
+        left: 0;
+        z-index: 3;
+        background: #111113;
+    }
+    /* Shadow separator after sticky column */
+    .emp-sticky::after,
+    .emp-sticky-head::after {
+        content: '';
+        position: absolute;
+        top: 0; right: -8px; bottom: 0;
+        width: 8px;
+        background: linear-gradient(to right, rgba(0,0,0,.25), transparent);
+        pointer-events: none;
+    }
 </style>
 @endpush
 
-<div class="space-y-5">
+@php
+    $data   = $this->getData();
+    $dates  = $this->getDates();
+    $today  = $data['today'];
+    $ukDays = ['Пн','Вт','Ср','Чт','Пт','Сб','Нд'];
+@endphp
 
-    {{-- ДАТА СПРАВА --}}
-    <div style="display:flex;justify-content:flex-end;">
-        <input type="date" wire:model.live="date" wire:change="loadAttendance"
-            style="background:#27272a;border:1px solid #3f3f46;border-radius:10px;padding:9px 14px;color:#f4f4f5;font-size:14px;font-weight:600;outline:none;">
-    </div>
+<div class="emp-wrap">
 
-    {{-- СТАТУС ДЕНЬ --}}
-    @if($dailyTotal > 0)
-    <div style="background:linear-gradient(135deg,#052e16,#0a1f14);border:1px solid #065f46;border-radius:14px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
-        <div style="display:flex;align-items:center;gap:12px;">
-            <div style="width:40px;height:40px;background:#14532d;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#22c55e" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            </div>
-            <div>
-                <p style="color:#22c55e;font-weight:700;font-size:15px;line-height:1.2;">Табель заповнено</p>
-                <p style="color:#4ade80;font-size:12px;opacity:.7;margin-top:2px;">{{ \Carbon\Carbon::parse($date)->isoFormat('D MMMM Y') }}</p>
-            </div>
-        </div>
-        <div style="text-align:right;">
-            <p style="color:#4ade80;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.6;">Разом нараховано</p>
-            <p style="color:#22c55e;font-size:24px;font-weight:900;line-height:1.1;">{{ number_format($dailyTotal, 0, '.', ' ') }} ₴</p>
+    {{-- ШАПКА --}}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+        <h1 style="font-size:20px;font-weight:700;color:#f4f4f5;margin:0;">Табель змін</h1>
+
+        {{-- Вибір діапазону дат --}}
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="color:#71717a;font-size:13px;">Період:</span>
+            <input type="date" wire:model.live="startDate" class="emp-date-input">
+            <span style="color:#52525b;">→</span>
+            <input type="date" wire:model.live="endDate" class="emp-date-input">
         </div>
     </div>
-    @else
-    <div style="background:#1c1400;border:1px solid #78350f;border-radius:14px;padding:14px 18px;display:flex;align-items:center;gap:12px;">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#f59e0b" stroke-width="2" style="flex-shrink:0;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
-        <p style="color:#fbbf24;font-size:13px;font-weight:500;">За цей день ще немає нарахувань. Відмітьте тих, хто працював, та збережіть.</p>
-    </div>
-    @endif
 
-    {{-- ТАБЛИЦЯ --}}
-    <div style="background:#18181b;border:1px solid #27272a;border-radius:16px;overflow:hidden;">
-        <table style="width:100%;border-collapse:collapse;">
+    {{-- СТАТИСТИКА --}}
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
+        <div style="background:#18181b;border-radius:14px;padding:16px 20px;border:1px solid #27272a;">
+            <p style="color:#52525b;font-size:12px;margin:0 0 6px;font-weight:500;">Змін за період</p>
+            <p style="color:#f4f4f5;font-size:26px;font-weight:700;margin:0;line-height:1.2;">{{ $data['stats']['shifts'] }}</p>
+        </div>
+        <div style="background:#18181b;border-radius:14px;padding:16px 20px;border:1px solid #27272a;">
+            <p style="color:#52525b;font-size:12px;margin:0 0 6px;font-weight:500;">Нараховано зарплати</p>
+            <p style="color:#f59e0b;font-size:26px;font-weight:700;margin:0;line-height:1.2;">{{ number_format($data['stats']['salary'], 0, '.', ' ') }} ₴</p>
+        </div>
+        <div style="background:#18181b;border-radius:14px;padding:16px 20px;border:1px solid #27272a;">
+            <p style="color:#52525b;font-size:12px;margin:0 0 6px;font-weight:500;">Не вийшли сьогодні</p>
+            <p style="color:{{ $data['stats']['absent_today'] > 0 ? '#f87171' : '#f4f4f5' }};font-size:26px;font-weight:700;margin:0;line-height:1.2;">
+                {{ $data['stats']['absent_today'] }}
+            </p>
+        </div>
+    </div>
+
+    {{-- ФІЛЬТРИ РОЛЕЙ --}}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
+        @foreach(['all' => 'Всі ролі', 'cook' => 'Кухарі', 'courier' => "Кур'єри", 'manager' => 'Менеджери'] as $key => $label)
+        <button wire:click="$set('roleFilter', '{{ $key }}')" class="emp-btn"
+            style="padding:7px 16px;border-radius:20px;font-size:13px;font-weight:{{ $roleFilter === $key ? '600' : '500' }};
+                   border:1.5px solid {{ $roleFilter === $key ? '#3b82f6' : '#3f3f46' }};
+                   background:{{ $roleFilter === $key ? '#1e3a5f' : 'transparent' }};
+                   color:{{ $roleFilter === $key ? '#60a5fa' : '#71717a' }};">
+            {{ $label }}
+        </button>
+        @endforeach
+    </div>
+
+    {{-- ТАБЛИЦЯ зі sticky лівою колонкою --}}
+    <div style="background:#18181b;border-radius:16px;border:1px solid #27272a;overflow:hidden;margin-bottom:14px;">
+        <div style="overflow-x:auto;">
+        <table style="width:max-content;min-width:100%;border-collapse:collapse;">
             <thead>
                 <tr style="background:#111113;border-bottom:1px solid #27272a;">
-                    <th style="text-align:left;padding:13px 20px;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Співробітник</th>
-                    <th style="text-align:left;padding:13px 16px;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Посада</th>
-                    <th style="text-align:left;padding:13px 16px;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Ставка за день</th>
-                    <th style="text-align:center;padding:13px 20px;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Вийшов</th>
+                    {{-- Фіксована колонка --}}
+                    <th class="emp-sticky-head"
+                        style="text-align:left;padding:14px 20px;color:#52525b;font-size:12px;font-weight:500;min-width:220px;border-right:1px solid #27272a;">
+                        Співробітник
+                    </th>
+                    {{-- Колонки дат --}}
+                    @foreach($dates as $date)
+                    @php
+                        $d       = \Carbon\Carbon::parse($date);
+                        $isToday = $date === $today;
+                        $dayIdx  = ($d->dayOfWeek + 6) % 7; // Пн=0
+                    @endphp
+                    <th style="text-align:center;padding:14px 6px;min-width:56px;">
+                        <span style="font-size:11px;font-weight:{{ $isToday ? '700' : '500' }};
+                                     color:{{ $isToday ? '#60a5fa' : ($d->isWeekend() ? '#52525b' : '#71717a') }};
+                                     display:inline-flex;flex-direction:column;align-items:center;gap:2px;">
+                            <span>{{ $ukDays[$dayIdx] }}</span>
+                            <span style="font-size:13px;font-weight:{{ $isToday ? '700' : '600' }};">{{ $d->day }}</span>
+                            @if($isToday)
+                            <span style="display:inline-block;width:4px;height:4px;border-radius:50%;background:#3b82f6;"></span>
+                            @endif
+                        </span>
+                    </th>
+                    @endforeach
                 </tr>
             </thead>
             <tbody>
-                @forelse($attendance as $id => $data)
+                @forelse($data['rows'] as $row)
                 @php
-                    $posColors = [
-                        'cook'    => ['bg'=>'#3b1a00','color'=>'#fb923c'],
-                        'manager' => ['bg'=>'#052e16','color'=>'#34d399'],
-                        'packer'  => ['bg'=>'#1e1b4b','color'=>'#a78bfa'],
-                        'cleaner' => ['bg'=>'#1a1a2e','color'=>'#818cf8'],
-                        'admin'   => ['bg'=>'#1e3a5f','color'=>'#60a5fa'],
-                    ];
-                    $pc = $posColors[$data['position']] ?? ['bg'=>'#27272a','color'=>'#a1a1aa'];
-                    $posLabels = ['cook'=>'Кухар','manager'=>'Менеджер','packer'=>'Пакувальник','cleaner'=>'Прибиральниця','admin'=>'Адміністратор','courier'=>'Кур\'єр'];
-                    $posLabel = $posLabels[$data['position']] ?? $data['position'];
+                    $words       = array_filter(explode(' ', $row['name']));
+                    $initials    = collect($words)->take(2)->map(fn($w) => mb_strtoupper(mb_substr($w,0,1)))->join('');
+                    $avatarBg    = $row['is_kitchen'] ? '#14532d' : '#1e3a5f';
+                    $avatarColor = $row['is_kitchen'] ? '#22c55e' : '#60a5fa';
                 @endphp
-                <tr class="attend-row" style="border-bottom:1px solid #1f1f22;{{ $data['present'] ? 'background:rgba(34,197,94,.06);' : '' }}">
-
-                    <td style="padding:14px 20px;">
+                <tr style="border-bottom:1px solid #1f1f22;">
+                    {{-- Фіксована колонка --}}
+                    <td class="emp-sticky" style="padding:12px 20px;border-right:1px solid #27272a;">
                         <div style="display:flex;align-items:center;gap:10px;">
-                            <div style="width:34px;height:34px;border-radius:50%;background:#27272a;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#a1a1aa;flex-shrink:0;">
-                                {{ mb_substr($data['name'], 0, 1) }}
+                            <div style="width:38px;height:38px;border-radius:50%;background:{{ $avatarBg }};
+                                        display:flex;align-items:center;justify-content:center;
+                                        font-size:12px;font-weight:700;color:{{ $avatarColor }};
+                                        flex-shrink:0;letter-spacing:.3px;">
+                                {{ $initials }}
                             </div>
-                            <span style="color:#f4f4f5;font-weight:600;font-size:14px;">{{ $data['name'] }}</span>
+                            <div>
+                                <p style="color:#f4f4f5;font-weight:600;font-size:14px;margin:0;line-height:1.3;white-space:nowrap;">
+                                    {{ $row['name'] }}
+                                </p>
+                                <p style="color:#71717a;font-size:12px;margin:0;line-height:1.4;white-space:nowrap;">
+                                    {{ $row['position_label'] }} · {{ number_format($row['base_rate'], 0, '.', ' ') }} ₴/зміну
+                                </p>
+                                @if($row['absent_today'])
+                                <p style="color:#f87171;font-size:11px;margin:2px 0 0;white-space:nowrap;display:flex;align-items:center;gap:3px;">
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+                                    </svg>
+                                    Не вийшов сьогодні
+                                </p>
+                                @endif
+                            </div>
                         </div>
                     </td>
 
-                    <td style="padding:14px 16px;">
-                        <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:{{ $pc['bg'] }};color:{{ $pc['color'] }};">
-                            {{ $posLabel }}
-                        </span>
-                    </td>
-
-                    <td style="padding:14px 16px;">
-                        @if($data['position'] !== 'courier')
-                        <div style="display:flex;align-items:center;gap:8px;">
-                            <span style="color:#52525b;font-size:13px;">₴</span>
-                            <input type="number" wire:model="attendance.{{ $id }}.rate"
-                                class="attend-rate"
-                                {{ !$data['present'] ? 'disabled' : '' }}>
-                        </div>
+                    {{-- Клітинки днів --}}
+                    @foreach($dates as $date)
+                    @php $status = $row['days'][$date] ?? 'future'; @endphp
+                    <td style="text-align:center;padding:6px 4px;">
+                        @if($status === 'present')
+                            <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
+                                style="width:34px;height:34px;border-radius:50%;
+                                       background:{{ $row['is_kitchen'] ? '#14532d' : '#1e3a5f' }};
+                                       display:inline-flex;align-items:center;justify-content:center;">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                     stroke="{{ $row['is_kitchen'] ? '#22c55e' : '#60a5fa' }}" stroke-width="2.8">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                                </svg>
+                            </button>
+                        @elseif($status === 'absent_today')
+                            <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
+                                style="width:34px;height:34px;border-radius:50%;
+                                       border:2px dashed #f87171;
+                                       display:inline-flex;align-items:center;justify-content:center;
+                                       color:#f87171;font-weight:700;font-size:14px;">
+                                !
+                            </button>
+                        @elseif($status === 'off')
+                            <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
+                                style="width:34px;height:34px;border-radius:50%;
+                                       display:inline-flex;align-items:center;justify-content:center;
+                                       color:#3f3f46;font-size:17px;font-weight:300;line-height:1;">
+                                –
+                            </button>
                         @else
-                            @if(($data['courier_earned'] ?? 0) > 0)
-                                <span style="color:#60a5fa;font-weight:700;font-size:14px;">{{ number_format($data['courier_earned'], 0, '.', ' ') }} ₴</span>
-                                <span style="display:block;color:#3f3f46;font-size:10px;margin-top:2px;">з маршрутів</span>
-                            @else
-                                <span style="color:#3f3f46;font-size:13px;">немає маршрутів</span>
-                            @endif
+                            <span style="color:#27272a;font-size:17px;font-weight:300;
+                                         display:inline-block;width:34px;text-align:center;line-height:34px;">–</span>
                         @endif
                     </td>
-
-                    <td style="padding:14px 20px;text-align:center;">
-                        <label style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;cursor:pointer;
-                            {{ $data['present'] ? 'background:#14532d;border:2px solid #22c55e;' : 'background:#27272a;border:2px solid #3f3f46;' }}
-                            transition:all .15s;">
-                            <input type="checkbox" wire:model.live="attendance.{{ $id }}.present"
-                                style="position:absolute;opacity:0;width:0;height:0;">
-                            @if($data['present'])
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#22c55e" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
-                            @endif
-                        </label>
-                    </td>
+                    @endforeach
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="4" style="padding:48px;text-align:center;color:#52525b;">
-                        Співробітників не знайдено. Перевірте чи вони активні.
+                    <td colspan="{{ 1 + count($dates) }}" style="padding:48px;text-align:center;color:#52525b;font-size:14px;">
+                        Співробітників не знайдено
                     </td>
                 </tr>
                 @endforelse
+
+                {{-- Порції на зміну --}}
+                <tr style="background:#111113;border-top:1.5px solid #27272a;">
+                    <td class="emp-sticky" style="padding:12px 20px;color:#52525b;font-size:12px;font-weight:500;
+                                background:#111113;border-right:1px solid #27272a;white-space:nowrap;">
+                        Порцій на зміну
+                    </td>
+                    @foreach($dates as $date)
+                    @php $count = $data['portions'][$date] ?? null; @endphp
+                    <td style="text-align:center;padding:12px 4px;">
+                        @if($count !== null)
+                            <span style="font-size:14px;font-weight:{{ $date === $today ? '700' : '600' }};
+                                         color:{{ $date === $today ? '#60a5fa' : '#a1a1aa' }};">
+                                {{ $count }}
+                            </span>
+                        @else
+                            <span style="color:#27272a;font-size:14px;">–</span>
+                        @endif
+                    </td>
+                    @endforeach
+                </tr>
             </tbody>
         </table>
+        </div>
     </div>
 
-    {{-- КНОПКА ЗБЕРЕЖЕННЯ --}}
-    <button wire:click="save"
-        style="width:100%;padding:16px;border-radius:14px;border:none;cursor:pointer;font-size:15px;font-weight:700;letter-spacing:.02em;
-        background:linear-gradient(135deg,#166534,#14532d);color:#86efac;box-shadow:0 0 16px rgba(20,83,45,.5);transition:all .15s;"
-        onmouseover="this.style.boxShadow='0 0 24px rgba(20,83,45,.7)'"
-        onmouseout="this.style.boxShadow='0 0 16px rgba(20,83,45,.5)'">
-        Зберегти табель та нарахувати гроші на баланси
-    </button>
+    {{-- ЛЕГЕНДА --}}
+    <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:6px;">
+            <div style="width:20px;height:20px;border-radius:50%;background:#14532d;
+                        display:flex;align-items:center;justify-content:center;">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                </svg>
+            </div>
+            <span style="color:#71717a;font-size:12px;">Кухня — вийшов</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <div style="width:20px;height:20px;border-radius:50%;background:#1e3a5f;
+                        display:flex;align-items:center;justify-content:center;">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="3">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                </svg>
+            </div>
+            <span style="color:#71717a;font-size:12px;">Доставка / офіс — вийшов</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <div style="width:20px;height:20px;border-radius:50%;border:2px dashed #f87171;
+                        display:flex;align-items:center;justify-content:center;">
+                <span style="color:#f87171;font-size:10px;font-weight:700;line-height:1;">!</span>
+            </div>
+            <span style="color:#71717a;font-size:12px;">Не вийшов</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <span style="color:#3f3f46;font-size:17px;font-weight:300;line-height:1;">–</span>
+            <span style="color:#71717a;font-size:12px;">Вихідний / кліпнути щоб додати зміну</span>
+        </div>
+    </div>
 
 </div>
 </x-filament-panels::page>
