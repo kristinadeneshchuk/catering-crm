@@ -89,8 +89,11 @@ class AnalyticsController extends Controller
 
         // 🔥 Зарплати (ФОП) одним запитом за період
         $allShifts = EmployeeShift::whereBetween('date', [$startDate, $endDate])
+            ->with('employee')
             ->get()
             ->groupBy('date');
+
+        $kitchenPositions = ['cook', 'packer', 'cleaner'];
 
         // Налаштування меню та циклу
         $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
@@ -124,6 +127,8 @@ class AnalyticsController extends Controller
         $revenueCount = []; $totalRevenue = 0;
         $foodCostCount = []; $totalFoodCost = 0;
         $fopCount = []; $totalFop = 0;
+        $fopKitchenCount = []; $totalFopKitchen = 0;
+        $fopOtherCount = []; $totalFopOther = 0;
         $discountCount = []; $totalDiscount = 0;
         $packagingCount = []; $totalPackagingCost = 0;
 
@@ -144,10 +149,25 @@ class AnalyticsController extends Controller
             $rationsCount[$ymd] = $count;
             $totalRations += $count;
 
-            // ФОП за день
-            $dailyFop = $allShifts->has($ymd) ? $allShifts->get($ymd)->sum('rate') : 0;
-            $fopCount[$ymd] = round($dailyFop);
-            $totalFop += round($dailyFop);
+            // ФОП за день (загальний + розбивка кухня / інше)
+            $dailyFop = 0; $dailyFopKitchen = 0; $dailyFopOther = 0;
+            if ($allShifts->has($ymd)) {
+                foreach ($allShifts->get($ymd) as $shift) {
+                    $rate = (float) $shift->rate;
+                    $dailyFop += $rate;
+                    if (in_array($shift->employee?->position, $kitchenPositions, true)) {
+                        $dailyFopKitchen += $rate;
+                    } else {
+                        $dailyFopOther += $rate;
+                    }
+                }
+            }
+            $fopCount[$ymd]        = round($dailyFop);
+            $fopKitchenCount[$ymd] = round($dailyFopKitchen);
+            $fopOtherCount[$ymd]   = round($dailyFopOther);
+            $totalFop        += round($dailyFop);
+            $totalFopKitchen += round($dailyFopKitchen);
+            $totalFopOther   += round($dailyFopOther);
 
             $dailyRevenue = 0;
             $dailyFoodCost = 0;
@@ -594,6 +614,8 @@ class AnalyticsController extends Controller
             'revenueCount', 'totalRevenue',
             'foodCostCount', 'totalFoodCost',
             'fopCount', 'totalFop',
+            'fopKitchenCount', 'totalFopKitchen',
+            'fopOtherCount', 'totalFopOther',
             'discountCount', 'totalDiscount',  // 🔥 Знижки
             'spoilagePercent', 'otherExpenses', 'activeTab',
             'rentByDay', 'utilitiesByDay', 'monthlyRent', 'monthlyUtilities',

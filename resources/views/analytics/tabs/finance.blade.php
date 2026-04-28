@@ -79,14 +79,19 @@
                     @endforeach
                     <td>{{ number_format($totalPackagingCost ?? 0, 0, '.', ' ') }} ₴</td>
                 </tr>
-                <tr class="row-hover sub-row text-zinc-300">
-                    <td class="font-medium">Фонд оплати праці (ФОП)</td>
-                    @foreach($dates as $ymd => $dm) 
-                        <td class="{{ ($fopCount[$ymd] ?? 0) > 0 ? 'text-zinc-200' : 'text-zinc-600' }}">
-                            {{ number_format($fopCount[$ymd] ?? 0, 0, '.', ' ') }} ₴
-                        </td> 
+                <tr class="row-hover sub-row">
+                    <td>ФОП — кухня</td>
+                    @foreach($dates as $ymd => $dm)
+                        <td>{{ number_format($fopKitchenCount[$ymd] ?? 0, 0, '.', ' ') }} ₴</td>
                     @endforeach
-                    <td class="text-white">{{ number_format($totalFop ?? 0, 0, '.', ' ') }} ₴</td>
+                    <td>{{ number_format($totalFopKitchen ?? 0, 0, '.', ' ') }} ₴</td>
+                </tr>
+                <tr class="row-hover sub-row">
+                    <td>ФОП — кур'єри та менеджери</td>
+                    @foreach($dates as $ymd => $dm)
+                        <td>{{ number_format($fopOtherCount[$ymd] ?? 0, 0, '.', ' ') }} ₴</td>
+                    @endforeach
+                    <td>{{ number_format($totalFopOther ?? 0, 0, '.', ' ') }} ₴</td>
                 </tr>
 
                 <tr class="row-hover text-emerald-400 bg-emerald-500/[0.05]">
