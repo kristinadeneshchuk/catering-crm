@@ -81,9 +81,10 @@ class InstagramChannelDriver implements ChannelDriverInterface
     }
 
     /**
-     * У новій Instagram Login API webhook-підписки конфігуруються на рівні App,
-     * а не per-користувач. Тут просто перевіряємо, що токен валідний,
-     * викликаючи /me — якщо успішно, акаунт «активний».
+     * У новій Instagram Login API окрім налаштувань webhook на рівні App
+     * (URL, verify token, доступні поля) кожен IG-акаунт повинен сам себе
+     * підписати викликом POST /me/subscribed_apps з потрібними полями —
+     * без цього Meta не надсилає webhook events на цей акаунт.
      */
     public function connect(MessengerAccount $account): void
     {
@@ -93,16 +94,29 @@ class InstagramChannelDriver implements ChannelDriverInterface
             throw new RuntimeException('Instagram: спочатку пройди OAuth — кнопка «Авторизувати через Instagram»');
         }
 
-        $response = Http::withToken($token)
+        $meRes = Http::withToken($token)
             ->acceptJson()
             ->timeout(10)
             ->get(self::GRAPH_BASE . '/' . self::API_VERSION . '/me', [
                 'fields' => 'user_id,username,account_type',
             ]);
 
-        if (! $response->successful()) {
-            $err = $response->json('error.message') ?? $response->body();
+        if (! $meRes->successful()) {
+            $err = $meRes->json('error.message') ?? $meRes->body();
             throw new RuntimeException("Instagram /me: {$err}");
+        }
+
+        $subRes = Http::asForm()
+            ->acceptJson()
+            ->timeout(10)
+            ->post(self::GRAPH_BASE . '/' . self::API_VERSION . '/me/subscribed_apps', [
+                'subscribed_fields' => 'messages,messaging_postbacks,messaging_seen,message_reactions',
+                'access_token'      => $token,
+            ]);
+
+        if (! $subRes->successful()) {
+            $err = $subRes->json('error.message') ?? $subRes->body();
+            throw new RuntimeException("Instagram subscribe: {$err}");
         }
 
         $account->update([
