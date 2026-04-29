@@ -23,6 +23,11 @@ class InstagramWebhookController extends Controller
      */
     public function verify(Request $request)
     {
+        Log::info('IG webhook DEBUG: verify hit', [
+            'ip'    => $request->ip(),
+            'query' => $request->query(),
+        ]);
+
         $mode      = $request->query('hub_mode');
         $token     = $request->query('hub_verify_token');
         $challenge = $request->query('hub_challenge');
@@ -50,12 +55,24 @@ class InstagramWebhookController extends Controller
         $rawBody   = $request->getContent();
         $signature = (string) $request->header('X-Hub-Signature-256');
 
+        Log::info('IG webhook DEBUG: handle hit', [
+            'ip'           => $request->ip(),
+            'has_sig'      => $signature !== '',
+            'body_length'  => strlen($rawBody),
+            'body_preview' => substr($rawBody, 0, 500),
+        ]);
+
         if (! $this->verifySignature($rawBody, $signature)) {
             Log::warning('Instagram webhook: invalid signature');
             return response('Forbidden', 403);
         }
 
         $payload = $request->all();
+
+        Log::info('IG webhook DEBUG: signature ok', [
+            'object'      => $payload['object'] ?? null,
+            'entry_count' => count($payload['entry'] ?? []),
+        ]);
 
         if (($payload['object'] ?? null) !== 'instagram') {
             // Може прийти 'page' або інший тип — нас цікавить тільки instagram messaging
