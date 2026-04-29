@@ -117,7 +117,9 @@ class InstagramWebhookController extends Controller
             return false;
         }
 
-        $appSecret = config('services.meta.app_secret');
+        // У новій Instagram Login API webhook підписується Instagram App Secret
+        // (з product Instagram), а не загальним App Secret самого Meta App.
+        $appSecret = config('services.meta.instagram.app_secret');
         if (! $appSecret) {
             return false;
         }
