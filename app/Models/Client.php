@@ -131,4 +131,23 @@ class Client extends Authenticatable
     {
         return $this->hasMany(OrderCall::class);
     }
+
+    // === МЕСЕНДЖЕРИ ===
+
+    public function channels(): HasMany
+    {
+        return $this->hasMany(ClientChannel::class);
+    }
+
+    public function conversations(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            Conversation::class,
+            ClientChannel::class,
+            'client_id',          // FK on client_channels
+            'client_channel_id',  // FK on conversations
+            'id',                 // local key on clients
+            'id'                  // local key on client_channels
+        );
+    }
 }

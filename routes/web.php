@@ -9,6 +9,9 @@ use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\KitchenPlanController;
 use App\Http\Controllers\PackagingAssemblyController;
 use App\Http\Controllers\ClientMenuController;
+use App\Http\Controllers\InstagramOAuthController;
+use App\Http\Controllers\Webhooks\InstagramWebhookController;
+use App\Http\Controllers\Webhooks\ViberWebhookController;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\LogisticsExport;
 use App\Models\Order;
@@ -24,6 +27,36 @@ use Carbon\Carbon;
 Route::get('/', function () {
     return view('welcome');
 });
+
+/**
+ * 📜 ПУБЛІЧНІ ЮРИДИЧНІ СТОРІНКИ (для Meta App Review та клієнтів)
+ */
+Route::view('/privacy',       'legal.privacy')->name('legal.privacy');
+Route::view('/terms',         'legal.terms')->name('legal.terms');
+Route::view('/data-deletion', 'legal.data-deletion')->name('legal.data-deletion');
+
+/**
+ * 💬 МЕСЕНДЖЕР-ІНТЕГРАЦІЇ
+ */
+
+// Webhooks — викликаються самими месенджерами. CSRF вимкнено в bootstrap/app.php.
+Route::post('/webhooks/viber/{account}', [ViberWebhookController::class, 'handle'])
+    ->name('webhooks.viber');
+
+Route::get('/webhooks/instagram',  [InstagramWebhookController::class, 'verify'])->name('webhooks.instagram.verify');
+Route::post('/webhooks/instagram', [InstagramWebhookController::class, 'handle'])->name('webhooks.instagram');
+
+// OAuth для Instagram (через Facebook Login).
+// start — потребує авторизованого менеджера. callback — редирект з FB, без auth-middleware.
+Route::middleware('auth')->group(function () {
+    Route::get('/admin/messenger-accounts/{account}/oauth-instagram/start',
+        [InstagramOAuthController::class, 'start'])
+        ->name('messenger.instagram.oauth.start');
+});
+
+Route::get('/oauth/instagram/callback', [InstagramOAuthController::class, 'callback'])
+    ->middleware('auth')
+    ->name('messenger.instagram.oauth.callback');
 
 /**
  * 📱 ПУБЛІЧНЕ МЕНЮ КЛІЄНТА (по QR-коду)

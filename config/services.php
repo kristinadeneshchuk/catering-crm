@@ -43,6 +43,26 @@ return [
         'bot_token'       => env('TELEGRAM_BOT_TOKEN'),
         'owner_chat_id'   => env('TELEGRAM_OWNER_CHAT_ID'),
         'manager_chat_id' => env('TELEGRAM_MANAGER_CHAT_ID'),
+
+        // Для месенджер-інтеграції через MadelineProto (наступна фаза).
+        // api_id / api_hash береш на https://my.telegram.org/apps
+        'api_id'   => env('TELEGRAM_API_ID'),
+        'api_hash' => env('TELEGRAM_API_HASH'),
+    ],
+
+    // Meta (Facebook + Instagram).
+    // Усі ключі — з Meta App у https://developers.facebook.com/apps/
+    'meta' => [
+        'app_id'                => env('META_APP_ID'),
+        'app_secret'            => env('META_APP_SECRET'),
+        // Випадковий рядок 32+ символів — ставимо в Meta App → Webhooks → Verify Token
+        'webhook_verify_token'  => env('META_WEBHOOK_VERIFY_TOKEN'),
+    ],
+
+    // Viber Public Account / Bot API.
+    // Кожен акаунт має свій auth_token, тому тут конфігу мало — тільки для дефолтного фолбеку.
+    'viber' => [
+        'default_auth_token' => env('VIBER_AUTH_TOKEN'),
     ],
 
 ];

@@ -11,7 +11,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Webhook-роути від месенджерів (Viber, Instagram) перевіряють підпис самі —
+        // CSRF-токен вони слати не можуть.
+        $middleware->validateCsrfTokens(except: [
+            'webhooks/*',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
