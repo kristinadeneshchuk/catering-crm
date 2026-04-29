@@ -12,31 +12,32 @@ use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
- * Драйвер для Instagram (Meta Graph API).
+ * Драйвер Instagram через нову Instagram Login API
+ * (Instagram API with Instagram Login, https://graph.instagram.com).
  *
  * Передумови:
- *  - IG акаунт переведений на Business
- *  - Привʼязаний до Facebook Page
+ *  - IG акаунт = Business
  *  - У Privacy → Messages → "Allow access to messages" увімкнено
- *  - Meta App створений, App Review поданий (для production)
- *
- * Підключення відбувається через OAuth (InstagramOAuthController).
- * Цей драйвер вже припускає, що page_access_token отриманий.
+ *  - Окремий Instagram App створений у Meta App use case
+ *    «Управление сообщениями и контентом в Instagram»
+ *  - OAuth уже пройдений (InstagramOAuthController), credentials.access_token у БД
  */
 class InstagramChannelDriver implements ChannelDriverInterface
 {
-    private const GRAPH_BASE = 'https://graph.facebook.com/v19.0';
+    private const GRAPH_BASE = 'https://graph.instagram.com';
+    private const API_VERSION = 'v23.0';
 
     public function send(Message $message): void
     {
-        $account = $message->conversation->messengerAccount;
-        $pageToken = $account->credentials['page_access_token'] ?? null;
+        $account  = $message->conversation->messengerAccount;
+        $token    = $account->credentials['access_token'] ?? null;
+        $igUserId = $account->credentials['user_id'] ?? null;
 
-        if (! $pageToken) {
-            throw new RuntimeException('Instagram: page_access_token не заданий');
+        if (! $token || ! $igUserId) {
+            throw new RuntimeException('Instagram: access_token або user_id не задані. Пройди OAuth.');
         }
 
-        $recipientId = $message->conversation->external_chat_id; // IGSID
+        $recipientId = $message->conversation->external_chat_id; // IGSID отримувача
 
         $payload = [
             'recipient' => ['id' => $recipientId],
@@ -57,11 +58,13 @@ class InstagramChannelDriver implements ChannelDriverInterface
             $payload['message'] = ['text' => $message->text ?? ''];
         }
 
-        $response = Http::withToken($pageToken)
+        $url = self::GRAPH_BASE . '/' . self::API_VERSION . "/{$igUserId}/messages";
+
+        $response = Http::withToken($token)
             ->acceptJson()
             ->asJson()
             ->timeout(15)
-            ->post(self::GRAPH_BASE . '/me/messages', $payload);
+            ->post($url, $payload);
 
         $body = $response->json();
 
@@ -77,32 +80,29 @@ class InstagramChannelDriver implements ChannelDriverInterface
         ]);
     }
 
+    /**
+     * У новій Instagram Login API webhook-підписки конфігуруються на рівні App,
+     * а не per-користувач. Тут просто перевіряємо, що токен валідний,
+     * викликаючи /me — якщо успішно, акаунт «активний».
+     */
     public function connect(MessengerAccount $account): void
     {
-        // Для Instagram connect виконується OAuth-флоу (InstagramOAuthController).
-        // Цей метод викликається після того, як OAuth уже зберіг credentials —
-        // він підписує сторінку на webhooks для нашого app.
+        $token = $account->credentials['access_token'] ?? null;
 
-        $pageToken = $account->credentials['page_access_token'] ?? null;
-        $pageId    = $account->credentials['page_id'] ?? null;
-
-        if (! $pageToken || ! $pageId) {
-            throw new RuntimeException('Instagram: спочатку пройди OAuth — кнопка «Авторизувати через Facebook»');
+        if (! $token) {
+            throw new RuntimeException('Instagram: спочатку пройди OAuth — кнопка «Авторизувати через Instagram»');
         }
 
-        $response = Http::withToken($pageToken)
+        $response = Http::withToken($token)
             ->acceptJson()
-            ->asJson()
-            ->timeout(15)
-            ->post(self::GRAPH_BASE . "/{$pageId}/subscribed_apps", [
-                'subscribed_fields' => 'messages,messaging_postbacks,message_reactions,message_reads',
+            ->timeout(10)
+            ->get(self::GRAPH_BASE . '/' . self::API_VERSION . '/me', [
+                'fields' => 'user_id,username,account_type',
             ]);
 
-        $body = $response->json();
-
-        if (! $response->successful() || empty($body['success'])) {
-            $err = $body['error']['message'] ?? $response->body();
-            throw new RuntimeException("Instagram subscribe_apps: {$err}");
+        if (! $response->successful()) {
+            $err = $response->json('error.message') ?? $response->body();
+            throw new RuntimeException("Instagram /me: {$err}");
         }
 
         $account->update([
@@ -112,33 +112,38 @@ class InstagramChannelDriver implements ChannelDriverInterface
         ]);
     }
 
+    /**
+     * Відкликати токен. Instagram має endpoint /me/permissions DELETE для цього.
+     */
     public function disconnect(MessengerAccount $account): void
     {
-        $pageToken = $account->credentials['page_access_token'] ?? null;
-        $pageId    = $account->credentials['page_id'] ?? null;
-
-        if (! $pageToken || ! $pageId) {
+        $token = $account->credentials['access_token'] ?? null;
+        if (! $token) {
             return;
         }
 
-        Http::withToken($pageToken)
-            ->timeout(10)
-            ->delete(self::GRAPH_BASE . "/{$pageId}/subscribed_apps");
+        try {
+            Http::withToken($token)
+                ->timeout(10)
+                ->delete(self::GRAPH_BASE . '/' . self::API_VERSION . '/me/permissions');
+        } catch (\Throwable $e) {
+            Log::warning('IG disconnect failed', ['error' => $e->getMessage()]);
+        }
     }
 
     /**
-     * Нормалізація одного messaging-евенту.
+     * Нормалізація одного messaging-евенту з webhook'а.
      * Контролер ітерується по entry[].messaging[] і викликає для кожного.
      */
     public function normalizeInbound(MessengerAccount $account, array $payload): ?InboundMessageData
     {
-        // Echo власних повідомлень (коли наш менеджер відправляє з Instagram-додатка) —
-        // приходить is_echo=true. Не робимо з них inbound, просто синхронізуємо outbound пізніше.
+        // Echo власних повідомлень (коли менеджер відправляє з Instagram-додатка) —
+        // приходить is_echo=true. Не дублюємо як inbound.
         if (! empty($payload['message']['is_echo'])) {
             return null;
         }
 
-        // Не повідомлення (postback / read / reaction) — пропускаємо
+        // Не повідомлення (read / reaction / postback) — пропускаємо
         if (! isset($payload['message'])) {
             return null;
         }
@@ -169,7 +174,7 @@ class InstagramChannelDriver implements ChannelDriverInterface
                     'video'    => Message::TYPE_VIDEO,
                     'audio'    => Message::TYPE_AUDIO,
                     'file'     => Message::TYPE_DOCUMENT,
-                    'story_mention', 'share' => Message::TYPE_TEXT,
+                    'story_mention', 'share', 'ig_reel' => Message::TYPE_TEXT,
                     default    => Message::TYPE_DOCUMENT,
                 };
             }
@@ -182,8 +187,7 @@ class InstagramChannelDriver implements ChannelDriverInterface
         // Reply-to — якщо клієнт відповів на наше повідомлення
         $replyTo = $msg['reply_to']['mid'] ?? null;
 
-        // Підвантажуємо профіль користувача, щоб мати імʼя і аватар.
-        // Це ОПЦІЙНО — якщо не вийде, запишемо без імʼя, потім ContactMatcher сам спробує знайти.
+        // Підвантажуємо профіль користувача
         $profile = $this->fetchUserProfile($account, (string) $senderId);
 
         return new InboundMessageData(
@@ -205,12 +209,12 @@ class InstagramChannelDriver implements ChannelDriverInterface
     }
 
     /**
-     * GET /{ig-scoped-id}?fields=name,username,profile_pic
-     * Може повернути порожнє — і це ок.
+     * GET /v23.0/{IGSID}?fields=name,username,profile_pic
+     * У Instagram Login API цей endpoint доступний з нашим access_token.
      */
     protected function fetchUserProfile(MessengerAccount $account, string $igsid): array
     {
-        $token = $account->credentials['page_access_token'] ?? null;
+        $token = $account->credentials['access_token'] ?? null;
         if (! $token) {
             return [];
         }
@@ -218,7 +222,7 @@ class InstagramChannelDriver implements ChannelDriverInterface
         try {
             $response = Http::withToken($token)
                 ->timeout(8)
-                ->get(self::GRAPH_BASE . "/{$igsid}", [
+                ->get(self::GRAPH_BASE . '/' . self::API_VERSION . "/{$igsid}", [
                     'fields' => 'name,username,profile_pic',
                 ]);
 
@@ -236,65 +240,38 @@ class InstagramChannelDriver implements ChannelDriverInterface
     }
 
     /**
-     * Оновити long-lived page access token через user access token.
+     * Оновити long-lived access token.
+     * GET /refresh_access_token?grant_type=ig_refresh_token&access_token=...
+     * Можна викликати лише коли токен ще валідний (мінімум 24 години після створення).
      * Викликається з RefreshInstagramTokens command.
      */
     public function refreshToken(MessengerAccount $account): void
     {
-        $userToken = $account->credentials['user_access_token'] ?? null;
-        $pageId    = $account->credentials['page_id'] ?? null;
-
-        if (! $userToken || ! $pageId) {
+        $token = $account->credentials['access_token'] ?? null;
+        if (! $token) {
             return;
         }
 
-        // Long-lived user access token живе 60 днів. Кожні ~50 днів обмінюємо на новий.
-        $appId     = config('services.meta.app_id');
-        $appSecret = config('services.meta.app_secret');
-
-        $exchanged = Http::timeout(15)->get(self::GRAPH_BASE . '/oauth/access_token', [
-            'grant_type'        => 'fb_exchange_token',
-            'client_id'         => $appId,
-            'client_secret'     => $appSecret,
-            'fb_exchange_token' => $userToken,
+        $response = Http::timeout(15)->get(self::GRAPH_BASE . '/refresh_access_token', [
+            'grant_type'   => 'ig_refresh_token',
+            'access_token' => $token,
         ]);
 
-        if (! $exchanged->successful()) {
+        if (! $response->successful()) {
             $account->update([
                 'status'     => MessengerAccount::STATUS_EXPIRED,
-                'last_error' => 'Не вдалося оновити user token: ' . $exchanged->body(),
+                'last_error' => 'Не вдалось оновити Instagram токен: ' . $response->body(),
             ]);
             return;
         }
 
-        $newUserToken = $exchanged->json('access_token');
-
-        // Заново витягуємо page access token
-        $pages = Http::timeout(15)->get(self::GRAPH_BASE . '/me/accounts', [
-            'access_token' => $newUserToken,
-        ]);
-
-        if (! $pages->successful()) {
-            $account->update([
-                'status'     => MessengerAccount::STATUS_EXPIRED,
-                'last_error' => 'Не вдалося отримати pages: ' . $pages->body(),
-            ]);
-            return;
-        }
-
-        $matchedPage = collect($pages->json('data') ?? [])->firstWhere('id', $pageId);
-        if (! $matchedPage) {
-            $account->update([
-                'status'     => MessengerAccount::STATUS_EXPIRED,
-                'last_error' => "Page {$pageId} більше не доступний з цим токеном",
-            ]);
-            return;
-        }
+        $newToken  = $response->json('access_token');
+        $expiresIn = (int) $response->json('expires_in');
 
         $newCreds = array_merge($account->credentials ?? [], [
-            'user_access_token' => $newUserToken,
-            'page_access_token' => $matchedPage['access_token'],
-            'token_refreshed_at' => now()->toIso8601String(),
+            'access_token'        => $newToken,
+            'token_expires_at'    => $expiresIn ? now()->addSeconds($expiresIn)->toIso8601String() : null,
+            'token_refreshed_at'  => now()->toIso8601String(),
         ]);
 
         $account->update([

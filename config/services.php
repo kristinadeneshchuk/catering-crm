@@ -57,6 +57,16 @@ return [
         'app_secret'            => env('META_APP_SECRET'),
         // Випадковий рядок 32+ символів — ставимо в Meta App → Webhooks → Verify Token
         'webhook_verify_token'  => env('META_WEBHOOK_VERIFY_TOKEN'),
+
+        // Окремий Instagram App для нової Instagram Login API.
+        // Створюється Meta автоматично при налаштуванні use case
+        // «Управление сообщениями и контентом в Instagram».
+        // OAuth-флоу йде через api.instagram.com з цими ключами,
+        // а не через facebook.com з основними META_APP_*.
+        'instagram' => [
+            'app_id'     => env('INSTAGRAM_APP_ID'),
+            'app_secret' => env('INSTAGRAM_APP_SECRET'),
+        ],
     ],
 
     // Viber Public Account / Bot API.

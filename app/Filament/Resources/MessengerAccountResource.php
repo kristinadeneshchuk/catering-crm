@@ -67,7 +67,7 @@ class MessengerAccountResource extends Resource
                 ->schema([
                     Forms\Components\Placeholder::make('instagram_help')
                         ->label('')
-                        ->content('Збережи акаунт, потім натисни «Авторизувати через Facebook» — CRM перенаправить тебе у Meta для надання прав, після чого автоматично підпишеться на webhooks.'),
+                        ->content('Збережи акаунт, потім натисни «Авторизувати через Instagram» — CRM перенаправить тебе на instagram.com для надання прав. Працює через нову Instagram Login API (без Facebook Page).'),
                 ])
                 ->columnSpanFull(),
 
@@ -218,9 +218,9 @@ class MessengerAccountResource extends Resource
                         }
                     }),
 
-                // ─── Instagram OAuth ───
+                // ─── Instagram OAuth (через Instagram Login API) ───
                 Tables\Actions\Action::make('authorizeInstagram')
-                    ->label('Авторизувати через Facebook')
+                    ->label('Авторизувати через Instagram')
                     ->icon('heroicon-o-arrow-top-right-on-square')
                     ->color('danger')
                     ->visible(fn (MessengerAccount $record) => $record->channel === MessengerAccount::CHANNEL_INSTAGRAM)

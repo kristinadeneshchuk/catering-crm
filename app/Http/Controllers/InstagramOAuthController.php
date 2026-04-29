@@ -11,23 +11,33 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
- * OAuth-флоу для Instagram (через Facebook Login).
+ * OAuth-флоу для Instagram через нову "Instagram Login API"
+ * (запущена Meta наприкінці 2024 року на заміну старій Facebook Login).
  *
- * /admin/messenger-accounts/{id}/oauth-instagram/start    — починає, редиректить на FB
- * /oauth/instagram/callback                               — приймає код, обмінює на токени
+ * Відрізняється від старого підходу:
+ *  - Аутентифікація напряму через instagram.com, не через facebook.com
+ *  - Не потрібна Facebook Page
+ *  - Окремий Instagram App ID/Secret (config('services.meta.instagram'))
+ *  - Endpoint'и graph.instagram.com замість graph.facebook.com
+ *
+ * Документація:
+ *  https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login
+ *
+ * Шляхи:
+ *  /admin/messenger-accounts/{id}/oauth-instagram/start  — починає, редиректить на instagram.com
+ *  /oauth/instagram/callback                              — приймає code, обмінює на токени
  */
 class InstagramOAuthController extends Controller
 {
-    private const FB_OAUTH = 'https://www.facebook.com/v19.0/dialog/oauth';
-    private const GRAPH    = 'https://graph.facebook.com/v19.0';
+    private const IG_OAUTH_URL = 'https://www.instagram.com/oauth/authorize';
+    private const API_BASE     = 'https://api.instagram.com';
+    private const GRAPH_BASE   = 'https://graph.instagram.com';
 
     private const SCOPES = [
-        'instagram_basic',
-        'instagram_manage_messages',
-        'pages_show_list',
-        'pages_messaging',
-        'pages_manage_metadata',
-        'business_management',
+        'instagram_business_basic',
+        'instagram_business_manage_messages',
+        'instagram_business_manage_comments',
+        'instagram_business_content_publish',
     ];
 
     public function start(Request $request, MessengerAccount $account): RedirectResponse
@@ -36,20 +46,23 @@ class InstagramOAuthController extends Controller
             abort(400, 'Цей акаунт не Instagram');
         }
 
-        if (! config('services.meta.app_id')) {
-            abort(500, 'META_APP_ID не налаштований у .env');
+        $appId = config('services.meta.instagram.app_id');
+        if (! $appId) {
+            abort(500, 'INSTAGRAM_APP_ID не налаштований у .env');
         }
 
-        // CSRF-захист: state = випадковий рядок + account_id
+        // CSRF-захист: state = account_id + випадковий рядок
         $state = $account->id . ':' . Str::random(40);
         session(['instagram_oauth_state' => $state]);
 
-        $url = self::FB_OAUTH . '?' . http_build_query([
-            'client_id'     => config('services.meta.app_id'),
-            'redirect_uri'  => $this->redirectUri(),
-            'state'         => $state,
-            'scope'         => implode(',', self::SCOPES),
-            'response_type' => 'code',
+        $url = self::IG_OAUTH_URL . '?' . http_build_query([
+            'enable_fb_login'      => '0',
+            'force_authentication' => '1',
+            'client_id'            => $appId,
+            'redirect_uri'         => $this->redirectUri(),
+            'response_type'        => 'code',
+            'scope'                => implode(',', self::SCOPES),
+            'state'                => $state,
         ]);
 
         return redirect()->away($url);
@@ -57,14 +70,15 @@ class InstagramOAuthController extends Controller
 
     public function callback(Request $request, InstagramChannelDriver $driver): RedirectResponse
     {
-        // Ловимо помилки з боку FB
+        // Помилки авторизації
         if ($request->has('error')) {
             return $this->backWithError(
-                'Facebook відхилив авторизацію: ' . $request->query('error_description', $request->query('error'))
+                'Instagram відхилив авторизацію: ' . $request->query('error_description', $request->query('error'))
             );
         }
 
-        $state = $request->query('state');
+        // Перевірка state
+        $state    = $request->query('state');
         $expected = session('instagram_oauth_state');
         session()->forget('instagram_oauth_state');
 
@@ -79,91 +93,85 @@ class InstagramOAuthController extends Controller
             return $this->backWithError('Акаунт не знайдено');
         }
 
+        // Instagram після #_ додає fragment, який браузер не передає у GET-параметри.
+        // Code приходить чисто у query string — використовуємо його.
         $code = $request->query('code');
         if (! $code) {
             return $this->backWithError('Не отримано authorization code');
         }
 
-        try {
-            // 1) code → short-lived user access token
-            $tokenRes = Http::timeout(15)->get(self::GRAPH . '/oauth/access_token', [
-                'client_id'     => config('services.meta.app_id'),
-                'client_secret' => config('services.meta.app_secret'),
-                'redirect_uri'  => $this->redirectUri(),
-                'code'          => $code,
-            ]);
+        $appId     = config('services.meta.instagram.app_id');
+        $appSecret = config('services.meta.instagram.app_secret');
 
-            if (! $tokenRes->successful()) {
-                throw new \RuntimeException('Token exchange: ' . $tokenRes->body());
+        try {
+            // 1) code → short-lived access token (1 година)
+            $shortRes = Http::asForm()
+                ->timeout(15)
+                ->post(self::API_BASE . '/oauth/access_token', [
+                    'client_id'     => $appId,
+                    'client_secret' => $appSecret,
+                    'grant_type'    => 'authorization_code',
+                    'redirect_uri'  => $this->redirectUri(),
+                    'code'          => $code,
+                ]);
+
+            if (! $shortRes->successful()) {
+                throw new \RuntimeException('Token exchange: ' . $shortRes->body());
             }
 
-            $shortLived = $tokenRes->json('access_token');
+            $shortLivedToken = $shortRes->json('access_token');
+            $userId          = $shortRes->json('user_id');
+
+            if (! $shortLivedToken || ! $userId) {
+                throw new \RuntimeException('Token exchange повернув порожні поля: ' . $shortRes->body());
+            }
 
             // 2) short-lived → long-lived (60 днів)
-            $longRes = Http::timeout(15)->get(self::GRAPH . '/oauth/access_token', [
-                'grant_type'        => 'fb_exchange_token',
-                'client_id'         => config('services.meta.app_id'),
-                'client_secret'     => config('services.meta.app_secret'),
-                'fb_exchange_token' => $shortLived,
+            $longRes = Http::timeout(15)->get(self::GRAPH_BASE . '/access_token', [
+                'grant_type'    => 'ig_exchange_token',
+                'client_secret' => $appSecret,
+                'access_token'  => $shortLivedToken,
             ]);
 
             if (! $longRes->successful()) {
                 throw new \RuntimeException('Long-lived exchange: ' . $longRes->body());
             }
 
-            $userToken = $longRes->json('access_token');
+            $longLivedToken = $longRes->json('access_token');
+            $expiresIn      = (int) $longRes->json('expires_in');
 
-            // 3) Список Pages, до яких користувач дав доступ
-            $pagesRes = Http::timeout(15)->get(self::GRAPH . '/me/accounts', [
-                'access_token' => $userToken,
-                'fields'       => 'id,name,access_token,instagram_business_account',
+            // 3) Профіль користувача
+            $profileRes = Http::timeout(10)->get(self::GRAPH_BASE . '/v23.0/me', [
+                'fields'       => 'user_id,username,name,account_type,profile_picture_url',
+                'access_token' => $longLivedToken,
             ]);
 
-            if (! $pagesRes->successful()) {
-                throw new \RuntimeException('Get pages: ' . $pagesRes->body());
-            }
+            $profile = $profileRes->successful() ? (array) $profileRes->json() : [];
+            $username = $profile['username'] ?? null;
 
-            $pages = $pagesRes->json('data') ?? [];
-            $pageWithIg = collect($pages)->first(fn ($p) => isset($p['instagram_business_account']));
-
-            if (! $pageWithIg) {
-                throw new \RuntimeException(
-                    'Серед ваших Facebook Pages не знайшлось жодної з підключеним Instagram Business акаунтом. '
-                    . 'Переконайтесь що IG → Business + повʼязаний з FB Page.'
-                );
-            }
-
-            $pageId   = $pageWithIg['id'];
-            $pageName = $pageWithIg['name'] ?? null;
-            $pageToken = $pageWithIg['access_token'];
-            $igAccountId = $pageWithIg['instagram_business_account']['id'] ?? null;
-
-            // 4) Дотягуємо username Instagram-акаунта (для display name)
-            $igInfo = Http::timeout(10)->get(self::GRAPH . "/{$igAccountId}", [
-                'fields'       => 'username,name',
-                'access_token' => $pageToken,
-            ]);
-            $igUsername = $igInfo->json('username');
-
-            // 5) Зберігаємо credentials і external_account_id = Page ID
+            // 4) Зберігаємо credentials.
+            // external_account_id = Instagram User ID (саме він фігурує у webhook'ах як entry.id)
             $account->update([
-                'external_account_id' => $pageId,
-                'display_name'        => $account->display_name ?: ('@' . $igUsername),
+                'external_account_id' => (string) $userId,
+                'display_name'        => $account->display_name ?: ('@' . ($username ?: $userId)),
                 'credentials'         => [
-                    'user_access_token'    => $userToken,
-                    'page_access_token'    => $pageToken,
-                    'page_id'              => $pageId,
-                    'page_name'            => $pageName,
-                    'instagram_account_id' => $igAccountId,
-                    'instagram_username'   => $igUsername,
+                    'access_token'         => $longLivedToken,
+                    'user_id'              => (string) $userId,
+                    'username'             => $username,
+                    'name'                 => $profile['name'] ?? null,
+                    'account_type'         => $profile['account_type'] ?? null,
+                    'profile_picture_url'  => $profile['profile_picture_url'] ?? null,
+                    'token_expires_at'     => $expiresIn ? now()->addSeconds($expiresIn)->toIso8601String() : null,
                     'token_refreshed_at'   => now()->toIso8601String(),
                 ],
-                'status'         => MessengerAccount::STATUS_INACTIVE,
+                'status'         => MessengerAccount::STATUS_ACTIVE,
                 'last_error'     => null,
                 'last_synced_at' => now(),
             ]);
 
-            // 6) Підписуємось на webhooks для цієї Page
+            // 5) connect() в новій API — це просто перевірка токена.
+            // Підписка на webhooks конфігурується на рівні App у Meta Dashboard,
+            // окремих subscribe_apps викликів не потрібно.
             $driver->connect($account);
 
             return redirect()
