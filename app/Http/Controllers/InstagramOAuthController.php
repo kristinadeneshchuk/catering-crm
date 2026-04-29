@@ -140,23 +140,26 @@ class InstagramOAuthController extends Controller
             $longLivedToken = $longRes->json('access_token');
             $expiresIn      = (int) $longRes->json('expires_in');
 
-            // 3) Профіль користувача
+            // 3) Профіль користувача.
+            // Тут id = Page-Scoped User ID (PSID), а user_id = IG Business Account ID.
+            // Webhook'и приходять з entry.id = IG Business Account ID, тому саме його
+            // треба зберігати як external_account_id для матчингу.
             $profileRes = Http::timeout(10)->get(self::GRAPH_BASE . '/v23.0/me', [
-                'fields'       => 'user_id,username,name,account_type,profile_picture_url',
+                'fields'       => 'id,user_id,username,name,account_type,profile_picture_url',
                 'access_token' => $longLivedToken,
             ]);
 
             $profile = $profileRes->successful() ? (array) $profileRes->json() : [];
             $username = $profile['username'] ?? null;
+            $igBusinessId = $profile['user_id'] ?? (string) $userId;
 
-            // 4) Зберігаємо credentials.
-            // external_account_id = Instagram User ID (саме він фігурує у webhook'ах як entry.id)
             $account->update([
-                'external_account_id' => (string) $userId,
-                'display_name'        => $account->display_name ?: ('@' . ($username ?: $userId)),
+                'external_account_id' => (string) $igBusinessId,
+                'display_name'        => $account->display_name ?: ('@' . ($username ?: $igBusinessId)),
                 'credentials'         => [
                     'access_token'         => $longLivedToken,
                     'user_id'              => (string) $userId,
+                    'ig_business_id'       => (string) $igBusinessId,
                     'username'             => $username,
                     'name'                 => $profile['name'] ?? null,
                     'account_type'         => $profile['account_type'] ?? null,
