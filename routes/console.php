@@ -16,5 +16,7 @@ Schedule::command('telegram:morning-pulse')->dailyAt('11:00');
 Schedule::command('telegram:evening-summary')->dailyAt('18:00');
 Schedule::command('telegram:weekly-digest')->weeklyOn(1, '09:00'); // 1 = понеділок
 
-// Instagram polling — workaround для dev mode і для Message Requests
-Schedule::command('messenger:poll-instagram')->everyMinute()->withoutOverlapping();
+// Instagram polling — для Message Requests (перших звернень нових клієнтів),
+// які не приходять через webhook навіть після публікації app.
+// Увімкнути ПІСЛЯ App Review (зараз у dev mode conversations API повертає порожньо).
+// Schedule::command('messenger:poll-instagram')->everyMinute()->withoutOverlapping();

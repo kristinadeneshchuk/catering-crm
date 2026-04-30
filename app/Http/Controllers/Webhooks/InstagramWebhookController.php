@@ -23,11 +23,6 @@ class InstagramWebhookController extends Controller
      */
     public function verify(Request $request)
     {
-        Log::info('IG webhook DEBUG: verify hit', [
-            'ip'    => $request->ip(),
-            'query' => $request->query(),
-        ]);
-
         $mode      = $request->query('hub_mode');
         $token     = $request->query('hub_verify_token');
         $challenge = $request->query('hub_challenge');
@@ -55,24 +50,12 @@ class InstagramWebhookController extends Controller
         $rawBody   = $request->getContent();
         $signature = (string) $request->header('X-Hub-Signature-256');
 
-        Log::info('IG webhook DEBUG: handle hit', [
-            'ip'           => $request->ip(),
-            'has_sig'      => $signature !== '',
-            'body_length'  => strlen($rawBody),
-            'body_preview' => substr($rawBody, 0, 500),
-        ]);
-
         if (! $this->verifySignature($rawBody, $signature)) {
             Log::warning('Instagram webhook: invalid signature');
             return response('Forbidden', 403);
         }
 
         $payload = $request->all();
-
-        Log::info('IG webhook DEBUG: signature ok', [
-            'object'      => $payload['object'] ?? null,
-            'entry_count' => count($payload['entry'] ?? []),
-        ]);
 
         if (($payload['object'] ?? null) !== 'instagram') {
             // Може прийти 'page' або інший тип — нас цікавить тільки instagram messaging
@@ -84,17 +67,48 @@ class InstagramWebhookController extends Controller
                 $pageId = $entry['id'] ?? null;
                 if (! $pageId) continue;
 
-                $account = MessengerAccount::where('channel', MessengerAccount::CHANNEL_INSTAGRAM)
-                    ->where('external_account_id', $pageId)
-                    ->first();
+                // Тестові webhooks з Meta Dashboard надсилаються з entry.id="0".
+                // Підпис у них валідний (підписаний нашим App Secret), тому це безпечно
+                // мапити на першу активну IG account — щоб дашбордовий «Тестировать»
+                // створював тестове повідомлення в CRM /admin/inbox.
+                $account = $pageId === '0'
+                    ? MessengerAccount::where('channel', MessengerAccount::CHANNEL_INSTAGRAM)
+                        ->where('status', MessengerAccount::STATUS_ACTIVE)
+                        ->first()
+                    : MessengerAccount::where('channel', MessengerAccount::CHANNEL_INSTAGRAM)
+                        ->where('external_account_id', $pageId)
+                        ->first();
 
                 if (! $account) {
                     Log::info('IG webhook: no account for page_id', ['page_id' => $pageId]);
                     continue;
                 }
 
+                // Реальні DM приходять у форматі entry[].messaging[]
                 foreach ($entry['messaging'] ?? [] as $event) {
                     $inbound = $this->driver->normalizeInbound($account, $event);
+                    if ($inbound) {
+                        $this->handler->handle($account, $inbound);
+                    }
+                }
+
+                // Тестові події з Meta Dashboard ("Тестировать" біля webhook field)
+                // приходять у форматі entry[].changes[] — конвертуємо в messaging-event
+                // і обробляємо тим самим шляхом.
+                foreach ($entry['changes'] ?? [] as $change) {
+                    if (($change['field'] ?? null) !== 'messages') continue;
+
+                    $value = $change['value'] ?? [];
+                    if (empty($value['message'])) continue;
+
+                    $synthetic = [
+                        'sender'    => $value['sender']    ?? [],
+                        'recipient' => $value['recipient'] ?? [],
+                        'timestamp' => isset($value['timestamp']) ? ((int) $value['timestamp']) * 1000 : null,
+                        'message'   => $value['message']   ?? [],
+                    ];
+
+                    $inbound = $this->driver->normalizeInbound($account, $synthetic);
                     if ($inbound) {
                         $this->handler->handle($account, $inbound);
                     }

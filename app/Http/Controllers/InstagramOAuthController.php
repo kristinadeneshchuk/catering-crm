@@ -33,11 +33,12 @@ class InstagramOAuthController extends Controller
     private const API_BASE     = 'https://api.instagram.com';
     private const GRAPH_BASE   = 'https://graph.instagram.com';
 
+    // Запитуємо тільки те, що подаємо на App Review.
+    // Якщо в майбутньому потрібні коментарі чи публікація — додай permission
+    // у submission (Meta dashboard) і потім сюди.
     private const SCOPES = [
         'instagram_business_basic',
         'instagram_business_manage_messages',
-        'instagram_business_manage_comments',
-        'instagram_business_content_publish',
     ];
 
     public function start(Request $request, MessengerAccount $account): RedirectResponse
