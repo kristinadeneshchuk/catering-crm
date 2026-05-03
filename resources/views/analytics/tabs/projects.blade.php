@@ -66,6 +66,33 @@
                         <p class="text-zinc-400 font-semibold">{{ number_format($ps['food_cost'] + $ps['packaging'], 0, '.', ' ') }} ₴</p>
                     </div>
                 </div>
+
+                {{-- НОВІ / ВІДПАЛИ за період (per-project) --}}
+                <div class="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-white/5">
+                    <div class="bg-emerald-500/5 border border-emerald-500/10 rounded-lg p-2.5">
+                        <div class="flex items-center gap-1.5 mb-1">
+                            <svg class="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+                            <span class="text-emerald-400 text-[9px] uppercase tracking-wider font-bold">Нові</span>
+                        </div>
+                        <p class="text-white text-xl font-black leading-none mb-1">{{ $ps['new_clients'] ?? 0 }}</p>
+                        @if(($ps['new_clients'] ?? 0) > 0)
+                            <p class="text-[10px] text-zinc-500">
+                                <span class="text-emerald-400 font-bold">{{ $ps['new_clients_continued'] ?? 0 }}</span> продовж.,
+                                <span class="text-rose-400 font-bold">{{ $ps['new_clients_churned'] ?? 0 }}</span> від.
+                            </p>
+                        @endif
+                    </div>
+                    <div class="bg-rose-500/5 border border-rose-500/10 rounded-lg p-2.5">
+                        <div class="flex items-center gap-1.5 mb-1">
+                            <svg class="w-3 h-3 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                            <span class="text-rose-400 text-[9px] uppercase tracking-wider font-bold">Відпали</span>
+                        </div>
+                        <p class="text-white text-xl font-black leading-none mb-1">{{ $ps['churned_period'] ?? 0 }}</p>
+                        @if(($ps['churned_period_percent'] ?? 0) > 0)
+                            <p class="text-[10px] text-zinc-500">{{ number_format($ps['churned_period_percent'], 1) }}% від клієнтів</p>
+                        @endif
+                    </div>
+                </div>
             </div>
         </div>
         @endforeach

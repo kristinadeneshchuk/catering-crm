@@ -26,11 +26,9 @@ class StatsOverview extends Widget
         $today    = $now->format('Y-m-d');
         $tomorrow = $now->copy()->addDay()->format('Y-m-d');
 
-        // День меню
-        $cycleDays    = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-        $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: $today;
-        $anchorDate   = Carbon::parse($startDateStr)->startOfDay();
-        $menuDay      = (abs($now->diffInDays($anchorDate)) % $cycleDays) + 1;
+        // День меню (TODO multi-plan: для огляду показуємо день дефолтного плану)
+        $defaultPlan = \App\Models\MenuPlan::default();
+        $menuDay     = $defaultPlan ? $defaultPlan->globalDayFor($now) : 0;
 
         // Порцій сьогодні
         $todayCount = OrderDay::where('date', $today)

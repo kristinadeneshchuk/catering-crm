@@ -249,6 +249,19 @@
             text-transform: uppercase;
         }
 
+        .tag-bundle {
+            font-size: 6pt;
+            font-weight: 800;
+            padding: 1px 5px;
+            border-radius: 3px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            background: #ede9fe;
+            color: #5b21b6;
+            border: 0.3pt solid #c4b5fd;
+            letter-spacing: 0.2px;
+        }
+
         .tag-address {
             font-size: 5.5pt;
             color: #6b7280;
@@ -498,6 +511,11 @@
                     </span>
                     @if($man['is_individual'])
                         <span class="tag-individual">ІНД</span>
+                    @endif
+                    @if(!empty($man['bundles']))
+                        @foreach($man['bundles'] as $bundleName)
+                            <span class="tag-bundle">{{ $bundleName }}</span>
+                        @endforeach
                     @endif
                     @if(!empty($man['ant_route_num']))
                         <span class="tag-route">М{{ $man['ant_route_num'] }}

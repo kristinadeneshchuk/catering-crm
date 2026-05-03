@@ -7,17 +7,20 @@ use App\Traits\RestrictCookAccess;
 use App\Filament\Resources\DailyMenuResource\Pages;
 use App\Models\DailyMenu;
 use App\Models\MealPlan;
+use App\Models\MenuPlan;
 use App\Models\Setting;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Placeholder;
 use Illuminate\Support\HtmlString;
+use Illuminate\Validation\Rule;
 
 class DailyMenuResource extends Resource
 {
@@ -41,13 +44,28 @@ class DailyMenuResource extends Resource
                 Forms\Components\Section::make('Параметри дня')
                     ->description('Вкажіть номер дня та цільові норми БЖУ. При зміні калорійності норми оновлюються автоматично.')
                     ->schema([
+                        Select::make('menu_plan_id')
+                            ->label('План меню')
+                            ->options(fn () => MenuPlan::orderBy('sort_order')->orderBy('id')->pluck('name', 'id'))
+                            ->required()
+                            ->default(fn () => request()->integer('menu_plan_id') ?: optional(MenuPlan::default())->id)
+                            ->disabledOn('edit')
+                            ->helperText('Створюйте новий план через вкладки на сторінці списку.'),
+
                         TextInput::make('day_number')
                             ->label('Номер дня в циклі')
                             ->numeric()
                             ->required()
                             ->minValue(1)
-                            ->maxValue(fn () => (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24)
-                            ->unique(ignoreRecord: true),
+                            ->maxValue(function (Forms\Get $get) {
+                                $planId = $get('menu_plan_id') ?: optional(MenuPlan::default())->id;
+                                return $planId ? (int) (MenuPlan::find($planId)?->cycle_days ?? 24) : 24;
+                            })
+                            ->unique(
+                                modifyRuleUsing: fn (\Illuminate\Validation\Rules\Unique $rule, Forms\Get $get) =>
+                                    $rule->where('menu_plan_id', $get('menu_plan_id')),
+                                ignoreRecord: true
+                            ),
 
                         TextInput::make('target_kcal')
                             ->label('Цільова калорійність')

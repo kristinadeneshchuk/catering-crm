@@ -97,6 +97,23 @@
             display: block;
         }
 
+        .client-bundles {
+            font-size: 7px;
+            font-weight: 800;
+            color: #5b21b6;
+            background: #ede9fe;
+            border: 0.3mm solid #c4b5fd;
+            border-radius: 1mm;
+            padding: 0.2mm 1mm;
+            display: inline-block;
+            margin-top: 0.5mm;
+            line-height: 1.1;
+            max-width: 70%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         .client-id {
             font-size: 7px;
             font-weight: 700;
@@ -139,6 +156,17 @@
             padding: 1px 4px;
             border-radius: 2px;
         }
+
+        .meal-slot {
+            font-size: 7px;
+            font-weight: 900;
+            padding: 1px 4px;
+            border-radius: 2px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .meal-slot.morning { background: #fde047; color: #000; }
+        .meal-slot.evening { background: #1e293b; color: #fff; }
 
         .dish-name {
             font-size: 10px;
@@ -278,6 +306,9 @@
                     <div class="sticker-header">
                         <div>
                             <div class="client-name">{{ $sticker['client'] }}</div>
+                            @if(!empty($sticker['bundles']))
+                                <div class="client-bundles">{{ implode(', ', $sticker['bundles']) }}</div>
+                            @endif
                             <span class="client-id">ID: {{ $sticker['client_id'] }}</span>
                         </div>
                         @if($logoBase64)
@@ -288,6 +319,9 @@
                     <div class="meal-row">
                         <span class="meal-type" style="color: {{ $brandColor }};">{{ $sticker['meal'] }}</span>
                         <span class="meal-date">{{ \Carbon\Carbon::parse($date)->addDay()->format('d.m') }}</span>
+                        @if(isset($sticker['is_evening']))
+                            <span class="meal-slot {{ $sticker['is_evening'] ? 'evening' : 'morning' }}">{{ $sticker['delivery_slot'] }}</span>
+                        @endif
                         <span class="calories">{{ $sticker['calories'] }}</span>
                     </div>
 

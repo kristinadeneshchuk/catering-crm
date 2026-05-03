@@ -37,6 +37,7 @@ class ClientMenuController extends Controller
             'client.mealTypes',
             'client.ingredientExclusions',
             'client.dishExclusions',
+            'menuPlan',
             'replacements.originalProduct',
             'replacements.replacementProduct',
             'replacements.replacementDish.dishIngredients.ingredient',
@@ -66,7 +67,7 @@ class ClientMenuController extends Controller
                 $items  = $result['items'];
                 $totals = $result['totals'];
             } else {
-                [$menu] = $this->getMenuForDate($date);
+                [$menu] = $this->getMenuForDate($date, $activeOrder);
                 if ($menu) {
                     $result = $this->buildDayPlan($activeOrder, $menu);
                     $items  = $result['items'];
@@ -227,7 +228,7 @@ class ClientMenuController extends Controller
 
         // Для циклічного меню — рахуємо страви з меню що відповідають типам клієнта
         $dateObj = Carbon::parse($date);
-        [$menu] = $this->getMenuForDate($dateObj);
+        [$menu] = $this->getMenuForDate($dateObj, $order);
         if (!$menu) return 0;
 
         $clientMealTypeIds = $order->client->mealTypes->pluck('id')->toArray();
@@ -260,6 +261,7 @@ class ClientMenuController extends Controller
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
+                'menuPlan',
                 'replacements.originalProduct',
                 'replacements.replacementProduct',
                 'replacements.replacementDish.dishIngredients.ingredient',
@@ -268,6 +270,7 @@ class ClientMenuController extends Controller
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
+                'menuPlan',
                 'replacements.originalProduct',
                 'replacements.replacementProduct',
                 'replacements.replacementDish.dishIngredients.ingredient',
@@ -312,7 +315,7 @@ class ClientMenuController extends Controller
             ]);
         }
 
-        [$menu] = $this->getMenuForDate($date);
+        [$menu] = $this->getMenuForDate($date, $activeOrder);
         if (! $menu) abort(404);
 
         $menuItem = $menu->menuItems->firstWhere('dish_id', $dishId);
@@ -355,15 +358,19 @@ class ClientMenuController extends Controller
     // Допоміжні методи
     // =====================================================================
 
-    private function getMenuForDate(Carbon $date): array
+    /**
+     * Меню на дату для конкретного замовлення (через його план меню).
+     * Якщо $order не передано — fallback на дефолтний план (бек-сумісність).
+     */
+    private function getMenuForDate(Carbon $date, ?Order $order = null): array
     {
-        $cycleDays    = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-        $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
-        $anchorDate   = Carbon::parse($startDateStr);
+        $plan = $order?->effectiveMenuPlan() ?? \App\Models\MenuPlan::default();
+        if (!$plan) return [null, 0];
 
-        $globalDay = (abs($date->diffInDays($anchorDate)) % $cycleDays) + 1;
+        $globalDay = $plan->globalDayFor($date);
 
-        $menu = DailyMenu::where('day_number', $globalDay)
+        $menu = DailyMenu::where('menu_plan_id', $plan->id)
+            ->where('day_number', $globalDay)
             ->with([
                 'menuItems.dish.dishIngredients.ingredient.allergens',
                 'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient.allergens',

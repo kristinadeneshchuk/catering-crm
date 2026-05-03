@@ -19,7 +19,7 @@ class Order extends Model
         'client_id', 'parent_order_id', 'tariff_id', 'project', 'is_paid',
         'start_date', 'end_date', 'duration', 'status',
         'calories', 'scale_factor', 'price_per_day', 'total_price',
-        'comment', 'menu_token', 'schedule_type', 'menu_type', 'delivery_time',
+        'comment', 'menu_token', 'schedule_type', 'menu_type', 'menu_plan_id', 'delivery_time',
         'discount_type', 'discount_value', 'discount_reason',
         'discount_amount', 'final_price',
         'reward_unlocked', 'reward_given',
@@ -50,6 +50,23 @@ class Order extends Model
         static::saving(function ($order) {
             if ($order->scale_factor === null) {
                 $order->scale_factor = 1.0;
+            }
+
+            // --- Авто-заповнення menu_plan_id ---
+            // Циклічне меню без явного плану: беремо дефолтний план тарифу;
+            // якщо й там пусто — системний дефолтний план.
+            // Індивідуальні (individual) меню — план не потрібен, лишаємо null.
+            if ($order->menu_type !== 'individual' && empty($order->menu_plan_id)) {
+                $planId = null;
+                if ($order->tariff_id) {
+                    $planId = DB::table('tariffs')->where('id', $order->tariff_id)->value('default_menu_plan_id');
+                }
+                if (!$planId) {
+                    $planId = optional(MenuPlan::default())->id;
+                }
+                if ($planId) {
+                    $order->menu_plan_id = $planId;
+                }
             }
 
             // --- Розрахунок базової ціни ---
@@ -91,7 +108,7 @@ class Order extends Model
         });
 
         static::created(function ($o) {
-            self::handleBalance($o, 'sub');
+            self::syncClient($o);
             Transaction::create([
                 'type'     => 'income',
                 'category' => 'Нове замовлення',
@@ -103,7 +120,7 @@ class Order extends Model
         });
 
         static::updated(function ($o) {
-            self::handleBalanceUpdate($o);
+            self::syncClient($o);
 
             if ($o->isDirty('final_price')) {
                 $diff = (float) $o->final_price - (float) $o->getOriginal('final_price');
@@ -142,36 +159,24 @@ class Order extends Model
             }
         });
 
-        static::deleted(fn ($o) => self::handleBalance($o, 'add'));
+        static::deleted(fn ($o) => self::syncClient($o));
     }
 
     // =========================
     // Баланс / оплата
     // =========================
-    private static function handleBalance($order, $op)
-    {
-        $price = (float) $order->final_price;
-        if ($order->client_id && $price > 0) {
-            $op === 'sub'
-                ? $order->client->decrement('balance', $price)
-                : $order->client->increment('balance', $price);
-        }
-        if ($order->client) $order->client->recalculateOrderPaymentStatus();
-    }
 
-    private static function handleBalanceUpdate($order)
+    /**
+     * Перераховує баланс клієнта з джерела правди (transactions + orders.final_price)
+     * та оновлює FIFO-статуси оплати замовлень.
+     * Викликається після будь-якої зміни замовлення замість incrementing/decrementing.
+     */
+    private static function syncClient($order)
     {
-        if ($order->client_id && $order->isDirty('final_price')) {
-            $diff = (float) $order->final_price - (float) $order->getOriginal('final_price');
-            if ($diff > 0) {
-                // Ціна зросла — знімаємо різницю з балансу
-                $order->client->decrement('balance', $diff);
-            } elseif ($diff < 0) {
-                // Ціна впала (скасування днів) — повертаємо різницю на баланс
-                $order->client->increment('balance', abs($diff));
-            }
+        if ($order->client) {
+            $order->client->syncBalance();
+            $order->client->recalculateOrderPaymentStatus();
         }
-        if ($order->client) $order->client->recalculateOrderPaymentStatus();
     }
 
     // =========================
@@ -227,6 +232,16 @@ class Order extends Model
 
     public function isIndividual(): bool { return $this->menu_type === 'individual'; }
 
+    public function menuPlan(): BelongsTo { return $this->belongsTo(MenuPlan::class); }
+
+    /**
+     * План меню для розрахунків. Якщо у замовлення явно не вказаний — повертає дефолтний.
+     */
+    public function effectiveMenuPlan(): ?MenuPlan
+    {
+        return $this->menuPlan ?? MenuPlan::default();
+    }
+
     public function dishRatings(): HasMany { return $this->hasMany(DishRating::class); }
 
     // =========================================================
@@ -234,15 +249,13 @@ class Order extends Model
     // =========================================================
     public function getScaleFactorForDate(Carbon $date): float
     {
-        $cycleDays = (int) DB::table('settings')->where('key', 'menu_cycle_days')->value('value') ?: 24;
+        $plan = $this->effectiveMenuPlan();
+        if (!$plan) return 1.0;
 
-        // бажано теж тягнути з settings, але залишаю як у тебе, щоб не ламати логіку
-        $anchorDate = Carbon::parse('2025-01-01');
+        $globalDay = $plan->globalDayFor($date);
 
-        $diff = abs($date->diffInDays($anchorDate));
-        $globalDay = ($diff % $cycleDays) + 1;
-
-        $dailyMenu = DailyMenu::where('day_number', $globalDay)
+        $dailyMenu = DailyMenu::where('menu_plan_id', $plan->id)
+            ->where('day_number', $globalDay)
             ->with(['menuItems.dish', 'menuItems.mealType'])
             ->first();
 
@@ -279,8 +292,8 @@ class Order extends Model
         $period = CarbonPeriod::create($this->start_date, $this->end_date);
         $finalMenu = [];
 
-        $cycleDays = (int) DB::table('settings')->where('key', 'menu_cycle_days')->value('value') ?: 24;
-        $anchorDate = Carbon::parse('2025-01-01');
+        $plan = $this->effectiveMenuPlan();
+        if (!$plan) return $finalMenu;
 
         // Які прийоми їжі клієнт активні
         $clientMealTypeIds = $this->client?->mealTypes->pluck('id')->toArray() ?? [];
@@ -288,10 +301,10 @@ class Order extends Model
         foreach ($period as $date) {
             $dateStr = $date->format('Y-m-d');
 
-            $diffInDays = abs($date->diffInDays($anchorDate));
-            $globalDay = ($diffInDays % $cycleDays) + 1;
+            $globalDay = $plan->globalDayFor($date);
 
-            $dailyMenu = DailyMenu::where('day_number', $globalDay)
+            $dailyMenu = DailyMenu::where('menu_plan_id', $plan->id)
+                ->where('day_number', $globalDay)
                 ->with([
                     'menuItems.mealType',
                     'menuItems.dish.dishIngredients.ingredient',

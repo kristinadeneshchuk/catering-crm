@@ -44,6 +44,49 @@
         .text-right { text-align: right !important; }
         .font-bold { font-weight: bold !important; }
 
+        /* РЕЦЕПТ ПРИГОТУВАННЯ */
+        .recipe-box {
+            margin: 0 0 18px 0;
+            border: 1px solid #fde68a;
+            background: #fffbeb;
+            border-left: 4px solid #f59e0b;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 11px;
+            line-height: 1.55;
+            color: #1f2937;
+            break-inside: avoid;
+        }
+        .recipe-box .recipe-title {
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #92400e;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .recipe-box .recipe-title::before {
+            content: "👨‍🍳";
+            font-size: 12px;
+        }
+        .recipe-box .recipe-content h2,
+        .recipe-box .recipe-content h3 { font-size: 11px; font-weight: 800; margin: 6px 0 3px; color: #111827; }
+        .recipe-box .recipe-content ul,
+        .recipe-box .recipe-content ol { padding-left: 18px; margin: 4px 0; }
+        .recipe-box .recipe-content li { margin: 2px 0; }
+        .recipe-box .recipe-content p  { margin: 3px 0; }
+        .recipe-box .recipe-content strong { color: #111827; }
+        .recipe-box .recipe-content blockquote {
+            border-left: 3px solid #f59e0b;
+            padding: 2px 8px;
+            margin: 4px 0;
+            color: #4b5563;
+            font-style: italic;
+        }
+
         /* СПЕЦІАЛЬНІ СТИЛІ ДРУКУ */
         @media print {
             .no-print { display: none !important; }
@@ -51,6 +94,7 @@
             .pf-grid { gap: 8px; margin-bottom: 10px; }
             th, td { padding: 2px 4px !important; font-size: 10px !important; }
             .meal-header { padding: 4px 8px !important; font-size: 13px !important; margin-top: 15px;}
+            .recipe-box { font-size: 10px !important; padding: 6px 10px !important; }
         }
     </style>
 </head>
@@ -73,29 +117,14 @@
     @endphp
 
     {{-- КНОПКА ДРУКУ --}}
-    @php
-        $kitchenUrl = url('/kitchen?date=' . $targetDate);
-        $qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' . urlencode($kitchenUrl);
-    @endphp
     <div class="no-print mb-6 flex justify-between items-center max-w-5xl mx-auto bg-white p-4 rounded-xl shadow" style="gap:16px; flex-wrap:wrap;">
         <div>
             <h1 class="text-xl font-bold">План виробництва</h1>
             <p class="text-sm text-gray-500">Готуємо сьогодні ({{ $date }}) на завтра ({{ \Carbon\Carbon::parse($targetDate)->format('d.m.Y') }})</p>
         </div>
-        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-            {{-- QR code --}}
-            <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
-                <img src="{{ $qrUrl }}" alt="QR Меню кухні"
-                     style="width:80px; height:80px; border:2px solid #e5e7eb; border-radius:8px;">
-                <a href="{{ $kitchenUrl }}" target="_blank"
-                   style="font-size:10px; color:#6b7280; text-decoration:none;">
-                    Меню кухні
-                </a>
-            </div>
-            <button onclick="window.print()" class="bg-yellow-500 hover:bg-yellow-600 text-black px-6 py-2 rounded-lg font-bold shadow transition">
-                Роздрукувати звіт
-            </button>
-        </div>
+        <button onclick="window.print()" class="bg-yellow-500 hover:bg-yellow-600 text-black px-6 py-2 rounded-lg font-bold shadow transition">
+            Роздрукувати звіт
+        </button>
     </div>
 
     {{-- ГОЛОВНИЙ КОНТЕЙНЕР --}}
@@ -104,16 +133,33 @@
             План кухні на {{ \Carbon\Carbon::parse($targetDate)->format('d.m.Y') }}
         </h2>
 
+        @if(!empty($missingPlans ?? []))
+            <div style="background:#fee2e2; border:2px solid #ef4444; border-radius:8px; padding:12px 16px; margin-bottom:18px; color:#7f1d1d; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
+                <div style="font-weight:900; font-size:13px; margin-bottom:6px; text-transform:uppercase;">⚠️ Не вистачає меню для деяких планів</div>
+                @foreach($missingPlans as $mp)
+                    <div style="margin-bottom:4px; font-size:12px;">
+                        <strong>{{ $mp['plan']->name }}</strong> — день №{{ $mp['day_number'] }} циклу не створено.
+                        Зачеплено клієнтів: <strong>{{ $mp['orders_count'] }}</strong>
+                        @if(!empty($mp['client_names']))
+                            ({{ implode(', ', $mp['client_names']) }}@if($mp['orders_count'] > count($mp['client_names'])), …@endif)
+                        @endif
+                    </div>
+                @endforeach
+            </div>
+        @endif
+
         @if(empty($report))
             <p class="text-center text-gray-500 py-10">Немає замовлень або страв для приготування на цю дату.</p>
         @else
             @php
-                // Збираємо всі унікальні коментарі з усіх страв (один раз на день)
+                // Збираємо всі унікальні коментарі з усіх планів і страв (один раз на день)
                 $allDayComments = [];
-                foreach($report as $mealGroup) {
-                    foreach($mealGroup as $dishRow) {
-                        foreach($dishRow['comment_clients'] ?? [] as $cc) {
-                            $allDayComments[$cc['client_name']] = $cc; // дедуплікація по клієнту
+                foreach($report as $planData) {
+                    foreach(($planData['meals'] ?? []) as $mealGroup) {
+                        foreach($mealGroup as $dishRow) {
+                            foreach($dishRow['comment_clients'] ?? [] as $cc) {
+                                $allDayComments[$cc['client_name']] = $cc; // дедуплікація по клієнту
+                            }
                         }
                     }
                 }
@@ -133,7 +179,27 @@
                 </div>
             @endif
 
-            @foreach($report as $mealName => $dishes)
+            {{-- ОБХІД ПО ПЛАНАХ МЕНЮ --}}
+            @foreach($report as $planId => $planData)
+                @php
+                    $kitchenUrl = url('/kitchen?date=' . $targetDate . '&plan_id=' . $planId);
+                    $qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' . urlencode($kitchenUrl);
+                @endphp
+                <div style="margin-top:24px; margin-bottom:18px; padding:12px 16px; background:#f5f3ff; border:2px solid #c4b5fd; border-radius:10px; -webkit-print-color-adjust:exact; print-color-adjust:exact; page-break-before:auto; page-break-inside:avoid;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <div>
+                            <div style="font-size:10px; font-weight:800; color:#5b21b6; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px;">План меню</div>
+                            <div style="font-size:18px; font-weight:900; color:#1e1b4b;">{{ $planData['plan']->name }}</div>
+                            <div style="font-size:11px; color:#5b21b6; margin-top:2px;">День циклу №{{ $planData['day_number'] }} з {{ $planData['plan']->cycle_days }}</div>
+                        </div>
+                        <div class="no-print" style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+                            <img src="{{ $qrUrl }}" alt="QR" style="width:64px; height:64px; border:1px solid #c4b5fd; border-radius:6px;">
+                            <a href="{{ $kitchenUrl }}" target="_blank" style="font-size:9px; color:#5b21b6; text-decoration:none;">Меню кухні</a>
+                        </div>
+                    </div>
+                </div>
+
+                @foreach(($planData['meals'] ?? []) as $mealName => $dishes)
                 @php
                     $mealLower = mb_strtolower(trim($mealName));
                     $mealClass = 'meal-default';
@@ -231,6 +297,14 @@
                                     </table>
                                 </div>
                             @endforeach
+                        </div>
+                    @endif
+
+                    {{-- РЕЦЕПТ ПРИГОТУВАННЯ --}}
+                    @if(!empty(trim(strip_tags($dish['recipe'] ?? ''))))
+                        <div class="recipe-box">
+                            <div class="recipe-title">Рецепт приготування</div>
+                            <div class="recipe-content">{!! $dish['recipe'] !!}</div>
                         </div>
                     @endif
 
@@ -434,17 +508,16 @@
                         </div>
                     @endif
 
-                @endforeach
-            @endforeach
-        @endif
+                @endforeach {{-- $dishes --}}
+                @endforeach {{-- $planData['meals'] --}}
 
-        {{-- ІНДИВІДУАЛЬНІ КЛІЄНТИ --}}
-        @if(!empty($individualClients))
-            <div style="margin-top:30px; border-top:3px solid #7c3aed; padding-top:16px;">
+                {{-- ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану --}}
+                @if(!empty($planData['individuals']))
+            <div style="margin-top:24px; border-top:3px solid #7c3aed; padding-top:16px;">
                 <div style="background:#7c3aed; color:white; padding:6px 12px; font-weight:900; font-size:13px; text-transform:uppercase; margin-bottom:12px; border-radius:4px; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
-                    ★ Індивідуальні клієнти
+                    ★ Індивідуальні клієнти ({{ $planData['plan']->name }})
                 </div>
-                @foreach(array_values($individualClients) as $client)
+                @foreach(array_values($planData['individuals']) as $client)
                     <div style="border:2px solid #7c3aed; border-radius:6px; overflow:hidden; margin-bottom:16px; page-break-inside:avoid;">
                         {{-- Шапка клієнта --}}
                         <div style="background:#7c3aed; color:white; padding:6px 12px; font-size:12px; font-weight:900; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
@@ -498,6 +571,12 @@
                                                     @endforeach
                                                 </tbody>
                                             </table>
+                                            @if(!empty(trim(strip_tags($meal['recipe'] ?? ''))))
+                                                <div style="border-top:1px dashed #fde68a; background:#fffbeb; padding:5px 8px; font-size:9px; line-height:1.45; color:#1f2937; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
+                                                    <div style="font-weight:800; color:#92400e; font-size:8px; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:2px;">Рецепт</div>
+                                                    <div class="recipe-content">{!! $meal['recipe'] !!}</div>
+                                                </div>
+                                            @endif
                                         </td>
                                     @endforeach
                                 </tr>
@@ -506,6 +585,8 @@
                     </div>
                 @endforeach
             </div>
+                @endif
+            @endforeach
         @endif
     </div>
 </body>

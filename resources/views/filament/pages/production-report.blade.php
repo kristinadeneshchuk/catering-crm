@@ -119,6 +119,12 @@
                                     $allergenName = htmlspecialchars($comp['conflict']['allergen'], ENT_QUOTES);
                                     $html .= '<span style="display:inline-flex; align-items:center; gap:3px; background:#fef3c7; color:#92400e; border:1px solid #fbbf24; border-radius:4px; font-size:9px; font-weight:900; padding:2px 5px; margin-top:2px;">' . $svgWarning . 'АЛЕРГІЯ: ' . $allergenName . '</span>';
                                 }
+                                if (!empty($comp['conflict']['bundle_suggestion'])) {
+                                    $sug         = $comp['conflict']['bundle_suggestion'];
+                                    $sugName     = htmlspecialchars($sug['name'], ENT_QUOTES);
+                                    $sugBundle   = htmlspecialchars($sug['bundle_name'], ENT_QUOTES);
+                                    $html .= '<span style="display:inline-flex; align-items:center; gap:3px; background:#ede9fe; color:#5b21b6; border:1px solid #c4b5fd; border-radius:4px; font-size:9px; font-weight:800; padding:2px 5px; margin-top:2px;" title="З шаблону «' . $sugBundle . '»">' . $svgArrow . 'Пропозиція: ' . $sugName . ' <span style="opacity:0.7;font-weight:600;">(' . $sugBundle . ')</span></span>';
+                                }
                             }
                         }
                         $html .= '</div>';
@@ -134,6 +140,12 @@
                             } elseif ($isResolved) {
                                 $html .= '<button type="button" wire:click="mountAction(\'resetReplacement\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['conflict']['original_ing_id'] . ' })" style="color: #64748b; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">Скасувати</button>';
                             } else {
+                                if (!empty($comp['conflict']['bundle_suggestion'])) {
+                                    $sug      = $comp['conflict']['bundle_suggestion'];
+                                    $sugName  = htmlspecialchars($sug['name'], ENT_QUOTES);
+                                    $sugBundle = addslashes($sug['bundle_name']);
+                                    $html .= '<button type="button" wire:click="mountAction(\'applyBundleSuggestion\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['product_id'] . ', replacement_product_id: ' . (int)$sug['product_id'] . ', bundle_name: \'' . $sugBundle . '\' })" style="color: #5b21b6; font-size: 10px; cursor: pointer; border: 1px solid #c4b5fd; background: #ede9fe; border-radius: 3px; padding: 1px 5px; font-weight: 800; white-space: nowrap;">✓ На: ' . $sugName . '</button>';
+                                }
                                 $html .= '<button type="button" wire:click="mountAction(\'replaceIngredient\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['product_id'] . ' })" style="color: #ea580c; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">→ Замінити</button>';
                                 $html .= '<button type="button" wire:click="mountAction(\'forceApproveIngredient\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['product_id'] . ' })" style="color: #16a34a; font-size: 10px; cursor: pointer; border: 1px solid #16a34a; background: #f0fdf4; border-radius: 3px; padding: 1px 5px; font-weight: 700;">✓ Одобрити</button>';
                             }
@@ -155,6 +167,27 @@
         </form>
     </div>
 
+    {{-- ПОПЕРЕДЖЕННЯ: ПЛАНИ БЕЗ МЕНЮ НА ЦЕЙ ДЕНЬ --}}
+    @if(!empty($this->missingPlans))
+        <div class="no-print" style="background:#7f1d1d; border:2px solid #f87171; border-radius:12px; padding:14px 18px; margin-bottom:18px; color:#fee2e2;">
+            <div style="font-weight: 900; font-size: 14px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.3px;">
+                ⚠️ Не вистачає меню для деяких планів
+            </div>
+            @foreach($this->missingPlans as $mp)
+                <div style="margin-bottom: 6px; font-size: 13px;">
+                    <strong style="color:#fff;">{{ $mp['plan']->name }}</strong> — день №{{ $mp['day_number'] }} циклу не створено.
+                    Зачеплено клієнтів: <strong>{{ $mp['orders_count'] }}</strong>
+                    @if(!empty($mp['client_names']))
+                        ({{ implode(', ', $mp['client_names']) }}@if($mp['orders_count'] > count($mp['client_names'])), …@endif)
+                    @endif
+                </div>
+            @endforeach
+            <div style="font-size: 11px; margin-top: 8px; color: #fecaca;">
+                Створи день меню у «Циклічне меню» → відповідна вкладка плану → «Додати день».
+            </div>
+        </div>
+    @endif
+
     {{-- БЛОК ОЧІКУВАНОГО СПИСАННЯ --}}
     @php
         $summaryIngredients = [];
@@ -169,12 +202,14 @@
             }
         };
 
-        foreach($reportData as $mealGroup) {
-            foreach($mealGroup as $dishRow) {
-                $collectSummary($dishRow['standard_structure']);
-                foreach ($dishRow['custom_cards'] as $card) {
-                    if (!$card['dish_excluded'] || isset($card['dish_replacement'])) {
-                        $collectSummary($card['components']);
+        foreach($reportData as $planData) {
+            foreach(($planData['meals'] ?? []) as $mealGroup) {
+                foreach($mealGroup as $dishRow) {
+                    $collectSummary($dishRow['standard_structure']);
+                    foreach ($dishRow['custom_cards'] as $card) {
+                        if (!$card['dish_excluded'] || isset($card['dish_replacement'])) {
+                            $collectSummary($card['components']);
+                        }
                     }
                 }
             }
@@ -202,10 +237,12 @@
     @php
         // Збираємо всі унікальні коментарі з усіх страв — один раз на день
         $allDayComments = [];
-        foreach($reportData as $mealGroup) {
-            foreach($mealGroup as $dishRow) {
-                foreach($dishRow['comment_clients'] ?? [] as $cc) {
-                    $allDayComments[$cc['order_id']] = $cc;
+        foreach($reportData as $planData) {
+            foreach(($planData['meals'] ?? []) as $mealGroup) {
+                foreach($mealGroup as $dishRow) {
+                    foreach($dishRow['comment_clients'] ?? [] as $cc) {
+                        $allDayComments[$cc['order_id']] = $cc;
+                    }
                 }
             }
         }
@@ -234,9 +271,25 @@
     </div>
     @endif
 
-    <div style="display: flex; flex-direction: column; gap: 15px; color: #0f172a !important;">
-        @forelse($reportData as $mealName => $dishes)
-            <div class="meal-group" style="background-color: white; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+    <div style="display: flex; flex-direction: column; gap: 24px; color: #0f172a !important;">
+        @forelse($reportData as $planId => $planData)
+            <div class="plan-section" style="background: linear-gradient(180deg, #f5f3ff 0%, #ffffff 60px); border: 2px solid #c4b5fd; border-radius: 12px; padding: 14px;">
+                {{-- ШАПКА ПЛАНУ --}}
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; padding-bottom:10px; border-bottom: 1px dashed #c4b5fd;">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div style="background:#7c3aed; color:white; padding:6px 14px; border-radius:8px; font-size:14px; font-weight:900; text-transform:uppercase; letter-spacing:0.4px;">
+                            План: {{ $planData['plan']->name }}
+                        </div>
+                        <span style="font-size:12px; color:#5b21b6; font-weight:700;">День циклу №{{ $planData['day_number'] }} з {{ $planData['plan']->cycle_days }}</span>
+                    </div>
+                    <span style="font-size:11px; color:#64748b;">
+                        {{ collect($planData['meals'] ?? [])->flatten(1)->count() }} страв ·
+                        {{ count($planData['individuals'] ?? []) }} індивідуальних
+                    </span>
+                </div>
+
+                @forelse(($planData['meals'] ?? []) as $mealName => $dishes)
+            <div class="meal-group" style="background-color: white; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin-bottom:15px;">
                 <div style="background-color: #fff7ed; padding: 8px 15px; border-bottom: 1px solid #ffedd5;">
                     <h2 style="color: #ea580c !important; font-size: 16px; font-weight: 800; text-transform: uppercase; margin: 0;">{{ $mealName }}</h2>
                 </div>
@@ -280,7 +333,49 @@
 
                                         {{-- Ім'я клієнта + кнопка --}}
                                         <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.05); padding-bottom: 4px;">
-                                            <div style="font-weight: 800; font-size: 13px;">{{ $card['client_name'] }}</div>
+                                            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                                                <div style="font-weight: 800; font-size: 13px;">{{ $card['client_name'] }}</div>
+
+                                                @if(!empty($card['bundles']))
+                                                    @foreach($card['bundles'] as $bundleName)
+                                                        <span style="background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700;">{{ $bundleName }}</span>
+                                                    @endforeach
+                                                @endif
+
+                                                @if(!empty($card['excluded_ingredients']))
+                                                    <div x-data="{ open: false }" @click.away="open = false" class="no-print" style="position: relative; line-height: 1;">
+                                                        <button type="button" @click="open = !open"
+                                                            title="Не їсть інгредієнти"
+                                                            style="width: 16px; height: 16px; border-radius: 50%; background: #dbeafe; border: 1px solid #3b82f6; color: #1d4ed8; font-size: 10px; font-weight: 900; font-style: italic; font-family: serif; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;">i</button>
+                                                        <div x-show="open" x-cloak x-transition.opacity
+                                                            style="position: absolute; top: 20px; left: 0; z-index: 50; background: white; border: 1px solid #93c5fd; border-radius: 6px; padding: 8px 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.12); min-width: 200px; max-width: 280px; font-weight: 400;">
+                                                            <div style="font-size: 10px; font-weight: 900; color: #1d4ed8; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.3px;">Не їсть інгредієнти</div>
+                                                            <ul style="margin: 0; padding-left: 16px; font-size: 11px; color: #111827; line-height: 1.4;">
+                                                                @foreach($card['excluded_ingredients'] as $ing)
+                                                                    <li>{{ $ing }}</li>
+                                                                @endforeach
+                                                            </ul>
+                                                        </div>
+                                                    </div>
+                                                @endif
+
+                                                @if(!empty($card['excluded_dishes']))
+                                                    <div x-data="{ open: false }" @click.away="open = false" class="no-print" style="position: relative; line-height: 1;">
+                                                        <button type="button" @click="open = !open"
+                                                            title="Виключені страви"
+                                                            style="width: 16px; height: 16px; border-radius: 50%; background: #fee2e2; border: 1px solid #ef4444; color: #b91c1c; font-size: 10px; font-weight: 900; font-style: italic; font-family: serif; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;">i</button>
+                                                        <div x-show="open" x-cloak x-transition.opacity
+                                                            style="position: absolute; top: 20px; left: 0; z-index: 50; background: white; border: 1px solid #fca5a5; border-radius: 6px; padding: 8px 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.12); min-width: 200px; max-width: 280px; font-weight: 400;">
+                                                            <div style="font-size: 10px; font-weight: 900; color: #b91c1c; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.3px;">Виключені страви</div>
+                                                            <ul style="margin: 0; padding-left: 16px; font-size: 11px; color: #111827; line-height: 1.4;">
+                                                                @foreach($card['excluded_dishes'] as $d)
+                                                                    <li>{{ $d }}</li>
+                                                                @endforeach
+                                                            </ul>
+                                                        </div>
+                                                    </div>
+                                                @endif
+                                            </div>
                                             <div class="no-print">
                                                 <button type="button" wire:click="mountAction('replaceDish', { order_id: {{ $card['order_id'] }}, dish_id: {{ $dishRow['dish_id'] }} })" style="background: white; border: 1px solid #ef4444; color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; cursor: pointer;">
                                                     Замінити страву
@@ -326,20 +421,18 @@
                     @endforeach
                 </div>
             </div>
-        @empty
-            <div style="text-align: center; padding: 30px; color: white; font-size: 15px; font-weight: 500;">
-                Замовлень немає
-            </div>
-        @endforelse
+                @empty
+                    <div style="text-align: center; padding: 14px; color: #64748b; font-size: 13px;">У цьому плані немає страв на цю дату</div>
+                @endforelse
 
-    {{-- ІНДИВІДУАЛЬНІ КЛІЄНТИ --}}
-    @if(!empty($individualClients))
-        <div style="margin-top:32px; border-top:3px solid #7c3aed; padding-top:20px;">
-            <div style="background:#7c3aed; color:white; display:inline-block; padding:6px 18px; border-radius:8px; font-size:14px; font-weight:900; text-transform:uppercase; margin-bottom:18px;">
+                {{-- ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану --}}
+                @if(!empty($planData['individuals']))
+        <div style="margin-top:18px; border-top:3px solid #7c3aed; padding-top:14px;">
+            <div style="background:#7c3aed; color:white; display:inline-block; padding:6px 18px; border-radius:8px; font-size:14px; font-weight:900; text-transform:uppercase; margin-bottom:14px;">
                 ★ Індивідуальні клієнти
             </div>
             <div style="display:flex; flex-direction:column; gap:16px;">
-                @foreach($individualClients as $client)
+                @foreach($planData['individuals'] as $client)
                     <div style="border:2px solid #7c3aed; border-radius:10px; overflow:hidden; background:white;">
                         {{-- Шапка клієнта --}}
                         <div style="background:#7c3aed; color:white; padding:8px 16px; display:flex; align-items:center; gap:12px;">
@@ -398,6 +491,12 @@
                 @endforeach
             </div>
         </div>
-    @endif
+                @endif
+            </div>
+        @empty
+            <div style="text-align: center; padding: 30px; color: white; font-size: 15px; font-weight: 500;">
+                Замовлень немає
+            </div>
+        @endforelse
     </div>
 </x-filament-panels::page>

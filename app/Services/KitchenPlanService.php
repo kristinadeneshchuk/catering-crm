@@ -173,14 +173,13 @@ PROMPT;
     {
         $targetDateObj = Carbon::parse($targetDate);
 
-        $cycleDays   = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-        $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
-        $anchorDate  = Carbon::parse($startDateStr);
+        // TODO (multi-plan): зараз бере меню з дефолтного плану.
+        $defaultPlan = \App\Models\MenuPlan::default();
+        if (!$defaultPlan) return '(дефолтного плану меню немає)';
 
-        $diff      = abs($targetDateObj->diffInDays($anchorDate));
-        $dayNumber = ($diff % $cycleDays) + 1;
-
-        $menu = DailyMenu::where('day_number', $dayNumber)
+        $dayNumber = $defaultPlan->globalDayFor($targetDateObj);
+        $menu = DailyMenu::where('menu_plan_id', $defaultPlan->id)
+            ->where('day_number', $dayNumber)
             ->with(['menuItems.dish.dishIngredients.ingredient', 'menuItems.mealType'])
             ->first();
 

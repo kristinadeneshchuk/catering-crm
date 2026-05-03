@@ -89,9 +89,30 @@
         </div>
         <div class="header-right">
             <div class="big">{{ $date }}</div>
-            <div><span class="day-badge">{{ $dayNumber }}-й день циклу меню</span></div>
+            <div>
+                @if(!empty($planSummaries))
+                    @foreach($planSummaries as $ps)
+                        <span class="day-badge">{{ $ps['plan']->name }}: {{ $ps['day_number'] }}-й день з {{ $ps['plan']->cycle_days }}</span>
+                    @endforeach
+                @endif
+            </div>
         </div>
     </div>
+
+    @if(!empty($missingPlans ?? []))
+        <div style="background:#fee2e2; border:2px solid #ef4444; border-radius:8px; padding:10px 14px; margin-bottom:18px; color:#7f1d1d; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
+            <div style="font-weight:900; font-size:12px; margin-bottom:5px; text-transform:uppercase;">⚠️ Не вистачає меню для деяких планів</div>
+            @foreach($missingPlans as $mp)
+                <div style="margin-bottom:3px; font-size:11px;">
+                    <strong>{{ $mp['plan']->name }}</strong> — день №{{ $mp['day_number'] }} циклу не створено.
+                    Зачеплено клієнтів: <strong>{{ $mp['orders_count'] }}</strong>
+                    @if(!empty($mp['client_names']))
+                        ({{ implode(', ', $mp['client_names']) }}@if($mp['orders_count'] > count($mp['client_names'])), …@endif)
+                    @endif
+                </div>
+            @endforeach
+        </div>
+    @endif
 
     @php
         $toBuy   = array_values(array_filter($shoppingList, fn($r) => !$r['enough']));

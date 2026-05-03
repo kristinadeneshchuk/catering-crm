@@ -243,12 +243,13 @@ class PersonalMenus extends Page
      */
     private function getKitchenIngredientIds(string $date): array
     {
-        $cycleDays  = (int)(Setting::where('key', 'menu_cycle_days')->value('value') ?: 24);
-        $anchorDate = Carbon::parse('2025-01-01');
-        $diff       = abs(Carbon::parse($date)->diffInDays($anchorDate));
-        $globalDay  = ($diff % $cycleDays) + 1;
+        // TODO (multi-plan): зараз бере інгредієнти з дефолтного плану.
+        $defaultPlan = \App\Models\MenuPlan::default();
+        if (!$defaultPlan) return [];
 
-        $menu = DailyMenu::where('day_number', $globalDay)
+        $globalDay = $defaultPlan->globalDayFor($date);
+        $menu = DailyMenu::where('menu_plan_id', $defaultPlan->id)
+            ->where('day_number', $globalDay)
             ->with('menuItems.dish.dishIngredients')
             ->first();
 

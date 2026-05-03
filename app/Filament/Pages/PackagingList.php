@@ -29,6 +29,7 @@ class PackagingList extends Page implements HasForms
     public ?array $data = [];
     public array $report = [];
     public array $clientComments = [];
+    public array $missingPlans = []; // плани з замовленнями, у яких немає меню на цей день циклу
     public ?string $debugMessage = null;
 
     /** @var array<int, array{items: array, totals?: array}> */
@@ -131,17 +132,14 @@ class PackagingList extends Page implements HasForms
                             $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
                             $targetDateObj = Carbon::parse($selectedDate)->addDay();
 
-                            $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-                            $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
-                            $anchorDate = Carbon::parse($startDateStr);
-
-                            $diff = abs($targetDateObj->diffInDays($anchorDate));
-                            $dayNum = ($diff % $cycleDays) + 1;
+                            $plan = \App\Models\MenuPlan::default();
+                            $dayNum = $plan ? $plan->globalDayFor($targetDateObj) : 0;
+                            $planName = $plan?->name ?? '—';
 
                             return new HtmlString(
                                 "<div class='p-4 bg-gray-900 border border-gray-700 rounded-lg text-white'>
                                     Фасування на <strong class='text-primary-400'>завтра (" . $targetDateObj->format('d.m.Y') . ")</strong>.
-                                    <br> Це буде <strong class='text-primary-400'>" . $dayNum . "-й день</strong> циклу меню.
+                                    <br> План «{$planName}», <strong class='text-primary-400'>{$dayNum}-й день</strong> циклу.
                                 </div>"
                             );
                         }),
@@ -170,29 +168,10 @@ class PackagingList extends Page implements HasForms
         $targetDateObj = Carbon::parse($selectedDate)->addDay();
         $targetDate    = $targetDateObj->format('Y-m-d');
 
-        $this->report = [];
+        $this->report = []; // тепер: [$planId => ['plan'=>MenuPlan, 'day_number'=>int, 'tables'=>[...]]]
         $this->orderPlans = [];
+        $this->missingPlans = [];
         $this->debugMessage = null;
-
-        $cycleDays    = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-        $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
-        $anchorDate   = Carbon::parse($startDateStr);
-
-        $diff = abs($targetDateObj->diffInDays($anchorDate));
-        $globalDay = ($diff % $cycleDays) + 1;
-
-        $menu = DailyMenu::where('day_number', $globalDay)
-            ->with([
-                'menuItems.dish.dishIngredients.ingredient',
-                'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
-                'menuItems.mealType'
-            ])
-            ->first();
-
-        if (!$menu) {
-            $this->debugMessage = "Меню на {$targetDateObj->format('d.m.Y')} (день циклу {$globalDay}) не знайдено";
-            return;
-        }
 
         // Беремо активні та нові замовлення (призупинені — не фасуємо)
         $orders = Order::whereIn('status', ['new', 'active'])
@@ -201,6 +180,7 @@ class PackagingList extends Page implements HasForms
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
+                'menuPlan',
                 'replacements.replacementProduct',
                 'replacements.replacementDish',
                 'projectData',
@@ -211,28 +191,63 @@ class PackagingList extends Page implements HasForms
             return;
         }
 
-        // Збираємо глобальні коментарі клієнтів окремо
+        // Збираємо глобальні коментарі клієнтів — один блок зверху
         $this->clientComments = [];
+        $seenClients = [];
         foreach ($orders as $order) {
+            $cid = (int) $order->client?->id;
+            if (!$cid || isset($seenClients[$cid])) continue;
             $comment = trim($order->client->production_comment ?? '');
             if (!empty($comment)) {
                 $this->clientComments[] = [
-                    'id'      => $order->client->id,
+                    'id'      => $cid,
                     'name'    => $order->client->name,
                     'project' => $order->projectData?->name ?? ucfirst($order->project ?? ''),
                     'calories'=> (int)($order->calories ?? 0),
                     'text'    => $comment,
                 ];
+                $seenClients[$cid] = true;
             }
         }
 
-        foreach ($orders as $order) {
-            $this->orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu, $targetDate);
-        }
+        // === ГРУПУЄМО ЗАМОВЛЕННЯ ПО ПЛАНАХ МЕНЮ ===
+        $ordersByPlan = $orders->groupBy(fn ($o) => $o->effectiveMenuPlan()?->id ?? 0);
+
+        foreach ($ordersByPlan as $planId => $planOrders) {
+            $menuPlan = $planOrders->first()->effectiveMenuPlan();
+            if (!$menuPlan) continue;
+
+            $globalDay = $menuPlan->globalDayFor($targetDateObj);
+            $menu = DailyMenu::where('menu_plan_id', $menuPlan->id)
+                ->where('day_number', $globalDay)
+                ->with([
+                    'menuItems.dish.dishIngredients.ingredient',
+                    'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
+                    'menuItems.mealType'
+                ])
+                ->first();
+
+            if (!$menu) {
+                $this->missingPlans[] = [
+                    'plan'          => $menuPlan,
+                    'day_number'    => $globalDay,
+                    'orders_count'  => $planOrders->count(),
+                    'client_names'  => $planOrders->map(fn ($o) => $o->client?->name)->filter()->unique()->take(5)->values()->all(),
+                ];
+                continue;
+            }
+
+            $planTables = []; // окремий накопичувач рядків для цього плану
+
+            foreach ($planOrders as $order) {
+                $this->orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu, $targetDate);
+            }
+
+            $orders = $planOrders; // alias для існуючого нижче коду
 
         $sortedMenuItems = $menu->menuItems->sortBy(fn ($i) => $i->mealType?->sort_order ?? 99);
 
-        // Накопичувач для замінних страв (повна заміна страви)
+        // Накопичувач для замінних страв (повна заміна страви) — у межах плану
         $replacementDishData = [];
 
         foreach ($sortedMenuItems as $mItem) {
@@ -338,7 +353,7 @@ class PackagingList extends Page implements HasForms
 
             if (empty($tableData['columns'])) {
                 if (!empty($tableData['individual_notes'])) {
-                    $this->report[] = $tableData;
+                    $planTables[] = $tableData;
                 }
                 continue;
             }
@@ -367,7 +382,7 @@ class PackagingList extends Page implements HasForms
                 ];
             }
 
-            $this->report[] = $tableData;
+            $planTables[] = $tableData;
         }
 
         // === ЗАМІННІ СТРАВИ — окремі таблиці для страв, якими повністю замінено оригінал ===
@@ -397,10 +412,10 @@ class PackagingList extends Page implements HasForms
             }
 
             unset($repData['dish_obj']);
-            $this->report[] = $repData;
+            $planTables[] = $repData;
         }
 
-        // === ІНДИВІДУАЛЬНІ КЛІЄНТИ — одна картка на клієнта з усіма стравами ===
+        // === ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану ===
         $individualByOrder = [];
 
         foreach ($orders as $order) {
@@ -447,7 +462,21 @@ class PackagingList extends Page implements HasForms
         }
 
         foreach ($individualByOrder as $clientData) {
-            $this->report[] = $clientData;
+            $planTables[] = $clientData;
+        }
+
+            // Зберігаємо секцію цього плану
+            if (!empty($planTables)) {
+                $this->report[$menuPlan->id] = [
+                    'plan'       => $menuPlan,
+                    'day_number' => $globalDay,
+                    'tables'     => $planTables,
+                ];
+            }
+        } // кінець foreach($ordersByPlan)
+
+        if (empty($this->report)) {
+            $this->debugMessage = "Меню для жодного плану не знайдено на {$targetDateObj->format('d.m.Y')}";
         }
     }
 

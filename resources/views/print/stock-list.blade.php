@@ -152,9 +152,27 @@
         <div class="header-right">
             <div class="date-label">Дата приготування</div>
             <div class="date-val">{{ $date }}</div>
-            <div><span class="day-badge">{{ $dayNumber }}-й день циклу → {{ $targetDateFormatted }}</span></div>
+            <div>
+                @if(!empty($planSummaries))
+                    @foreach($planSummaries as $ps)
+                        <span class="day-badge">{{ $ps['plan']->name }}: день {{ $ps['day_number'] }} → {{ $targetDateFormatted }}</span>
+                    @endforeach
+                @endif
+            </div>
         </div>
     </div>
+
+    @if(!empty($missingPlans ?? []))
+        <div style="background:#fee2e2; border:2px solid #ef4444; border-radius:8px; padding:10px 14px; margin-bottom:18px; color:#7f1d1d; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
+            <div style="font-weight:900; font-size:12px; margin-bottom:5px; text-transform:uppercase;">⚠️ Не вистачає меню для деяких планів</div>
+            @foreach($missingPlans as $mp)
+                <div style="margin-bottom:3px; font-size:11px;">
+                    <strong>{{ $mp['plan']->name }}</strong> — день №{{ $mp['day_number'] }} циклу не створено.
+                    Зачеплено клієнтів: <strong>{{ $mp['orders_count'] }}</strong>
+                </div>
+            @endforeach
+        </div>
+    @endif
 
     <div class="ingredient-grid">
         @foreach($ingredients as $name => $weight)

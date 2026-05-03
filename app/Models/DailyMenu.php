@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -11,6 +12,7 @@ class DailyMenu extends Model
     use HasFactory;
 
     protected $fillable = [
+        'menu_plan_id',
         'day_number',
         'target_kcal',
         'target_protein_g',
@@ -35,5 +37,10 @@ class DailyMenu extends Model
     public function menuItems(): HasMany
     {
         return $this->hasMany(DailyMenuDish::class, 'daily_menu_id');
+    }
+
+    public function menuPlan(): BelongsTo
+    {
+        return $this->belongsTo(MenuPlan::class);
     }
 }

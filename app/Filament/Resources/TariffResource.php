@@ -50,7 +50,83 @@ class TariffResource extends Resource
                             ->placeholder('Наприклад: Від 7 днів')
                             ->required(),
 
+                        Forms\Components\Select::make('default_menu_plan_id')
+                            ->label('План меню за замовчуванням')
+                            ->helperText('Підставляється у нове замовлення з цим тарифом. Менеджер може змінити вручну.')
+                            ->options(fn () => \App\Models\MenuPlan::orderBy('sort_order')->orderBy('id')->pluck('name', 'id'))
+                            ->placeholder('— дефолтний план системи —')
+                            ->searchable()
+                            ->preload()
+                            ->columnSpan(2),
+
                     ])->columns(2),
+
+                Forms\Components\Section::make('Ціни по діапазонах калорій')
+                    ->description('Скільки коштує 1 день харчування у цьому тарифі для кожного діапазону калорій. Рядки відповідають діапазонам, створеним у «Діапазони калорій».')
+                    ->schema([
+                        Forms\Components\Placeholder::make('no_ranges_warning')
+                            ->label('')
+                            ->columnSpanFull()
+                            ->visible(fn () => \App\Models\CalorieRange::count() === 0)
+                            ->content(new \Illuminate\Support\HtmlString(
+                                '<div style="background:#7f1d1d; border:1px solid #ef4444; border-radius:6px; padding:8px 12px; color:#fee2e2; font-size:12px;">⚠️ Спочатку створи діапазони калорій у «Довідник → Діапазони калорій».</div>'
+                            )),
+
+                        Forms\Components\Repeater::make('prices')
+                            ->relationship('prices')
+                            ->label('')
+                            ->columnSpanFull()
+                            ->schema([
+                                Forms\Components\Select::make('calorie_range_id')
+                                    ->label('Діапазон калорій')
+                                    ->options(fn () => \App\Models\CalorieRange::orderBy('min_kcal')->get()
+                                        ->mapWithKeys(fn ($r) => [$r->id => "{$r->name} ({$r->min_kcal}–{$r->max_kcal} ккал)"]))
+                                    ->required()
+                                    ->distinct()
+                                    ->validationMessages(['distinct' => 'Цей діапазон уже додано — не дублюй.'])
+                                    ->searchable()
+                                    ->preload(),
+
+                                Forms\Components\TextInput::make('price_per_day')
+                                    ->label('Ціна за 1 день')
+                                    ->prefix('₴')
+                                    ->numeric()
+                                    ->minValue(0)
+                                    ->required(),
+                            ])
+                            ->columns(2)
+                            ->reorderable(false)
+                            ->defaultItems(0)
+                            ->minItems(0)
+                            ->visible(fn () => \App\Models\CalorieRange::count() > 0)
+                            ->addActionLabel('Додати рядок'),
+
+                        Forms\Components\Actions::make([
+                            Forms\Components\Actions\Action::make('fillMissingRanges')
+                                ->label('Додати рядки для всіх діапазонів')
+                                ->icon('heroicon-o-plus-circle')
+                                ->color('info')
+                                ->visible(fn () => \App\Models\CalorieRange::count() > 0)
+                                ->action(function (Forms\Set $set, Forms\Get $get) {
+                                    $existing = collect($get('prices') ?? [])
+                                        ->pluck('calorie_range_id')
+                                        ->filter()
+                                        ->all();
+
+                                    $newItems = $get('prices') ?? [];
+                                    foreach (\App\Models\CalorieRange::orderBy('min_kcal')->get() as $r) {
+                                        if (!in_array($r->id, $existing)) {
+                                            $newItems[] = [
+                                                'calorie_range_id' => $r->id,
+                                                'price_per_day'    => 0,
+                                            ];
+                                        }
+                                    }
+
+                                    $set('prices', $newItems);
+                                }),
+                        ])->columnSpanFull(),
+                    ]),
 
                 Forms\Components\Section::make('Статус')
                     ->schema([

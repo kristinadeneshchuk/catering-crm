@@ -8,86 +8,59 @@ use App\Models\Transaction;
 
 class RecalculateClientBalances extends Command
 {
-    /**
-     * Ім'я команди для запуску в терміналі
-     */
-    protected $signature = 'app:recalculate-balances';
+    protected $signature = 'app:recalculate-balances {--dry-run : Тільки показати клієнтів з некоректним балансом, нічого не змінювати}';
 
-    /**
-     * Опис команди
-     */
-    protected $description = 'Перераховує баланси клієнтів та оновлює статуси оплати замовлень (FIFO)';
+    protected $description = 'Перераховує баланси клієнтів за формулою SUM(income)-SUM(refund)-SUM(orders.final_price) та оновлює FIFO статуси оплати';
 
     public function handle()
     {
-        $this->info('Починаємо перерахунок балансів...');
+        $dryRun = (bool) $this->option('dry-run');
 
-        // Проходимо по всіх клієнтах
-        Client::chunk(100, function ($clients) {
+        $this->info($dryRun ? 'DRY-RUN: показую кого треба правити, нічого не змінюю...' : 'Перерахунок балансів...');
+
+        $changed = 0;
+        $total   = 0;
+
+        Client::chunk(100, function ($clients) use ($dryRun, &$changed, &$total) {
             foreach ($clients as $client) {
-                $this->line("Обробка клієнта: {$client->name} (ID: {$client->id})...");
+                $total++;
 
-                // 1. Рахуємо суму всіх оплат (Income)
-                // Використовуємо whereHas, щоб переконатися, що транзакції прив'язані до цього клієнта через замовлення
-                $income = Transaction::whereHas('order', fn($q) => $q->where('client_id', $client->id))
-                    ->where('type', 'income')
-                    ->sum('amount');
+                $orderIds   = $client->orders()->pluck('id');
+                $income     = (float) Transaction::whereIn('order_id', $orderIds)->where('type', 'income')->sum('amount');
+                $refund     = (float) Transaction::whereIn('order_id', $orderIds)->where('type', 'refund')->sum('amount');
+                $ordersCost = (float) $client->orders()->sum('final_price');
 
-                // 2. Рахуємо суму всіх повернень (Refund)
-                $refund = Transaction::whereHas('order', fn($q) => $q->where('client_id', $client->id))
-                    ->where('type', 'refund')
-                    ->sum('amount');
+                $expected = round($income - $refund - $ordersCost, 2);
+                $current  = round((float) $client->balance, 2);
 
-                // 3. Рахуємо вартість усіх замовлень
-                $ordersCost = $client->orders->sum('total_price');
+                if (abs($expected - $current) < 0.01) {
+                    continue;
+                }
 
-                // 4. Оновлюємо баланс (Всі гроші - Всі замовлення)
-                $realBalance = $income - $refund - $ordersCost;
-                
-                // updateQuietly важливий, щоб не викликати події, які знову запустять перерахунок
-                $client->updateQuietly(['balance' => $realBalance]);
+                $changed++;
+                $diff = $expected - $current;
+                $this->line(sprintf(
+                    '#%d %s: %.2f → %.2f (diff %+.2f)',
+                    $client->id,
+                    $client->name,
+                    $current,
+                    $expected,
+                    $diff
+                ));
 
-                $this->info(" -> Баланс виправлено на: {$realBalance} грн");
-
-                // 5. Запускаємо логіку FIFO (проставляємо статуси оплати)
-                $this->recalculateOrdersFifo($client, $income - $refund);
+                if (!$dryRun) {
+                    $client->syncBalance();
+                    $client->recalculateOrderPaymentStatus();
+                }
             }
         });
 
-        $this->info('Успішно завершено!');
-    }
+        $this->info(sprintf('Готово. Перевірено клієнтів: %d, з некоректним балансом: %d', $total, $changed));
 
-    private function recalculateOrdersFifo($client, $wallet)
-    {
-        // Беремо замовлення від старих до нових
-        $orders = $client->orders()->orderBy('start_date', 'asc')->get();
-
-        foreach ($orders as $order) {
-            // Якщо ціна 0 (тестове замовлення), ставимо оплачено
-            if ($order->total_price <= 0) {
-                 if (!$order->is_paid) {
-                     $order->updateQuietly(['is_paid' => true]);
-                     $this->line(" -> Замовлення #{$order->id} (0 грн) -> ОПЛАЧЕНО (безкоштовне)");
-                 }
-                 continue;
-            }
-
-            if ($wallet >= $order->total_price) {
-                // Грошей вистачає
-                if (!$order->is_paid) {
-                    $order->updateQuietly(['is_paid' => true]);
-                    $this->info(" -> Замовлення #{$order->id} ({$order->total_price} грн) -> ОПЛАЧЕНО");
-                }
-                $wallet -= $order->total_price;
-            } else {
-                // Грошей не вистачає
-                if ($order->is_paid) {
-                    $order->updateQuietly(['is_paid' => false]);
-                    $this->error(" -> Замовлення #{$order->id} ({$order->total_price} грн) -> НЕ ОПЛАЧЕНО (бракує коштів)");
-                }
-                // Віднімаємо залишок (йдемо в мінус по віртуальному гаманцю)
-                $wallet -= $order->total_price;
-            }
+        if ($dryRun && $changed > 0) {
+            $this->warn('Це був DRY-RUN. Щоб реально виправити — запусти без --dry-run.');
         }
+
+        return self::SUCCESS;
     }
 }

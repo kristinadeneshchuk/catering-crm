@@ -103,7 +103,9 @@ class SettingResource extends Resource
     {
         return $table
             ->modifyQueryUsing(function (Builder $query) {
-                return $query->whereIn('key', ['menu_cycle_days', 'menu_cycle_start_date', 'monthly_rent', 'monthly_utilities', 'rewards_enabled']);
+                // menu_cycle_days / menu_cycle_start_date — застарілі (тепер на рівні плану меню),
+                // приховані з цього списку, але рядки лишаються в БД для бек-сумісності.
+                return $query->whereIn('key', ['monthly_rent', 'monthly_utilities', 'rewards_enabled']);
             })
             ->columns([
                 Tables\Columns\TextColumn::make('key')

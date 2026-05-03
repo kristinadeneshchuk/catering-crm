@@ -95,15 +95,24 @@ class AnalyticsController extends Controller
 
         $kitchenPositions = ['cook', 'packer', 'cleaner'];
 
-        // Налаштування меню та циклу
-        $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-        $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
-        $anchorDate = Carbon::parse($startDateStr);
-
-        $allMenus = DailyMenu::with([
-            'menuItems.dish.dishIngredients.ingredient',
-            'menuItems.mealType'
-        ])->get()->keyBy('day_number');
+        // Кеш денних меню за (planId, dayNumber) — фактично завантажуємо лише ті, що реально потрібні
+        $menuCache = [];
+        $resolveMenu = function (\App\Models\Order $order, string $ymd) use (&$menuCache) {
+            $plan = $order->effectiveMenuPlan();
+            if (!$plan) return null;
+            $dayNum = $plan->globalDayFor($ymd);
+            $key = $plan->id . ':' . $dayNum;
+            if (!array_key_exists($key, $menuCache)) {
+                $menuCache[$key] = DailyMenu::with([
+                    'menuItems.dish.dishIngredients.ingredient',
+                    'menuItems.mealType',
+                ])
+                    ->where('menu_plan_id', $plan->id)
+                    ->where('day_number', $dayNum)
+                    ->first();
+            }
+            return $menuCache[$key];
+        };
         
         $allIngredients = Ingredient::all()->keyBy('id');
 
@@ -175,10 +184,6 @@ class AnalyticsController extends Controller
             $dailyPackaging = 0;
 
             if ($count > 0) {
-                $diff = abs(Carbon::parse($ymd)->diffInDays($anchorDate));
-                $dayNum = ($diff % $cycleDays) + 1;
-                $menu = $allMenus->get($dayNum);
-
                 foreach ($days as $orderDay) {
                     $order = $orderDay->order;
                     if (!$order || !$order->client) continue;
@@ -195,6 +200,9 @@ class AnalyticsController extends Controller
 
                     $dailyRevenue  += $netPricePerDay;
                     $dailyDiscount += $orderDiscountPerDay + $dayDiscount;
+
+                    // Меню для цього замовлення на цю дату — через його план
+                    $menu = $resolveMenu($order, $ymd);
 
                     // Food Cost
                     $orderCost = 0;
@@ -264,6 +272,11 @@ class AnalyticsController extends Controller
                             'food_cost'     => 0,
                             'packaging'     => 0,
                             'clients'       => [],
+                            // Per-project retention за обраний період
+                            'new_clients'           => 0,
+                            'new_clients_continued' => 0,
+                            'new_clients_churned'   => 0,
+                            'churned_period'        => 0,
                         ];
                     }
                     $projectStats[$projectSlug]['rations']   += 1;
@@ -313,6 +326,53 @@ class AnalyticsController extends Controller
             $ps['revenue_share'] = $totalRevenue > 0 ? ($ps['revenue'] / $totalRevenue) * 100 : 0;
         }
         unset($ps);
+
+        // 4а. RETENTION ПО КОЖНОМУ ПРОЄКТУ (нові / відпали за період)
+        // Беремо first_start / last_end per (client_id, project) — клієнт може існувати в кількох проєктах одночасно.
+        if (!empty($projectStats)) {
+            $clientProjectAgg = \Illuminate\Support\Facades\DB::table('orders')
+                ->where('total_price', '>', 0)
+                ->whereNotIn('status', ['cancelled'])
+                ->whereIn('project', array_keys($projectStats))
+                ->selectRaw('client_id, project, MIN(start_date) as first_start_date, MAX(end_date) as last_end_date')
+                ->groupBy('client_id', 'project')
+                ->get();
+
+            $todayStr = Carbon::now()->format('Y-m-d');
+
+            foreach ($clientProjectAgg as $row) {
+                $slug = $row->project;
+                if (!isset($projectStats[$slug])) continue;
+
+                $first = $row->first_start_date;
+                $last  = $row->last_end_date;
+
+                // Новий у проєкті: перший раз замовив у цьому проєкті в обраний період
+                if ($first && $first >= $startDate && $first <= $endDate) {
+                    $projectStats[$slug]['new_clients']++;
+                    if ($last && $last >= $todayStr) {
+                        $projectStats[$slug]['new_clients_continued']++;
+                    } else {
+                        $projectStats[$slug]['new_clients_churned']++;
+                    }
+                }
+
+                // Відпав у проєкті: остання підписка цього проєкту закінчилась у обраний період
+                // і немає активної підписки в цьому проєкті на сьогодні
+                if ($last && $last < $todayStr && $last >= $startDate && $last <= $endDate) {
+                    $projectStats[$slug]['churned_period']++;
+                }
+            }
+
+            // Відсотки для зручності у blade
+            foreach ($projectStats as $slug => &$ps) {
+                $unique = max(1, (int) ($ps['unique_clients'] ?? 0));
+                $ps['new_clients_percent']    = ($ps['new_clients'] / $unique) * 100;
+                $ps['churned_period_percent'] = ($ps['churned_period'] / $unique) * 100;
+            }
+            unset($ps);
+        }
+
         uasort($projectStats, fn ($a, $b) => $b['revenue'] <=> $a['revenue']);
 
         // 5. ПІДРАХУНОК МАРКЕТИНГУ (Агрегація)

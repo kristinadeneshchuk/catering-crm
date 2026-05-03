@@ -138,10 +138,20 @@ class CreateOrder extends CreateRecord
     private function createChildOrders(\App\Models\Order $parentOrder): void
     {
         foreach ($this->additionalRations as $ration) {
-            $tariffId = $ration['tariff_id'] ?? null;
-            $calories = (int) ($ration['calories'] ?? 0);
-            $menuType = $ration['menu_type'] ?? 'cyclic';
-            $project  = $ration['project'] ?? null;
+            $tariffId    = $ration['tariff_id'] ?? null;
+            $calories    = (int) ($ration['calories'] ?? 0);
+            $menuType    = $ration['menu_type'] ?? 'cyclic';
+            $project     = $ration['project'] ?? null;
+            $menuPlanId  = $ration['menu_plan_id'] ?? null;
+
+            // Якщо план не вказано явно — підтягуємо дефолтний з тарифу
+            if (!$menuPlanId && $tariffId) {
+                $menuPlanId = \App\Models\Tariff::find($tariffId)?->default_menu_plan_id;
+            }
+            // Останній фолбек — системний дефолтний план
+            if (!$menuPlanId) {
+                $menuPlanId = optional(\App\Models\MenuPlan::default())->id;
+            }
 
             if (!$tariffId || !$calories) {
                 continue;
@@ -174,6 +184,7 @@ class CreateOrder extends CreateRecord
                 'project'         => $project,
                 'calories'        => $calories,
                 'menu_type'       => $menuType,
+                'menu_plan_id'    => $menuType === 'individual' ? null : $menuPlanId,
                 'start_date'      => $parentOrder->start_date,
                 'end_date'        => $parentOrder->end_date,
                 'duration'        => $duration,

@@ -54,6 +54,7 @@ class EditOrder extends EditRecord
             'tariff_id'     => $child->tariff_id,
             'calories'      => $child->calories,
             'menu_type'     => $child->menu_type,
+            'menu_plan_id'  => $child->menu_plan_id,
             'project'       => $child->project,
             'status'        => in_array($child->status, ['active', 'new']) ? 'active' : 'paused',
             'price_per_day' => $this->calcPricePerDay($child->tariff_id, (int) $child->calories),
@@ -88,11 +89,23 @@ class EditOrder extends EditRecord
         foreach ($rations as $ration) {
             if (empty($ration['tariff_id'])) continue;
 
-            $tariffId = $ration['tariff_id'];
-            $calories = (int) ($ration['calories'] ?? 0);
-            $menuType = $ration['menu_type'] ?? 'cyclic';
-            $project  = $ration['project'] ?? Tariff::find($tariffId)?->project;
-            $childId  = $ration['order_id'] ?? null;
+            $tariffId    = $ration['tariff_id'];
+            $calories    = (int) ($ration['calories'] ?? 0);
+            $menuType    = $ration['menu_type'] ?? 'cyclic';
+            $project     = $ration['project'] ?? Tariff::find($tariffId)?->project;
+            $childId     = $ration['order_id'] ?? null;
+            $menuPlanId  = $ration['menu_plan_id'] ?? null;
+
+            // Якщо план не вказано — підтягуємо з тарифу або системний дефолт
+            if (!$menuPlanId && $tariffId) {
+                $menuPlanId = Tariff::find($tariffId)?->default_menu_plan_id;
+            }
+            if (!$menuPlanId) {
+                $menuPlanId = optional(\App\Models\MenuPlan::default())->id;
+            }
+
+            // Для індивідуального меню план не потрібен
+            $effectivePlanId = $menuType === 'individual' ? null : $menuPlanId;
 
             $pricePerDay = $this->calcPricePerDay($tariffId, $calories);
             $duration    = $order->duration ?: $order->orderDays()->count();
@@ -104,13 +117,14 @@ class EditOrder extends EditRecord
             if ($childId && $existingChildren->has($childId)) {
                 // Оновлюємо існуюче дочірнє замовлення
                 $existingChildren[$childId]->update([
-                    'tariff_id'   => $tariffId,
-                    'calories'    => $calories,
-                    'menu_type'   => $menuType,
-                    'project'     => $project,
-                    'status'      => $newStatus,
-                    'total_price' => $totalPrice,
-                    'final_price' => $totalPrice,
+                    'tariff_id'    => $tariffId,
+                    'calories'     => $calories,
+                    'menu_type'    => $menuType,
+                    'menu_plan_id' => $effectivePlanId,
+                    'project'      => $project,
+                    'status'       => $newStatus,
+                    'total_price'  => $totalPrice,
+                    'final_price'  => $totalPrice,
                 ]);
                 $keptIds[] = $childId;
             } else {
@@ -122,6 +136,7 @@ class EditOrder extends EditRecord
                     'project'         => $project,
                     'calories'        => $calories,
                     'menu_type'       => $menuType,
+                    'menu_plan_id'    => $effectivePlanId,
                     'start_date'      => $order->start_date,
                     'end_date'        => $order->end_date,
                     'duration'        => $duration,

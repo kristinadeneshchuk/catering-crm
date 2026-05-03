@@ -23,24 +23,23 @@ class CookStats extends BaseWidget
     {
         $date = now()->format('Y-m-d');
 
-        // 1. Параметри глобального циклу
-        $cycleDays = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-        $anchorDate = Carbon::parse('2025-01-01'); // Наш стабільний "якір"
+        // 1. Дефолтний план меню (TODO multi-plan: для віджета показуємо лише дефолт)
+        $defaultPlan = \App\Models\MenuPlan::default();
+        $globalDay = $defaultPlan ? $defaultPlan->globalDayFor(now()) : 0;
 
-        // 2. Математичний розрахунок дня циклу для Avocado Food
-        $diffInDays = abs(now()->diffInDays($anchorDate));
-        $globalDay = ($diffInDays % $cycleDays) + 1;
-
-        // 3. Кількість активних порцій на сьогодні (календарна дата)
+        // 2. Кількість активних порцій на сьогодні (календарна дата)
         $totalOrders = Order::where('start_date', '<=', $date)
             ->where('end_date', '>=', $date)
             ->whereIn('status', ['new', 'active'])
             ->count();
 
-        // 4. Шукаємо меню за day_number замість дати
-        $menu = DailyMenu::where('day_number', $globalDay)
-            ->withCount('menuItems')
-            ->first();
+        // 3. Шукаємо меню дефолтного плану за day_number
+        $menu = $defaultPlan
+            ? DailyMenu::where('menu_plan_id', $defaultPlan->id)
+                ->where('day_number', $globalDay)
+                ->withCount('menuItems')
+                ->first()
+            : null;
             
         $dishesCount = $menu ? $menu->menu_items_count : 0;
 

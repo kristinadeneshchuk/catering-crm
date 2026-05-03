@@ -25,6 +25,7 @@ class ShoppingList extends Page implements HasForms
 
     public ?array $data = [];
     public array $shoppingList = [];
+    public array $missingPlans = [];
     public string $selectedDate = '';
 
     public static function canAccess(): bool
@@ -57,34 +58,14 @@ class ShoppingList extends Page implements HasForms
         $date = $this->data['date'] ?? now()->addDay()->format('Y-m-d');
         $this->selectedDate = $date;
 
-        // Визначаємо день циклу
-        $cycleDays  = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-        $startDate  = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
-        $anchorDate = Carbon::parse($startDate);
-        $carbonDate = Carbon::parse($date);
-        $diff       = abs($carbonDate->diffInDays($anchorDate));
-        $globalDay  = ($diff % $cycleDays) + 1;
-
-        $menu = DailyMenu::where('day_number', $globalDay)
-            ->with([
-                'menuItems.dish.dishIngredients.ingredient',
-                'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
-                'menuItems.mealType',
-            ])
-            ->first();
-
-        if (!$menu) {
-            $this->shoppingList = [];
-            return;
-        }
-
-        // Замовлення через orderDays (як в ProductionReport — правильно!)
+        // Замовлення через orderDays
         $orders = Order::whereHas('orderDays', fn ($q) => $q->where('date', $date))
             ->whereIn('status', ['new', 'active'])
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
+                'menuPlan',
                 'replacements.replacementProduct',
                 'replacements.replacementDish.dishIngredients.ingredient',
             ])
@@ -92,79 +73,107 @@ class ShoppingList extends Page implements HasForms
 
         if ($orders->isEmpty()) {
             $this->shoppingList = [];
+            $this->missingPlans = [];
             return;
         }
 
-        // Для кожного замовлення рахуємо план (калорійне масштабування)
-        $orderPlans = [];
-        foreach ($orders as $order) {
-            $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu, $date);
-        }
+        $this->missingPlans = [];
 
-        // Збираємо брутто по всіх інгредієнтах
-        $bruttoByIngredient = []; // [ingredient_id => ['name', 'brutto_g', 'unit']]
+        // Збираємо брутто глобально по всіх планах (купуємо в магазині один раз)
+        $bruttoByIngredient = [];
 
-        foreach ($menu->menuItems->sortBy(fn ($i) => $i->mealType?->sort_order ?? 99) as $item) {
-            if (!$item->dish) continue;
+        // Групуємо замовлення по планах меню
+        $ordersByPlan = $orders->groupBy(fn ($o) => $o->effectiveMenuPlan()?->id ?? 0);
 
-            $dish = $item->dish;
+        foreach ($ordersByPlan as $planId => $planOrders) {
+            $plan = $planOrders->first()->effectiveMenuPlan();
+            if (!$plan) continue;
 
-            foreach ($orders as $order) {
-                if ($order->menu_type === 'individual') continue; // індивідуальні — окремо
-
-                $plan = $orderPlans[$order->id] ?? null;
-                if (!$plan) continue;
-
-                $plannedWeight = collect($plan['items'])->first(
-                    fn ($it) => (int)$it['dish_id'] === (int)$dish->id
-                        && (int)$it['meal_type_id'] === (int)$item->meal_type_id
-                )['weight'] ?? null;
-
-                if ($plannedWeight === null) continue;
-
-                $baseW     = (float)($dish->base_weight_g ?? 0);
-                $dishScale = $baseW > 0 ? ($plannedWeight / $baseW) : 0.0;
-
-                // Визначаємо: кастомна страва чи стандартна
-                $dishReplacement = $order->replacements
-                    ->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
-
-                $activeDish = ($dishReplacement?->replacementDish) ?? $dish;
-
-                if ($order->client->dishExclusions->contains('id', $dish->id) && !$dishReplacement) {
-                    continue;
-                }
-
-                $this->collectBrutto(
-                    $activeDish,
-                    $dishScale,
-                    1.0,
-                    $order,
-                    (int)$dish->id,
-                    $bruttoByIngredient
-                );
+            $globalDay = $plan->globalDayFor($date);
+            $menu = DailyMenu::where('menu_plan_id', $plan->id)
+                ->where('day_number', $globalDay)
+                ->with([
+                    'menuItems.dish.dishIngredients.ingredient',
+                    'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
+                    'menuItems.mealType',
+                ])
+                ->first();
+            if (!$menu) {
+                $this->missingPlans[] = [
+                    'plan'         => $plan,
+                    'day_number'   => $globalDay,
+                    'orders_count' => $planOrders->count(),
+                    'client_names' => $planOrders->map(fn ($o) => $o->client?->name)->filter()->unique()->take(5)->values()->all(),
+                ];
+                continue;
             }
-        }
 
-        // === ІНДИВІДУАЛЬНІ КЛІЄНТИ ===
-        foreach ($orders as $order) {
-            if ($order->menu_type !== 'individual') continue;
+            $orderPlans = [];
+            foreach ($planOrders as $order) {
+                $orderPlans[$order->id] = $this->calculateOrderPlan($order, $menu, $date);
+            }
 
-            $plan = $orderPlans[$order->id] ?? null;
-            if (!$plan || empty($plan['items'])) continue;
+            foreach ($menu->menuItems->sortBy(fn ($i) => $i->mealType?->sort_order ?? 99) as $item) {
+                if (!$item->dish) continue;
 
-            foreach ($plan['items'] as $item) {
-                $dish = \App\Models\Dish::with(
-                    'dishIngredients.ingredient',
-                    'dishIngredients.childDish.dishIngredients.ingredient'
-                )->find($item['dish_id']);
-                if (!$dish) continue;
+                $dish = $item->dish;
 
-                $weight = (int)$item['weight'];
-                $baseW  = (float)($dish->base_weight_g ?? 0);
-                $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
+                foreach ($planOrders as $order) {
+                    if ($order->menu_type === 'individual') continue;
 
-                $this->collectBrutto($dish, $scale, 1.0, null, (int)$dish->id, $bruttoByIngredient);
+                    $orderPlan = $orderPlans[$order->id] ?? null;
+                    if (!$orderPlan) continue;
+
+                    $plannedWeight = collect($orderPlan['items'])->first(
+                        fn ($it) => (int)$it['dish_id'] === (int)$dish->id
+                            && (int)$it['meal_type_id'] === (int)$item->meal_type_id
+                    )['weight'] ?? null;
+
+                    if ($plannedWeight === null) continue;
+
+                    $baseW     = (float)($dish->base_weight_g ?? 0);
+                    $dishScale = $baseW > 0 ? ($plannedWeight / $baseW) : 0.0;
+
+                    $dishReplacement = $order->replacements
+                        ->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
+
+                    $activeDish = ($dishReplacement?->replacementDish) ?? $dish;
+
+                    if ($order->client->dishExclusions->contains('id', $dish->id) && !$dishReplacement) {
+                        continue;
+                    }
+
+                    $this->collectBrutto(
+                        $activeDish,
+                        $dishScale,
+                        1.0,
+                        $order,
+                        (int)$dish->id,
+                        $bruttoByIngredient
+                    );
+                }
+            }
+
+            // === ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану ===
+            foreach ($planOrders as $order) {
+                if ($order->menu_type !== 'individual') continue;
+
+                $orderPlan = $orderPlans[$order->id] ?? null;
+                if (!$orderPlan || empty($orderPlan['items'])) continue;
+
+                foreach ($orderPlan['items'] as $item) {
+                    $dish = \App\Models\Dish::with(
+                        'dishIngredients.ingredient',
+                        'dishIngredients.childDish.dishIngredients.ingredient'
+                    )->find($item['dish_id']);
+                    if (!$dish) continue;
+
+                    $weight = (int)$item['weight'];
+                    $baseW  = (float)($dish->base_weight_g ?? 0);
+                    $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
+
+                    $this->collectBrutto($dish, $scale, 1.0, null, (int)$dish->id, $bruttoByIngredient);
+                }
             }
         }
 

@@ -102,6 +102,21 @@
         </a>
     </div>
 
+    @if(!empty($missingPlans ?? []))
+        <div style="background:#fee2e2; border:2px solid #ef4444; border-radius:8px; padding:10px 14px; margin-bottom:18px; color:#7f1d1d; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
+            <div style="font-weight:900; font-size:12px; margin-bottom:5px; text-transform:uppercase;">⚠️ Не вистачає меню для деяких планів</div>
+            @foreach($missingPlans as $mp)
+                <div style="margin-bottom:3px; font-size:11px;">
+                    <strong>{{ $mp['plan']->name }}</strong> — день №{{ $mp['day_number'] }} циклу не створено.
+                    Зачеплено клієнтів: <strong>{{ $mp['orders_count'] }}</strong>
+                    @if(!empty($mp['client_names']))
+                        ({{ implode(', ', $mp['client_names']) }}@if($mp['orders_count'] > count($mp['client_names'])), …@endif)
+                    @endif
+                </div>
+            @endforeach
+        </div>
+    @endif
+
     @if(!empty($clientComments))
         <div style="background:#fefce8; border:1px dashed #ca8a04; padding:8px 10px; margin-bottom:20px; font-size:11px;">
             <div style="font-weight:bold; text-transform:uppercase; margin-bottom:5px; color:#92400e;">Коментарі клієнтів:</div>
@@ -113,10 +128,19 @@
         </div>
     @endif
 
-    @php
-        $cyclicTables     = array_filter($report, fn($t) => empty($t['is_individual']));
-        $individualTables = array_filter($report, fn($t) => !empty($t['is_individual']));
-    @endphp
+    {{-- ОБХІД ПО ПЛАНАХ МЕНЮ --}}
+    @foreach($reportByPlan as $planId => $planBlock)
+        @php
+            $report           = $planBlock['report'];
+            $cyclicTables     = array_filter($report, fn($t) => empty($t['is_individual']));
+            $individualTables = array_filter($report, fn($t) => !empty($t['is_individual']));
+        @endphp
+
+        <div style="margin-top:18px; margin-bottom:12px; padding:10px 14px; background:#f5f3ff; border:2px solid #c4b5fd; border-radius:8px; -webkit-print-color-adjust:exact; print-color-adjust:exact; page-break-inside:avoid;">
+            <div style="font-size:9px; font-weight:800; color:#5b21b6; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px;">План меню</div>
+            <div style="font-size:16px; font-weight:900; color:#1e1b4b;">{{ $planBlock['plan']->name }}</div>
+            <div style="font-size:10px; color:#5b21b6; margin-top:2px;">День циклу №{{ $planBlock['day_number'] }} з {{ $planBlock['plan']->cycle_days }}</div>
+        </div>
 
     {{-- ЦИКЛІЧНІ СТРАВИ --}}
     @foreach($cyclicTables as $table)
@@ -242,6 +266,9 @@
             @endforeach
         </div>
     @endif
+
+    @endforeach
+    {{-- кінець @foreach($reportByPlan) --}}
 
     <script>
         setTimeout(function() {

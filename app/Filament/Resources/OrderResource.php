@@ -87,7 +87,7 @@ class OrderResource extends Resource
                             ->label('Тариф')
                             ->relationship('tariff', 'name', fn (Builder $query) => $query->where('is_active', true))
                             // 🔥 Динамічна назва проєкту з бази (або резервна зі старого поля)
-                            ->getOptionLabelFromRecordUsing(fn ($record) => 
+                            ->getOptionLabelFromRecordUsing(fn ($record) =>
                                 "{$record->name} (" . ($record->projectData?->name ?? $record->project) . ")"
                             )
                             ->required()
@@ -97,6 +97,11 @@ class OrderResource extends Resource
                                 if ($tariff) {
                                     // Оновлюємо проєкт при зміні тарифу
                                     $set('project', $tariff->project);
+                                    // Підставляємо план меню з тарифу (перезаписує системний дефолт);
+                                    // якщо у тарифа план не вказано — лишаємо поточне значення.
+                                    if (!empty($tariff->default_menu_plan_id)) {
+                                        $set('menu_plan_id', $tariff->default_menu_plan_id);
+                                    }
                                     static::updateOrderTotals($set, $get);
                                 }
                             })
@@ -108,7 +113,37 @@ class OrderResource extends Resource
                             ->required()
                             ->label('Калорії (Ккал)')
                             ->live(onBlur: true)
-                            ->afterStateUpdated(fn (Set $set, Get $get) => static::updateOrderTotals($set, $get)),
+                            ->afterStateUpdated(fn (Set $set, Get $get) => static::updateOrderTotals($set, $get))
+                            ->helperText(function (Get $get) {
+                                $cal = (int) $get('calories');
+                                $tariffId = $get('tariff_id');
+                                if (!$cal) return null;
+
+                                $range = \App\Models\CalorieRange::where('min_kcal', '<=', $cal)
+                                    ->where('max_kcal', '>=', $cal)->first();
+                                if (!$range) {
+                                    return new \Illuminate\Support\HtmlString(
+                                        '<span style="color:#ef4444;font-weight:700;">⚠️ Жоден діапазон калорій не охоплює '.$cal.' ккал — ціна буде 0₴. Створіть/розширте діапазон у «Діапазони калорій».</span>'
+                                    );
+                                }
+                                if (!$tariffId) return "Діапазон: {$range->name} ({$range->min_kcal}–{$range->max_kcal} ккал)";
+
+                                $price = \App\Models\TariffPrice::where('tariff_id', $tariffId)
+                                    ->where('calorie_range_id', $range->id)->value('price_per_day');
+                                if ($price === null) {
+                                    return new \Illuminate\Support\HtmlString(
+                                        '<span style="color:#ef4444;font-weight:700;">⚠️ Для цього тарифу немає ціни на діапазон «'.$range->name.'» — ціна буде 0₴. Заповніть у «Категорії тарифів».</span>'
+                                    );
+                                }
+                                if ((float)$price <= 0) {
+                                    return new \Illuminate\Support\HtmlString(
+                                        '<span style="color:#f59e0b;font-weight:700;">⚠️ Ціна для діапазону «'.$range->name.'» = 0₴. Перевір налаштування тарифу.</span>'
+                                    );
+                                }
+                                return new \Illuminate\Support\HtmlString(
+                                    '<span style="color:#10b981;">Діапазон: <b>'.$range->name.'</b> · Ціна: <b>'.number_format((float)$price, 0, '.', ' ').' ₴/день</b></span>'
+                                );
+                            }),
 
                         Hidden::make('status')
                             ->default('new'),
@@ -150,7 +185,19 @@ class OrderResource extends Resource
                             ])
                             ->default('cyclic')
                             ->required()
-                            ->columnSpan(2),
+                            ->live()
+                            ->columnSpan(1),
+
+                        Select::make('menu_plan_id')
+                            ->label('План меню')
+                            ->relationship('menuPlan', 'name')
+                            ->options(fn () => \App\Models\MenuPlan::orderBy('sort_order')->orderBy('id')->pluck('name', 'id'))
+                            ->default(fn () => optional(\App\Models\MenuPlan::default())->id)
+                            ->visible(fn (Get $get) => $get('menu_type') !== 'individual')
+                            ->required(fn (Get $get) => $get('menu_type') !== 'individual')
+                            ->preload()
+                            ->searchable()
+                            ->columnSpan(1),
 
                         Select::make('schedule_type')
                             ->label('Графік доставки')
@@ -267,6 +314,9 @@ class OrderResource extends Resource
                                         $tariff = Tariff::find($state);
                                         if ($tariff) {
                                             $set('project', $tariff->project);
+                                            if (!empty($tariff->default_menu_plan_id)) {
+                                                $set('menu_plan_id', $tariff->default_menu_plan_id);
+                                            }
                                         }
                                         static::updateRationPrice($state, (int) $get('calories'), $set);
                                     }),
@@ -289,7 +339,17 @@ class OrderResource extends Resource
                                         'individual' => 'Персональне (індивідуальник)',
                                     ])
                                     ->default('cyclic')
+                                    ->live()
                                     ->required(),
+
+                                Select::make('menu_plan_id')
+                                    ->label('План меню')
+                                    ->options(fn () => \App\Models\MenuPlan::orderBy('sort_order')->orderBy('id')->pluck('name', 'id'))
+                                    ->default(fn () => optional(\App\Models\MenuPlan::default())->id)
+                                    ->visible(fn (Get $get) => $get('menu_type') !== 'individual')
+                                    ->required(fn (Get $get) => $get('menu_type') !== 'individual')
+                                    ->preload()
+                                    ->searchable(),
 
                                 TextInput::make('price_per_day')
                                     ->label('Ціна / день')

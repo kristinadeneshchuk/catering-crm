@@ -142,6 +142,15 @@ class ClientResource extends Resource
                 Section::make('Персоналізація меню')
                     ->icon('heroicon-o-no-symbol')
                     ->schema([
+                        Select::make('replacementBundles')
+                            ->label('Шаблони замін')
+                            ->helperText('Усі інгредієнти з шаблону автоматично вважаються виключеннями (наприклад «Без м\'яса», «Безлактозний»).')
+                            ->relationship('replacementBundles', 'name')
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->columnSpanFull(),
+
                         Select::make('ingredientExclusions')
                             ->label('Продукти виключення')
                             ->relationship('ingredientExclusions', 'name')

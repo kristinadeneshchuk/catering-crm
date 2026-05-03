@@ -18,68 +18,88 @@ class PackagingAssemblyController extends Controller
     public function index(Request $request)
     {
         $date = $request->input('date', Carbon::tomorrow()->format('Y-m-d'));
-        $targetDate = Carbon::parse($date);
 
-        // Меню на цю дату (цикл)
-        $cycleDays    = (int) Setting::where('key', 'menu_cycle_days')->value('value') ?: 24;
-        $startDateStr = Setting::where('key', 'menu_cycle_start_date')->value('value') ?: '2025-01-01';
-        $anchorDate   = Carbon::parse($startDateStr)->startOfDay();
-        $diff         = abs($targetDate->startOfDay()->diffInDays($anchorDate));
-        $dayNum       = ($diff % $cycleDays) + 1;
-
-        $menu = DailyMenu::with([
-            'menuItems.dish.dishIngredients.childDish',
-            'menuItems.mealType',
-        ])->where('day_number', $dayNum)->first();
-
-        if (!$menu) {
-            return view('kitchen.packaging-assembly', [
-                'date'        => $date,
-                'menu'        => null,
-                'summary'     => [],
-                'perClient'   => [],
-                'totalCost'   => 0,
-            ]);
-        }
-
-        // Всі замовлення на цю дату
+        // Усі активні замовлення на цю дату
         $orders = Order::whereIn('status', ['new', 'active'])
             ->whereHas('orderDays', fn ($q) => $q->where('date', $date))
             ->with([
                 'client.mealTypes',
                 'client.dishExclusions',
+                'menuPlan',
                 'replacements.replacementDish',
                 'orderDays' => fn ($q) => $q->where('date', $date),
                 'projectData',
             ])
             ->get();
 
-        // Усі пакувальні матеріали з проставленим типом
+        if ($orders->isEmpty()) {
+            return view('kitchen.packaging-assembly', [
+                'date'      => $date,
+                'menu'      => null,
+                'summary'   => [],
+                'perClient' => [],
+                'totalCost' => 0,
+            ]);
+        }
+
         $allPackaging = Packaging::whereNotNull('packaging_type')->get()->keyBy('id');
 
-        // Зведений список по всіх замовленнях
-        $summary = $this->packagingService->getDailyPackagingSummary($orders, $menu, $allPackaging);
+        // Групуємо замовлення по планах меню — кожен план має свій день циклу і своє меню
+        $ordersByPlan = $orders->groupBy(fn ($o) => $o->effectiveMenuPlan()?->id ?? 0);
 
-        // Деталізація по кожному клієнту
+        $summary = []; // зведений список — підсумки по упаковці складаємо з усіх планів
         $perClient = [];
-        foreach ($orders as $order) {
-            if (!$order->client) continue;
+        $primaryMenu = null; // для зворотної сумісності view — лишаємо одне меню (для шапки)
 
-            $breakdown = $this->packagingService->getOrderPackagingBreakdown($order, $menu, $allPackaging);
-            if (empty($breakdown)) continue;
+        foreach ($ordersByPlan as $planId => $planOrders) {
+            $plan = $planOrders->first()->effectiveMenuPlan();
+            if (!$plan) continue;
 
-            $orderDay = $order->orderDays->first();
+            $dayNum = $plan->globalDayFor($date);
 
-            $perClient[] = [
-                'client_id'      => $order->client->id,
-                'client_name'    => $order->client->name,
-                'calories'       => (int) $order->calories,
-                'project'        => $order->projectData?->name ?? ($order->project ?? '—'),
-                'project_slug'   => $order->project ?? 'none',
-                'address'        => $orderDay?->address ?? '—',
-                'items'          => $breakdown,
-                'total_cost'     => collect($breakdown)->sum('total_price'),
-            ];
+            $menu = DailyMenu::with([
+                'menuItems.dish.dishIngredients.childDish',
+                'menuItems.mealType',
+            ])
+                ->where('menu_plan_id', $plan->id)
+                ->where('day_number', $dayNum)
+                ->first();
+            if (!$menu) continue;
+
+            $primaryMenu = $primaryMenu ?? $menu;
+
+            // Зведений список цього плану — додаємо до глобального
+            $planSummary = $this->packagingService->getDailyPackagingSummary($planOrders, $menu, $allPackaging);
+            foreach ($planSummary as $packagingId => $row) {
+                if (!isset($summary[$packagingId])) {
+                    $summary[$packagingId] = $row;
+                } else {
+                    $summary[$packagingId]['total_qty']   = ($summary[$packagingId]['total_qty'] ?? 0) + ($row['total_qty'] ?? 0);
+                    $summary[$packagingId]['total_cost']  = ($summary[$packagingId]['total_cost'] ?? 0) + ($row['total_cost'] ?? 0);
+                    $summary[$packagingId]['total_price'] = ($summary[$packagingId]['total_price'] ?? 0) + ($row['total_price'] ?? 0);
+                }
+            }
+
+            foreach ($planOrders as $order) {
+                if (!$order->client) continue;
+
+                $breakdown = $this->packagingService->getOrderPackagingBreakdown($order, $menu, $allPackaging);
+                if (empty($breakdown)) continue;
+
+                $orderDay = $order->orderDays->first();
+
+                $perClient[] = [
+                    'client_id'    => $order->client->id,
+                    'client_name'  => $order->client->name,
+                    'calories'     => (int) $order->calories,
+                    'project'      => $order->projectData?->name ?? ($order->project ?? '—'),
+                    'project_slug' => $order->project ?? 'none',
+                    'address'      => $orderDay?->address ?? '—',
+                    'items'        => $breakdown,
+                    'total_cost'   => collect($breakdown)->sum('total_price'),
+                    'plan_name'    => $plan->name,
+                ];
+            }
         }
 
         // Сортуємо по бренду, потім по імені клієнта
@@ -89,8 +109,12 @@ class PackagingAssemblyController extends Controller
 
         $totalCost = collect($summary)->sum('total_cost');
 
-        return view('kitchen.packaging-assembly', compact(
-            'date', 'menu', 'summary', 'perClient', 'totalCost'
-        ));
+        return view('kitchen.packaging-assembly', [
+            'date'      => $date,
+            'menu'      => $primaryMenu,
+            'summary'   => $summary,
+            'perClient' => $perClient,
+            'totalCost' => $totalCost,
+        ]);
     }
 }

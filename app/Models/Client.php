@@ -76,11 +76,35 @@ class Client extends Authenticatable
     public function dishExclusions(): BelongsToMany
     {
         return $this->belongsToMany(
-            Dish::class, 
-            'client_dish_exclusion', 
-            'client_id', 
+            Dish::class,
+            'client_dish_exclusion',
+            'client_id',
             'dish_id'
         )->withTimestamps();
+    }
+
+    public function replacementBundles(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            ReplacementBundle::class,
+            'client_replacement_bundle',
+            'client_id',
+            'replacement_bundle_id'
+        )->withTimestamps();
+    }
+
+    /**
+     * Усі ID інгредієнтів, яких клієнт не їсть:
+     * ручні `ingredientExclusions` ∪ `original_ingredient_id` з прив'язаних шаблонів.
+     */
+    public function effectiveExcludedIngredientIds(): array
+    {
+        $manual = $this->ingredientExclusions->pluck('id');
+
+        $fromBundles = $this->replacementBundles
+            ->flatMap(fn ($b) => $b->items->pluck('original_ingredient_id'));
+
+        return $manual->merge($fromBundles)->unique()->values()->all();
     }
 
     public function mealTypes(): BelongsToMany
@@ -88,8 +112,24 @@ class Client extends Authenticatable
         return $this->belongsToMany(MealType::class, 'client_meal_type');
     }
 
+    // === БАЛАНС (єдине джерело правди) ===
+
+    /**
+     * Перераховує balance з нуля за формулою:
+     * SUM(income) − SUM(refund) − SUM(orders.final_price).
+     * Використовується замість increment/decrement, щоб поле не дрейфувало.
+     */
+    public function syncBalance(): void
+    {
+        $income     = (float) $this->transactions()->where('type', 'income')->sum('amount');
+        $refund     = (float) $this->transactions()->where('type', 'refund')->sum('amount');
+        $ordersCost = (float) $this->orders()->sum('final_price');
+
+        $this->updateQuietly(['balance' => $income - $refund - $ordersCost]);
+    }
+
     // === ЛОГІКА АВТОМАТИЧНОЇ ОПЛАТИ (FIFO) ===
-    
+
     /**
      * Цей метод бере всі гроші, які вніс клієнт, і "гасить" ними замовлення
      * у хронологічному порядку (від старих до нових).

@@ -5,6 +5,26 @@
         </form>
     </x-filament::section>
 
+    @if(!empty($this->missingPlans))
+        <div style="background:#7f1d1d; border:2px solid #f87171; border-radius:12px; padding:14px 18px; margin-bottom:18px; color:#fee2e2;">
+            <div style="font-weight:900; font-size:14px; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.3px;">
+                ⚠️ Не вистачає меню для деяких планів
+            </div>
+            @foreach($this->missingPlans as $mp)
+                <div style="margin-bottom:6px; font-size:13px;">
+                    <strong style="color:#fff;">{{ $mp['plan']->name }}</strong> — день №{{ $mp['day_number'] }} циклу не створено.
+                    Зачеплено клієнтів: <strong>{{ $mp['orders_count'] }}</strong>
+                    @if(!empty($mp['client_names']))
+                        ({{ implode(', ', $mp['client_names']) }}@if($mp['orders_count'] > count($mp['client_names'])), …@endif)
+                    @endif
+                </div>
+            @endforeach
+            <div style="font-size:11px; margin-top:8px; color:#fecaca;">
+                Створи день меню у «Циклічне меню» → відповідна вкладка плану → «Додати день».
+            </div>
+        </div>
+    @endif
+
     @if(empty($shoppingList))
         <div style="padding:32px;text-align:center;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:12px;">
             <div style="font-size:32px;color:#22c55e;">✓</div>

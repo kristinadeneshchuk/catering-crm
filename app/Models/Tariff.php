@@ -15,6 +15,20 @@ class Tariff extends Model
     // Дозволяємо масове заповнення всіх полів
     protected $guarded = [];
 
+    protected static function booted(): void
+    {
+        // Коли створили новий тариф — для кожного існуючого діапазону калорій
+        // одразу робимо рядок ціни (0₴), щоб менеджер бачив повну матрицю.
+        static::created(function (Tariff $tariff) {
+            foreach (CalorieRange::all() as $range) {
+                TariffPrice::firstOrCreate(
+                    ['tariff_id' => $tariff->id, 'calorie_range_id' => $range->id],
+                    ['price_per_day' => 0]
+                );
+            }
+        });
+    }
+
     /**
      * ПРАВИЛЬНИЙ ЗВ'ЯЗОК З ДІАПАЗОНАМИ КАЛОРІЙ
      * Це виправляє помилку "getResults() on null"
@@ -36,5 +50,13 @@ class Tariff extends Model
     public function projectData(): BelongsTo
     {
         return $this->belongsTo(Project::class, 'project', 'slug');
+    }
+
+    /**
+     * План меню за замовчуванням — підставляється у нове замовлення з цим тарифом.
+     */
+    public function defaultMenuPlan(): BelongsTo
+    {
+        return $this->belongsTo(MenuPlan::class, 'default_menu_plan_id');
     }
 }

@@ -49,43 +49,24 @@ class Transaction extends Model
     // === ЛОГІКА БАЛАНСУ ТА АВТО-ОПЛАТИ ===
     protected static function booted()
     {
-        // Коли створили транзакцію
-        static::created(function ($transaction) {
-            // Логіка для клієнтів (залишаємо як була)
-            if ($transaction->order) {
-                $client = $transaction->order->client;
-                if ($client) {
-                    if ($transaction->type === 'income') {
-                        $client->increment('balance', $transaction->amount);
-                    } else {
-                        $client->decrement('balance', $transaction->amount);
-                    }
-                    $client->recalculateOrderPaymentStatus();
-                }
+        // Будь-яка зміна транзакції клієнта → перерахувати баланс і FIFO статуси.
+        // Не використовуємо increment/decrement, щоб поле balance не дрейфувало —
+        // syncBalance() завжди обчислює з нуля за формулою.
+        $syncClient = function ($transaction) {
+            if ($transaction->order && $transaction->order->client) {
+                $transaction->order->client->syncBalance();
+                $transaction->order->client->recalculateOrderPaymentStatus();
             }
-            
-            // Примітка: Для співробітників баланс (борг) ми зменшуємо вручну в EmployeeResource,
-            // щоб мати повний контроль над процесом виплати.
-        });
+        };
 
-        // Коли видалили транзакцію (СКАСУВАННЯ ПОМИЛКИ)
-        static::deleted(function ($transaction) {
-            // 1. Якщо це була транзакція замовлення (клієнт)
-            if ($transaction->order) {
-                $client = $transaction->order->client;
-                if ($client) {
-                    if ($transaction->type === 'income') {
-                        $client->decrement('balance', $transaction->amount);
-                    } else {
-                        $client->increment('balance', $transaction->amount);
-                    }
-                    $client->recalculateOrderPaymentStatus();
-                }
-            }
+        static::created($syncClient);
+        static::updated($syncClient);
 
-            // 🔥 2. НОВА ЛОГІКА: Якщо це була виплата зарплати (співробітник)
+        static::deleted(function ($transaction) use ($syncClient) {
+            $syncClient($transaction);
+
+            // Якщо це була виплата зарплати (співробітник) — повертаємо суму у "Борг компанії"
             if ($transaction->employee_id && $transaction->type === 'expense') {
-                // Повертаємо суму назад у "Борг компанії"
                 $transaction->employee()->increment('balance', $transaction->amount);
             }
         });
