@@ -29,6 +29,7 @@ class StatsOverview extends Widget
         // День меню (TODO multi-plan: для огляду показуємо день дефолтного плану)
         $defaultPlan = \App\Models\MenuPlan::default();
         $menuDay     = $defaultPlan ? $defaultPlan->globalDayFor($now) : 0;
+        $cycleDays   = $defaultPlan ? (int) $defaultPlan->cycle_days : 0;
 
         // Порцій сьогодні
         $todayCount = OrderDay::where('date', $today)
