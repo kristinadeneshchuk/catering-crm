@@ -5,6 +5,7 @@ namespace App\Filament\Resources\OrderResource\Pages;
 use App\Filament\Resources\OrderResource;
 use Filament\Resources\Pages\CreateRecord;
 use App\Models\Client;
+use App\Models\Order;
 use App\Models\OrderDay;
 use App\Models\CalorieRange;
 use App\Models\TariffPrice;
@@ -25,15 +26,43 @@ class CreateOrder extends CreateRecord
         parent::mount();
 
         $clientId = request('client_id');
-        if ($clientId) {
-            $client = Client::find($clientId);
-            if ($client && $client->target_kcal) {
-                $this->form->fill([
-                    'client_id' => (int) $clientId,
-                    'calories'  => $client->target_kcal,
-                ]);
-            }
+        if (!$clientId) {
+            return;
         }
+
+        $client = Client::find($clientId);
+        if (!$client) {
+            return;
+        }
+
+        $defaults = ['client_id' => (int) $clientId];
+
+        // Підтягуємо дані з найсвіжішого замовлення клієнта (батьківського, не скасованого),
+        // щоб менеджер не вводив повторно тариф/меню/графік доставки.
+        $lastOrder = Order::where('client_id', $clientId)
+            ->whereNull('parent_order_id')
+            ->where('status', '!=', 'cancelled')
+            ->latest('id')
+            ->first();
+
+        if ($lastOrder) {
+            $defaults += array_filter([
+                'tariff_id'     => $lastOrder->tariff_id,
+                'project'       => $lastOrder->project,
+                'calories'      => $lastOrder->calories,
+                'menu_type'     => $lastOrder->menu_type,
+                'menu_plan_id'  => $lastOrder->menu_plan_id,
+                'schedule_type' => $lastOrder->schedule_type,
+                'delivery_time' => $lastOrder->delivery_time,
+            ], fn ($v) => $v !== null && $v !== '');
+        }
+
+        // Фолбек на калораж клієнта, якщо минулого замовлення не було
+        if (empty($defaults['calories']) && $client->target_kcal) {
+            $defaults['calories'] = $client->target_kcal;
+        }
+
+        $this->form->fill($defaults);
     }
 
     protected function getRedirectUrl(): string
