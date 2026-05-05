@@ -11,19 +11,14 @@ use Illuminate\Console\Command;
  */
 class DishCheckCommand extends Command
 {
-    protected $signature = 'nutrition:dish:check {id : Dish ID} {--json : Machine-readable output}';
+    protected $signature = 'nutrition:dish:check {id : Dish ID або частина назви} {--json : Machine-readable output}';
 
     protected $description = 'Read-only: sanity check on a dish tech card';
 
     public function handle(): int
     {
-        $dish = Dish::with([
-            'dishIngredients.ingredient',
-            'dishIngredients.childDish.dishIngredients.ingredient',
-        ])->find($this->argument('id'));
-
-        if (!$dish) {
-            $this->error("Страву #{$this->argument('id')} не знайдено.");
+        $dish = $this->resolveDish($this->argument('id'));
+        if (!$dish instanceof Dish) {
             return self::FAILURE;
         }
 
@@ -122,5 +117,25 @@ class DishCheckCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    private function resolveDish(string $idOrName): Dish|false
+    {
+        $with = [
+            'dishIngredients.ingredient',
+            'dishIngredients.childDish.dishIngredients.ingredient',
+        ];
+        if (is_numeric($idOrName)) {
+            $dish = Dish::with($with)->find((int) $idOrName);
+            if (!$dish) { $this->error("Страву #{$idOrName} не знайдено."); return false; }
+            return $dish;
+        }
+        $matches = Dish::with($with)->where('name', 'like', '%' . $idOrName . '%')->get();
+        if ($matches->isEmpty()) { $this->error("Страву «{$idOrName}» не знайдено."); return false; }
+        if ($matches->count() === 1) return $matches->first();
+        $this->warn("Знайдено кілька страв за запитом «{$idOrName}»:");
+        foreach ($matches as $d) $this->line("  #{$d->id} — {$d->name}");
+        $this->line('Уточни запит або вкажи ID.');
+        return false;
     }
 }

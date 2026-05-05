@@ -23,13 +23,15 @@ Run these from the project root (`/Users/kristinadeneshchuk/Documents/Work/crm_h
 | Command | Purpose |
 |---|---|
 | `php artisan nutrition:client {id} [--json]` | Client profile: target_kcal, meal types with energy %, allergens, exclusions, replacement bundles, active tariff/order |
-| `php artisan nutrition:dish {id} [--json]` | Tech card: ingredients with grams, per-ingredient КБЖУ contribution, totals, allergens, cost |
-| `php artisan nutrition:menu {dailyMenuId} [--json]` | Daily-menu snapshot: dishes by meal type, target vs actual КБЖУ, per-meal breakdown |
-| `php artisan nutrition:menu:analyze {dailyMenuId} [--client=ID] [--json]` | Diagnostic: deviations from target by K/B/Z/U and per meal; with `--client` adjusts target to client's `target_kcal`, scales menu, flags allergen and exclusion conflicts |
+| `php artisan nutrition:dish {idOrName} [--json]` | Tech card. Argument accepts either numeric Dish ID OR a substring of the dish name. If multiple matches — lists them. |
+| `php artisan nutrition:menu {dailyMenuId?} [--plan=NAME] [--day=N] [--json]` | Daily-menu snapshot. Pass DailyMenu ID, OR `--plan="Стандарт" --day=27` to look up by plan name and cycle day. |
+| `php artisan nutrition:menu:analyze {dailyMenuId?} [--plan=NAME] [--day=N] [--client=ID] [--json]` | Diagnostic. Same arg flexibility as `nutrition:menu`. With `--client` scales target to client's `target_kcal`, flags allergen and exclusion conflicts. |
 | `php artisan nutrition:dish:find [--kcal=N] [--kcal-tol=PERCENT] [--protein-min=N] [--fat-max=N] [--carb-max=N] [--meal=lunch] [--exclude-ingr=id,id] [--no-allergens=name,name] [--name-like=...] [--limit=20] [--json]` | Search dish catalog by parameters. Used to suggest substitutes |
-| `php artisan nutrition:dish:compare {id1} {id2} [--json]` | Side-by-side: two dishes by КБЖУ, cost, ingredients, allergens |
-| `php artisan nutrition:dish:check {id} [--json]` | Sanity check on a tech card: ingredients without КБЖУ data, suspicious yield_percent, missing prices |
+| `php artisan nutrition:dish:compare {id1OrName} {id2OrName} [--json]` | Side-by-side: two dishes by КБЖВ, cost, ingredients, allergens. Each arg accepts ID or name substring. |
+| `php artisan nutrition:dish:check {idOrName} [--json]` | Sanity check on a tech card: ingredients without КБЖВ data, suspicious yield_percent, missing prices |
 | `php artisan nutrition:client:day {clientId} {date} [--json]` | Pulls the client's effective daily menu for a date (via active order's MenuPlan) and runs analyze on it |
+
+**Important:** the user typically does NOT know DailyMenu IDs or Dish IDs. They speak in names ("план Стандарт день 27", "блюдо Боул з тунцем"). Always try lookup-by-name first; fall back to asking for ID only if name is ambiguous.
 
 `--json` outputs machine-readable JSON. Default is human-readable Russian text. **Always use `--json` when chaining commands** — it's faster and unambiguous to parse.
 

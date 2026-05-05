@@ -10,19 +10,14 @@ use Illuminate\Console\Command;
  */
 class DishCommand extends Command
 {
-    protected $signature = 'nutrition:dish {id : Dish ID} {--json : Machine-readable output}';
+    protected $signature = 'nutrition:dish {id : Dish ID або частина назви} {--json : Machine-readable output}';
 
-    protected $description = 'Read-only: dish tech card with ingredients, КБЖУ, allergens, cost';
+    protected $description = 'Read-only: dish tech card with ingredients, КБЖВ, allergens, cost';
 
     public function handle(): int
     {
-        $dish = Dish::with([
-            'dishIngredients.ingredient.allergens:id,name',
-            'dishIngredients.childDish.dishIngredients.ingredient',
-        ])->find($this->argument('id'));
-
-        if (!$dish) {
-            $this->error("Страву #{$this->argument('id')} не знайдено.");
+        $dish = $this->resolveDish($this->argument('id'));
+        if (!$dish instanceof Dish) {
             return self::FAILURE;
         }
 
@@ -145,5 +140,42 @@ class DishCommand extends Command
     private function ingredientHasKbzhu($ing): bool
     {
         return ((float)$ing->proteins_100g + (float)$ing->fats_100g + (float)$ing->carbs_100g) > 0;
+    }
+
+    /**
+     * Accept either numeric Dish ID or substring of dish name.
+     * Returns Dish on success, false on failure (with $this->error already emitted).
+     */
+    private function resolveDish(string $idOrName): Dish|false
+    {
+        $with = [
+            'dishIngredients.ingredient.allergens:id,name',
+            'dishIngredients.childDish.dishIngredients.ingredient',
+        ];
+
+        if (is_numeric($idOrName)) {
+            $dish = Dish::with($with)->find((int) $idOrName);
+            if (!$dish) {
+                $this->error("Страву #{$idOrName} не знайдено.");
+                return false;
+            }
+            return $dish;
+        }
+
+        $matches = Dish::with($with)->where('name', 'like', '%' . $idOrName . '%')->get();
+        if ($matches->isEmpty()) {
+            $this->error("Страву «{$idOrName}» не знайдено.");
+            return false;
+        }
+        if ($matches->count() === 1) {
+            return $matches->first();
+        }
+        $this->warn("Знайдено кілька страв за запитом «{$idOrName}»:");
+        foreach ($matches as $d) {
+            $this->line("  #{$d->id} — {$d->name}");
+        }
+        $this->line('');
+        $this->line('Уточни запит або вкажи ID.');
+        return false;
     }
 }

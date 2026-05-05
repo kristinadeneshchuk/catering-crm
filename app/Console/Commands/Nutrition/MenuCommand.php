@@ -10,21 +10,18 @@ use Illuminate\Console\Command;
  */
 class MenuCommand extends Command
 {
-    protected $signature = 'nutrition:menu {id : DailyMenu ID} {--json : Machine-readable output}';
+    protected $signature = 'nutrition:menu
+        {id? : DailyMenu ID (або використовуй --plan + --day)}
+        {--plan= : Назва або ID плану меню}
+        {--day= : Номер дня циклу}
+        {--json : Machine-readable output}';
 
-    protected $description = 'Read-only: daily menu snapshot with per-meal КБЖУ';
+    protected $description = 'Read-only: daily menu snapshot with per-meal КБЖВ';
 
     public function handle(): int
     {
-        $menu = DailyMenu::with([
-            'menuPlan:id,name,cycle_days',
-            'menuItems.mealType:id,name,sort_order,energy_percent',
-            'menuItems.dish.dishIngredients.ingredient',
-            'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
-        ])->find($this->argument('id'));
-
-        if (!$menu) {
-            $this->error("DailyMenu #{$this->argument('id')} не знайдено.");
+        $menu = $this->resolveMenu();
+        if (!$menu instanceof DailyMenu) {
             return self::FAILURE;
         }
 
@@ -125,5 +122,49 @@ class MenuCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Resolves a DailyMenu either by its ID or by --plan (name/ID) + --day (cycle day).
+     */
+    private function resolveMenu(): DailyMenu|false
+    {
+        $with = [
+            'menuPlan:id,name,cycle_days',
+            'menuItems.mealType:id,name,sort_order,energy_percent',
+            'menuItems.dish.dishIngredients.ingredient',
+            'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
+        ];
+
+        if ($id = $this->argument('id')) {
+            $menu = DailyMenu::with($with)->find((int) $id);
+            if (!$menu) { $this->error("DailyMenu #{$id} не знайдено."); return false; }
+            return $menu;
+        }
+
+        $plan = $this->option('plan');
+        $day  = $this->option('day');
+        if (!$plan || !$day) {
+            $this->error('Вкажи DailyMenu ID АБО --plan="..." і --day=N.');
+            return false;
+        }
+
+        $menuPlan = is_numeric($plan)
+            ? \App\Models\MenuPlan::find((int) $plan)
+            : \App\Models\MenuPlan::where('name', 'like', '%' . $plan . '%')->orderBy('id')->first();
+        if (!$menuPlan) {
+            $this->error("План «{$plan}» не знайдено.");
+            return false;
+        }
+
+        $menu = DailyMenu::with($with)
+            ->where('menu_plan_id', $menuPlan->id)
+            ->where('day_number', (int) $day)
+            ->first();
+        if (!$menu) {
+            $this->error("У плані «{$menuPlan->name}» (id {$menuPlan->id}) немає дня {$day}.");
+            return false;
+        }
+        return $menu;
     }
 }

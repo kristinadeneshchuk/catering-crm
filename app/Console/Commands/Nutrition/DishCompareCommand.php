@@ -10,17 +10,16 @@ use Illuminate\Console\Command;
  */
 class DishCompareCommand extends Command
 {
-    protected $signature = 'nutrition:dish:compare {id1 : First dish ID} {id2 : Second dish ID} {--json : Machine-readable output}';
+    protected $signature = 'nutrition:dish:compare {id1 : Перша страва (ID або назва)} {id2 : Друга страва (ID або назва)} {--json : Machine-readable output}';
 
     protected $description = 'Read-only: compare two dishes by KBZHU, cost, allergens';
 
     public function handle(): int
     {
-        $a = $this->load($this->argument('id1'));
-        $b = $this->load($this->argument('id2'));
-
-        if (!$a) { $this->error("Страву #{$this->argument('id1')} не знайдено."); return self::FAILURE; }
-        if (!$b) { $this->error("Страву #{$this->argument('id2')} не знайдено."); return self::FAILURE; }
+        $a = $this->resolveDish($this->argument('id1'));
+        if (!$a) return self::FAILURE;
+        $b = $this->resolveDish($this->argument('id2'));
+        if (!$b) return self::FAILURE;
 
         $payload = ['a' => $a, 'b' => $b, 'delta' => [
             'kcal' => round($b['kcal'] - $a['kcal'], 1),
@@ -61,13 +60,26 @@ class DishCompareCommand extends Command
         return self::SUCCESS;
     }
 
-    private function load($id): ?array
+    private function resolveDish(string $idOrName): ?array
     {
-        $dish = Dish::with([
+        $with = [
             'dishIngredients.ingredient.allergens:id,name',
             'dishIngredients.childDish.dishIngredients.ingredient.allergens:id,name',
-        ])->find($id);
-        if (!$dish) return null;
+        ];
+        if (is_numeric($idOrName)) {
+            $dish = Dish::with($with)->find((int) $idOrName);
+            if (!$dish) { $this->error("Страву #{$idOrName} не знайдено."); return null; }
+        } else {
+            $matches = Dish::with($with)->where('name', 'like', '%' . $idOrName . '%')->get();
+            if ($matches->isEmpty()) { $this->error("Страву «{$idOrName}» не знайдено."); return null; }
+            if ($matches->count() > 1) {
+                $this->warn("Знайдено кілька страв за запитом «{$idOrName}»:");
+                foreach ($matches as $d) $this->line("  #{$d->id} — {$d->name}");
+                $this->line('Уточни запит або вкажи ID.');
+                return null;
+            }
+            $dish = $matches->first();
+        }
 
         $t = $dish->calculated_totals;
         $allergens = [];
