@@ -142,19 +142,45 @@ class MenuCommand extends Command
             return $menu;
         }
 
-        $plan = $this->option('plan');
+        $plan = trim((string) $this->option('plan'));
         $day  = $this->option('day');
         if (!$plan || !$day) {
             $this->error('Вкажи DailyMenu ID АБО --plan="..." і --day=N.');
             return false;
         }
 
-        $menuPlan = is_numeric($plan)
-            ? \App\Models\MenuPlan::find((int) $plan)
-            : \App\Models\MenuPlan::where('name', 'like', '%' . $plan . '%')->orderBy('id')->first();
-        if (!$menuPlan) {
-            $this->error("План «{$plan}» не знайдено.");
-            return false;
+        if (is_numeric($plan)) {
+            $menuPlan = \App\Models\MenuPlan::find((int) $plan);
+            if (!$menuPlan) {
+                $this->error("План #{$plan} не знайдено.");
+                return false;
+            }
+        } else {
+            $candidates = \App\Models\MenuPlan::where('name', 'like', '%' . $plan . '%')
+                ->whereHas('dailyMenus', fn($q) => $q->where('day_number', (int) $day))
+                ->get();
+            if ($candidates->count() > 1) {
+                $this->warn("Кілька планів «{$plan}» мають день {$day}:");
+                foreach ($candidates as $p) {
+                    $this->line("  #{$p->id} — {$p->name} (cycle_days={$p->cycle_days})");
+                }
+                $this->error('Уточни план по ID.');
+                return false;
+            }
+            if ($candidates->count() === 1) {
+                $menuPlan = $candidates->first();
+            } else {
+                $all = \App\Models\MenuPlan::where('name', 'like', '%' . $plan . '%')->get();
+                if ($all->isEmpty()) {
+                    $this->error("План «{$plan}» не знайдено.");
+                } else {
+                    $this->warn("План «{$plan}» знайдено, але без дня {$day}:");
+                    foreach ($all as $p) {
+                        $this->line("  #{$p->id} — {$p->name} (cycle_days={$p->cycle_days})");
+                    }
+                }
+                return false;
+            }
         }
 
         $menu = DailyMenu::with($with)
