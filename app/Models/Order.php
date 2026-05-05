@@ -70,9 +70,17 @@ class Order extends Model
             }
 
             // --- Розрахунок базової ціни ---
-            // Для нових замовлень (або якщо price_per_day не встановлено) — беремо з тарифу
-            // Для існуючих замовлень — використовуємо збережену price_per_day (ціна не змінюється при оновленні тарифу)
-            if (!$order->exists || $order->price_per_day === null) {
+            // Для нових замовлень (або якщо price_per_day не встановлено) — беремо з тарифу.
+            // Для існуючих замовлень — також перераховуємо, якщо користувач явно змінив
+            // тариф або калораж (інакше зміни в формі ігнорувалися б, бо UI рахує ціну
+            // на льоту, а saving() перетирав би total_price старою price_per_day).
+            // Зміна цін у самому tariff_prices на існуючі замовлення, як і раніше, не впливає.
+            $shouldRecalcPrice = !$order->exists
+                || $order->price_per_day === null
+                || $order->isDirty('tariff_id')
+                || $order->isDirty('calories');
+
+            if ($shouldRecalcPrice) {
                 $range = CalorieRange::where('min_kcal', '<=', $order->calories)
                     ->where('max_kcal', '>=', $order->calories)
                     ->first();
