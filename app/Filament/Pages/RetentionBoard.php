@@ -107,12 +107,7 @@ class RetentionBoard extends KanbanBoard
                 
             Select::make('refusal_reason')
                 ->label('Причина відмови')
-                ->options([
-                    'expensive' => 'Задорого',
-                    'taste' => 'Не сподобалось',
-                    'vacation' => 'Відпустка / Від\'їзд',
-                    'other' => 'Інше',
-                ])
+                ->options(OrderCall::refusalReasons())
                 ->visible(fn (\Filament\Forms\Get $get) => $get('status') === 'refused'),
         ];
     }

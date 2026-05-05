@@ -111,3 +111,54 @@
         @endif
     </div>
 </div>
+
+{{-- ── Причини відмов ── --}}
+<div class="bg-zinc-900 border border-white/5 rounded-2xl shadow-2xl overflow-hidden mb-8">
+    <div class="p-6 border-b border-white/5 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+            <h3 class="text-lg text-white font-bold mb-1 flex items-center gap-2">
+                <svg class="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                Причини відмов
+            </h3>
+            <p class="text-zinc-500 text-sm">Чому клієнти не продовжують підписку (за обраний період)</p>
+        </div>
+        @if(($refusalReasonStats['total'] ?? 0) > 0)
+            <div class="text-right">
+                <div class="text-3xl font-black text-rose-400">{{ $refusalReasonStats['total'] }}</div>
+                <div class="text-zinc-500 text-xs uppercase tracking-widest">Всього відмов</div>
+                @if(($refusalReasonStats['without_reason'] ?? 0) > 0)
+                    <div class="text-zinc-500 text-xs mt-1">Без причини: <span class="text-zinc-300 font-semibold">{{ $refusalReasonStats['without_reason'] }}</span></div>
+                @endif
+            </div>
+        @endif
+    </div>
+
+    <div class="p-6">
+        @if(($refusalReasonStats['total'] ?? 0) > 0)
+            <div class="space-y-3">
+                @foreach($refusalReasonStats['rows'] as $row)
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-sm text-zinc-300 font-medium">
+                                @if($row['empty'])
+                                    <span class="text-zinc-500 italic">Без зазначеної причини</span>
+                                @else
+                                    {{ $row['label'] }}
+                                @endif
+                            </span>
+                            <span class="text-sm text-zinc-400">
+                                <span class="text-white font-bold">{{ $row['count'] }}</span>
+                                <span class="text-zinc-500 ml-1">({{ $row['pct'] }}%)</span>
+                            </span>
+                        </div>
+                        <div class="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                            <div class="h-full {{ $row['empty'] ? 'bg-zinc-600' : 'bg-rose-500' }} transition-all duration-500" style="width: {{ $row['pct'] }}%"></div>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        @else
+            <div class="text-center py-8 text-zinc-500">Немає відмов за обраний період.</div>
+        @endif
+    </div>
+</div>

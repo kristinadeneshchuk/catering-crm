@@ -12,6 +12,7 @@ use App\Models\DailyMenu;
 use App\Models\Ingredient;
 use App\Models\Client;
 use App\Models\EmployeeShift;
+use App\Models\OrderCall;
 use App\Models\Packaging;
 use App\Models\Transaction;
 use App\Services\FoodCostService;
@@ -471,6 +472,38 @@ class AnalyticsController extends Controller
             }
         }
 
+        // 6в. ПРИЧИНИ ВІДМОВ за період (з канбан-задач OrderCall)
+        $refusalRowsRaw = OrderCall::where('status', 'refused')
+            ->whereBetween('updated_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+            ->select('refusal_reason', \Illuminate\Support\Facades\DB::raw('COUNT(*) as cnt'))
+            ->groupBy('refusal_reason')
+            ->orderByDesc('cnt')
+            ->get();
+
+        $totalRefused = (int) $refusalRowsRaw->sum('cnt');
+        $withReason = (int) $refusalRowsRaw
+            ->filter(fn ($r) => !empty($r->refusal_reason))
+            ->sum('cnt');
+
+        $refusalRows = [];
+        foreach ($refusalRowsRaw as $r) {
+            $cnt = (int) $r->cnt;
+            $refusalRows[] = [
+                'key'   => $r->refusal_reason,
+                'label' => OrderCall::refusalReasonLabel($r->refusal_reason),
+                'count' => $cnt,
+                'pct'   => $totalRefused > 0 ? round(($cnt / $totalRefused) * 100, 1) : 0.0,
+                'empty' => empty($r->refusal_reason),
+            ];
+        }
+
+        $refusalReasonStats = [
+            'total'          => $totalRefused,
+            'with_reason'    => $withReason,
+            'without_reason' => $totalRefused - $withReason,
+            'rows'           => $refusalRows,
+        ];
+
         // 6б. INDIVIDUAL CLIENTS ANALYTICS
         ksort($indCalories);
         foreach ($indCalories as $indCal => &$cData) {
@@ -685,7 +718,8 @@ class AnalyticsController extends Controller
             'packagingCount', 'totalPackagingCost',
             'deliveryCostByDate', 'totalDeliveryCost',
             'projectStats',
-            'individualStats'
+            'individualStats',
+            'refusalReasonStats'
         ));
     }
 

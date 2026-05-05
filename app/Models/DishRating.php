@@ -38,7 +38,10 @@ class DishRating extends Model
             $starsLine = str_repeat('⭐', $stars) . str_repeat('☆', max(0, 5 - $stars));
 
             $dishName   = $rating->dish?->name ?? '—';
-            $clientName = $rating->order?->client?->name ?? '—';
+            $client     = $rating->order?->client;
+            $clientName = $client?->name ?? '—';
+            $phone      = $client?->phone;
+            $tg         = $client?->telegram_username;
 
             $lines = [];
             $lines[] = "📊 <b>Новий рейтинг</b>";
@@ -46,6 +49,15 @@ class DishRating extends Model
             $lines[] = "{$starsLine} <b>{$stars}/5</b>";
             $lines[] = "🍽 <b>Страва:</b> {$dishName}";
             $lines[] = "👤 <b>Клієнт:</b> {$clientName}";
+
+            if (!empty($phone)) {
+                $lines[] = "📞 <b>Телефон:</b> {$phone}";
+            }
+
+            if (!empty($tg)) {
+                $tgHandle = ltrim($tg, '@');
+                $lines[] = "✈️ <b>Telegram:</b> <a href=\"https://t.me/{$tgHandle}\">@{$tgHandle}</a>";
+            }
 
             if (!empty($rating->comment)) {
                 $lines[] = "💬 <b>Коментар:</b> {$rating->comment}";

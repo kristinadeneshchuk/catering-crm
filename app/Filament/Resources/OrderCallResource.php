@@ -45,12 +45,7 @@ class OrderCallResource extends Resource
                     
                 Select::make('refusal_reason')
                     ->label('Причина відмови')
-                    ->options([
-                        'expensive' => 'Задорого',
-                        'taste' => 'Не сподобалось',
-                        'vacation' => 'Відпустка / Від\'їзд',
-                        'other' => 'Інше',
-                    ]),
+                    ->options(OrderCall::refusalReasons()),
                     
                 DateTimePicker::make('next_call_at')
                     ->label('Коли перетелефонувати?'),
@@ -111,13 +106,7 @@ class OrderCallResource extends Resource
                 Tables\Columns\TextColumn::make('refusal_reason')
                     ->label('Причина')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'expensive' => 'Задорого',
-                        'taste' => 'Не смачно',
-                        'vacation' => 'Відпустка',
-                        'other' => 'Інше',
-                        default => $state,
-                    })
+                    ->formatStateUsing(fn (?string $state): string => OrderCall::refusalReasonLabel($state))
                     ->color('warning'),
 
                 Tables\Columns\TextColumn::make('next_call_at')
@@ -148,12 +137,7 @@ class OrderCallResource extends Resource
                 // Фільтр по причині відмови
                 Tables\Filters\SelectFilter::make('refusal_reason')
                     ->label('Причина відмови')
-                    ->options([
-                        'expensive' => 'Задорого',
-                        'taste' => 'Не сподобалось',
-                        'vacation' => 'Відпустка / Від\'їзд',
-                        'other' => 'Інше',
-                    ]),
+                    ->options(OrderCall::refusalReasons()),
 
                 // 🔥 НОВИЙ ФІЛЬТР ПО ГРАДАЦІЇ ЧАСУ
                 Tables\Filters\Filter::make('archived_time')

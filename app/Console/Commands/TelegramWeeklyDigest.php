@@ -93,7 +93,7 @@ class TelegramWeeklyDigest extends Command
         $lines[] = "❌ <b>Топ причини відмов:</b>";
         if ($refusals->isNotEmpty()) {
             foreach ($refusals as $i => $r) {
-                $lines[] = "  " . ($i + 1) . ". {$r->refusal_reason} ({$r->cnt})";
+                $lines[] = "  " . ($i + 1) . ". " . OrderCall::refusalReasonLabel($r->refusal_reason) . " ({$r->cnt})";
             }
         } else {
             $lines[] = "  Немає відмов за тиждень";

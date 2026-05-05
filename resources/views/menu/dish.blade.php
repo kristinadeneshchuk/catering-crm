@@ -339,30 +339,6 @@
         </div>
     </div>
 
-    {{-- Склад --}}
-    @if(!empty($ingredients))
-        <div class="ingredients-card">
-            <div class="card-title">Склад</div>
-
-            @foreach($ingredients as $ing)
-                <div class="ingredient-row">
-                    @if($ing['is_replaced'])
-                        <div class="ingredient-name replaced">
-                            <span class="ingredient-original">{{ $ing['original_name'] }}</span>
-                            <span class="ingredient-new">
-                                {{ $ing['name'] }}
-                                <span class="replaced-badge">заміна</span>
-                            </span>
-                        </div>
-                    @else
-                        <div class="ingredient-name">{{ $ing['name'] }}</div>
-                    @endif
-                    <div class="ingredient-weight">{{ $ing['net_weight'] }} г</div>
-                </div>
-            @endforeach
-        </div>
-    @endif
-
     {{-- Алергени --}}
     @if(!empty($allergens))
         <div class="allergens-card">
