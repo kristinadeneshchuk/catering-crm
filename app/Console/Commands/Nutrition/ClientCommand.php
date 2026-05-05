@@ -24,7 +24,7 @@ class ClientCommand extends Command
         ])->find($this->argument('id'));
 
         if (!$client) {
-            $this->error("Клиент #{$this->argument('id')} не найден.");
+            $this->error("Клієнт #{$this->argument('id')} не знайдено.");
             return self::FAILURE;
         }
 
@@ -87,14 +87,14 @@ class ClientCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->info("Клиент #{$payload['id']} — {$payload['name']}");
-        $this->line('  Целевая калорийность: ' . ($payload['target_kcal'] ?? '—') . ' ккал');
+        $this->info("Клієнт #{$payload['id']} — {$payload['name']}");
+        $this->line('  Цільова калорійність: ' . ($payload['target_kcal'] ?? '—') . ' ккал');
         $this->line('  Телефон: ' . ($payload['phone'] ?: '—'));
 
         $this->line('');
-        $this->info('Приёмы пищи:');
+        $this->info('Прийоми їжі:');
         if (empty($mealTypes)) {
-            $this->warn('  (не настроены — это сломает анализ меню)');
+            $this->warn('  (не налаштовані — це зламає аналіз меню)');
         } else {
             foreach ($mealTypes as $m) {
                 $tag = $m['is_overridden'] ? ' [override]' : '';
@@ -103,7 +103,7 @@ class ClientCommand extends Command
         }
 
         $this->line('');
-        $this->info('Аллергены (через эффективные исключения):');
+        $this->info('Алергени (через ефективні винятки):');
         if (empty($payload['allergen_ingredients'])) {
             $this->line('  (не задано)');
         } else {
@@ -113,32 +113,32 @@ class ClientCommand extends Command
         }
 
         $this->line('');
-        $this->info('Исключения:');
+        $this->info('Винятки:');
         $manualIngr = $payload['exclusions']['manual_ingredients'];
         $manualDish = $payload['exclusions']['manual_dishes'];
         $effectiveCount = count($payload['exclusions']['effective_ingredient_ids']);
-        $this->line('  Ингредиенты вручную: ' . (count($manualIngr) ? implode(', ', array_column($manualIngr, 'name')) : '—'));
-        $this->line('  Блюда вручную: ' . (count($manualDish) ? implode(', ', array_column($manualDish, 'name')) : '—'));
-        $this->line("  Эффективно исключено ингредиентов (с бандлами): {$effectiveCount}");
+        $this->line('  Інгредієнти вручну: ' . (count($manualIngr) ? implode(', ', array_column($manualIngr, 'name')) : '—'));
+        $this->line('  Страви вручну: ' . (count($manualDish) ? implode(', ', array_column($manualDish, 'name')) : '—'));
+        $this->line("  Ефективно виключено інгредієнтів (з бандлами): {$effectiveCount}");
 
         $this->line('');
-        $this->info('Бандлы замен:');
+        $this->info('Бандли замін:');
         if (empty($payload['replacement_bundles'])) {
-            $this->line('  (не привязаны)');
+            $this->line('  (не прив\'язані)');
         } else {
             foreach ($payload['replacement_bundles'] as $b) {
-                $this->line("  — {$b['name']} (#{$b['id']}): " . count($b['items']) . ' замен');
+                $this->line("  — {$b['name']} (#{$b['id']}): " . count($b['items']) . ' замін');
             }
         }
 
         $this->line('');
-        $this->info('Активный заказ:');
+        $this->info('Активне замовлення:');
         if (!$payload['active_order']) {
-            $this->line('  (нет)');
+            $this->line('  (немає)');
         } else {
             $o = $payload['active_order'];
             $this->line("  #{$o['id']} | {$o['status']} | {$o['calories']} ккал | план: " . ($o['menu_plan'] ?: '—') . " (id {$o['menu_plan_id']})");
-            $this->line("  период: {$o['start_date']} → {$o['end_date']}");
+            $this->line("  період: {$o['start_date']} → {$o['end_date']}");
         }
 
         return self::SUCCESS;

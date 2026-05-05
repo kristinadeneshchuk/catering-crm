@@ -21,14 +21,14 @@ class ClientDayCommand extends Command
     {
         $client = Client::find($this->argument('clientId'));
         if (!$client) {
-            $this->error("Клиент #{$this->argument('clientId')} не найден.");
+            $this->error("Клієнта #{$this->argument('clientId')} не знайдено.");
             return self::FAILURE;
         }
 
         try {
             $date = Carbon::parse($this->argument('date'));
         } catch (\Throwable $e) {
-            $this->error("Неверная дата: {$this->argument('date')} (ожидаю YYYY-MM-DD)");
+            $this->error("Невірна дата: {$this->argument('date')} (очікую YYYY-MM-DD)");
             return self::FAILURE;
         }
 
@@ -52,20 +52,20 @@ class ClientDayCommand extends Command
         $plan = $order?->effectiveMenuPlan() ?? MenuPlan::default();
 
         if (!$plan) {
-            $this->error('У клиента нет заказа на эту дату и нет дефолтного MenuPlan.');
+            $this->error('У клієнта немає замовлення на цю дату і немає дефолтного MenuPlan.');
             return self::FAILURE;
         }
 
         $dailyMenu = $plan->menuFor($date);
         if (!$dailyMenu) {
-            $this->error("На дату {$date->toDateString()} в плане «{$plan->name}» (id {$plan->id}) нет DailyMenu — день цикла " . $plan->globalDayFor($date) . '.');
+            $this->error("На дату {$date->toDateString()} у плані «{$plan->name}» (id {$plan->id}) немає DailyMenu — день циклу " . $plan->globalDayFor($date) . '.');
             return self::FAILURE;
         }
 
         if (!$this->option('json')) {
-            $this->info("Клиент #{$client->id} «{$client->name}» — {$date->toDateString()}");
-            $this->line("  План: «{$plan->name}» (id {$plan->id}), день цикла: " . $plan->globalDayFor($date));
-            $this->line('  Заказ: ' . ($order ? "#{$order->id} ({$order->status}, {$order->calories} ккал)" : '(нет активного — взят default plan)'));
+            $this->info("Клієнт #{$client->id} «{$client->name}» — {$date->toDateString()}");
+            $this->line("  План: «{$plan->name}» (id {$plan->id}), день циклу: " . $plan->globalDayFor($date));
+            $this->line('  Замовлення: ' . ($order ? "#{$order->id} ({$order->status}, {$order->calories} ккал)" : '(немає активного — взято default plan)'));
             $this->line("  DailyMenu: #{$dailyMenu->id}");
             $this->line('');
         }

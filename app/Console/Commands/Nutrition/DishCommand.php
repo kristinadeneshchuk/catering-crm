@@ -22,7 +22,7 @@ class DishCommand extends Command
         ])->find($this->argument('id'));
 
         if (!$dish) {
-            $this->error("Блюдо #{$this->argument('id')} не найдено.");
+            $this->error("Страву #{$this->argument('id')} не знайдено.");
             return self::FAILURE;
         }
 
@@ -74,7 +74,7 @@ class DishCommand extends Command
                 $rows[] = [
                     'kind'   => $type ?: 'unknown',
                     'id'     => null,
-                    'name'   => '(битая строка техкарты — нет ingredient/child_dish)',
+                    'name'   => '(биті дані техкарти — немає ingredient/child_dish)',
                     'unit'   => null,
                     'net_g'  => round($netG, 1),
                     'kcal'   => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0,
@@ -107,31 +107,31 @@ class DishCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->info("Блюдо #{$payload['id']} — " . ($payload['name'] ?: '(без названия)'));
-        if ($payload['group'])         $this->line('  Группа: ' . $payload['group']);
-        if ($payload['base_weight_g']) $this->line('  Заданный выход: ' . $payload['base_weight_g'] . ' г');
+        $this->info("Страва #{$payload['id']} — " . ($payload['name'] ?: '(без назви)'));
+        if ($payload['group'])         $this->line('  Група: ' . $payload['group']);
+        if ($payload['base_weight_g']) $this->line('  Заданий вихід: ' . $payload['base_weight_g'] . ' г');
 
         $this->line('');
         $t = $payload['totals'];
-        $this->info('Итого:');
-        $this->line(sprintf('  ККал: %.1f | Б: %.1f | Ж: %.1f | У: %.1f | Цена: %.2f ₴', $t['kcal'], $t['prot'], $t['fat'], $t['carb'], $t['cost']));
-        $this->line(sprintf('  Закладка: %.1f г | Выход: %.1f г', $t['input_weight'], $t['output_weight']));
+        $this->info('Разом:');
+        $this->line(sprintf('  ККал: %.1f | Б: %.1f | Ж: %.1f | В: %.1f | Ціна: %.2f ₴', $t['kcal'], $t['prot'], $t['fat'], $t['carb'], $t['cost']));
+        $this->line(sprintf('  Закладка: %.1f г | Вихід: %.1f г', $t['input_weight'], $t['output_weight']));
 
         $this->line('');
-        $this->info('Состав:');
+        $this->info('Склад:');
         $this->table(
-            ['Тип', 'ID', 'Название', 'Нетто, г', 'ккал', 'Б', 'Ж', 'У', 'КБЖУ?', 'Аллергены'],
+            ['Тип', 'ID', 'Назва', 'Нетто, г', 'ккал', 'Б', 'Ж', 'В', 'КБЖВ?', 'Алергени'],
             array_map(fn($r) => [
                 $r['kind'], $r['id'] ?? '—', $r['name'], $r['net_g'],
                 $r['kcal'], $r['prot'], $r['fat'], $r['carb'],
-                $r['has_kbzhu_data'] ? 'да' : 'НЕТ',
+                $r['has_kbzhu_data'] ? 'так' : 'НІ',
                 implode(',', $r['allergens']) ?: '—',
             ], $rows)
         );
 
         if (!empty($payload['allergens'])) {
             $this->line('');
-            $this->info('Аллергены блюда: ' . implode(', ', $payload['allergens']));
+            $this->info('Алергени страви: ' . implode(', ', $payload['allergens']));
         }
 
         return self::SUCCESS;

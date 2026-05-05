@@ -19,8 +19,8 @@ class DishCompareCommand extends Command
         $a = $this->load($this->argument('id1'));
         $b = $this->load($this->argument('id2'));
 
-        if (!$a) { $this->error("Блюдо #{$this->argument('id1')} не найдено."); return self::FAILURE; }
-        if (!$b) { $this->error("Блюдо #{$this->argument('id2')} не найдено."); return self::FAILURE; }
+        if (!$a) { $this->error("Страву #{$this->argument('id1')} не знайдено."); return self::FAILURE; }
+        if (!$b) { $this->error("Страву #{$this->argument('id2')} не знайдено."); return self::FAILURE; }
 
         $payload = ['a' => $a, 'b' => $b, 'delta' => [
             'kcal' => round($b['kcal'] - $a['kcal'], 1),
@@ -37,25 +37,25 @@ class DishCompareCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->info("Сравнение: #{$a['id']} «{$a['name']}» vs #{$b['id']} «{$b['name']}»");
+        $this->info("Порівняння: #{$a['id']} «{$a['name']}» vs #{$b['id']} «{$b['name']}»");
         $this->table(
             ['', 'A: ' . $a['name'], 'B: ' . $b['name'], 'Δ (B-A)'],
             [
                 ['ккал',      $a['kcal'], $b['kcal'], $payload['delta']['kcal']],
-                ['Белок',     $a['prot'], $b['prot'], $payload['delta']['prot']],
+                ['Білок',     $a['prot'], $b['prot'], $payload['delta']['prot']],
                 ['Жир',       $a['fat'],  $b['fat'],  $payload['delta']['fat']],
-                ['Углеводы',  $a['carb'], $b['carb'], $payload['delta']['carb']],
-                ['Цена, ₴',   $a['cost'], $b['cost'], $payload['delta']['cost']],
-                ['Выход, г',  $a['output_weight'], $b['output_weight'], round($b['output_weight'] - $a['output_weight'], 1)],
-                ['Аллергены', implode(',', $a['allergens']) ?: '—', implode(',', $b['allergens']) ?: '—', '—'],
+                ['Вуглеводи', $a['carb'], $b['carb'], $payload['delta']['carb']],
+                ['Ціна, ₴',   $a['cost'], $b['cost'], $payload['delta']['cost']],
+                ['Вихід, г',  $a['output_weight'], $b['output_weight'], round($b['output_weight'] - $a['output_weight'], 1)],
+                ['Алергени',  implode(',', $a['allergens']) ?: '—', implode(',', $b['allergens']) ?: '—', '—'],
             ]
         );
 
         if (!empty($payload['delta']['allergens_only_in_a'])) {
-            $this->line('  Только в A: ' . implode(', ', $payload['delta']['allergens_only_in_a']));
+            $this->line('  Тільки в A: ' . implode(', ', $payload['delta']['allergens_only_in_a']));
         }
         if (!empty($payload['delta']['allergens_only_in_b'])) {
-            $this->line('  Только в B: ' . implode(', ', $payload['delta']['allergens_only_in_b']));
+            $this->line('  Тільки в B: ' . implode(', ', $payload['delta']['allergens_only_in_b']));
         }
 
         return self::SUCCESS;
@@ -82,7 +82,7 @@ class DishCompareCommand extends Command
 
         return [
             'id'    => $dish->id,
-            'name'  => $dish->name ?? '(без названия)',
+            'name'  => $dish->name ?? '(без назви)',
             'group' => $dish->group ?? null,
             'kcal'  => round((float)$t['kcal'], 1),
             'prot'  => round((float)$t['prot'], 1),

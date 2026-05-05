@@ -24,7 +24,7 @@ class MenuCommand extends Command
         ])->find($this->argument('id'));
 
         if (!$menu) {
-            $this->error("DailyMenu #{$this->argument('id')} не найден.");
+            $this->error("DailyMenu #{$this->argument('id')} не знайдено.");
             return self::FAILURE;
         }
 
@@ -100,11 +100,11 @@ class MenuCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->info("DailyMenu #{$payload['id']} — день {$payload['day_number']} плана «{$payload['menu_plan']}»");
+        $this->info("DailyMenu #{$payload['id']} — день {$payload['day_number']} плану «{$payload['menu_plan']}»");
         $tg = $payload['target']; $ac = $payload['actual'];
-        $this->line(sprintf('  Цель:  ккал %d | Б %d | Ж %d | У %d', $tg['kcal'], $tg['prot'], $tg['fat'], $tg['carb']));
-        $this->line(sprintf('  Факт:  ккал %.1f | Б %.1f | Ж %.1f | У %.1f', $ac['kcal'], $ac['prot'], $ac['fat'], $ac['carb']));
-        $this->line(sprintf('  Дельта: %s%.1f ккал | Б %s%.1f | Ж %s%.1f | У %s%.1f',
+        $this->line(sprintf('  Ціль:  ккал %d | Б %d | Ж %d | В %d', $tg['kcal'], $tg['prot'], $tg['fat'], $tg['carb']));
+        $this->line(sprintf('  Факт:  ккал %.1f | Б %.1f | Ж %.1f | В %.1f', $ac['kcal'], $ac['prot'], $ac['fat'], $ac['carb']));
+        $this->line(sprintf('  Дельта: %s%.1f ккал | Б %s%.1f | Ж %s%.1f | В %s%.1f',
             $ac['kcal'] >= $tg['kcal'] ? '+' : '', $ac['kcal'] - $tg['kcal'],
             $ac['prot'] >= $tg['prot'] ? '+' : '', $ac['prot'] - $tg['prot'],
             $ac['fat']  >= $tg['fat']  ? '+' : '', $ac['fat']  - $tg['fat'],
@@ -114,13 +114,13 @@ class MenuCommand extends Command
         $this->line('');
         foreach ($byMeal as $m) {
             $energy = $m['custom_energy'] ?? $m['energy_percent'];
-            $this->info(sprintf('%s [%.1f%% энергии]', $m['meal_type'], $energy));
+            $this->info(sprintf('%s [%.1f%% енергії]', $m['meal_type'], $energy));
             foreach ($m['dishes'] as $d) {
-                $this->line(sprintf('  — #%d %s: %.1f ккал | Б %.1f / Ж %.1f / У %.1f | %.0f г | %.2f ₴',
+                $this->line(sprintf('  — #%d %s: %.1f ккал | Б %.1f / Ж %.1f / В %.1f | %.0f г | %.2f ₴',
                     $d['dish_id'], $d['name'], $d['kcal'], $d['prot'], $d['fat'], $d['carb'], $d['output_weight'], $d['cost']));
             }
             $a = $m['actual'];
-            $this->line(sprintf('  ИТОГО: %.1f ккал | Б %.1f | Ж %.1f | У %.1f', $a['kcal'], $a['prot'], $a['fat'], $a['carb']));
+            $this->line(sprintf('  РАЗОМ: %.1f ккал | Б %.1f | Ж %.1f | В %.1f', $a['kcal'], $a['prot'], $a['fat'], $a['carb']));
             $this->line('');
         }
 

@@ -153,14 +153,14 @@ class DishFindCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->info("Найдено: {$payload['count']}");
+        $this->info("Знайдено: {$payload['count']}");
         if (empty($matches)) {
-            $this->line('  По заданным критериям ничего не подошло — ослабь фильтры.');
+            $this->line('  За заданими критеріями нічого не підійшло — послаб фільтри.');
             return self::SUCCESS;
         }
 
         $this->table(
-            ['ID', 'Название', 'ккал', 'Б', 'Ж', 'У', 'г', '₴', 'Аллергены'],
+            ['ID', 'Назва', 'ккал', 'Б', 'Ж', 'В', 'г', '₴', 'Алергени'],
             array_map(fn($m) => [
                 $m['id'], $m['name'], $m['kcal'], $m['prot'], $m['fat'], $m['carb'],
                 $m['output_weight'], $m['cost'],

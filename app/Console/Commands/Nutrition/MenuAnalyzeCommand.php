@@ -25,7 +25,7 @@ class MenuAnalyzeCommand extends Command
         ])->find($this->argument('id'));
 
         if (!$menu) {
-            $this->error("DailyMenu #{$this->argument('id')} не найден.");
+            $this->error("DailyMenu #{$this->argument('id')} не знайдено.");
             return self::FAILURE;
         }
 
@@ -42,7 +42,7 @@ class MenuAnalyzeCommand extends Command
                 'replacementBundles.items',
             ])->find($cid);
             if (!$client) {
-                $this->error("Клиент #{$cid} не найден.");
+                $this->error("Клієнт #{$cid} не знайдено.");
                 return self::FAILURE;
             }
 
@@ -204,10 +204,10 @@ class MenuAnalyzeCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->info("Анализ DailyMenu #{$menu->id}" . ($client ? " под клиента #{$client->id} ({$client->name})" : ''));
-        $this->line(sprintf('  Цель [%s]:   ккал %s | Б %s | Ж %s | У %s', $target['source'], $target['kcal'], $target['prot'], $target['fat'], $target['carb']));
-        $this->line(sprintf('  Эффективно:  ккал %.1f | Б %.1f | Ж %.1f | У %.1f (scale %.3f)', $effective['kcal'], $effective['prot'], $effective['fat'], $effective['carb'], $effective['scale_factor']));
-        $this->line(sprintf('  Дельта:      %s%.1f ккал (%s%.1f%%) | Б %s%.1f (%s%.1f%%) | Ж %s%.1f (%s%.1f%%) | У %s%.1f (%s%.1f%%)',
+        $this->info("Аналіз DailyMenu #{$menu->id}" . ($client ? " під клієнта #{$client->id} ({$client->name})" : ''));
+        $this->line(sprintf('  Ціль [%s]:    ккал %s | Б %s | Ж %s | В %s', $target['source'], $target['kcal'], $target['prot'], $target['fat'], $target['carb']));
+        $this->line(sprintf('  Ефективно:   ккал %.1f | Б %.1f | Ж %.1f | В %.1f (scale %.3f)', $effective['kcal'], $effective['prot'], $effective['fat'], $effective['carb'], $effective['scale_factor']));
+        $this->line(sprintf('  Дельта:      %s%.1f ккал (%s%.1f%%) | Б %s%.1f (%s%.1f%%) | Ж %s%.1f (%s%.1f%%) | В %s%.1f (%s%.1f%%)',
             $deviations['kcal']['delta'] >= 0 ? '+' : '', $deviations['kcal']['delta'], $deviations['kcal']['pct'] >= 0 ? '+' : '', $deviations['kcal']['pct'] ?? 0,
             $deviations['prot']['delta'] >= 0 ? '+' : '', $deviations['prot']['delta'], $deviations['prot']['pct'] >= 0 ? '+' : '', $deviations['prot']['pct'] ?? 0,
             $deviations['fat']['delta']  >= 0 ? '+' : '', $deviations['fat']['delta'],  $deviations['fat']['pct']  >= 0 ? '+' : '', $deviations['fat']['pct']  ?? 0,
@@ -215,10 +215,10 @@ class MenuAnalyzeCommand extends Command
         ));
 
         $this->line('');
-        $this->info('По приёмам:');
+        $this->info('По прийомах:');
         foreach ($perMeal as $m) {
             $sign = $m['delta_kcal'] >= 0 ? '+' : '';
-            $this->line(sprintf('  %s [%.1f%%]: цель %.1f ккал, факт %.1f ккал (%s%.1f, %s%.1f%%) | Б %.1f / Ж %.1f / У %.1f',
+            $this->line(sprintf('  %s [%.1f%%]: ціль %.1f ккал, факт %.1f ккал (%s%.1f, %s%.1f%%) | Б %.1f / Ж %.1f / В %.1f',
                 $m['meal_type'], $m['energy_percent'], $m['target_kcal'], $m['actual_kcal'],
                 $sign, $m['delta_kcal'], $sign, $m['delta_kcal_percent'] ?? 0,
                 $m['actual_prot'], $m['actual_fat'], $m['actual_carb']));
@@ -226,20 +226,20 @@ class MenuAnalyzeCommand extends Command
 
         if ($client) {
             $this->line('');
-            $this->info('Конфликты:');
+            $this->info('Конфлікти:');
             if (empty($conflicts['excluded_ingredients']) && empty($conflicts['excluded_dishes'])) {
-                $this->line('  (нет)');
+                $this->line('  (немає)');
             } else {
                 foreach ($conflicts['excluded_dishes'] as $d) {
-                    $this->warn("  Блюдо #{$d['dish_id']} ({$d['name']}) — в исключениях клиента");
+                    $this->warn("  Страва #{$d['dish_id']} ({$d['name']}) — у винятках клієнта");
                 }
                 foreach ($conflicts['excluded_ingredients'] as $c) {
-                    $tail = $c['replacement_id'] ? " → есть замена в бандле (ingredient #{$c['replacement_id']})" : '';
-                    $this->warn("  В блюде #{$c['dish_id']} ({$c['dish_name']}): ингредиент #{$c['ingredient_id']} {$c['ingredient_name']}{$tail}");
+                    $tail = $c['replacement_id'] ? " → є заміна у бандлі (ingredient #{$c['replacement_id']})" : '';
+                    $this->warn("  У страві #{$c['dish_id']} ({$c['dish_name']}): інгредієнт #{$c['ingredient_id']} {$c['ingredient_name']}{$tail}");
                 }
                 if (!empty($conflicts['allergens'])) {
                     $this->line('');
-                    $this->info('Аллергены, спровоцированные конфликтными ингредиентами:');
+                    $this->info('Алергени, спровоковані конфліктними інгредієнтами:');
                     foreach (array_unique(array_column($conflicts['allergens'], 'allergen')) as $a) {
                         $this->line("  — {$a}");
                     }
