@@ -473,34 +473,55 @@ class AnalyticsController extends Controller
         }
 
         // 6в. ПРИЧИНИ ВІДМОВ за період (з канбан-задач OrderCall)
+        // Завжди показуємо всі визначені причини; якщо за період даних нема — count=0.
         $refusalRowsRaw = OrderCall::where('status', 'refused')
             ->whereBetween('updated_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
             ->select('refusal_reason', \Illuminate\Support\Facades\DB::raw('COUNT(*) as cnt'))
             ->groupBy('refusal_reason')
-            ->orderByDesc('cnt')
             ->get();
 
         $totalRefused = (int) $refusalRowsRaw->sum('cnt');
-        $withReason = (int) $refusalRowsRaw
-            ->filter(fn ($r) => !empty($r->refusal_reason))
-            ->sum('cnt');
+
+        $countByKey = [];
+        $emptyCount = 0;
+        foreach ($refusalRowsRaw as $r) {
+            if (empty($r->refusal_reason)) {
+                $emptyCount += (int) $r->cnt;
+            } else {
+                $countByKey[$r->refusal_reason] = (int) $r->cnt;
+            }
+        }
 
         $refusalRows = [];
-        foreach ($refusalRowsRaw as $r) {
-            $cnt = (int) $r->cnt;
+        foreach (OrderCall::refusalReasons() as $key => $label) {
+            $cnt = $countByKey[$key] ?? 0;
             $refusalRows[] = [
-                'key'   => $r->refusal_reason,
-                'label' => OrderCall::refusalReasonLabel($r->refusal_reason),
+                'key'   => $key,
+                'label' => $label,
                 'count' => $cnt,
                 'pct'   => $totalRefused > 0 ? round(($cnt / $totalRefused) * 100, 1) : 0.0,
-                'empty' => empty($r->refusal_reason),
+                'empty' => false,
+            ];
+            unset($countByKey[$key]);
+        }
+
+        // Легасі-ключі (vacation, other) показуємо лише якщо там є дані
+        foreach ($countByKey as $key => $cnt) {
+            $refusalRows[] = [
+                'key'   => $key,
+                'label' => OrderCall::refusalReasonLabel($key),
+                'count' => $cnt,
+                'pct'   => $totalRefused > 0 ? round(($cnt / $totalRefused) * 100, 1) : 0.0,
+                'empty' => false,
             ];
         }
 
+        usort($refusalRows, fn ($a, $b) => $b['count'] <=> $a['count']);
+
         $refusalReasonStats = [
             'total'          => $totalRefused,
-            'with_reason'    => $withReason,
-            'without_reason' => $totalRefused - $withReason,
+            'with_reason'    => $totalRefused - $emptyCount,
+            'without_reason' => $emptyCount,
             'rows'           => $refusalRows,
         ];
 

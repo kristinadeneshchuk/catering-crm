@@ -122,43 +122,33 @@
             </h3>
             <p class="text-zinc-500 text-sm">Чому клієнти не продовжують підписку (за обраний період)</p>
         </div>
-        @if(($refusalReasonStats['total'] ?? 0) > 0)
-            <div class="text-right">
-                <div class="text-3xl font-black text-rose-400">{{ $refusalReasonStats['total'] }}</div>
-                <div class="text-zinc-500 text-xs uppercase tracking-widest">Всього відмов</div>
-                @if(($refusalReasonStats['without_reason'] ?? 0) > 0)
-                    <div class="text-zinc-500 text-xs mt-1">Без причини: <span class="text-zinc-300 font-semibold">{{ $refusalReasonStats['without_reason'] }}</span></div>
-                @endif
-            </div>
-        @endif
+        <div class="text-right">
+            <div class="text-3xl font-black {{ ($refusalReasonStats['total'] ?? 0) > 0 ? 'text-rose-400' : 'text-zinc-500' }}">{{ $refusalReasonStats['total'] ?? 0 }}</div>
+            <div class="text-zinc-500 text-xs uppercase tracking-widest">Всього відмов</div>
+            @if(($refusalReasonStats['without_reason'] ?? 0) > 0)
+                <div class="text-zinc-500 text-xs mt-1">Без причини: <span class="text-zinc-300 font-semibold">{{ $refusalReasonStats['without_reason'] }}</span></div>
+            @endif
+        </div>
     </div>
 
     <div class="p-6">
-        @if(($refusalReasonStats['total'] ?? 0) > 0)
-            <div class="space-y-3">
-                @foreach($refusalReasonStats['rows'] as $row)
-                    <div>
-                        <div class="flex items-center justify-between mb-1.5">
-                            <span class="text-sm text-zinc-300 font-medium">
-                                @if($row['empty'])
-                                    <span class="text-zinc-500 italic">Без зазначеної причини</span>
-                                @else
-                                    {{ $row['label'] }}
-                                @endif
-                            </span>
-                            <span class="text-sm text-zinc-400">
-                                <span class="text-white font-bold">{{ $row['count'] }}</span>
-                                <span class="text-zinc-500 ml-1">({{ $row['pct'] }}%)</span>
-                            </span>
-                        </div>
-                        <div class="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                            <div class="h-full {{ $row['empty'] ? 'bg-zinc-600' : 'bg-rose-500' }} transition-all duration-500" style="width: {{ $row['pct'] }}%"></div>
-                        </div>
+        <div class="space-y-3">
+            @foreach($refusalReasonStats['rows'] ?? [] as $row)
+                <div>
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-sm {{ $row['count'] > 0 ? 'text-zinc-300' : 'text-zinc-500' }} font-medium">
+                            {{ $row['label'] }}
+                        </span>
+                        <span class="text-sm text-zinc-400">
+                            <span class="{{ $row['count'] > 0 ? 'text-white' : 'text-zinc-500' }} font-bold">{{ $row['count'] }}</span>
+                            <span class="text-zinc-500 ml-1">({{ $row['pct'] }}%)</span>
+                        </span>
                     </div>
-                @endforeach
-            </div>
-        @else
-            <div class="text-center py-8 text-zinc-500">Немає відмов за обраний період.</div>
-        @endif
+                    <div class="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                        <div class="h-full bg-rose-500 transition-all duration-500" style="width: {{ $row['pct'] }}%"></div>
+                    </div>
+                </div>
+            @endforeach
+        </div>
     </div>
 </div>
