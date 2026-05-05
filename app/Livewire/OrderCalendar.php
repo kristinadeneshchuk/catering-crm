@@ -318,15 +318,10 @@ class OrderCalendar extends Component
     {
         if (!$this->order) return;
 
-        $hasFuture = $this->order->orderDays()->whereDate('date', '>=', now())->exists();
-        
-        if (!$hasFuture) {
-            $this->order->update(['status' => 'finished']);
-        } else {
-            if ($this->order->status === 'finished') {
-                $this->order->update(['status' => 'active']);
-            }
-        }
+        // Уся логіка тепер — у Order::recomputeStatus() (paused-sticky, finished/active/new).
+        // OrderDayObserver уже зробив це при OrderDay::create/delete — це повторний виклик,
+        // щоб синхронізувати стан $this->order у пам'яті Livewire-компонента.
+        $this->order->refresh()->recomputeStatus();
     }
 
     public function render()

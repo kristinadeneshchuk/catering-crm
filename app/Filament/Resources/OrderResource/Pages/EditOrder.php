@@ -70,6 +70,13 @@ class EditOrder extends EditRecord
     {
         // Repeater dehydrated(false), тому беремо з rawState
         unset($data['additional_rations']);
+
+        // Hidden-поле статусу містить значення на момент відкриття форми. Якщо
+        // паралельно OrderCalendar / OrderDayObserver уже оновили статус у БД,
+        // запис форми перетер би їх. Status управляється виключно
+        // Order::recomputeStatus() — тут просто не пускаємо його у update().
+        unset($data['status']);
+
         return $data;
     }
 
@@ -164,6 +171,13 @@ class EditOrder extends EditRecord
         // Видаляємо раціони, які прибрали з форми
         $toDelete = $existingChildren->keys()->diff($keptIds);
         Order::whereIn('id', $toDelete)->each(fn ($o) => $o->delete());
+
+        // Гарантуємо консистентний статус після всіх змін форми.
+        // OrderDayObserver уже міг це зробити при додаванні/видаленні днів — це повторний
+        // виклик-страховка для випадку, коли дні не змінювали, але статус мусить бути
+        // переконаним (paused-sticky враховано всередині методу).
+        $order->refresh()->recomputeStatus();
+        Order::where('parent_order_id', $order->id)->each(fn ($child) => $child->recomputeStatus());
     }
 
     /**

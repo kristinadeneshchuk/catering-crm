@@ -7,19 +7,21 @@ use App\Models\OrderDay;
 class OrderDayObserver
 {
     /**
-     * Тимчасово вимкнено: Автоматичне списання при створенні дня не відбувається.
+     * При додаванні дня — перерахунок статусу замовлення
+     * (щоб finished автоматично оживало в active/new, якщо знову є майбутні дні).
      */
     public function created(OrderDay $orderDay): void
     {
-        // Логіка списання (charge) закоментована
+        $orderDay->order?->refresh()->recomputeStatus();
     }
 
     /**
-     * Тимчасово вимкнено: Автоматичне повернення при видаленні дня не відбувається.
+     * При видаленні дня — той самий перерахунок
+     * (щоб замовлення без майбутніх днів автоматично ставало finished).
      */
     public function deleted(OrderDay $orderDay): void
     {
-        // Логіка повернення (refund) закоментована
+        $orderDay->order?->refresh()->recomputeStatus();
     }
 
     /**

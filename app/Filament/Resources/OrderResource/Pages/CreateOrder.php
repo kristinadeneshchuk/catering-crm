@@ -217,15 +217,9 @@ class CreateOrder extends CreateRecord
 
     private function updateOrderStatus($order)
     {
-        $hasFuture = $order->orderDays()->whereDate('date', '>=', now())->exists();
-        
-        if ($hasFuture) {
-             $count = \App\Models\Order::where('client_id', $order->client_id)->count();
-             $status = ($count === 1) ? 'new' : 'active';
-             
-             if ($order->status !== $status) {
-                 $order->update(['status' => $status]);
-             }
-        }
+        // Логіка повністю в Order::recomputeStatus() (paused-sticky враховано).
+        // OrderDayObserver уже викликав це при створенні кожного OrderDay —
+        // повторний виклик-страховка для випадку, коли днів у замовленні нема взагалі.
+        $order->refresh()->recomputeStatus();
     }
 }

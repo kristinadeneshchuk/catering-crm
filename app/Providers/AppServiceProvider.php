@@ -5,9 +5,11 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use App\Models\Transaction;
 use App\Models\Order;
+use App\Models\OrderDay;
 use App\Models\StockDocumentItem;
 use App\Observers\PaymentObserver;
 use App\Observers\OrderObserver;
+use App\Observers\OrderDayObserver;
 use App\Observers\StockDocumentItemObserver;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
@@ -32,6 +34,9 @@ class AppServiceProvider extends ServiceProvider
         Transaction::observe(PaymentObserver::class); 
 
         Order::observe(OrderObserver::class);
+
+        // Auto-перерахунок статусу замовлення при будь-якій зміні order_days
+        OrderDay::observe(OrderDayObserver::class);
 
         // Після кожного надходження товару — оновлюємо кеш собівартості меню
         StockDocumentItem::observe(StockDocumentItemObserver::class);

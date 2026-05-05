@@ -217,6 +217,44 @@ class Order extends Model
     }
 
     // =========================
+    // Статус (єдине джерело правди)
+    // =========================
+
+    /**
+     * Перераховує статус замовлення з реальних order_days.
+     *
+     * Правила:
+     *  - 'paused' — sticky: ручне рішення адміна, не чіпається.
+     *  - Немає днів з date >= today → 'finished' (якщо ще не finished/completed).
+     *  - Є майбутні дні → 'new' (єдине замовлення клієнта) або 'active'.
+     *    Перетираємо лише з finished/completed/порожнього — щоб не плутати new ↔ active.
+     */
+    public function recomputeStatus(): void
+    {
+        if ($this->status === 'paused') {
+            return;
+        }
+
+        $hasFuture = $this->orderDays()->whereDate('date', '>=', now())->exists();
+
+        if (!$hasFuture) {
+            if (!in_array($this->status, ['finished', 'completed'], true)) {
+                $this->update(['status' => 'finished']);
+            }
+            return;
+        }
+
+        $clientOrdersCount = static::where('client_id', $this->client_id)->count();
+        $target = $clientOrdersCount === 1 ? 'new' : 'active';
+
+        $resurrectFrom = ['finished', 'completed', null, ''];
+
+        if (in_array($this->status, $resurrectFrom, true) && $this->status !== $target) {
+            $this->update(['status' => $target]);
+        }
+    }
+
+    // =========================
     // Relations
     // =========================
     public function client(): BelongsTo { return $this->belongsTo(Client::class); }
