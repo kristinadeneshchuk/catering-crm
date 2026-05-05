@@ -77,6 +77,20 @@ class EditOrder extends EditRecord
         // Order::recomputeStatus() — тут просто не пускаємо його у update().
         unset($data['status']);
 
+        // Завжди перераховуємо ціну з поточних значень форми (тариф + калораж +
+        // тривалість). Інакше виходить рассинхрон: UI показує 1073 ₴/день,
+        // а в БД лежить старий price_per_day (бо колись зберігся з іншим калоражем),
+        // і Order::saving() множить старий price_per_day × duration → стара сума.
+        $tariffId = $data['tariff_id'] ?? null;
+        $calories = (int) ($data['calories'] ?? 0);
+        $duration = (int) ($data['duration'] ?? $this->record->duration ?? 0) ?: 1;
+
+        $pricePerDay = $this->calcPricePerDay($tariffId, $calories);
+        if ($pricePerDay > 0) {
+            $data['price_per_day'] = $pricePerDay;
+            $data['total_price']   = $pricePerDay * $duration;
+        }
+
         return $data;
     }
 
