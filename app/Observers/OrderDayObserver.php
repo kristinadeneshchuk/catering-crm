@@ -7,12 +7,22 @@ use App\Models\OrderDay;
 class OrderDayObserver
 {
     /**
-     * При додаванні дня — перерахунок статусу замовлення
+     * При додаванні дня — перерахунок end_date і статусу замовлення
      * (щоб finished автоматично оживало в active/new, якщо знову є майбутні дні).
      */
     public function created(OrderDay $orderDay): void
     {
-        $orderDay->order?->refresh()->recomputeStatus();
+        $this->syncOrder($orderDay);
+    }
+
+    /**
+     * Якщо у дня змінилась дата — підлаштувати end_date парента.
+     */
+    public function updated(OrderDay $orderDay): void
+    {
+        if ($orderDay->wasChanged('date')) {
+            $this->syncOrder($orderDay);
+        }
     }
 
     /**
@@ -21,7 +31,18 @@ class OrderDayObserver
      */
     public function deleted(OrderDay $orderDay): void
     {
-        $orderDay->order?->refresh()->recomputeStatus();
+        $this->syncOrder($orderDay);
+    }
+
+    private function syncOrder(OrderDay $orderDay): void
+    {
+        $order = $orderDay->order;
+        if (!$order) {
+            return;
+        }
+        $order->refresh();
+        $order->recomputeEndDate();
+        $order->refresh()->recomputeStatus();
     }
 
     /**

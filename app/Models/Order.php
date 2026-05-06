@@ -229,6 +229,25 @@ class Order extends Model
     // =========================
 
     /**
+     * Підтягує end_date з реального MAX(order_days.date).
+     * Викликається з OrderDayObserver на створення/зміну/видалення дня.
+     */
+    public function recomputeEndDate(): void
+    {
+        $maxDate = $this->orderDays()->max('date');
+        if (!$maxDate) {
+            return;
+        }
+
+        $newEnd = Carbon::parse($maxDate)->toDateString();
+        $currentEnd = $this->end_date ? Carbon::parse($this->end_date)->toDateString() : null;
+
+        if ($currentEnd !== $newEnd) {
+            $this->update(['end_date' => $newEnd]);
+        }
+    }
+
+    /**
      * Перераховує статус замовлення з реальних order_days.
      *
      * Правила:
