@@ -5,10 +5,27 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 class OrderDay extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly([
+                'order_id', 'date', 'is_completed',
+                'address', 'address_entrance', 'address_apartment', 'address_floor',
+                'delivery_comment', 'delivery_time',
+                'discount_type', 'discount_value', 'discount_amount',
+                'ant_route_num', 'ant_route_pos', 'ant_driver', 'ant_delivery_group',
+            ])
+            ->logOnlyDirty()
+            ->dontLogEmptyChanges()
+            ->useLogName('order_day');
+    }
 
     protected $fillable = [
         'order_id', 'date', 'is_completed',

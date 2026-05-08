@@ -7,6 +7,7 @@ use App\Traits\RestrictCookAccess;
 use App\Filament\Resources\ClientResource\Pages;
 use App\Filament\Resources\ClientResource\RelationManagers\OrdersRelationManager;
 use App\Filament\Resources\ClientResource\RelationManagers\AddressesRelationManager;
+use App\Filament\Resources\ClientResource\RelationManagers\ActivityLogsRelationManager;
 use App\Models\Client;
 use App\Models\MealType;
 use App\Models\MealPlan;
@@ -449,6 +450,7 @@ class ClientResource extends Resource
         return [
             OrdersRelationManager::class,
             AddressesRelationManager::class,
+            ActivityLogsRelationManager::class,
         ];
     }
 

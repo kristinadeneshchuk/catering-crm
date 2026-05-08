@@ -10,10 +10,28 @@ use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use App\Models\Transaction;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 class Order extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly([
+                'client_id', 'parent_order_id', 'tariff_id', 'project', 'is_paid',
+                'start_date', 'end_date', 'duration', 'status',
+                'calories', 'price_per_day', 'total_price',
+                'comment', 'schedule_type', 'menu_type', 'menu_plan_id', 'delivery_time',
+                'discount_type', 'discount_value', 'discount_reason',
+                'discount_amount', 'final_price',
+            ])
+            ->logOnlyDirty()
+            ->dontLogEmptyChanges()
+            ->useLogName('order');
+    }
 
     protected $fillable = [
         'client_id', 'parent_order_id', 'tariff_id', 'project', 'is_paid',

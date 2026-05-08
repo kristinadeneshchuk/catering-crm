@@ -7,6 +7,7 @@ use App\Traits\RestrictCookAccess;
 use App\Filament\Resources\OrderResource\Pages;
 use App\Filament\Resources\OrderResource\RelationManagers\TransactionsRelationManager;
 use App\Filament\Resources\OrderResource\RelationManagers\DeliveryCalendarRelationManager;
+use App\Filament\Resources\OrderResource\RelationManagers\ActivityLogsRelationManager;
 use App\Models\Order;
 use App\Models\Client;
 use App\Models\Tariff;
@@ -551,6 +552,7 @@ class OrderResource extends Resource
     {
         return [
             TransactionsRelationManager::class,
+            ActivityLogsRelationManager::class,
         ];
     }
 
