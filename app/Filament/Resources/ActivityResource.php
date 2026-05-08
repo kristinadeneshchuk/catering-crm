@@ -17,7 +17,6 @@ class ActivityResource extends Resource
     use RestrictCookAccess;
 
     protected static ?string $model = Activity::class;
-    protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
     protected static ?string $navigationGroup = 'Система';
     protected static ?int $navigationSort = 5;
     protected static ?string $navigationLabel = 'Журнал дій';
