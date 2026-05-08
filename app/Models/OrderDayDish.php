@@ -4,8 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Spatie\Activitylog\Models\Concerns\LogsActivity;
-use Spatie\Activitylog\Support\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class OrderDayDish extends Model
 {
@@ -16,7 +16,7 @@ class OrderDayDish extends Model
         return LogOptions::defaults()
             ->logOnly(['order_id', 'date', 'meal_type_id', 'dish_id', 'weight_grams'])
             ->logOnlyDirty()
-            ->dontLogEmptyChanges()
+            ->dontSubmitEmptyLogs()
             ->useLogName('order_day_dish');
     }
 

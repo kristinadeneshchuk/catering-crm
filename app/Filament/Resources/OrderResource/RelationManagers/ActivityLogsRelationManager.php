@@ -17,7 +17,7 @@ use Spatie\Activitylog\Models\Activity;
 
 class ActivityLogsRelationManager extends RelationManager
 {
-    protected static string $relationship = 'activitiesAsSubject';
+    protected static string $relationship = 'activities';
     protected static ?string $title = 'Журнал змін';
     protected static ?string $icon = 'heroicon-o-clipboard-document-list';
     protected static ?string $modelLabel = 'запис';
