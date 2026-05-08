@@ -109,31 +109,57 @@ class ActivityResource extends Resource
 
     public static function renderChanges($record): \Illuminate\Contracts\Support\Htmlable
     {
+        $dash = '<span style="color:rgba(125,125,125,.7)">—</span>';
+
         if (!$record) {
-            return new \Illuminate\Support\HtmlString('—');
+            return new \Illuminate\Support\HtmlString($dash);
         }
 
         $rows = ActivityLogTranslator::changes($record->properties->toArray());
         if (empty($rows)) {
-            return new \Illuminate\Support\HtmlString('<em>Без змін полів</em>');
+            return new \Illuminate\Support\HtmlString(
+                '<em style="color:rgba(125,125,125,.7)">Без змін полів</em>'
+            );
         }
 
-        $html = '<table style="width:100%;border-collapse:collapse;font-size:13px">';
-        $html .= '<thead><tr style="background:#f3f4f6">'
-            . '<th style="text-align:left;padding:6px;border:1px solid #e5e7eb">Поле</th>'
-            . '<th style="text-align:left;padding:6px;border:1px solid #e5e7eb">Було</th>'
-            . '<th style="text-align:left;padding:6px;border:1px solid #e5e7eb">Стало</th>'
-            . '</tr></thead><tbody>';
+        $th    = 'padding:10px 16px;text-align:left;font-size:11px;font-weight:600;'
+               . 'text-transform:uppercase;letter-spacing:.06em;color:rgba(125,125,125,1);';
+        $tdKey = 'padding:12px 16px;font-size:13px;font-weight:500;color:inherit;'
+               . 'border-top:1px solid rgba(125,125,125,.18);width:35%;';
+        $tdVal = 'padding:12px 16px;font-size:13px;'
+               . 'border-top:1px solid rgba(125,125,125,.18);';
+        $box   = 'overflow:hidden;border-radius:10px;border:1px solid rgba(125,125,125,.2);';
+        $tbl   = 'width:100%;border-collapse:collapse;font-family:inherit;';
+        $pillOld = 'display:inline-flex;align-items:center;padding:3px 10px;border-radius:8px;'
+                 . 'background:rgba(244,63,94,.14);color:rgb(244,63,94);font-weight:500;';
+        $pillNew = 'display:inline-flex;align-items:center;padding:3px 10px;border-radius:8px;'
+                 . 'background:rgba(34,197,94,.14);color:rgb(34,197,94);font-weight:500;';
+
+        $html  = '<div style="' . $box . '">';
+        $html .= '<table style="' . $tbl . '">';
+        $html .= '<thead><tr>'
+              . '<th style="' . $th . '">Поле</th>'
+              . '<th style="' . $th . '">Було</th>'
+              . '<th style="' . $th . '">Стало</th>'
+              . '</tr></thead>';
+        $html .= '<tbody>';
 
         foreach ($rows as $row) {
-            $html .= '<tr>'
-                . '<td style="padding:6px;border:1px solid #e5e7eb;font-weight:500">' . e($row['label']) . '</td>'
-                . '<td style="padding:6px;border:1px solid #e5e7eb;color:#991b1b">' . e($row['old']) . '</td>'
-                . '<td style="padding:6px;border:1px solid #e5e7eb;color:#065f46">' . e($row['new']) . '</td>'
-                . '</tr>';
+            $oldEmpty = $row['old'] === '—';
+            $newEmpty = $row['new'] === '—';
+
+            $html .= '<tr>';
+            $html .= '<td style="' . $tdKey . '">' . e($row['label']) . '</td>';
+            $html .= '<td style="' . $tdVal . '">'
+                  . ($oldEmpty ? $dash : '<span style="' . $pillOld . '">' . e($row['old']) . '</span>')
+                  . '</td>';
+            $html .= '<td style="' . $tdVal . '">'
+                  . ($newEmpty ? $dash : '<span style="' . $pillNew . '">' . e($row['new']) . '</span>')
+                  . '</td>';
+            $html .= '</tr>';
         }
 
-        $html .= '</tbody></table>';
+        $html .= '</tbody></table></div>';
 
         return new \Illuminate\Support\HtmlString($html);
     }
