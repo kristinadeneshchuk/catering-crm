@@ -69,7 +69,7 @@ class PackagingAssemblyController extends Controller
             $primaryMenu = $primaryMenu ?? $menu;
 
             // Зведений список цього плану — додаємо до глобального
-            $planSummary = $this->packagingService->getDailyPackagingSummary($planOrders, $menu, $allPackaging);
+            $planSummary = $this->packagingService->getDailyPackagingSummary($planOrders, $menu, $allPackaging, $date);
             foreach ($planSummary as $packagingId => $row) {
                 if (!isset($summary[$packagingId])) {
                     $summary[$packagingId] = $row;
@@ -83,7 +83,7 @@ class PackagingAssemblyController extends Controller
             foreach ($planOrders as $order) {
                 if (!$order->client) continue;
 
-                $breakdown = $this->packagingService->getOrderPackagingBreakdown($order, $menu, $allPackaging);
+                $breakdown = $this->packagingService->getOrderPackagingBreakdown($order, $menu, $allPackaging, $date);
                 if (empty($breakdown)) continue;
 
                 $orderDay = $order->orderDays->first();

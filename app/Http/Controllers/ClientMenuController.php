@@ -69,7 +69,7 @@ class ClientMenuController extends Controller
             } else {
                 [$menu] = $this->getMenuForDate($date, $activeOrder);
                 if ($menu) {
-                    $result = $this->buildDayPlan($activeOrder, $menu);
+                    $result = $this->buildDayPlan($activeOrder, $menu, $date->format('Y-m-d'));
                     $items  = $result['items'];
                     $totals = $result['totals'];
                 }
@@ -323,7 +323,7 @@ class ClientMenuController extends Controller
 
         $dish = $menuItem->dish;
 
-        $result = $this->buildDayPlan($activeOrder, $menu);
+        $result = $this->buildDayPlan($activeOrder, $menu, $date->format('Y-m-d'));
         $plannedDish = collect($result['items'])->firstWhere('dish_id', $dishId);
         if (! $plannedDish) abort(404);
 
@@ -396,6 +396,7 @@ class ClientMenuController extends Controller
         $count      = $personalDishes->count();
         $totals     = ['kcal' => 0.0, 'prot' => 0.0, 'fat' => 0.0, 'carb' => 0.0];
         $items      = [];
+        $weightMultiplier = \App\Support\DailyWeightMultiplier::for($date);
 
         foreach ($personalDishes as $pd) {
             $dish     = $pd->dish;
@@ -407,12 +408,12 @@ class ClientMenuController extends Controller
             $kcalPer100 = ($baseW > 0 && $totalKcal > 0) ? ($totalKcal / $baseW) * 100.0 : 0;
 
             if ($pd->weight_grams) {
-                $weight = (int)$pd->weight_grams;
+                $weight = (int)round((int)$pd->weight_grams * $weightMultiplier);
             } else {
                 $kcalForMeal = $count > 0 ? $targetKcal / $count : 0;
                 $weight = ($kcalPer100 > 0)
-                    ? (int)round(($kcalForMeal / $kcalPer100) * 100.0)
-                    : (int)$baseW;
+                    ? (int)round(($kcalForMeal / $kcalPer100) * 100.0 * $weightMultiplier)
+                    : (int)round($baseW * $weightMultiplier);
             }
 
             $dishKcal = $weight * $kcalPer100 / 100.0;
@@ -444,12 +445,13 @@ class ClientMenuController extends Controller
         return ['items' => $items, 'totals' => $totals];
     }
 
-    private function buildDayPlan(Order $order, DailyMenu $menu): array
+    private function buildDayPlan(Order $order, DailyMenu $menu, ?string $date = null): array
     {
         $targetKcal = (float) ($order->calories ?? 0);
         if ($targetKcal <= 0) {
             return ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
         }
+        $weightMultiplier = \App\Support\DailyWeightMultiplier::for($date);
 
         $clientMealTypeIds = $order->client->mealTypes->pluck('id')->toArray();
 
@@ -501,7 +503,7 @@ class ClientMenuController extends Controller
                 $totalKcal = (float) ($dish->total_kcal ?? 0);
                 $kcalPer100 = ($baseW > 0 && $totalKcal > 0) ? ($totalKcal / $baseW) * 100.0 : 0;
 
-                $weight = $kcalPer100 > 0 ? (int) round(($kcalPerDish / $kcalPer100) * 100.0) : 0;
+                $weight = $kcalPer100 > 0 ? (int) round(($kcalPerDish / $kcalPer100) * 100.0 * $weightMultiplier) : 0;
 
                 $protPerG = $baseW > 0 ? (float) ($dish->total_prot ?? 0) / $baseW : 0.0;
                 $fatPerG  = $baseW > 0 ? (float) ($dish->total_fat  ?? 0) / $baseW : 0.0;

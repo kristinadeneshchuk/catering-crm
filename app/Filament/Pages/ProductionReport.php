@@ -895,7 +895,7 @@ public function form(Form $form): Form
 
             if (!$menu) continue;
 
-            $summary = $service->getDailyPackagingSummary($planOrders, $menu, $allPackaging);
+            $summary = $service->getDailyPackagingSummary($planOrders, $menu, $allPackaging, $targetDateObj->format('Y-m-d'));
 
             foreach ($summary as $packagingId => $item) {
                 $qty = (int) round($item['total_qty'] ?? 0);

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\MealPlan;
 use App\Models\Packaging;
+use App\Support\DailyWeightMultiplier;
 use Illuminate\Support\Collection;
 
 class PackagingService
@@ -11,9 +12,9 @@ class PackagingService
     /**
      * Вартість пакування для одного раціону (для аналітики).
      */
-    public function calculateOrderPackagingCost($order, $menu, Collection $allPackaging): float
+    public function calculateOrderPackagingCost($order, $menu, Collection $allPackaging, ?string $date = null): float
     {
-        $items = $this->buildPackagingItems($order, $menu, $allPackaging);
+        $items = $this->buildPackagingItems($order, $menu, $allPackaging, $date);
         return round(collect($items)->sum('total_price'), 2);
     }
 
@@ -21,22 +22,22 @@ class PackagingService
      * Деталізований список упаковки для одного раціону (для менеджера).
      * Повертає масив: [['name', 'qty', 'unit_price', 'total_price', 'packaging_type', 'auto_pair'], ...]
      */
-    public function getOrderPackagingBreakdown($order, $menu, Collection $allPackaging): array
+    public function getOrderPackagingBreakdown($order, $menu, Collection $allPackaging, ?string $date = null): array
     {
-        return $this->buildPackagingItems($order, $menu, $allPackaging);
+        return $this->buildPackagingItems($order, $menu, $allPackaging, $date);
     }
 
     /**
      * Зведений список упаковки для всіх замовлень на день.
      * Повертає: [packaging_id => ['name', 'total_qty', 'unit_price', 'total_cost'], ...]
      */
-    public function getDailyPackagingSummary(Collection $orders, $menu, Collection $allPackaging): array
+    public function getDailyPackagingSummary(Collection $orders, $menu, Collection $allPackaging, ?string $date = null): array
     {
         $summary = [];
 
         foreach ($orders as $order) {
             if (!$order->client) continue;
-            $items = $this->buildPackagingItems($order, $menu, $allPackaging);
+            $items = $this->buildPackagingItems($order, $menu, $allPackaging, $date);
 
             foreach ($items as $item) {
                 $id = $item['packaging_id'];
@@ -68,10 +69,12 @@ class PackagingService
     /**
      * Основний метод — будує список упаковки для одного замовлення.
      */
-    private function buildPackagingItems($order, $menu, Collection $allPackaging): array
+    private function buildPackagingItems($order, $menu, Collection $allPackaging, ?string $date = null): array
     {
         $targetKcal = (float)($order->calories ?? 0);
         if ($targetKcal <= 0) return [];
+
+        $weightMultiplier = DailyWeightMultiplier::for($date);
 
         $clientMealTypeIds = $order->client?->mealTypes?->pluck('id')->toArray() ?? [];
 
@@ -145,6 +148,7 @@ class PackagingService
                 $totalKcal  = (float)($actualDish->total_kcal ?? 0);
                 $kcalPer100 = ($baseW > 0 && $totalKcal > 0) ? ($totalKcal / $baseW) * 100.0 : 0;
                 $actualWeight = ($kcalPer100 > 0) ? ($kcalPerDish / $kcalPer100) * 100.0 : $baseW;
+                $actualWeight *= $weightMultiplier;
 
                 // Підбираємо контейнер для actualDish
                 $container = $this->findContainer($allPackaging, $actualDish->packaging_type, $actualWeight, $orderProject);

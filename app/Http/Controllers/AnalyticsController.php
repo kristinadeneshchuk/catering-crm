@@ -215,7 +215,7 @@ class AnalyticsController extends Controller
                     // Packaging Cost
                     $packagingCost = 0;
                     if ($menu && $allPackaging->isNotEmpty()) {
-                        $packagingCost = $this->packagingService->calculateOrderPackagingCost($order, $menu, $allPackaging);
+                        $packagingCost = $this->packagingService->calculateOrderPackagingCost($order, $menu, $allPackaging, $ymd);
                         $dailyPackaging += $packagingCost;
                     }
 

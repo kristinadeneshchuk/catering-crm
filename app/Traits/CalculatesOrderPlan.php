@@ -4,6 +4,7 @@ namespace App\Traits;
 
 use App\Models\DailyMenu;
 use App\Models\Order;
+use App\Support\DailyWeightMultiplier;
 use Illuminate\Support\Collection;
 
 trait CalculatesOrderPlan
@@ -11,6 +12,7 @@ trait CalculatesOrderPlan
     private function calculateOrderPlan(Order $order, DailyMenu $menu, ?string $date = null): array
     {
         $empty = ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
+        $weightMultiplier = DailyWeightMultiplier::for($date);
 
         // Індивідуальний клієнт — беремо персональне меню на дату
         if ($date && $order->menu_type === 'individual') {
@@ -20,7 +22,7 @@ trait CalculatesOrderPlan
                 ->get();
 
             if ($personalDishes->isNotEmpty()) {
-                return $this->buildPlanFromPersonal($personalDishes, $order);
+                return $this->buildPlanFromPersonal($personalDishes, $order, $weightMultiplier);
             }
         }
 
@@ -76,7 +78,7 @@ trait CalculatesOrderPlan
 
                 $kcalPer100 = $this->dishKcalPer100g($dish);
                 $weight     = ($kcalPer100 > 0)
-                    ? (int)round(($kcalPerDish / $kcalPer100) * 100.0)
+                    ? (int)round(($kcalPerDish / $kcalPer100) * 100.0 * $weightMultiplier)
                     : 0;
 
                 $dt    = $dish->calculated_totals;
@@ -109,7 +111,7 @@ trait CalculatesOrderPlan
     }
 
     // Будуємо план з персонального меню (для індивідуальних клієнтів)
-    private function buildPlanFromPersonal(Collection $personalDishes, Order $order): array
+    private function buildPlanFromPersonal(Collection $personalDishes, Order $order, float $weightMultiplier = 1.0): array
     {
         $targetKcal = (float)($order->calories ?? 0);
         $count      = $personalDishes->count();
@@ -125,11 +127,11 @@ trait CalculatesOrderPlan
 
             // Якщо вага задана вручну — використовуємо її, інакше розраховуємо по калоріям
             if ($pd->weight_grams) {
-                $weight = (int)$pd->weight_grams;
+                $weight = (int)round((int)$pd->weight_grams * $weightMultiplier);
             } else {
                 $kcalForMeal = $count > 0 ? $targetKcal / $count : 0;
                 $weight      = ($kcalPer100 > 0)
-                    ? (int)round(($kcalForMeal / $kcalPer100) * 100.0)
+                    ? (int)round(($kcalForMeal / $kcalPer100) * 100.0 * $weightMultiplier)
                     : 0;
             }
 
