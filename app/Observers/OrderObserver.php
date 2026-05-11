@@ -42,7 +42,12 @@ class OrderObserver
             return;
         }
 
-        $order->loadMissing(['client.ingredientExclusions', 'projectData']);
+        $order->loadMissing([
+            'client.ingredientExclusions',
+            'client.replacementBundles.items.originalIngredient',
+            'ingredientExclusions',
+            'projectData',
+        ]);
         $client = $order->client;
         if (!$client) return;
 
@@ -60,7 +65,7 @@ class OrderObserver
 
         $typeLabel   = $type === 'extension' ? 'Продовження' : 'Новий клієнт';
         $projectName = $order->projectData?->name ?? $order->project ?? '';
-        $hasExclusions = $client->ingredientExclusions?->isNotEmpty() ?? false;
+        $hasExclusions = $order->effectiveExcludedIngredients()->isNotEmpty();
 
         $message = "{$typeLabel}: {$client->name} — {$order->calories} ккал, {$order->duration} дн. ({$scheduleLabel})";
 

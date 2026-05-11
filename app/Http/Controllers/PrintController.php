@@ -29,6 +29,8 @@ class PrintController extends Controller
                 'client.mealTypes',
                 'client.dishExclusions',
                 'client.ingredientExclusions',
+                'client.replacementBundles.items.originalIngredient',
+                'ingredientExclusions',
                 'menuPlan',
                 'projectData',
                 'orderDays' => fn($q) => $q->where('date', $targetDate),
@@ -183,7 +185,8 @@ class PrintController extends Controller
             ->with([
                 'client.dishExclusions',
                 'client.ingredientExclusions',
-                'client.replacementBundles',
+                'client.replacementBundles.items.originalIngredient',
+                'ingredientExclusions',
                 'menuPlan',
                 'projectData',
                 'replacements.replacementProduct',
@@ -316,7 +319,8 @@ class PrintController extends Controller
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
-                'client.replacementBundles',
+                'client.replacementBundles.items.originalIngredient',
+                'ingredientExclusions',
                 'menuPlan',
                 'projectData',
                 'replacements.replacementProduct',
@@ -457,6 +461,8 @@ class PrintController extends Controller
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
+                'client.replacementBundles.items.originalIngredient',
+                'ingredientExclusions',
                 'menuPlan',
                 'replacements.replacementProduct',
                 'replacements.replacementDish',
@@ -715,6 +721,8 @@ class PrintController extends Controller
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
+                'client.replacementBundles.items.originalIngredient',
+                'ingredientExclusions',
                 'menuPlan',
                 'replacements.replacementProduct',
                 'replacements.replacementDish.dishIngredients.ingredient',
@@ -809,7 +817,7 @@ class PrintController extends Controller
 
                     $hasIngredientLevelChange =
                         $order->replacements->where('dish_id', $dish->id)->whereNotNull('original_product_id')->isNotEmpty()
-                        || !empty($this->getConflictingIngredients($dish, $order->client->ingredientExclusions));
+                        || !empty($this->getConflictingIngredients($dish, $order->effectiveExcludedIngredients()));
 
                     $isCustom = $hasDishLevelChange || $hasIngredientLevelChange;
 
@@ -923,7 +931,11 @@ class PrintController extends Controller
         $orders = Order::whereHas('orderDays', fn ($q) => $q->where('date', $date))
             ->whereIn('status', ['new', 'active'])
             ->with([
-                'client.mealTypes', 'client.ingredientExclusions', 'client.dishExclusions',
+                'client.mealTypes',
+                'client.ingredientExclusions',
+                'client.dishExclusions',
+                'client.replacementBundles.items.originalIngredient',
+                'ingredientExclusions',
                 'menuPlan',
                 'replacements.replacementProduct',
                 'replacements.replacementDish.dishIngredients.ingredient',
@@ -1069,7 +1081,7 @@ class PrintController extends Controller
                     ->where('original_product_id', $ing->id)->first();
                 if ($rep?->replacementProduct) $ing = $rep->replacementProduct;
 
-                $isExcluded = $order?->client->ingredientExclusions->contains('id', $di->ingredient->id);
+                $isExcluded = $order?->effectiveExcludedIngredients()->contains('id', $di->ingredient->id);
                 if ($isExcluded && !$rep?->replacementProduct && !$rep?->force_approved) continue;
 
                 $yield   = (float)($ing->yield_percent ?: 100);
@@ -1103,6 +1115,8 @@ class PrintController extends Controller
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
+                'client.replacementBundles.items.originalIngredient',
+                'ingredientExclusions',
                 'menuPlan',
                 'replacements.replacementProduct',
                 'replacements.replacementDish.dishIngredients.ingredient',
@@ -1188,7 +1202,7 @@ class PrintController extends Controller
                     $isCustom =
                         $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
                         || $order->client->dishExclusions->contains('id', $dish->id)
-                        || !empty($this->getConflictingIngredients($dish, $order->client->ingredientExclusions));
+                        || !empty($this->getConflictingIngredients($dish, $order->effectiveExcludedIngredients()));
 
                     if ($isCustom) {
                         $custom[] = ['order' => $order, 'scale' => $dishScale];
@@ -1273,6 +1287,8 @@ class PrintController extends Controller
             ->with([
                 'client.dishExclusions',
                 'client.ingredientExclusions',
+                'client.replacementBundles.items.originalIngredient',
+                'ingredientExclusions',
                 'menuPlan',
                 'orderDays' => fn($q) => $q->where('date', $targetDate),
                 'replacements.replacementDish',
@@ -1497,7 +1513,7 @@ class PrintController extends Controller
 
         foreach ($dishOrChildDish->dishIngredients as $di) {
             if ($di->ingredient) {
-                if ($order->client->ingredientExclusions->contains('id', $di->ingredient->id)) {
+                if ($order->effectiveExcludedIngredients()->contains('id', $di->ingredient->id)) {
                     $ingRep = $order->replacements
                         ->where('dish_id', $rootDishId)
                         ->where('original_product_id', $di->ingredient->id)
@@ -1527,7 +1543,7 @@ class PrintController extends Controller
         if (!$dish || !$dish->dishIngredients) return;
 
         foreach ($dish->dishIngredients as $di) {
-            if ($di->ingredient_id && $order->client->ingredientExclusions->contains('id', $di->ingredient_id)) {
+            if ($di->ingredient_id && $order->effectiveExcludedIngredients()->contains('id', $di->ingredient_id)) {
                 $rep = $order->replacements
                     ->where('dish_id', $rootDishId)
                     ->where('original_product_id', $di->ingredient_id)
@@ -1638,7 +1654,7 @@ class PrintController extends Controller
 
             if ($checkConflicts && $specificOrder && $isProduct && $di->ingredient) {
                 $ingId = (int)$di->ingredient->id;
-                if ($specificOrder->client->ingredientExclusions->contains('id', $ingId)) {
+                if ($specificOrder->effectiveExcludedIngredients()->contains('id', $ingId)) {
                     $rep = $specificOrder->replacements->where('dish_id', $rootDishId)->where('original_product_id', $ingId)->first();
                     if ($rep && $rep->force_approved) {
                         $conflictData = null; // примусово одобрено — без конфлікту

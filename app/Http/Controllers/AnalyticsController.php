@@ -78,6 +78,8 @@ class AnalyticsController extends Controller
                 'order.client.mealTypes',
                 'order.client.dishExclusions',
                 'order.client.ingredientExclusions',
+                'order.client.replacementBundles.items.originalIngredient',
+                'order.ingredientExclusions',
                 'order.projectData',
                 'order.replacements.replacementProduct',
                 'order.replacements.replacementDish.dishIngredients.ingredient'

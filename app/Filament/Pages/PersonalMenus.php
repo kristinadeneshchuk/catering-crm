@@ -182,6 +182,8 @@ class PersonalMenus extends Page
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',
+                'client.replacementBundles.items.originalIngredient',
+                'ingredientExclusions',
                 'projectData',
                 'orderDays'      => fn($q) => $q->where('date', $this->date),
                 'personalDishes' => fn($q) => $q->where('date', $this->date),
@@ -200,7 +202,7 @@ class PersonalMenus extends Page
                 ->toArray();
 
             $mealTypes      = $client->mealTypes->sortBy('sort_order');
-            $excludedIngIds = $client->ingredientExclusions->pluck('id')->toArray();
+            $excludedIngIds = $order->effectiveExcludedIngredientIds();
 
             $meals = [];
             foreach ($mealTypes as $mt) {

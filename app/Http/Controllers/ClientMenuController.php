@@ -19,7 +19,7 @@ class ClientMenuController extends Controller
     public function show(string $token, Request $request)
     {
         $order = Order::where('menu_token', $token)
-            ->with(['client.mealTypes', 'client.ingredientExclusions', 'client.dishExclusions'])
+            ->with(['client.mealTypes', 'client.ingredientExclusions', 'client.dishExclusions', 'client.replacementBundles.items.originalIngredient', 'ingredientExclusions'])
             ->firstOrFail();
 
         $client = $order->client;
@@ -37,6 +37,8 @@ class ClientMenuController extends Controller
             'client.mealTypes',
             'client.ingredientExclusions',
             'client.dishExclusions',
+            'client.replacementBundles.items.originalIngredient',
+            'ingredientExclusions',
             'menuPlan',
             'replacements.originalProduct',
             'replacements.replacementProduct',
@@ -261,6 +263,8 @@ class ClientMenuController extends Controller
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
+                'client.replacementBundles.items.originalIngredient',
+                'ingredientExclusions',
                 'menuPlan',
                 'replacements.originalProduct',
                 'replacements.replacementProduct',
@@ -270,6 +274,8 @@ class ClientMenuController extends Controller
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
+                'client.replacementBundles.items.originalIngredient',
+                'ingredientExclusions',
                 'menuPlan',
                 'replacements.originalProduct',
                 'replacements.replacementProduct',
@@ -554,7 +560,7 @@ class ClientMenuController extends Controller
                     ->where('original_product_id', $ing->id)
                     ->first();
 
-                $isExcluded = $order->client->ingredientExclusions->contains('id', $ing->id);
+                $isExcluded = $order->effectiveExcludedIngredients()->contains('id', $ing->id);
 
                 if ($replacement && $replacement->replacementProduct) {
                     $list[] = [

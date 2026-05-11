@@ -5,7 +5,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
@@ -305,6 +307,48 @@ class Order extends Model
     public function client(): BelongsTo { return $this->belongsTo(Client::class); }
     public function tariff(): BelongsTo { return $this->belongsTo(Tariff::class); }
     public function replacements(): HasMany { return $this->hasMany(OrderReplacement::class); }
+
+    /**
+     * Виключення інгредієнтів, які додані тільки для цього замовлення.
+     * Додаються поверх клієнтських — не заміняють їх.
+     */
+    public function ingredientExclusions(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Ingredient::class,
+            'order_ingredient_exclusion',
+            'order_id',
+            'ingredient_id'
+        )->withTimestamps();
+    }
+
+    /**
+     * Усі інгредієнти, які треба виключити з цього замовлення:
+     * клієнтські ручні ∪ original_ingredient_id з клієнтських бандлів ∪ ордерські ручні.
+     * Повертає колекцію Ingredient (для `->contains('id', $x)`).
+     */
+    public function effectiveExcludedIngredients(): Collection
+    {
+        $client = $this->client;
+
+        $clientManual = $client?->ingredientExclusions ?? collect();
+        $clientBundle = ($client?->replacementBundles ?? collect())
+            ->flatMap(fn ($b) => $b->items->map(fn ($i) => $i->originalIngredient))
+            ->filter();
+        $orderManual = $this->ingredientExclusions ?? collect();
+
+        return $clientManual
+            ->merge($clientBundle)
+            ->merge($orderManual)
+            ->unique('id')
+            ->values();
+    }
+
+    public function effectiveExcludedIngredientIds(): array
+    {
+        return $this->effectiveExcludedIngredients()->pluck('id')->all();
+    }
+
     public function transactions(): HasMany { return $this->hasMany(Transaction::class); }
     public function orderDays(): HasMany { return $this->hasMany(OrderDay::class); }
     public function personalDishes(): HasMany { return $this->hasMany(OrderDayDish::class); }

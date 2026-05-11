@@ -223,6 +223,20 @@ class OrderResource extends Resource
                             ->columnSpanFull(),
                     ]),
 
+                Section::make('Виключення для цього замовлення')
+                    ->icon('heroicon-o-no-symbol')
+                    ->description('Додаються поверх виключень із картки клієнта. Якщо клієнт уже не їсть інгредієнт — він буде виключений у всіх його замовленнях.')
+                    ->collapsed()
+                    ->schema([
+                        Select::make('ingredientExclusions')
+                            ->label('Продукти виключення (тільки для цього замовлення)')
+                            ->relationship('ingredientExclusions', 'name')
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->columnSpanFull(),
+                    ]),
+
                 // === СЕКЦІЯ 3: ЗНИЖКА ===
                 Section::make('Знижка')
                     ->columns(2)

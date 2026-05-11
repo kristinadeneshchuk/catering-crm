@@ -180,6 +180,8 @@ class PackagingList extends Page implements HasForms
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
+                'client.replacementBundles.items.originalIngredient',
+                'ingredientExclusions',
                 'menuPlan',
                 'replacements.replacementProduct',
                 'replacements.replacementDish',
@@ -520,7 +522,7 @@ class PackagingList extends Page implements HasForms
 
         foreach ($dish->dishIngredients as $di) {
             // Звичайний продукт
-            if ($di->ingredient_id && $order->client->ingredientExclusions->contains('id', $di->ingredient_id)) {
+            if ($di->ingredient_id && $order->effectiveExcludedIngredients()->contains('id', $di->ingredient_id)) {
                 $rep = $order->replacements->where('dish_id', $rootDishId)->where('original_product_id', $di->ingredient_id)->first();
                 if ($rep && $rep->force_approved) {
                     // Одобрено — нічого не показуємо

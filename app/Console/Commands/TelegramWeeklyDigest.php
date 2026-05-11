@@ -109,14 +109,25 @@ class TelegramWeeklyDigest extends Command
         $lines[] = "   Середня тривалість: <b>{$avgDuration} дн.</b>";
         $lines[] = "";
 
-        // --- Виручка W/W ---
-        $revenue     = (float) Transaction::whereBetween('date', [$wS, $wE])->where('type', 'income')->whereNotNull('order_id')->sum('amount');
-        $prevRevenue = (float) Transaction::whereBetween('date', [$pS, $pE])->where('type', 'income')->whereNotNull('order_id')->sum('amount');
-        $revDiff     = $prevRevenue > 0 ? round(($revenue - $prevRevenue) / $prevRevenue * 100) : 0;
-        $revArrow    = $revDiff >= 0 ? "▲+" : "▼";
-        $revIcon     = $revDiff >= 0 ? "✅" : "⚠️";
-        $lines[] = "{$revIcon} <b>Виручка:</b> " . number_format($revenue, 0, '.', ' ') . " ₴ ({$revArrow}{$revDiff}% до мин.)";
+        // --- Виручка (продано: пропорційна частка total_price по днях доставки) ---
+        $soldRevenue     = $this->calcAccrualRevenue($wS, $wE);
+        $prevSoldRevenue = $this->calcAccrualRevenue($pS, $pE);
+        $soldDiff        = $prevSoldRevenue > 0 ? round(($soldRevenue - $prevSoldRevenue) / $prevSoldRevenue * 100) : 0;
+        $soldArrow       = $soldDiff >= 0 ? "▲+" : "▼";
+        $soldIcon        = $soldDiff >= 0 ? "✅" : "⚠️";
+        $lines[] = "{$soldIcon} <b>Виручка (продано):</b> " . number_format($soldRevenue, 0, '.', ' ') . " ₴ ({$soldArrow}{$soldDiff}% до мин.)";
+
+        // --- Оплачено за тиждень (cash inflow з транзакцій) ---
+        $paidRevenue     = (float) Transaction::whereBetween('date', [$wS, $wE])->where('type', 'income')->whereNotNull('order_id')->sum('amount');
+        $prevPaidRevenue = (float) Transaction::whereBetween('date', [$pS, $pE])->where('type', 'income')->whereNotNull('order_id')->sum('amount');
+        $paidDiff        = $prevPaidRevenue > 0 ? round(($paidRevenue - $prevPaidRevenue) / $prevPaidRevenue * 100) : 0;
+        $paidArrow       = $paidDiff >= 0 ? "▲+" : "▼";
+        $paidIcon        = $paidDiff >= 0 ? "✅" : "⚠️";
+        $lines[] = "{$paidIcon} <b>Оплачено:</b> " . number_format($paidRevenue, 0, '.', ' ') . " ₴ ({$paidArrow}{$paidDiff}% до мин.)";
         $lines[] = "";
+
+        // Для подальших розрахунків (топ-5 клієнтів, частки) — лишаємо орієнтир по cash.
+        $revenue = $paidRevenue;
 
         // --- Раціонів виготовлено W/W ---
         $portions     = OrderDay::whereBetween('date', [$wS, $wE])->count();
@@ -161,6 +172,32 @@ class TelegramWeeklyDigest extends Command
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * Accrual-виручка за період: SUM по OrderDay у вікні [$from, $to]
+     * (частка total_price/duration мінус знижка замовлення на день і знижка дня).
+     * Та сама формула, що в Управлінській Аналітиці, щоб числа сходилися.
+     */
+    private function calcAccrualRevenue(string $from, string $to): float
+    {
+        $sum = 0.0;
+        OrderDay::whereBetween('date', [$from, $to])
+            ->with(['order:id,total_price,discount_amount,duration'])
+            ->chunk(1000, function ($chunk) use (&$sum) {
+                foreach ($chunk as $od) {
+                    $order = $od->order;
+                    if (!$order) continue;
+
+                    $duration = max(1, (int) $order->duration);
+                    $base     = (float) $order->total_price / $duration;
+                    $orderD   = (float) $order->discount_amount / $duration;
+                    $dayD     = (float) $od->discount_amount;
+
+                    $sum += max(0.0, $base - $orderD - $dayD);
+                }
+            });
+        return $sum;
     }
 
     // ─────────────────────────────────────────────────────────────────────

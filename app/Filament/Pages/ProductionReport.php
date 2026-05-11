@@ -616,6 +616,7 @@ public function form(Form $form): Form
                 'client.dishExclusions',
                 'client.replacementBundles.items.originalIngredient',
                 'client.replacementBundles.items.replacementIngredient',
+                'ingredientExclusions',
                 'menuPlan',
                 'replacements.replacementProduct',
                 'replacements.replacementDish.dishIngredients.ingredient',
@@ -1160,12 +1161,7 @@ public function form(Form $form): Form
      */
     private function effectiveExclusions($order)
     {
-        $manual = $order->client->ingredientExclusions ?? collect();
-        $bundleIngs = ($order->client->replacementBundles ?? collect())
-            ->flatMap(fn ($b) => $b->items->map(fn ($i) => $i->originalIngredient))
-            ->filter();
-
-        return $manual->merge($bundleIngs)->unique('id')->values();
+        return $order->effectiveExcludedIngredients();
     }
 
     /**

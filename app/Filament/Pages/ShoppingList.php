@@ -65,6 +65,8 @@ class ShoppingList extends Page implements HasForms
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.dishExclusions',
+                'client.replacementBundles.items.originalIngredient',
+                'ingredientExclusions',
                 'menuPlan',
                 'replacements.replacementProduct',
                 'replacements.replacementDish.dishIngredients.ingredient',
@@ -238,7 +240,7 @@ class ShoppingList extends Page implements HasForms
                 }
 
                 // Пропускаємо виключений (без заміни) — але якщо є заміна, беремо її
-                $isExcluded = $order?->client->ingredientExclusions->contains('id', $di->ingredient->id);
+                $isExcluded = $order?->effectiveExcludedIngredients()->contains('id', $di->ingredient->id) ?? false;
                 if ($isExcluded && !$rep?->replacementProduct) continue;
 
                 $yield   = (float)($ing->yield_percent ?: 100);

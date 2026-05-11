@@ -103,7 +103,7 @@ class FoodCostService
             $isExcluded = false;
 
             if ($isProduct && $di->ingredient && $order->client) {
-                if ($order->client->ingredientExclusions->contains('id', $di->ingredient_id)) {
+                if ($order->effectiveExcludedIngredients()->contains('id', $di->ingredient_id)) {
                     $rep = $order->replacements->where('dish_id', $rootDishId)->where('original_product_id', $di->ingredient_id)->first();
                     if ($rep && $rep->replacementProduct) {
                         $finalProductId = $rep->replacementProduct->id;
