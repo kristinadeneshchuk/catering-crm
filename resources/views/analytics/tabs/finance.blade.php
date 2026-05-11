@@ -124,11 +124,11 @@
                                value="{{ $spoilagePercent }}" 
                                class="inline-input border-rose-500/30 focus:border-rose-500 w-16"> %
                     </td>
-                    @foreach($dates as $ymd => $dm) 
-                        @php $spoilage = ($revenueCount[$ymd] ?? 0) * ($spoilagePercent / 100); @endphp
-                        <td class="text-rose-400/70 text-sm italic">{{ number_format($spoilage, 0, '.', ' ') }} ₴</td> 
+                    @foreach($dates as $ymd => $dm)
+                        @php $spoilage = (($foodCostCount[$ymd] ?? 0) + ($packagingCount[$ymd] ?? 0)) * ($spoilagePercent / 100); @endphp
+                        <td class="text-rose-400/70 text-sm italic">{{ number_format($spoilage, 0, '.', ' ') }} ₴</td>
                     @endforeach
-                    <td class="text-rose-400">{{ number_format($totalRevenue * ($spoilagePercent / 100), 0, '.', ' ') }} ₴</td>
+                    <td class="text-rose-400">{{ number_format(($totalFoodCost + $totalPackagingCost) * ($spoilagePercent / 100), 0, '.', ' ') }} ₴</td>
                 </tr>
 
                 <tr class="row-hover text-zinc-300">
@@ -174,7 +174,7 @@
                     <td class="font-bold text-base text-emerald-300">Чистий прибуток</td>
                     @foreach($dates as $ymd => $dm)
                         @php
-                            $dailySpoilage = ($revenueCount[$ymd] ?? 0) * ($spoilagePercent / 100);
+                            $dailySpoilage = (($foodCostCount[$ymd] ?? 0) + ($packagingCount[$ymd] ?? 0)) * ($spoilagePercent / 100);
                             $dailyNet = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0) - ($packagingCount[$ymd] ?? 0) - $dailySpoilage - $otherExpenses - ($deliveryCostByDate[$ymd] ?? 0) - ($rentByDay[$ymd] ?? 0) - ($utilitiesByDay[$ymd] ?? 0);
                         @endphp
                         <td class="font-bold text-base {{ $dailyNet < 0 ? 'text-rose-400' : 'text-emerald-300' }}">
@@ -183,7 +183,7 @@
                     @endforeach
                     <td class="text-emerald-400">
                         @php
-                            $totalSpoilage = $totalRevenue * ($spoilagePercent / 100);
+                            $totalSpoilage = ($totalFoodCost + $totalPackagingCost) * ($spoilagePercent / 100);
                             $totalOther    = count($dates) * $otherExpenses;
                             $totalRentAll  = array_sum($rentByDay);
                             $totalUtilAll  = array_sum($utilitiesByDay);
@@ -196,7 +196,7 @@
                     <td class="font-semibold text-sm uppercase tracking-wider">Маржинальність</td>
                     @foreach($dates as $ymd => $dm)
                         @php
-                            $dailySpoilage = ($revenueCount[$ymd] ?? 0) * ($spoilagePercent / 100);
+                            $dailySpoilage = (($foodCostCount[$ymd] ?? 0) + ($packagingCount[$ymd] ?? 0)) * ($spoilagePercent / 100);
                             $profit = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0) - ($packagingCount[$ymd] ?? 0) - $dailySpoilage - $otherExpenses - ($deliveryCostByDate[$ymd] ?? 0) - ($rentByDay[$ymd] ?? 0) - ($utilitiesByDay[$ymd] ?? 0);
                             $margin = ($revenueCount[$ymd] ?? 0) > 0 ? ($profit / $revenueCount[$ymd]) * 100 : 0;
                         @endphp
