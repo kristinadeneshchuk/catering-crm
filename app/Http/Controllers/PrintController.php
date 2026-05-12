@@ -1726,8 +1726,9 @@ class PrintController extends Controller
         $planId = $request->integer('plan_id') ?: optional(MenuPlan::default())->id;
 
         $menus = DailyMenu::with([
-            'menuItems.dish',
             'menuItems.mealType',
+            'menuItems.dish.dishIngredients.ingredient',
+            'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
         ])
             ->when($planId, fn ($q) => $q->where('menu_plan_id', $planId))
             ->orderBy('day_number')

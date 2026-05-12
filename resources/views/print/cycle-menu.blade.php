@@ -54,6 +54,14 @@
         tbody td { padding:6px 8px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
         .meal-name { font-weight:700; font-size:11px; color:#475569; white-space:nowrap; }
         .dish-name { font-size:12px; font-weight:600; }
+        .num { text-align:right; font-variant-numeric: tabular-nums; white-space:nowrap; font-size:11px; }
+        .num-kcal { color:#0f172a; font-weight:700; }
+        .num-prot { color:#1d4ed8; }
+        .num-fat  { color:#b45309; }
+        .num-carb { color:#15803d; }
+        tbody tr.totals-row td { background:#0f172a !important; color:white; font-weight:800; border-bottom:none; }
+        tbody tr.totals-row td.num { color:white; }
+        thead th.num { text-align:right; }
 
         @media print {
             .no-print { display:none; }
@@ -88,6 +96,7 @@
 
             @php
                 $grouped = $menu->menuItems->sortBy(fn($i) => $i->mealType?->sort_order ?? 99)->groupBy(fn($i) => $i->mealType?->name ?? 'Інше');
+                $dayTotals = ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0];
             @endphp
 
             <table>
@@ -95,17 +104,43 @@
                     <tr>
                         <th style="width:140px;">Прийом їжі</th>
                         <th>Страва</th>
+                        <th class="num" style="width:60px;">Ккал</th>
+                        <th class="num" style="width:48px;">Б, г</th>
+                        <th class="num" style="width:48px;">Ж, г</th>
+                        <th class="num" style="width:48px;">В, г</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach($grouped as $mealName => $items)
                         @foreach($items as $item)
-                            <tr data-meal="{{ $mealName }}">
+                            @php
+                                $d = $item->dish;
+                                $kcal = $d ? (float) $d->total_kcal : 0;
+                                $prot = $d ? (float) $d->total_prot : 0;
+                                $fat  = $d ? (float) $d->total_fat  : 0;
+                                $carb = $d ? (float) $d->total_carb : 0;
+                                $dayTotals['kcal'] += $kcal;
+                                $dayTotals['prot'] += $prot;
+                                $dayTotals['fat']  += $fat;
+                                $dayTotals['carb'] += $carb;
+                            @endphp
+                            <tr data-meal="{{ $mealName }}" data-kcal="{{ $kcal }}" data-prot="{{ $prot }}" data-fat="{{ $fat }}" data-carb="{{ $carb }}">
                                 <td class="meal-name">{{ $mealName }}</td>
-                                <td class="dish-name">{{ $item->dish?->name ?? '—' }}</td>
+                                <td class="dish-name">{{ $d?->name ?? '—' }}</td>
+                                <td class="num num-kcal">{{ $d ? number_format($kcal, 0, '.', '') : '—' }}</td>
+                                <td class="num num-prot">{{ $d ? number_format($prot, 1, '.', '') : '—' }}</td>
+                                <td class="num num-fat">{{ $d ? number_format($fat,  1, '.', '') : '—' }}</td>
+                                <td class="num num-carb">{{ $d ? number_format($carb, 1, '.', '') : '—' }}</td>
                             </tr>
                         @endforeach
                     @endforeach
+                    <tr class="totals-row">
+                        <td colspan="2">Разом за день</td>
+                        <td class="num" data-total="kcal">{{ number_format($dayTotals['kcal'], 0, '.', '') }}</td>
+                        <td class="num" data-total="prot">{{ number_format($dayTotals['prot'], 1, '.', '') }}</td>
+                        <td class="num" data-total="fat">{{ number_format($dayTotals['fat'],  1, '.', '') }}</td>
+                        <td class="num" data-total="carb">{{ number_format($dayTotals['carb'], 1, '.', '') }}</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
@@ -138,6 +173,22 @@
             const checked = [...container.querySelectorAll('input:checked')].map(c => c.value);
             rows.forEach(row => {
                 row.style.display = checked.includes(row.dataset.meal) ? '' : 'none';
+            });
+            // Перерахунок підсумків кожного дня лише з видимих рядків
+            document.querySelectorAll('.day-block').forEach(block => {
+                const totals = { kcal: 0, prot: 0, fat: 0, carb: 0 };
+                block.querySelectorAll('tr[data-meal]').forEach(r => {
+                    if (r.style.display === 'none') return;
+                    totals.kcal += parseFloat(r.dataset.kcal) || 0;
+                    totals.prot += parseFloat(r.dataset.prot) || 0;
+                    totals.fat  += parseFloat(r.dataset.fat)  || 0;
+                    totals.carb += parseFloat(r.dataset.carb) || 0;
+                });
+                const cell = (key) => block.querySelector(`td[data-total="${key}"]`);
+                if (cell('kcal')) cell('kcal').textContent = totals.kcal.toFixed(0);
+                if (cell('prot')) cell('prot').textContent = totals.prot.toFixed(1);
+                if (cell('fat'))  cell('fat').textContent  = totals.fat.toFixed(1);
+                if (cell('carb')) cell('carb').textContent = totals.carb.toFixed(1);
             });
         }
     });
