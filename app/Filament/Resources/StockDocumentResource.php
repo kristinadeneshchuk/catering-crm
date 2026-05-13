@@ -112,25 +112,6 @@ class StockDocumentResource extends Resource
 
                 Section::make('Склад запису (Товари)')
                     ->schema([
-                        // 🔍 Пошук по вже доданих рядках накладної
-                        Forms\Components\Placeholder::make('items_filter_box')
-                            ->label('')
-                            ->columnSpanFull()
-                            ->content(new HtmlString(<<<'HTML'
-                                <input
-                                    type="text"
-                                    placeholder="🔍 Пошук по доданих товарах..."
-                                    oninput="(function(el){
-                                        var q=(el.value||'').toLowerCase().trim();
-                                        var scope=el.closest('section')||el.closest('.fi-section')||document;
-                                        scope.querySelectorAll('[wire\\:key*=\"items.\"]').forEach(function(row){
-                                            var t=(row.innerText||'').toLowerCase();
-                                            row.style.display=(!q||t.indexOf(q)!==-1)?'':'none';
-                                        });
-                                    })(this)"
-                                    style="width:100%;padding:8px 12px;border:1px solid rgba(148,163,184,.4);border-radius:8px;font-size:14px;background:transparent;color:inherit;" />
-                            HTML)),
-
                         Repeater::make('items')
                             ->relationship('items')
                             ->label('')
