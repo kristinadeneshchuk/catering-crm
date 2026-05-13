@@ -28,6 +28,7 @@ use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Toggle;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
 
 use Filament\Tables\Columns\TextColumn;
@@ -433,9 +434,51 @@ class StockDocumentResource extends Resource
                     ->searchable()
                     ->preload()
                     ->placeholder('Всі постачальники'),
+
+                // Пошук накладних за назвою товару (інгредієнт або тара)
+                Tables\Filters\Filter::make('product_search')
+                    ->form([
+                        TextInput::make('product')
+                            ->label('Пошук товару')
+                            ->placeholder('Напр.: яблуко')
+                            ->autocomplete(false),
+                    ])
+                    ->query(function ($query, array $data) {
+                        $term = trim((string) ($data['product'] ?? ''));
+                        if ($term === '') return $query;
+                        $like = '%' . $term . '%';
+
+                        return $query->whereExists(function ($sub) use ($like) {
+                            $sub->select(DB::raw(1))
+                                ->from('stock_document_items as sdi')
+                                ->whereColumn('sdi.stock_document_id', 'stock_documents.id')
+                                ->where(function ($w) use ($like) {
+                                    $w->whereExists(function ($q) use ($like) {
+                                        $q->select(DB::raw(1))
+                                            ->from('ingredients')
+                                            ->whereColumn('ingredients.id', 'sdi.itemable_id')
+                                            ->where('sdi.itemable_type', \App\Models\Ingredient::class)
+                                            ->where('ingredients.name', 'like', $like);
+                                    })->orWhereExists(function ($q) use ($like) {
+                                        $q->select(DB::raw(1))
+                                            ->from('packagings')
+                                            ->whereColumn('packagings.id', 'sdi.itemable_id')
+                                            ->where('sdi.itemable_type', \App\Models\Packaging::class)
+                                            ->where('packagings.name', 'like', $like);
+                                    });
+                                });
+                        });
+                    })
+                    ->indicateUsing(function (array $data): array {
+                        $term = trim((string) ($data['product'] ?? ''));
+                        if ($term === '') return [];
+                        return [
+                            Tables\Filters\Indicator::make("Товар: {$term}")->removeField('product'),
+                        ];
+                    }),
             ])
             ->filtersLayout(FiltersLayout::AboveContent)
-            ->filtersFormColumns(5)
+            ->filtersFormColumns(6)
             ->defaultSort('operation_date', 'desc')
             ->actions([
                 Tables\Actions\Action::make('toggle_paid')
