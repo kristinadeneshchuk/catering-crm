@@ -59,6 +59,8 @@
         .num-prot { color:#1d4ed8; }
         .num-fat  { color:#b45309; }
         .num-carb { color:#15803d; }
+        tbody tr.totals-row td { background:#0f172a !important; color:white; font-weight:800; border-bottom:none; }
+        tbody tr.totals-row td.num { color:white; }
         thead th.num { text-align:right; }
 
         @media print {
@@ -94,6 +96,17 @@
 
             @php
                 $grouped = $menu->menuItems->sortBy(fn($i) => $i->mealType?->sort_order ?? 99)->groupBy(fn($i) => $i->mealType?->name ?? 'Інше');
+
+                $targetKcal = 1800;
+                $rawDay = ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0];
+                foreach ($menu->menuItems as $mi) {
+                    if (!$mi->dish) continue;
+                    $rawDay['kcal'] += (float) $mi->dish->total_kcal;
+                    $rawDay['prot'] += (float) $mi->dish->total_prot;
+                    $rawDay['fat']  += (float) $mi->dish->total_fat;
+                    $rawDay['carb'] += (float) $mi->dish->total_carb;
+                }
+                $scale = $rawDay['kcal'] > 0 ? $targetKcal / $rawDay['kcal'] : 0;
             @endphp
 
             <table>
@@ -101,10 +114,10 @@
                     <tr>
                         <th style="width:140px;">Прийом їжі</th>
                         <th>Страва</th>
-                        <th class="num" style="width:70px;">Ккал/100г</th>
-                        <th class="num" style="width:60px;">Б/100г</th>
-                        <th class="num" style="width:60px;">Ж/100г</th>
-                        <th class="num" style="width:60px;">В/100г</th>
+                        <th class="num" style="width:60px;">Ккал</th>
+                        <th class="num" style="width:48px;">Б, г</th>
+                        <th class="num" style="width:48px;">Ж, г</th>
+                        <th class="num" style="width:48px;">В, г</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -112,23 +125,28 @@
                         @foreach($items as $item)
                             @php
                                 $d = $item->dish;
-                                $weight = $d ? (float) $d->output_weight : 0;
-                                $factor = $weight > 0 ? 100.0 / $weight : 0;
-                                $kcal100 = $d && $factor > 0 ? $d->total_kcal * $factor : null;
-                                $prot100 = $d && $factor > 0 ? $d->total_prot * $factor : null;
-                                $fat100  = $d && $factor > 0 ? $d->total_fat  * $factor : null;
-                                $carb100 = $d && $factor > 0 ? $d->total_carb * $factor : null;
+                                $kcal = $d && $scale > 0 ? $d->total_kcal * $scale : null;
+                                $prot = $d && $scale > 0 ? $d->total_prot * $scale : null;
+                                $fat  = $d && $scale > 0 ? $d->total_fat  * $scale : null;
+                                $carb = $d && $scale > 0 ? $d->total_carb * $scale : null;
                             @endphp
                             <tr data-meal="{{ $mealName }}">
                                 <td class="meal-name">{{ $mealName }}</td>
                                 <td class="dish-name">{{ $d?->name ?? '—' }}</td>
-                                <td class="num num-kcal">{{ $kcal100 !== null ? number_format($kcal100, 0, '.', '') : '—' }}</td>
-                                <td class="num num-prot">{{ $prot100 !== null ? number_format($prot100, 1, '.', '') : '—' }}</td>
-                                <td class="num num-fat">{{ $fat100  !== null ? number_format($fat100,  1, '.', '') : '—' }}</td>
-                                <td class="num num-carb">{{ $carb100 !== null ? number_format($carb100, 1, '.', '') : '—' }}</td>
+                                <td class="num num-kcal">{{ $kcal !== null ? number_format($kcal, 0, '.', '') : '—' }}</td>
+                                <td class="num num-prot">{{ $prot !== null ? number_format($prot, 1, '.', '') : '—' }}</td>
+                                <td class="num num-fat">{{ $fat  !== null ? number_format($fat,  1, '.', '') : '—' }}</td>
+                                <td class="num num-carb">{{ $carb !== null ? number_format($carb, 1, '.', '') : '—' }}</td>
                             </tr>
                         @endforeach
                     @endforeach
+                    <tr class="totals-row">
+                        <td colspan="2">Разом за день (норма {{ $targetKcal }} ккал)</td>
+                        <td class="num">{{ $scale > 0 ? number_format($rawDay['kcal'] * $scale, 0, '.', '') : '—' }}</td>
+                        <td class="num">{{ $scale > 0 ? number_format($rawDay['prot'] * $scale, 1, '.', '') : '—' }}</td>
+                        <td class="num">{{ $scale > 0 ? number_format($rawDay['fat']  * $scale, 1, '.', '') : '—' }}</td>
+                        <td class="num">{{ $scale > 0 ? number_format($rawDay['carb'] * $scale, 1, '.', '') : '—' }}</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
