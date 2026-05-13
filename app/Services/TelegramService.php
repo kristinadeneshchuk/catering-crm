@@ -10,12 +10,14 @@ class TelegramService
     private string $token;
     private ?string $ownerChatId;
     private ?string $managerChatId;
+    private ?string $cookChatId;
 
     public function __construct()
     {
         $this->token = config('services.telegram.bot_token', '');
         $this->ownerChatId = config('services.telegram.owner_chat_id');
         $this->managerChatId = config('services.telegram.manager_chat_id');
+        $this->cookChatId = config('services.telegram.cook_chat_id');
     }
 
     public function sendToOwner(string $text): void
@@ -35,12 +37,34 @@ class TelegramService
         }
     }
 
+    public function sendToCook(string $text): void
+    {
+        if ($this->cookChatId) {
+            foreach (explode(',', $this->cookChatId) as $chatId) {
+                $chatId = trim($chatId);
+                if ($chatId) $this->send($chatId, $text);
+            }
+        }
+    }
+
     public function sendToOwnerAndManager(string $text): void
     {
         $this->sendToOwner($text);
 
         if ($this->managerChatId && $this->managerChatId !== $this->ownerChatId) {
             $this->sendToManager($text);
+        }
+    }
+
+    public function sendToOwnerManagerCook(string $text): void
+    {
+        $this->sendToOwnerAndManager($text);
+
+        if ($this->cookChatId
+            && $this->cookChatId !== $this->ownerChatId
+            && $this->cookChatId !== $this->managerChatId
+        ) {
+            $this->sendToCook($text);
         }
     }
 

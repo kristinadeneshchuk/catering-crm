@@ -43,6 +43,7 @@ return [
         'bot_token'       => env('TELEGRAM_BOT_TOKEN'),
         'owner_chat_id'   => env('TELEGRAM_OWNER_CHAT_ID'),
         'manager_chat_id' => env('TELEGRAM_MANAGER_CHAT_ID'),
+        'cook_chat_id'    => env('TELEGRAM_COOK_CHAT_ID'),
 
         // Для месенджер-інтеграції через MadelineProto (наступна фаза).
         // api_id / api_hash береш на https://my.telegram.org/apps

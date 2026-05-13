@@ -32,13 +32,13 @@ class TelegramWeeklyDigest extends Command
         $pS = $prevStart->format('Y-m-d');
         $pE = $prevEnd->format('Y-m-d');
 
-        // ── Повідомлення 1: Основні метрики ──────────────────────────────
+        // ── Повідомлення 1: Основні метрики (власник + менеджер) ─────────
         $telegram->sendToOwnerAndManager($this->buildMainReport($weekStart, $weekEnd, $prevStart, $prevEnd, $wS, $wE, $pS, $pE));
 
-        // ── Повідомлення 2: Закупки та склад ─────────────────────────────
-        $telegram->sendToOwnerAndManager($this->buildStockReport($weekStart, $weekEnd, $wS, $wE, $pS, $pE));
+        // ── Повідомлення 2: Закупки та склад (власник + менеджер + кухар) ─
+        $telegram->sendToOwnerManagerCook($this->buildStockReport($weekStart, $weekEnd, $wS, $wE, $pS, $pE));
 
-        // ── Повідомлення 3: Не профільні оплати ──────────────────────────
+        // ── Повідомлення 3: Не профільні оплати (власник + менеджер) ─────
         $telegram->sendToOwnerAndManager($this->buildNonStandardPayments($wS, $wE));
 
         $this->info('Weekly digest sent (3 messages).');

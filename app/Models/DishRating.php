@@ -38,16 +38,25 @@ class DishRating extends Model
             $starsLine = str_repeat('⭐', $stars) . str_repeat('☆', max(0, 5 - $stars));
 
             $dishName   = $rating->dish?->name ?? '—';
-            $client     = $rating->order?->client;
+            $order      = $rating->order;
+            $client     = $order?->client;
             $clientName = $client?->name ?? '—';
             $phone      = $client?->phone;
             $tg         = $client?->telegram_username;
+
+            // Проєкт (план меню) або «Індивідуальний»
+            if (($order?->menu_type ?? null) === 'individual') {
+                $planLabel = 'Індивідуальний';
+            } else {
+                $planLabel = $order?->menuPlan?->name ?: '—';
+            }
 
             $lines = [];
             $lines[] = "📊 <b>Новий рейтинг</b>";
             $lines[] = "";
             $lines[] = "{$starsLine} <b>{$stars}/5</b>";
             $lines[] = "🍽 <b>Страва:</b> {$dishName}";
+            $lines[] = "📋 <b>Проєкт:</b> {$planLabel}";
             $lines[] = "👤 <b>Клієнт:</b> {$clientName}";
 
             if (!empty($phone)) {
@@ -63,7 +72,7 @@ class DishRating extends Model
                 $lines[] = "💬 <b>Коментар:</b> {$rating->comment}";
             }
 
-            app(TelegramService::class)->sendToOwnerAndManager(implode("\n", $lines));
+            app(TelegramService::class)->sendToOwnerManagerCook(implode("\n", $lines));
         });
     }
 }
