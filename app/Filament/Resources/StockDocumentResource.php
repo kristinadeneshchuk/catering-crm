@@ -433,7 +433,7 @@ class StockDocumentResource extends Resource
                     ->relationship('supplier', 'name')
                     ->searchable()
                     ->preload()
-                    ->placeholder('Всі постачальники'),
+                    ->placeholder('Усі'),
 
                 // Пошук накладних за назвою товару (інгредієнт або тара)
                 Tables\Filters\Filter::make('product_search')
