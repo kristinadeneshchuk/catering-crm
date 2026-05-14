@@ -47,6 +47,9 @@ class OrderCalendar extends Component
     // Час доставки на конкретний день
     public ?string $modalDeliveryTime = null;
 
+    // Override дати доставки (нерегулярний перенос на іншу дату — рідкісне виключення)
+    public ?string $modalDeliveryDateOverride = null;
+
     public function mount(?Order $order = null)
     {
         $this->order = $order;
@@ -158,6 +161,9 @@ class OrderCalendar extends Component
         $this->modalDiscountType  = $day->discount_type;
         $this->modalDiscountValue = $day->discount_value ? (string) $day->discount_value : null;
         $this->modalDeliveryTime  = $day->delivery_time ?? null;
+        $this->modalDeliveryDateOverride = $day->delivery_date_override
+            ? Carbon::parse($day->delivery_date_override)->format('Y-m-d')
+            : null;
         $this->addressSearch  = '';
         $this->addressResults = [];
         // Завантажуємо адреси клієнта
@@ -208,6 +214,7 @@ class OrderCalendar extends Component
         $this->modalDiscountType = null;
         $this->modalDiscountValue = null;
         $this->modalDeliveryTime = null;
+        $this->modalDeliveryDateOverride = null;
     }
 
     public function searchAddress(): void
@@ -246,6 +253,7 @@ class OrderCalendar extends Component
             'address_floor'    => $this->modalFloor ?: null,
             'delivery_comment' => $this->modalComment ?: null,
             'delivery_time'    => $this->modalDeliveryTime ?: null,
+            'delivery_date_override' => $this->modalDeliveryDateOverride ?: null,
             'discount_type'    => $this->modalDiscountType ?: null,
             'discount_value'   => ($this->modalDiscountType && $this->modalDiscountValue !== null && $this->modalDiscountValue !== '')
                 ? (float) $this->modalDiscountValue
@@ -337,44 +345,49 @@ class OrderCalendar extends Component
         }
 
         // 2. Отримуємо активні дні
+        $isEveningDelivery = ScheduleService::isEvening($this->scheduleType);
+        $daysWithOverride  = []; // dateStr => Carbon deliveryDate
+
         if ($this->order && $this->order->exists) {
-            $activeDays = OrderDay::where('order_id', $this->order->id)
+            $dayModels = OrderDay::where('order_id', $this->order->id)
                 ->whereBetween('date', [$startOfGrid->format('Y-m-d'), $endOfGrid->format('Y-m-d')])
-                ->get() // Отримуємо колекцію моделей
-                ->pluck('date') // Отримуємо колекцію дат (можуть бути Carbon об'єктами)
-                ->map(function ($date) {
-                    // 🔥 ЗАЛІЗОБЕТОННЕ ПЕРЕТВОРЕННЯ В РЯДОК
-                    return is_object($date) && method_exists($date, 'format') 
-                        ? $date->format('Y-m-d') 
-                        : (string)$date;
-                })
-                ->toArray();
+                ->get();
+
+            $activeDays = $dayModels->map(function ($day) use (&$daysWithOverride) {
+                $dateStr = is_object($day->date) && method_exists($day->date, 'format')
+                    ? $day->date->format('Y-m-d')
+                    : (string) $day->date;
+                $daysWithOverride[$dateStr] = $day->resolveDeliveryDate();
+                return $dateStr;
+            })->values()->toArray();
         } else {
             $activeDays = $this->virtualDays;
         }
 
         $events = [];
-        // Отримуємо тип доставки з динамічної змінної
-        $isEveningDelivery = ScheduleService::isEvening($this->scheduleType);
 
         foreach ($activeDays as $dateItem) {
-            // Гарантуємо, що працюємо з рядком для ключа масиву
             $eatDateStr = is_object($dateItem) ? $dateItem->format('Y-m-d') : $dateItem;
             $eatDate = Carbon::parse($eatDateStr);
-            
+
             // 1. Їсть
             $events[$eatDateStr][] = ['icon' => '🍽️', 'color' => 'bg-yellow-100 text-yellow-800', 'title' => 'Раціон'];
 
             // 2. Готуємо (вчора)
             $prepDate = $eatDate->copy()->subDay()->format('Y-m-d');
             $events[$prepDate][] = ['icon' => '👨‍🍳', 'color' => 'bg-blue-100 text-blue-800', 'title' => 'Готуємо'];
-            
-            // 3. Веземо
-            if ($isEveningDelivery) {
-                $events[$prepDate][] = ['icon' => '🚚', 'color' => 'bg-green-100 text-green-800', 'title' => 'Веземо'];
-            } else {
-                $events[$eatDateStr][] = ['icon' => '🚚', 'color' => 'bg-green-100 text-green-800', 'title' => 'Веземо'];
-            }
+
+            // 3. Веземо — через resolveDeliveryDate (override + закриті слоти).
+            // Для віртуальних днів (створення нового замовлення) — стара формула.
+            $deliveryDate = $daysWithOverride[$eatDateStr]
+                ?? ($isEveningDelivery ? $eatDate->copy()->subDay() : $eatDate->copy());
+
+            $deliveryStr = $deliveryDate->format('Y-m-d');
+            $title = $deliveryStr === ($isEveningDelivery ? $prepDate : $eatDateStr)
+                ? 'Веземо'
+                : 'Веземо (перенесено)';
+
+            $events[$deliveryStr][] = ['icon' => '🚚', 'color' => 'bg-green-100 text-green-800', 'title' => $title];
         }
 
         return view('livewire.order-calendar', [

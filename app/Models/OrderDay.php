@@ -18,7 +18,7 @@ class OrderDay extends Model
             ->logOnly([
                 'order_id', 'date', 'is_completed',
                 'address', 'address_entrance', 'address_apartment', 'address_floor',
-                'delivery_comment', 'delivery_time',
+                'delivery_comment', 'delivery_time', 'delivery_date_override',
                 'discount_type', 'discount_value', 'discount_amount',
                 'ant_route_num', 'ant_route_pos', 'ant_driver', 'ant_delivery_group',
             ])
@@ -30,16 +30,17 @@ class OrderDay extends Model
     protected $fillable = [
         'order_id', 'date', 'is_completed',
         'address', 'address_entrance', 'address_apartment', 'address_floor',
-        'delivery_comment', 'delivery_time',
+        'delivery_comment', 'delivery_time', 'delivery_date_override',
         'discount_type', 'discount_value', 'discount_amount',
         'ant_route_num', 'ant_route_pos', 'ant_driver', 'ant_delivery_group',
     ];
 
     protected $casts = [
-        'date'            => 'date',
-        'is_completed'    => 'boolean',
-        'discount_value'  => 'decimal:2',
-        'discount_amount' => 'decimal:2',
+        'date'                   => 'date',
+        'delivery_date_override' => 'date',
+        'is_completed'           => 'boolean',
+        'discount_value'         => 'decimal:2',
+        'discount_amount'        => 'decimal:2',
     ];
 
     protected static function booted(): void
@@ -85,5 +86,23 @@ class OrderDay extends Model
     public function order()
     {
         return $this->belongsTo(Order::class);
+    }
+
+    /**
+     * Фактична дата доставки цього дня.
+     * Якщо є override — повертаємо його. Інакше — глобальне правило (закриті слоти).
+     */
+    public function resolveDeliveryDate(): \Carbon\Carbon
+    {
+        if ($this->delivery_date_override) {
+            return \Carbon\Carbon::parse($this->delivery_date_override);
+        }
+
+        $isEvening = \App\Services\ScheduleService::isEvening($this->order?->schedule_type);
+
+        return \App\Services\ScheduleService::computeDeliveryDate(
+            \Carbon\Carbon::parse($this->date),
+            $isEvening,
+        );
     }
 }

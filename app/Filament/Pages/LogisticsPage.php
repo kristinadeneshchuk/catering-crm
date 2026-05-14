@@ -6,8 +6,10 @@ use App\Models\DeliveryRoute;
 use App\Models\Setting;
 use App\Traits\RestrictCookAccess;
 use App\Services\AntLogisticsService;
+use App\Services\ScheduleService;
 use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Select;
@@ -178,6 +180,31 @@ class LogisticsPage extends Page implements HasForms
                     } catch (\Throwable $e) {
                         Notification::make()->title('Помилка: ' . $e->getMessage())->danger()->send();
                     }
+                }),
+
+            Action::make('closed_slots')
+                ->label('Вихідні курʼєрів')
+                ->icon('heroicon-o-calendar-days')
+                ->color('warning')
+                ->modalHeading('Закриті слоти доставки')
+                ->modalDescription('Позначте слоти, в які курʼєри НЕ виїжджають. Доставка на ці дні автоматично переноситься на найближчий робочий день назад (подвійний раціон).')
+                ->form([
+                    CheckboxList::make('closed_slots')
+                        ->label('Закриті слоти')
+                        ->options(collect(ScheduleService::ALL_SLOTS)
+                            ->mapWithKeys(fn ($s) => [$s => ScheduleService::slotLabel($s)])
+                            ->all())
+                        ->columns(2)
+                        ->default(fn () => ScheduleService::getClosedDeliverySlots()),
+                ])
+                ->action(function (array $data) {
+                    $slots = array_values(array_intersect($data['closed_slots'] ?? [], ScheduleService::ALL_SLOTS));
+                    Setting::updateOrCreate(
+                        ['key' => ScheduleService::CLOSED_SLOTS_KEY],
+                        ['value' => json_encode($slots, JSON_UNESCAPED_UNICODE)],
+                    );
+                    ScheduleService::clearClosedSlotsCache();
+                    Notification::make()->title('Вихідні збережено')->success()->send();
                 }),
 
             Action::make('settings')

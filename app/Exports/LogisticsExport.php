@@ -2,7 +2,8 @@
 
 namespace App\Exports;
 
-use App\Models\Order;
+use App\Models\OrderDay;
+use App\Services\ScheduleService;
 use Carbon\Carbon;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -14,145 +15,177 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithColumnWidths
 {
-    protected $targetDate;
-    protected $shift; // 'morning' або 'evening'
+    /** Дата ДОСТАВКИ (фізично везуть). Для ранку = inputDate+1, для вечора = inputDate. */
+    protected string $deliveryDate;
+    protected string $shift; // 'morning' або 'evening'
 
     public function __construct($date, $shift = 'morning')
     {
-        // Додаємо 1 день, щоб логістика завжди брала меню на ЗАВТРА
-        $this->targetDate = Carbon::parse($date)->addDay()->format('Y-m-d');
+        // Логіка UI: користувач задає "сьогодні" (дата фасування).
+        // Ранкова зміна везе на завтра; вечірня — сьогодні ввечері.
+        $this->deliveryDate = $shift === 'morning'
+            ? Carbon::parse($date)->addDay()->format('Y-m-d')
+            : Carbon::parse($date)->format('Y-m-d');
+
         $this->shift = $shift;
     }
 
     public function collection()
     {
-        $targetDate = $this->targetDate;
-        $shift = $this->shift;
+        $shift        = $this->shift;
+        $deliveryDate = Carbon::parse($this->deliveryDate)->startOfDay();
 
-        // 1. Шукаємо замовлення, які мають запис у календарі на цей день
-        $orders = Order::query()
-            ->with(['client.addresses', 'orderDays' => fn($q) => $q->where('date', $targetDate)])
-            ->whereIn('status', ['active', 'new'])
-            // 🔥 ФІЛЬТР ПО ЗМІНІ (Ранок або Вечір)
-            ->where(function ($query) use ($shift) {
-                if ($shift === 'morning') {
-                    // Шукаємо графіки, що містять слово ранок або morning
-                    $query->where('schedule_type', 'like', '%morning%')
-                          ->orWhere('schedule_type', 'like', '%ранок%');
-                } else {
-                    // Шукаємо графіки, що містять слово вечір або evening
-                    $query->where('schedule_type', 'like', '%evening%')
-                          ->orWhere('schedule_type', 'like', '%вечір%');
-                }
-            })
-            ->whereHas('orderDays', function ($query) use ($targetDate) {
-                $query->where('date', $targetDate);
-            })
-            ->get();
+        // 1. Тягнемо всі OrderDay у вікні [-1..+4] днів від доставки і фільтруємо за resolveDeliveryDate.
+        $foodFrom = $deliveryDate->copy()->subDay()->format('Y-m-d');
+        $foodTo   = $deliveryDate->copy()->addDays(4)->format('Y-m-d');
 
-        // 2. Групуємо за "чистою" адресою
-        $groupedOrders = $orders->groupBy(function($order) {
-            $dayAddr = $order->orderDays->first()?->address;
-            $defaultAddr = $order->client->addresses()->where('is_default', true)->first();
-            $address = mb_strtolower($dayAddr ?? $defaultAddr?->address ?? $order->client->address ?? '');
-            
+        $query = OrderDay::query()
+            ->with(['order.client.addresses', 'order.projectData'])
+            ->whereBetween('date', [$foodFrom, $foodTo])
+            ->whereHas('order', fn ($q) => $q->whereIn('status', ['active', 'new']));
+
+        $query->whereHas('order', function ($q) use ($shift) {
+            if ($shift === 'morning') {
+                $q->where(fn ($qq) => $qq
+                    ->where('schedule_type', 'like', '%morning%')
+                    ->orWhere('schedule_type', 'like', '%ранок%'));
+            } else {
+                $q->where(fn ($qq) => $qq
+                    ->where('schedule_type', 'like', '%evening%')
+                    ->orWhere('schedule_type', 'like', '%вечір%'));
+            }
+        });
+
+        $days = $query->get()->filter(function (OrderDay $day) use ($deliveryDate) {
+            return $day->resolveDeliveryDate()->isSameDay($deliveryDate);
+        });
+
+        if ($days->isEmpty()) {
+            return collect();
+        }
+
+        // 2. Групуємо за "чистою" адресою + часом доставки
+        $grouped = $days->groupBy(function (OrderDay $day) {
+            $order       = $day->order;
+            $client      = $order?->client;
+            $defaultAddr = $client?->addresses->firstWhere('is_default', true);
+            $address     = mb_strtolower($day->address ?? $defaultAddr?->address ?? $client?->address ?? '');
+
             $garbageWords = ['вулиця', 'вул.', 'вул', 'проспект', 'просп.', 'просп', 'провулок', 'пров.', 'будинок', 'буд.', 'буд', 'квартира', 'кв.', 'кв', 'місто', 'м.', 'під\'їзд', 'під.', 'код', 'домофон'];
             $cleanAddress = str_replace($garbageWords, '', $address);
             $cleanAddress = preg_replace('/[^a-zа-яіїєґ0-9]/u', '', $cleanAddress);
 
-            // Час: override на конкретний день має пріоритет над часом замовлення
-            $deliveryTime = $order->orderDays->first()?->delivery_time ?? $order->delivery_time ?? 'no_time';
+            $deliveryTime = $day->delivery_time ?? $order?->delivery_time ?? 'no_time';
 
-            // Групуємо: Адреса + Час
             return $cleanAddress . '_' . $deliveryTime;
         });
 
         // 3. Формуємо рядки для Excel
-        $rows = $groupedOrders->map(function ($group) {
-            $mainOrder = $group->first();
-            $client = $mainOrder->client;
-            
-            // Імена всіх клієнтів у групі
-            $names = $group->map(fn($o) => $o->client->name)->unique()->join(' + ');
-            
-            // ID клієнта — завжди один (основний клієнт групи).
-            // Для сімейних замовлень усі раціони прив'язані до одного клієнта,
-            // тому беремо перший — він і є Comp_Id для ANT.
-            $primaryClientId = $group->first()->client->id;
-            $ids = (string) $primaryClientId;
+        $rows = $grouped->map(function ($group) {
+            /** @var OrderDay $mainDay */
+            $mainDay   = $group->first();
+            $mainOrder = $mainDay->order;
+            $client    = $mainOrder?->client;
 
-            // Інформація
+            // Унікальні замовлення (Order) у групі — для імен/проєктів/коментарів
+            $uniqueOrders = $group->map(fn (OrderDay $d) => $d->order)->filter()->unique('id');
+
+            $names = $uniqueOrders->map(fn ($o) => $o->client?->name)->filter()->unique()->join(' + ');
+            $ids   = (string) ($mainOrder?->client_id ?? '');
+
             $infoParts = [];
-            
-            // Проекти і калорії
-            $projects = $group->map(fn($o) => 
-                ($o->projectData?->name ?? $o->project) . " (" . (int)$o->calories . ")"
-            )->join(' | ');
-            $infoParts[] = $projects;
 
-            // Коментар по доставці: спочатку беремо з orderDays (конкретний день),
-            // потім з адреси клієнта, потім з самого клієнта
+            $projects = $uniqueOrders->map(fn ($o) =>
+                ($o->projectData?->name ?? $o->project) . ' (' . (int) $o->calories . ')'
+            )->join(' | ');
+            if ($projects) {
+                $infoParts[] = $projects;
+            }
+
+            // Подвійна доставка → перерахуємо дати їжі
+            $datesNote = $this->buildFoodDatesNote($group);
+            if ($datesNote) {
+                $infoParts[] = $datesNote;
+            }
+
             $bestDeliveryComment = $group
-                ->map(function ($o) {
-                    $dayComment  = $o->orderDays->first()?->delivery_comment;
-                    $defaultAddr = $o->client->addresses->firstWhere('is_default', true)
-                                   ?? $o->client->addresses->first();
-                    $addrComment = $defaultAddr?->delivery_comment ?? $o->client->delivery_comment;
+                ->map(function (OrderDay $d) {
+                    $client      = $d->order?->client;
+                    $dayComment  = $d->delivery_comment;
+                    $defaultAddr = $client?->addresses->firstWhere('is_default', true)
+                        ?? $client?->addresses->first();
+                    $addrComment = $defaultAddr?->delivery_comment ?? $client?->delivery_comment;
                     $parts = array_filter(array_unique([$dayComment, $addrComment]));
                     return implode(' / ', $parts) ?: null;
                 })
                 ->filter()
-                ->sortByDesc(fn($s) => mb_strlen($s))
+                ->sortByDesc(fn ($s) => mb_strlen($s))
                 ->first();
-            
+
             if ($bestDeliveryComment) {
-                $infoParts[] = "Інфо: " . $bestDeliveryComment;
+                $infoParts[] = 'Інфо: ' . $bestDeliveryComment;
             }
 
-            // Коментарі до замовлення
-            foreach ($group as $o) {
+            foreach ($uniqueOrders as $o) {
                 if (!empty($o->comment)) {
-                    $infoParts[] = "Комент ({$o->client->name}): {$o->comment}";
+                    $infoParts[] = 'Комент (' . ($o->client?->name ?? '') . '): ' . $o->comment;
                 }
             }
-            
+
             $additionalInfo = implode("\n", $infoParts);
 
             return [
-                'Comp_Id' => $ids,
-                'Comp_Name' => $names,
-                'Phone' => $client->phone,
-                'Address' => (function() use ($client, $mainOrder) {
-                    $dayAddr = $mainOrder->orderDays->first();
-                    if ($dayAddr?->address) {
-                        $parts = array_filter([
-                            $dayAddr->address,
-                            $dayAddr->address_entrance ? 'під\'їзд ' . $dayAddr->address_entrance : null,
-                            $dayAddr->address_floor ? 'пов' . $dayAddr->address_floor : null,
-                            $dayAddr->address_apartment ? 'кв ' . $dayAddr->address_apartment : null,
-                        ]);
-                        return implode(', ', $parts);
-                    }
-                    $addr = $client->addresses->firstWhere('is_default', true)
-                            ?? $client->addresses->first();
-                    if (!$addr) return $client->address;
-                    $parts = array_filter([
-                        $addr->address,
-                        $addr->address_entrance ? 'під\'їзд ' . $addr->address_entrance : null,
-                        $addr->address_floor ? 'пов' . $addr->address_floor : null,
-                        $addr->address_apartment ? 'кв ' . $addr->address_apartment : null,
-                    ]);
-                    return implode(', ', $parts);
-                })(),
+                'Comp_Id'         => $ids,
+                'Comp_Name'       => $names,
+                'Phone'           => $client?->phone,
+                'Address'         => $this->formatAddress($mainDay, $client),
                 'Additional_Info' => $additionalInfo,
-                'TimeWork_Info' => $mainOrder->orderDays->first()?->delivery_time ?? $mainOrder->delivery_time, // Day override → order default
-                'Unload_Time' => 7,
-                'Qty' => $group->count()
+                'TimeWork_Info'   => $mainDay->delivery_time ?? $mainOrder?->delivery_time,
+                'Unload_Time'     => 7,
+                'Qty'             => $group->count(),
             ];
         });
 
-        // 4. Сортуємо по часу доставки
         return $rows->sortBy('TimeWork_Info')->values();
+    }
+
+    private function formatAddress(OrderDay $day, ?\App\Models\Client $client): string
+    {
+        if ($day->address) {
+            $parts = array_filter([
+                $day->address,
+                $day->address_entrance ? 'під\'їзд ' . $day->address_entrance : null,
+                $day->address_floor ? 'пов' . $day->address_floor : null,
+                $day->address_apartment ? 'кв ' . $day->address_apartment : null,
+            ]);
+            return implode(', ', $parts);
+        }
+
+        if (!$client) return '';
+
+        $addr = $client->addresses->firstWhere('is_default', true)
+            ?? $client->addresses->first();
+        if (!$addr) return (string) $client->address;
+
+        $parts = array_filter([
+            $addr->address,
+            $addr->address_entrance ? 'під\'їзд ' . $addr->address_entrance : null,
+            $addr->address_floor ? 'пов' . $addr->address_floor : null,
+            $addr->address_apartment ? 'кв ' . $addr->address_apartment : null,
+        ]);
+        return implode(', ', $parts);
+    }
+
+    private function buildFoodDatesNote(\Illuminate\Support\Collection $group): string
+    {
+        $dates = $group->pluck('date')->map(fn ($d) => Carbon::parse($d))
+            ->unique(fn (Carbon $d) => $d->format('Y-m-d'))->sort();
+        if ($dates->count() < 2) return '';
+
+        $map = ['Mon' => 'пн', 'Tue' => 'вт', 'Wed' => 'ср', 'Thu' => 'чт', 'Fri' => 'пт', 'Sat' => 'сб', 'Sun' => 'нд'];
+        $parts = $dates->map(fn (Carbon $d) => ($map[$d->format('D')] ?? '') . ' ' . $d->format('d.m'))->all();
+
+        return 'Раціон: ' . implode(' + ', $parts);
     }
 
     public function headings(): array

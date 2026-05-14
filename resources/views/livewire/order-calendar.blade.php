@@ -230,6 +230,19 @@
                     @endif
                 </div>
 
+                {{-- Override дати доставки --}}
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">🚚 Перенести доставку на іншу дату</label>
+                    <p class="text-xs text-gray-400 dark:text-gray-500 mb-2">
+                        Залиш порожнім для автоматичного режиму (вихідні з налаштувань логістики враховуються самі).
+                    </p>
+                    <input type="date" wire:model="modalDeliveryDateOverride"
+                        class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500" />
+                    @if($modalDeliveryDateOverride)
+                        <p class="text-xs text-orange-500 mt-1">⚠️ Доставку перенесено на {{ \Carbon\Carbon::parse($modalDeliveryDateOverride)->format('d.m.Y') }}</p>
+                    @endif
+                </div>
+
                 {{-- Знижка на день --}}
                 <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
                     <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Знижка на цей день</label>

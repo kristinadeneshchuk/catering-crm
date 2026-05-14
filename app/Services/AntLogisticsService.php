@@ -202,78 +202,27 @@ class AntLogisticsService
         $dateFmt      = Carbon::parse($date)->format('d.m.Y'); // формат Ant: dd.MM.yyyy
 
         $extIdent    = 'crm_' . $deliveryDate . ($shift !== 'all' ? '_' . $shift : '');
-        $eveningDate = Carbon::parse($date)->addDay()->format('Y-m-d'); // день споживання для вечірніх
 
-        // --- 1. Отримуємо замовлення ---
-        // ⚠️ Важлива логіка дат:
-        // Ранкові клієнти: доставка вранці D, їдять в день D → orderDay = D
-        // Вечірні клієнти: доставка ввечері D, їдять в день D+1 → orderDay = D+1
-        // Тому для shift='all' потрібно окремо запитувати ранкових (orderDay=D) і вечірніх (orderDay=D+1)
-        if ($shift === 'all') {
-            $morningOrders = Order::query()
-                ->with([
-                    'client.addresses',
-                    'orderDays'  => fn ($q) => $q->where('date', $deliveryDate),
-                    'projectData',
-                ])
-                ->whereIn('status', ['active', 'new'])
-                ->whereHas('orderDays', fn ($q) => $q->where('date', $deliveryDate))
-                ->where(fn ($q) => $q
-                    ->where('schedule_type', 'like', '%morning%')
-                    ->orWhere('schedule_type', 'like', '%ранок%'))
-                ->get();
+        // --- 1. Тягнемо OrderDay через resolveDeliveryDate ---
+        // Дата доставки враховує закриті слоти (вихідні курʼєрів) та override на день.
+        // Можливе вікно дат їжі — [-2..+1]: вечір зазвичай їжа D+1, ранок — D,
+        // плюс можливий перенос на 1-2 дні вперед.
+        $dayCollections = $this->collectOrderDaysForDelivery($deliveryDate, $shift);
+        $orderDays      = $dayCollections['days'];
 
-            $eveningOrders = Order::query()
-                ->with([
-                    'client.addresses',
-                    'orderDays'  => fn ($q) => $q->where('date', $eveningDate),
-                    'projectData',
-                ])
-                ->whereIn('status', ['active', 'new'])
-                ->whereHas('orderDays', fn ($q) => $q->where('date', $eveningDate))
-                ->where(fn ($q) => $q
-                    ->where('schedule_type', 'like', '%evening%')
-                    ->orWhere('schedule_type', 'like', '%вечір%'))
-                ->get();
-
-            $orders = $morningOrders->merge($eveningOrders);
-        } else {
-            // Для конкретної зміни: ранок = той самий день, вечір = наступний
-            $targetDate = $shift === 'evening' ? $eveningDate : $deliveryDate;
-
-            $query = Order::query()
-                ->with([
-                    'client.addresses',
-                    'orderDays'  => fn ($q) => $q->where('date', $targetDate),
-                    'projectData',
-                ])
-                ->whereIn('status', ['active', 'new'])
-                ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate));
-
-            if ($shift === 'morning') {
-                $query->where(fn ($q) => $q
-                    ->where('schedule_type', 'like', '%morning%')
-                    ->orWhere('schedule_type', 'like', '%ранок%'));
-            } else {
-                $query->where(fn ($q) => $q
-                    ->where('schedule_type', 'like', '%evening%')
-                    ->orWhere('schedule_type', 'like', '%вечір%'));
-            }
-
-            $orders = $query->get();
-        }
-
-        if ($orders->isEmpty()) {
+        if ($orderDays->isEmpty()) {
             Log::info('[AntLogistics] No orders to push', ['date' => $deliveryDate, 'shift' => $shift]);
             return 0;
         }
 
-        // --- 2. Групуємо по client_id + час ---
-        // Два окремих клієнти на одній адресі → окремі точки доставки
-        // Два раціони одного клієнта (додатковий раціон) → одна точка з qty=2
-        $grouped = $orders->groupBy(function (Order $order) {
-            $deliveryTime = $order->orderDays->first()?->delivery_time ?? $order->delivery_time ?? 'no_time';
-            return $order->client_id . '_' . $deliveryTime;
+        // --- 2. Групуємо OrderDay по client_id + час ---
+        // Два окремих клієнти на одній адресі → окремі точки доставки.
+        // Два раціони одного клієнта (додатковий раціон) → одна точка з Qty=2.
+        // Подвійна доставка (сб+вс у одного клієнта) → одна точка з Qty=2 і двома датами в Note.
+        $grouped = $orderDays->groupBy(function (\App\Models\OrderDay $day) {
+            $order        = $day->order;
+            $deliveryTime = $day->delivery_time ?? $order?->delivery_time ?? 'no_time';
+            return ($order?->client_id ?? 0) . '_' . $deliveryTime;
         });
 
         // --- 3. Створюємо заявку на дату (Request header) ---
@@ -294,17 +243,18 @@ class AntLogisticsService
         $compRows = [];
 
         foreach ($grouped as $group) {
-            /** @var Order $mainOrder */
-            $mainOrder = $group->first();
-            $client    = $mainOrder->client;
-            $orderDay  = $mainOrder->orderDays->first();
+            /** @var \App\Models\OrderDay $mainDay */
+            $mainDay   = $group->first();
+            $mainOrder = $mainDay->order;
+            $client    = $mainOrder?->client;
+            if (!$client) continue;
 
             // Вибираємо правильний Comp_Id:
             // Якщо на цей день є override адреса — шукаємо відповідний ant_comp_id
             $compId = (string) $client->id; // default
-            if ($orderDay?->address) {
+            if ($mainDay->address) {
                 $matchedAddr = $client->addresses->first(
-                    fn ($a) => trim($a->address) === trim($orderDay->address)
+                    fn ($a) => trim($a->address) === trim($mainDay->address)
                 );
                 if ($matchedAddr?->ant_comp_id) {
                     $compId = $matchedAddr->ant_comp_id;
@@ -312,22 +262,29 @@ class AntLogisticsService
             }
 
             // Час: override на конкретний день → інакше час замовлення
-            $effectiveTime = $orderDay?->delivery_time ?? $mainOrder->delivery_time ?? '';
+            $effectiveTime = $mainDay->delivery_time ?? $mainOrder->delivery_time ?? '';
             [$workBeg, $workEnd] = $this->parseDeliveryTimeWindow($effectiveTime);
 
-            // Additional_Info — всі замовлення групи
-            $infoParts = $group->map(fn ($o) => $this->buildAdditionalInfo($o, $orderDay))->filter()->join(' | ');
+            // Additional_Info — по всіх Order у групі + перелік дат їжі для подвійної доставки
+            $orderInfo = $group
+                ->map(fn ($d) => $this->buildAdditionalInfo($d->order, $d))
+                ->filter()
+                ->unique()
+                ->join(' | ');
+
+            $foodDatesNote = $this->buildFoodDatesNote($group);
 
             $row = [
                 'Comp_Id'          => $compId,
-                'Note'             => $infoParts,
+                'Note'             => trim($orderInfo . ($foodDatesNote ? ' | ' . $foodDatesNote : '')),
                 'TimeWork_Beg_Req' => $workBeg . ':00',
                 'TimeWork_End_Req' => $workEnd . ':00',
                 'Unload_Time_Qty'  => 7,
             ];
 
-            // Кількість раціонів через Products (єдиний спосіб по API ANT)
-            // Увага: "0" є falsy в PHP, тому перевіряємо !== null
+            // Кількість раціонів = кількість OrderDay у групі.
+            // Один день одного замовлення = 1; подвійна доставка (сб+вс) у одного замовлення = 2;
+            // додатковий раціон того ж клієнта (другий Order, той самий час) = ще +1 за кожен його день.
             if ($rationProductId !== null) {
                 $row['Products'] = [
                     ['Product_Id' => $rationProductId, 'Qty' => (float) $group->count()],
@@ -388,12 +345,6 @@ class AntLogisticsService
         $deliveryDate = Carbon::parse($date)->format('Y-m-d');
         $dateFmt      = Carbon::parse($date)->format('d.m.Y');
 
-        // Дата їжі — по ній оновлюємо order_days
-        // Ранок: їжа на той самий день; Вечір: їжа на наступний день
-        $targetDate = $shift === 'evening'
-            ? Carbon::parse($date)->addDay()->format('Y-m-d')
-            : $deliveryDate;
-
         // 1. Отримуємо всі маршрути на дату доставки
         $routesData = $this->fetchAllPages(
             "{$this->baseUrl}/Routes/get",
@@ -404,6 +355,11 @@ class AntLogisticsService
             Log::info('[AntLogistics] No routes found — routes may not be built yet in Ant', ['date' => $deliveryDate]);
             return 0;
         }
+
+        // Заздалегідь зберігаємо OrderDay, які належать поточній доставці (можливо кілька дат їжі).
+        // Це дозволяє при наявності маршруту проставити ant-поля у ВСІ дні (включно з подвійною доставкою).
+        $dayCollections = $this->collectOrderDaysForDelivery($deliveryDate, $shift);
+        $daysByClient   = $dayCollections['days']->groupBy(fn ($d) => (int) ($d->order?->client_id ?? 0));
 
         // 2. Для кожного маршруту завантажуємо точки і оновлюємо order_days
         $totalComps = 0;
@@ -428,16 +384,17 @@ class AntLogisticsService
 
                 $routePos = (int) ($comp['Pos_Id'] ?? 0) ?: null;
 
-                // Оновлюємо order_days по даті ЇЖІ (не доставки)
-                $affected = \App\Models\OrderDay::query()
-                    ->whereHas('order', fn ($q) => $q->where('client_id', $clientId))
-                    ->where('date', $targetDate)
-                    ->update([
-                        'ant_route_num'      => $routeNum,
-                        'ant_route_pos'      => $routePos,
-                        'ant_driver'         => $driver,
-                        'ant_delivery_group' => null,
-                    ]);
+                // Знаходимо всі OrderDay цього клієнта, що їдуть саме цією доставкою
+                $clientDays = $daysByClient->get($clientId);
+                if (!$clientDays || $clientDays->isEmpty()) continue;
+
+                $dayIds   = $clientDays->pluck('id')->all();
+                $affected = \App\Models\OrderDay::whereIn('id', $dayIds)->update([
+                    'ant_route_num'      => $routeNum,
+                    'ant_route_pos'      => $routePos,
+                    'ant_driver'         => $driver,
+                    'ant_delivery_group' => null,
+                ]);
 
                 $updated  += $affected;
                 $totalComps++;
@@ -446,7 +403,6 @@ class AntLogisticsService
 
         Log::info('[AntLogistics] Route assignments pulled', [
             'delivery_date' => $deliveryDate,
-            'food_date'     => $targetDate,
             'shift'         => $shift,
             'routes'        => count($routesData),
             'comps'         => $totalComps,
@@ -454,6 +410,67 @@ class AntLogisticsService
         ]);
 
         return $updated;
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal: збираємо OrderDay-и, які фізично доставляються в задану дату/зміну.
+    // Враховує закриті слоти (вихідні) та delivery_date_override на OrderDay.
+    // -------------------------------------------------------------------------
+
+    /**
+     * @return array{days: \Illuminate\Support\Collection}
+     */
+    private function collectOrderDaysForDelivery(string $deliveryDate, string $shift): array
+    {
+        $delivery = Carbon::parse($deliveryDate)->startOfDay();
+
+        // Безпечне вікно дат їжі: ранкові їдять у день доставки, вечірні — на наступний.
+        // При зсуві через закриті слоти доставка може бути за 1-3 дні до їжі.
+        // Беремо широке вікно D-1 .. D+4 і фільтруємо точно через resolveDeliveryDate.
+        $foodFrom = $delivery->copy()->subDay()->format('Y-m-d');
+        $foodTo   = $delivery->copy()->addDays(4)->format('Y-m-d');
+
+        $query = \App\Models\OrderDay::query()
+            ->with(['order.client.addresses', 'order.projectData'])
+            ->whereBetween('date', [$foodFrom, $foodTo])
+            ->whereHas('order', fn ($q) => $q->whereIn('status', ['active', 'new']));
+
+        if ($shift !== 'all') {
+            $query->whereHas('order', function ($q) use ($shift) {
+                if ($shift === 'morning') {
+                    $q->where(fn ($qq) => $qq
+                        ->where('schedule_type', 'like', '%morning%')
+                        ->orWhere('schedule_type', 'like', '%ранок%'));
+                } else {
+                    $q->where(fn ($qq) => $qq
+                        ->where('schedule_type', 'like', '%evening%')
+                        ->orWhere('schedule_type', 'like', '%вечір%'));
+                }
+            });
+        }
+
+        // Фільтруємо точно за resolveDeliveryDate
+        $days = $query->get()->filter(function (\App\Models\OrderDay $day) use ($delivery) {
+            return $day->resolveDeliveryDate()->isSameDay($delivery);
+        })->values();
+
+        return ['days' => $days];
+    }
+
+    /**
+     * Формує Note "Раціон: сб 16.05 + вс 17.05" для групи OrderDay.
+     */
+    private function buildFoodDatesNote(\Illuminate\Support\Collection $group): string
+    {
+        $dates = $group->pluck('date')->map(fn ($d) => Carbon::parse($d))->unique(fn (Carbon $d) => $d->format('Y-m-d'))->sort();
+        if ($dates->count() < 2) {
+            return '';
+        }
+
+        $map = ['Mon' => 'пн', 'Tue' => 'вт', 'Wed' => 'ср', 'Thu' => 'чт', 'Fri' => 'пт', 'Sat' => 'сб', 'Sun' => 'нд'];
+        $parts = $dates->map(fn (Carbon $d) => ($map[$d->format('D')] ?? '') . ' ' . $d->format('d.m'))->all();
+
+        return 'Раціон: ' . implode(' + ', $parts);
     }
 
     // -------------------------------------------------------------------------

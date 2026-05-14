@@ -8,9 +8,6 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Pull route assignments back from Ant at 22:00 (after dispatcher builds routes)
-Schedule::command('ant:pull-routes')->dailyAt('22:00');
-
 // Чистимо активити-лог: записи старші за clean_after_days (180д = 6 міс).
 Schedule::command('activitylog:clean')->dailyAt('03:30');
 
