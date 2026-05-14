@@ -60,6 +60,13 @@
                 {{-- Роздільник --}}
                 <div style="width:1px;height:28px;background:#3f3f46;margin:0 2px;"></div>
 
+                {{-- Вихідні кур'єрів --}}
+                <button wire:click="mountAction('closed_slots')"
+                    style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .15s;background:#3b2800;color:#fbbf24;border:1px solid #92400e;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/></svg>
+                    Вихідні
+                </button>
+
                 {{-- Ставки --}}
                 <button wire:click="mountAction('settings')"
                     style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;font-size:13px;font-weight:600;border:1px solid #3f3f46;cursor:pointer;transition:all .15s;background:#27272a;color:#a1a1aa;">
