@@ -660,6 +660,21 @@ class AnalyticsController extends Controller
             ->whereBetween('date', [$startDate, $endDate])
             ->sum('amount'));
 
+        // Розбивка отриманих коштів по рахунках за обраний період
+        $cashReceivedByAccount = Transaction::where('type', 'income')
+            ->whereNotNull('account_id')
+            ->whereBetween('date', [$startDate, $endDate])
+            ->selectRaw('account_id, SUM(amount) as total')
+            ->groupBy('account_id')
+            ->with('account:id,name')
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn ($r) => [
+                'name'  => $r->account?->name ?? '—',
+                'total' => round((float) $r->total),
+            ])
+            ->values();
+
         $cashBalance = round(Account::sum('balance'));
 
         // Передоплачені, але ще не доставлені раціони (поточний момент)
@@ -736,7 +751,7 @@ class AnalyticsController extends Controller
             'spoilagePercent', 'otherExpenses', 'activeTab',
             'rentByDay', 'utilitiesByDay', 'monthlyRent', 'monthlyUtilities',
             'unitEconomics', 'marketingStats', 'retentionStats',
-            'cashReceivedPeriod', 'cashBalance', 'prepaidValue',
+            'cashReceivedPeriod', 'cashReceivedByAccount', 'cashBalance', 'prepaidValue',
             'totalClientDebt', 'debtorClientsCount',
             'packagingCount', 'totalPackagingCost',
             'deliveryCostByDate', 'totalDeliveryCost',

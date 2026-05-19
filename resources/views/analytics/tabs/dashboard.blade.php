@@ -68,6 +68,17 @@
             <p class="text-zinc-500 text-[11px] font-bold uppercase tracking-widest mb-1">Отримано коштів</p>
             <h3 class="text-2xl font-black text-blue-400">{{ number_format($cashReceivedPeriod ?? 0, 0, '.', ' ') }} ₴</h3>
             <p class="text-zinc-600 text-xs mt-1">Реальні оплати від клієнтів за період</p>
+
+            @if(!empty($cashReceivedByAccount) && $cashReceivedByAccount->isNotEmpty())
+                <div class="mt-3 pt-3 border-t border-white/5 space-y-1.5">
+                    @foreach($cashReceivedByAccount as $row)
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-zinc-400">{{ $row['name'] }}</span>
+                            <span class="font-semibold text-blue-300">{{ number_format($row['total'], 0, '.', ' ') }} ₴</span>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
         </div>
     </div>
 
