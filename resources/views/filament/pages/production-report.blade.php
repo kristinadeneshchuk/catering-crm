@@ -289,7 +289,7 @@
                 </div>
 
                 @forelse(($planData['meals'] ?? []) as $mealName => $dishes)
-            <div class="meal-group" style="background-color: white; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin-bottom:15px;">
+            <div class="meal-group" style="background-color: white; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom:15px;">
                 <div style="background-color: #fff7ed; padding: 8px 15px; border-bottom: 1px solid #ffedd5;">
                     <h2 style="color: #ea580c !important; font-size: 16px; font-weight: 800; text-transform: uppercase; margin: 0;">{{ $mealName }}</h2>
                 </div>
@@ -348,7 +348,7 @@
                                                             title="Не їсть інгредієнти"
                                                             style="width: 16px; height: 16px; border-radius: 50%; background: #dbeafe; border: 1px solid #3b82f6; color: #1d4ed8; font-size: 10px; font-weight: 900; font-style: italic; font-family: serif; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;">i</button>
                                                         <div x-show="open" x-cloak x-transition.opacity
-                                                            style="position: absolute; top: 20px; left: 0; z-index: 50; background: white; border: 1px solid #93c5fd; border-radius: 6px; padding: 8px 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.12); min-width: 200px; max-width: 280px; font-weight: 400;">
+                                                            style="position: absolute; top: 20px; left: 0; z-index: 9999; background: white; border: 1px solid #93c5fd; border-radius: 6px; padding: 8px 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.12); min-width: 200px; max-width: 280px; font-weight: 400;">
                                                             <div style="font-size: 10px; font-weight: 900; color: #1d4ed8; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.3px;">Не їсть інгредієнти</div>
                                                             <ul style="margin: 0; padding-left: 16px; font-size: 11px; color: #111827; line-height: 1.4; max-height: 240px; overflow-y: auto; overscroll-behavior: contain;">
                                                                 @foreach($card['excluded_ingredients'] as $ing)
@@ -365,7 +365,7 @@
                                                             title="Виключені страви"
                                                             style="width: 16px; height: 16px; border-radius: 50%; background: #fee2e2; border: 1px solid #ef4444; color: #b91c1c; font-size: 10px; font-weight: 900; font-style: italic; font-family: serif; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;">i</button>
                                                         <div x-show="open" x-cloak x-transition.opacity
-                                                            style="position: absolute; top: 20px; left: 0; z-index: 50; background: white; border: 1px solid #fca5a5; border-radius: 6px; padding: 8px 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.12); min-width: 200px; max-width: 280px; font-weight: 400;">
+                                                            style="position: absolute; top: 20px; left: 0; z-index: 9999; background: white; border: 1px solid #fca5a5; border-radius: 6px; padding: 8px 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.12); min-width: 200px; max-width: 280px; font-weight: 400;">
                                                             <div style="font-size: 10px; font-weight: 900; color: #b91c1c; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.3px;">Виключені страви</div>
                                                             <ul style="margin: 0; padding-left: 16px; font-size: 11px; color: #111827; line-height: 1.4; max-height: 240px; overflow-y: auto; overscroll-behavior: contain;">
                                                                 @foreach($card['excluded_dishes'] as $d)
