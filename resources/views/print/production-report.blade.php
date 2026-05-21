@@ -33,9 +33,10 @@
         .meal-vecherya { background-color: #38bdf8 !important; color: white !important; text-shadow: 0px 1px 1px rgba(0,0,0,0.3); } 
         .meal-default { background-color: #94a3b8 !important; color: white !important; }
 
-        /* СІТКА ДЛЯ КАРТОК (БАЗА + ПФ) */
-        .pf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
-        .pf-card { border: 1px solid #d1d5db; break-inside: avoid; border-radius: 4px; overflow: hidden; }
+        /* СІТКА ДЛЯ КАРТОК (БАЗА + ПФ) — masonry-like через CSS columns,
+           щоб картки різної висоти не лишали порожніх дір. */
+        .pf-grid { columns: 2; column-gap: 15px; margin-bottom: 20px; }
+        .pf-card { border: 1px solid #d1d5db; break-inside: avoid; border-radius: 4px; overflow: hidden; display: inline-block; width: 100%; margin-bottom: 15px; }
         .pf-card-header { padding: 5px 10px; font-weight: bold; font-size: 12px; border-bottom: 1px solid #ccc; display: flex; justify-content: space-between; }
         
         .dish-title { font-size: 14px; font-weight: bold; margin-bottom: 10px; border-bottom: 2px solid #ccc; padding-bottom: 4px; margin-top: 20px;}
@@ -91,7 +92,8 @@
         @media print {
             .no-print { display: none !important; }
             body { padding: 0 !important; margin: 0 !important; }
-            .pf-grid { gap: 8px; margin-bottom: 10px; }
+            .pf-grid { column-gap: 8px; margin-bottom: 10px; }
+            .pf-card { margin-bottom: 8px; }
             th, td { padding: 2px 4px !important; font-size: 10px !important; }
             .meal-header { padding: 4px 8px !important; font-size: 13px !important; margin-top: 15px;}
             .recipe-box { font-size: 10px !important; padding: 6px 10px !important; }
