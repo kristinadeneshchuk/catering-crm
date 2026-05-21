@@ -1708,6 +1708,7 @@ class PrintController extends Controller
                 $components[] = [
                     'type' => 'pf',
                     'name' => $di->childDish->name,
+                    'recipe' => $di->childDish->description,
                     'weight_output' => round($nettoTotalRaw, 1),
                     'weight_netto_sum' => round($sumNetto, 1),
                     'weight_brutto_sum' => round($sumBrutto, 1),

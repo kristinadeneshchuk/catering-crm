@@ -295,6 +295,12 @@
                                             </tr>
                                         </tbody>
                                     </table>
+                                    @if(!empty(trim(strip_tags($pf['recipe'] ?? ''))))
+                                        <div class="recipe-box" style="margin: 8px; border-radius: 4px;">
+                                            <div class="recipe-title">Рецепт НФ</div>
+                                            <div class="recipe-content">{!! $pf['recipe'] !!}</div>
+                                        </div>
+                                    @endif
                                 </div>
                             @endforeach
                         </div>
@@ -334,6 +340,7 @@
                                                     $summed[$key] = [
                                                         'name'   => $comp['name'],
                                                         'type'   => $comp['type'] ?? 'product',
+                                                        'recipe' => $comp['recipe'] ?? null,
                                                         'brutto' => 0,
                                                         'netto'  => 0,
                                                         'sub_ingredients' => $comp['sub_ingredients'] ?? [],
@@ -431,6 +438,12 @@
                                                     </tr>
                                                 </tbody>
                                             </table>
+                                            @if(!empty(trim(strip_tags($repPf['recipe'] ?? ''))))
+                                                <div class="recipe-box" style="margin: 8px; border-radius: 4px;">
+                                                    <div class="recipe-title">Рецепт НФ</div>
+                                                    <div class="recipe-content">{!! $repPf['recipe'] !!}</div>
+                                                </div>
+                                            @endif
                                         </div>
                                         @endif
                                     @endforeach
