@@ -18,6 +18,7 @@ jobs:
             cd /home/afood/a-food.com.ua/okn
             git pull origin main
             php artisan config:clear
+            php artisan view:clear
 
   deploy-shinshin:
     runs-on: ubuntu-latest
@@ -32,3 +33,4 @@ jobs:
             cd /home/shinshin/u-fit.com.ua/crm
             git pull origin main
             php artisan config:clear
+            php artisan view:clear
