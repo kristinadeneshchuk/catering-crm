@@ -295,19 +295,10 @@
                                             </tr>
                                         </tbody>
                                     </table>
-                                    @php
-                                        $pfRecipeRaw = $pf['recipe'] ?? null;
-                                        $pfRecipeLen = is_string($pfRecipeRaw) ? mb_strlen($pfRecipeRaw) : -1;
-                                        $pfRecipeClean = trim(strip_tags((string) $pfRecipeRaw));
-                                    @endphp
-                                    @if($pfRecipeClean !== '')
+                                    @if(!empty(trim(strip_tags($pf['recipe'] ?? ''))))
                                         <div class="recipe-box" style="margin: 8px; border-radius: 4px;">
                                             <div class="recipe-title">Рецепт НФ</div>
-                                            <div class="recipe-content">{!! $pfRecipeRaw !!}</div>
-                                        </div>
-                                    @else
-                                        <div style="margin: 8px; padding: 4px 8px; font-size: 9px; background: #fef2f2; color: #991b1b; border: 1px dashed #fca5a5; border-radius: 4px;">
-                                            DEBUG: пусто. raw_len={{ $pfRecipeLen }}, key_exists={{ array_key_exists('recipe', $pf) ? 'yes' : 'no' }}
+                                            <div class="recipe-content">{!! $pf['recipe'] !!}</div>
                                         </div>
                                     @endif
                                 </div>
