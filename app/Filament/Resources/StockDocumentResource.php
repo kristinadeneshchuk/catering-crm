@@ -148,21 +148,32 @@ class StockDocumentResource extends Resource
                                         }
                                         return null;
                                     })
-                                    ->options(function (Forms\Get $get) {
+                                    // Серверний пошук замість завантаження всієї таблиці.
+                                    // Раніше options() тягнув повний Ingredient/Packaging для КОЖНОГО
+                                    // рядка репітера при кожному live-рендері → 508 Resource Limit.
+                                    ->getSearchResultsUsing(function (string $search, Forms\Get $get) {
                                         $category = $get('../../item_category');
                                         if (!$category) return [];
 
-                                        if ($category === 'packaging') {
-                                            return Packaging::orderBy('name')->get()
-                                                ->mapWithKeys(fn ($item) => [
-                                                    Packaging::class . '||' . $item->id => $item->name,
-                                                ])->all();
-                                        }
+                                        $modelClass = $category === 'packaging'
+                                            ? Packaging::class
+                                            : Ingredient::class;
 
-                                        return Ingredient::orderBy('name')->get()
-                                            ->mapWithKeys(fn ($item) => [
-                                                Ingredient::class . '||' . $item->id => $item->name,
-                                            ])->all();
+                                        return $modelClass::query()
+                                            ->where('name', 'like', "%{$search}%")
+                                            ->orderBy('name')
+                                            ->limit(50)
+                                            ->pluck('name', 'id')
+                                            ->mapWithKeys(fn ($name, $id) => [
+                                                $modelClass . '||' . $id => $name,
+                                            ])
+                                            ->all();
+                                    })
+                                    ->getOptionLabelUsing(function ($value) {
+                                        if (!$value || !str_contains($value, '||')) return null;
+                                        [$modelClass, $modelId] = explode('||', $value);
+                                        if (!class_exists($modelClass)) return null;
+                                        return $modelClass::find($modelId)?->name;
                                     })
                                     ->live()
                                     ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
