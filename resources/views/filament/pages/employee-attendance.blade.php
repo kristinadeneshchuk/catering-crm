@@ -7,6 +7,13 @@
     .emp-btn:hover { opacity: .75; }
     .emp-cell-btn { border: none; cursor: pointer; transition: transform .12s; background: transparent; }
     .emp-cell-btn:hover { transform: scale(1.12); }
+    .emp-duty-star { transition: transform .12s ease, background .15s, box-shadow .15s; }
+    .emp-duty-star:hover { transform: scale(1.18); }
+    .emp-duty-star.is-active { animation: emp-duty-pulse 2s ease-in-out infinite; }
+    @keyframes emp-duty-pulse {
+        0%, 100% { box-shadow: 0 0 8px rgba(245, 158, 11, .6); }
+        50%      { box-shadow: 0 0 14px rgba(245, 158, 11, .95); }
+    }
     .fi-page-header { display: none !important; }
 
     .emp-date-input {
@@ -217,13 +224,16 @@
                             @if($row['is_cook'])
                                 <button wire:click="toggleDuty({{ $row['id'] }}, '{{ $date }}')"
                                     title="{{ $isDuty ? 'Зняти чергування' : 'Призначити черговим (+' . number_format($data['duty_bonus'], 0, '.', ' ') . ' ₴)' }}"
-                                    style="position:absolute;top:-6px;right:-6px;width:16px;height:16px;
-                                           border-radius:50%;border:none;cursor:pointer;padding:0;
-                                           background:{{ $isDuty ? '#f59e0b' : '#27272a' }};
+                                    class="emp-duty-star{{ $isDuty ? ' is-active' : '' }}"
+                                    style="position:absolute;top:-8px;right:-8px;width:22px;height:22px;
+                                           border-radius:50%;cursor:pointer;padding:0;
+                                           background:{{ $isDuty ? '#f59e0b' : '#1f1f22' }};
+                                           border:1.5px solid {{ $isDuty ? '#fbbf24' : '#3f3f46' }};
+                                           {{ $isDuty ? 'box-shadow:0 0 8px rgba(245, 158, 11, .6);' : '' }}
                                            display:inline-flex;align-items:center;justify-content:center;
-                                           transition:transform .12s;line-height:1;
+                                           transition:transform .12s, background .15s;line-height:1;
                                            z-index:2;">
-                                    <span style="font-size:9px;color:{{ $isDuty ? '#000' : '#71717a' }};font-weight:700;">★</span>
+                                    <span style="font-size:13px;color:{{ $isDuty ? '#000' : '#a1a1aa' }};font-weight:700;line-height:1;">★</span>
                                 </button>
                             @endif
                         </div>
