@@ -90,17 +90,12 @@ class Order extends Model
             }
 
             // --- Розрахунок базової ціни ---
-            // Для нових замовлень (або якщо price_per_day не встановлено) — беремо з тарифу.
-            // Для існуючих замовлень — також перераховуємо, якщо користувач явно змінив
-            // тариф або калораж (інакше зміни в формі ігнорувалися б, бо UI рахує ціну
-            // на льоту, а saving() перетирав би total_price старою price_per_day).
-            // Зміна цін у самому tariff_prices на існуючі замовлення, як і раніше, не впливає.
-            $shouldRecalcPrice = !$order->exists
-                || $order->price_per_day === null
-                || $order->isDirty('tariff_id')
-                || $order->isDirty('calories');
-
-            if ($shouldRecalcPrice) {
+            // Ціна заморожена з моменту створення замовлення: для існуючих замовлень
+            // НІКОЛИ не перераховуємо price_per_day з tariff_prices, навіть якщо
+            // менеджер змінив тариф/калораж/тривалість. Це гарантує, що підняття
+            // цін у tariff_prices не зачіпає вже оформлені замовлення.
+            // Для нових замовлень — беремо актуальну ціну з тарифу.
+            if (!$order->exists || $order->price_per_day === null) {
                 $range = CalorieRange::where('min_kcal', '<=', $order->calories)
                     ->where('max_kcal', '>=', $order->calories)
                     ->first();
@@ -115,6 +110,10 @@ class Order extends Model
                         $order->price_per_day = (float) $tariffPrice->price_per_day;
                     }
                 }
+            } elseif ($order->isDirty('price_per_day')) {
+                // Existing order — будь-яке намагання змінити price_per_day з форми
+                // відкочуємо назад до зафіксованої ціни з БД.
+                $order->price_per_day = $order->getOriginal('price_per_day');
             }
 
             if ($order->price_per_day > 0) {

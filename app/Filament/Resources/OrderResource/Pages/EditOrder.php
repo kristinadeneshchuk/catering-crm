@@ -57,7 +57,9 @@ class EditOrder extends EditRecord
             'menu_plan_id'  => $child->menu_plan_id,
             'project'       => $child->project,
             'status'        => in_array($child->status, ['active', 'new']) ? 'active' : 'paused',
-            'price_per_day' => $this->calcPricePerDay($child->tariff_id, (int) $child->calories),
+            // Зафіксована ціна з БД, а не поточна з tariff_prices — щоб після
+            // підняття цін у формі показувалась стара ціна.
+            'price_per_day' => (float) $child->price_per_day,
         ])->toArray();
 
         return $data;
@@ -77,19 +79,12 @@ class EditOrder extends EditRecord
         // Order::recomputeStatus() — тут просто не пускаємо його у update().
         unset($data['status']);
 
-        // Завжди перераховуємо ціну з поточних значень форми (тариф + калораж +
-        // тривалість). Інакше виходить рассинхрон: UI показує 1073 ₴/день,
-        // а в БД лежить старий price_per_day (бо колись зберігся з іншим калоражем),
-        // і Order::saving() множить старий price_per_day × duration → стара сума.
-        $tariffId = $data['tariff_id'] ?? null;
-        $calories = (int) ($data['calories'] ?? 0);
-        $duration = (int) ($data['duration'] ?? $this->record->duration ?? 0) ?: 1;
-
-        $pricePerDay = $this->calcPricePerDay($tariffId, $calories);
-        if ($pricePerDay > 0) {
-            $data['price_per_day'] = $pricePerDay;
-            $data['total_price']   = $pricePerDay * $duration;
-        }
+        // Ціна заморожена з моменту створення замовлення. Не пускаємо в БД нові
+        // значення price_per_day / total_price з форми (UI міг порахувати їх
+        // за поточними tariff_prices, які могли вирости). Order::saving() сам
+        // підставить зафіксовану price_per_day з БД і помножить на нову duration.
+        unset($data['price_per_day']);
+        unset($data['total_price']);
 
         return $data;
     }
@@ -128,15 +123,15 @@ class EditOrder extends EditRecord
             // Для індивідуального меню план не потрібен
             $effectivePlanId = $menuType === 'individual' ? null : $menuPlanId;
 
-            $pricePerDay = $this->calcPricePerDay($tariffId, $calories);
-            $duration    = $order->duration ?: $order->orderDays()->count();
-            $totalPrice  = $pricePerDay * $duration;
+            $duration = $order->duration ?: $order->orderDays()->count();
 
             // Статус: 'active' або 'paused' з форми
             $newStatus = ($ration['status'] ?? 'active') === 'paused' ? 'paused' : 'active';
 
             if ($childId && $existingChildren->has($childId)) {
-                // Оновлюємо існуюче дочірнє замовлення
+                // Оновлюємо існуюче дочірнє замовлення — ціна заморожена,
+                // total_price / final_price не передаємо. Order::saving() сам
+                // перерахує total_price як старе price_per_day × duration.
                 $existingChildren[$childId]->update([
                     'tariff_id'    => $tariffId,
                     'calories'     => $calories,
@@ -144,12 +139,14 @@ class EditOrder extends EditRecord
                     'menu_plan_id' => $effectivePlanId,
                     'project'      => $project,
                     'status'       => $newStatus,
-                    'total_price'  => $totalPrice,
-                    'final_price'  => $totalPrice,
                 ]);
                 $keptIds[] = $childId;
             } else {
-                // Нový раціон — створюємо дочірнє замовлення
+                // Новий раціон — рахуємо по поточних цінах із tariff_prices
+                $pricePerDay = $this->calcPricePerDay($tariffId, $calories);
+                $totalPrice  = $pricePerDay * $duration;
+
+                // Створюємо дочірнє замовлення
                 $childOrder = Order::create([
                     'client_id'       => $order->client_id,
                     'parent_order_id' => $order->id,
