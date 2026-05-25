@@ -30,8 +30,13 @@ class TelegramEveningSummary extends Command
         $paymentCount = (int) ($payments->count ?? 0);
         $paymentTotal = (float) ($payments->total ?? 0);
 
-        // Нові клієнти сьогодні
-        $newClients = Client::whereDate('created_at', $today)->count();
+        // Нові клієнти сьогодні + розбивка за джерелом
+        $newClientsBySource = Client::whereDate('created_at', $today)
+            ->select('sales_source', DB::raw('COUNT(*) as cnt'))
+            ->groupBy('sales_source')
+            ->orderByDesc('cnt')
+            ->get();
+        $newClients = (int) $newClientsBySource->sum('cnt');
 
         // Клієнти на паузі
         $pausedOrders = Order::where('status', 'paused')->count();
@@ -50,6 +55,10 @@ class TelegramEveningSummary extends Command
 
         $icon = $newClients > 0 ? "🆕" : "➖";
         $lines[] = "{$icon} <b>Нових клієнтів:</b> {$newClients}";
+        foreach ($newClientsBySource as $src) {
+            $label = $src->sales_source ?: 'Не вказано';
+            $lines[] = "   • {$label}: {$src->cnt}";
+        }
         $lines[] = "";
 
         $pauseIcon = $pausedOrders > 3 ? "⚠️" : "⏸";
