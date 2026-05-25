@@ -17,4 +17,9 @@ class Employee extends Model
     {
         return $this->hasMany(DeliveryRoute::class);
     }
+
+    public function penalties(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(EmployeePenalty::class);
+    }
 }

@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 
 use App\Filament\Resources\EmployeeResource\Pages;
+use App\Filament\Resources\EmployeeResource\RelationManagers;
 use App\Models\Employee;
 use App\Models\Account;
 use App\Models\Transaction;
@@ -212,6 +213,13 @@ class EmployeeResource extends Resource
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            RelationManagers\PenaltiesRelationManager::class,
+        ];
     }
 
     public static function getPages(): array
