@@ -53,6 +53,7 @@ class SettingResource extends Resource
                                 'monthly_rent' => 'Оренда (грн/місяць)',
                                 'monthly_utilities' => 'Комунальні послуги (грн/місяць)',
                                 'rewards_enabled' => 'Подарунки за рейтинги',
+                                'duty_cook_bonus' => 'Доплата черговому кухарю (грн)',
                                 default => (string)$state,
                             })
                             ->disabled()
@@ -87,6 +88,17 @@ class SettingResource extends Resource
                             ->visible(fn ($record) => $record && in_array($record->key, ['monthly_rent', 'monthly_utilities']))
                             ->dehydrated(fn ($record) => $record && in_array($record->key, ['monthly_rent', 'monthly_utilities'])),
 
+                        // 4b. ЗНАЧЕННЯ (Доплата черговому)
+                        Forms\Components\TextInput::make('value_duty_bonus')
+                            ->label('Сума доплати (грн/зміну)')
+                            ->statePath('value')
+                            ->required()
+                            ->numeric()
+                            ->prefix('₴')
+                            ->helperText('Сума, яка нараховується кухарю поверх ставки при призначенні черговим на день.')
+                            ->visible(fn ($record) => $record && $record->key === 'duty_cook_bonus')
+                            ->dehydrated(fn ($record) => $record && $record->key === 'duty_cook_bonus'),
+
                         // 5. СПИСОК (rewards_enabled)
                         Forms\Components\Select::make('value')
                             ->label('Подарунки за рейтинги')
@@ -105,7 +117,7 @@ class SettingResource extends Resource
             ->modifyQueryUsing(function (Builder $query) {
                 // menu_cycle_days / menu_cycle_start_date — застарілі (тепер на рівні плану меню),
                 // приховані з цього списку, але рядки лишаються в БД для бек-сумісності.
-                return $query->whereIn('key', ['monthly_rent', 'monthly_utilities', 'rewards_enabled']);
+                return $query->whereIn('key', ['monthly_rent', 'monthly_utilities', 'rewards_enabled', 'duty_cook_bonus']);
             })
             ->columns([
                 Tables\Columns\TextColumn::make('key')
@@ -116,6 +128,7 @@ class SettingResource extends Resource
                         'monthly_rent' => 'Оренда (грн/місяць)',
                         'monthly_utilities' => 'Комунальні послуги (грн/місяць)',
                         'rewards_enabled' => 'Подарунки за рейтинги',
+                        'duty_cook_bonus' => 'Доплата черговому кухарю (грн)',
                         default => $state,
                     })
                     ->sortable(),
@@ -128,7 +141,7 @@ class SettingResource extends Resource
                         if ($record->key === 'menu_cycle_start_date') {
                             return \Carbon\Carbon::parse($state)->format('d.m.Y');
                         }
-                        if (in_array($record->key, ['monthly_rent', 'monthly_utilities'])) {
+                        if (in_array($record->key, ['monthly_rent', 'monthly_utilities', 'duty_cook_bonus'])) {
                             return number_format((float)$state, 0, '.', ' ') . ' ₴';
                         }
                         if ($record->key === 'rewards_enabled') {

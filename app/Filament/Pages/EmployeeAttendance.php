@@ -6,7 +6,9 @@ use App\Models\DeliveryRoute;
 use App\Models\Employee;
 use App\Models\EmployeeShift;
 use App\Models\OrderDay;
+use App\Models\Setting;
 use Carbon\Carbon;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
 
@@ -51,6 +53,14 @@ class EmployeeAttendance extends Page
         return $dates;
     }
 
+    /**
+     * Сума доплати черговому кухарю — береться з налаштувань бізнесу.
+     */
+    protected function dutyBonus(): float
+    {
+        return (float) (Setting::where('key', 'duty_cook_bonus')->value('value') ?? 0);
+    }
+
     public function toggleShift(int $employeeId, string $date): void
     {
         $employee = Employee::findOrFail($employeeId);
@@ -58,6 +68,7 @@ class EmployeeAttendance extends Page
 
         DB::transaction(function () use ($employee, $shift, $employeeId, $date) {
             if ($shift) {
+                // Видаляємо зміну — відкочуємо повну суму (включно з можливою доплатою чергового)
                 $employee->decrement('balance', $shift->rate);
                 $shift->delete();
             } else {
@@ -68,8 +79,70 @@ class EmployeeAttendance extends Page
                 } else {
                     $rate = (float) $employee->base_rate;
                 }
-                EmployeeShift::create(['employee_id' => $employeeId, 'date' => $date, 'rate' => $rate]);
+                EmployeeShift::create(['employee_id' => $employeeId, 'date' => $date, 'rate' => $rate, 'is_duty' => false]);
                 $employee->increment('balance', $rate);
+            }
+        });
+    }
+
+    /**
+     * Призначити / зняти чергового кухаря на день.
+     * Один черговий на день. Якщо змінювати — спершу зняти з попереднього.
+     */
+    public function toggleDuty(int $employeeId, string $date): void
+    {
+        $employee = Employee::findOrFail($employeeId);
+
+        if ($employee->position !== 'cook') {
+            Notification::make()
+                ->title('Черговим може бути лише кухар (cook)')
+                ->danger()
+                ->send();
+            return;
+        }
+
+        $shift = EmployeeShift::where('employee_id', $employeeId)->where('date', $date)->first();
+
+        if (!$shift) {
+            Notification::make()
+                ->title('Спочатку відмітьте зміну, потім призначайте чергового')
+                ->warning()
+                ->send();
+            return;
+        }
+
+        $bonus = $this->dutyBonus();
+
+        DB::transaction(function () use ($shift, $employee, $employeeId, $date, $bonus) {
+            if ($shift->is_duty) {
+                // Знімаємо чергування — мінусуємо бонус з rate і balance
+                $shift->update([
+                    'is_duty' => false,
+                    'rate'    => max(0, (float) $shift->rate - $bonus),
+                ]);
+                $employee->decrement('balance', $bonus);
+            } else {
+                // Перевіряємо, що на цей день ще немає чергового
+                $existingDuty = EmployeeShift::where('date', $date)
+                    ->where('is_duty', true)
+                    ->where('employee_id', '!=', $employeeId)
+                    ->first();
+
+                if ($existingDuty) {
+                    $other = Employee::find($existingDuty->employee_id);
+                    Notification::make()
+                        ->title('На цей день вже призначено чергового')
+                        ->body('Спочатку зніміть чергування з: ' . ($other?->name ?? '—'))
+                        ->danger()
+                        ->send();
+                    return;
+                }
+
+                $shift->update([
+                    'is_duty' => true,
+                    'rate'    => (float) $shift->rate + $bonus,
+                ]);
+                $employee->increment('balance', $bonus);
             }
         });
     }
@@ -78,7 +151,7 @@ class EmployeeAttendance extends Page
     {
         $dates = $this->getDates();
         if (empty($dates)) {
-            return ['stats' => ['shifts' => 0, 'salary' => 0, 'absent_today' => 0], 'rows' => [], 'portions' => [], 'today' => now()->format('Y-m-d')];
+            return ['stats' => ['shifts' => 0, 'salary' => 0, 'absent_today' => 0], 'rows' => [], 'portions' => [], 'today' => now()->format('Y-m-d'), 'duty_bonus' => 0];
         }
 
         $rangeStart = $dates[0];
@@ -134,14 +207,17 @@ class EmployeeAttendance extends Page
 
             foreach ($dates as $date) {
                 if ($empShifts->has($date)) {
-                    $days[$date] = 'present';
+                    $days[$date] = [
+                        'status'  => 'present',
+                        'is_duty' => (bool) $empShifts[$date]->is_duty,
+                    ];
                 } elseif ($date > $today) {
-                    $days[$date] = 'future';
+                    $days[$date] = ['status' => 'future', 'is_duty' => false];
                 } elseif ($date === $today) {
-                    $days[$date] = 'absent_today';
+                    $days[$date] = ['status' => 'absent_today', 'is_duty' => false];
                     $absentEmployee = true;
                 } else {
-                    $days[$date] = 'off';
+                    $days[$date] = ['status' => 'off', 'is_duty' => false];
                 }
             }
 
@@ -152,6 +228,7 @@ class EmployeeAttendance extends Page
                 'position_label' => $posLabels[$emp->position] ?? $emp->position,
                 'base_rate'      => $emp->base_rate,
                 'is_kitchen'     => in_array($emp->position, $kitchenPositions),
+                'is_cook'        => $emp->position === 'cook',
                 'days'           => $days,
                 'absent_today'   => $absentEmployee && $inRange,
             ];
@@ -163,9 +240,10 @@ class EmployeeAttendance extends Page
                 'salary'       => $salary,
                 'absent_today' => $absentToday,
             ],
-            'rows'     => $rows,
-            'portions' => $portions->toArray(),
-            'today'    => $today,
+            'rows'       => $rows,
+            'portions'   => $portions->toArray(),
+            'today'      => $today,
+            'duty_bonus' => $this->dutyBonus(),
         ];
     }
 }

@@ -173,26 +173,47 @@
 
                     {{-- Клітинки днів --}}
                     @foreach($dates as $date)
-                    @php $status = $row['days'][$date] ?? 'future'; @endphp
+                    @php
+                        $dayInfo = $row['days'][$date] ?? ['status' => 'future', 'is_duty' => false];
+                        $status  = $dayInfo['status'];
+                        $isDuty  = $dayInfo['is_duty'];
+                    @endphp
                     <td style="text-align:center;padding:6px 4px;">
                         @if($status === 'present')
-                            <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
-                                style="width:34px;height:34px;border-radius:50%;
-                                       background:{{ $row['is_kitchen'] ? '#14532d' : '#1e3a5f' }};
-                                       display:inline-flex;align-items:center;justify-content:center;">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                     stroke="{{ $row['is_kitchen'] ? '#22c55e' : '#60a5fa' }}" stroke-width="2.8">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
-                                </svg>
-                            </button>
+                            <div style="position:relative;display:inline-block;width:34px;height:34px;">
+                                <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
+                                    style="width:34px;height:34px;border-radius:50%;
+                                           background:{{ $isDuty ? '#78350f' : ($row['is_kitchen'] ? '#14532d' : '#1e3a5f') }};
+                                           {{ $isDuty ? 'box-shadow:0 0 0 2px #f59e0b;' : '' }}
+                                           display:inline-flex;align-items:center;justify-content:center;">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                         stroke="{{ $isDuty ? '#fbbf24' : ($row['is_kitchen'] ? '#22c55e' : '#60a5fa') }}" stroke-width="2.8">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                                    </svg>
+                                </button>
+                                @if($row['is_cook'])
+                                    <button wire:click="toggleDuty({{ $row['id'] }}, '{{ $date }}')"
+                                        title="{{ $isDuty ? 'Зняти чергування' : 'Призначити черговим (+' . number_format($data['duty_bonus'], 0, '.', ' ') . ' ₴)' }}"
+                                        style="position:absolute;top:-6px;right:-6px;width:16px;height:16px;
+                                               border-radius:50%;border:none;cursor:pointer;padding:0;
+                                               background:{{ $isDuty ? '#f59e0b' : '#27272a' }};
+                                               display:inline-flex;align-items:center;justify-content:center;
+                                               transition:transform .12s;line-height:1;">
+                                        <span style="font-size:9px;color:{{ $isDuty ? '#000' : '#71717a' }};font-weight:700;">★</span>
+                                    </button>
+                                @endif
+                            </div>
                         @elseif($status === 'absent_today')
-                            <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
-                                style="width:34px;height:34px;border-radius:50%;
-                                       border:2px dashed #f87171;
-                                       display:inline-flex;align-items:center;justify-content:center;
-                                       color:#f87171;font-weight:700;font-size:14px;">
-                                !
-                            </button>
+                            <div style="position:relative;display:inline-block;width:34px;height:34px;">
+                                <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
+                                    style="width:34px;height:34px;border-radius:50%;
+                                           border:2px dashed #f87171;
+                                           background:transparent;
+                                           display:inline-flex;align-items:center;justify-content:center;
+                                           color:#f87171;font-weight:700;font-size:14px;">
+                                    !
+                                </button>
+                            </div>
                         @elseif($status === 'off')
                             <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
                                 style="width:34px;height:34px;border-radius:50%;
@@ -270,6 +291,20 @@
         <div style="display:flex;align-items:center;gap:6px;">
             <span style="color:#3f3f46;font-size:17px;font-weight:300;line-height:1;">–</span>
             <span style="color:#71717a;font-size:12px;">Вихідний / кліпнути щоб додати зміну</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <div style="position:relative;width:20px;height:20px;">
+                <div style="width:20px;height:20px;border-radius:50%;background:#78350f;box-shadow:0 0 0 2px #f59e0b;
+                            display:flex;align-items:center;justify-content:center;">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                    </svg>
+                </div>
+                <span style="position:absolute;top:-4px;right:-4px;width:11px;height:11px;border-radius:50%;
+                             background:#f59e0b;color:#000;font-size:7px;font-weight:700;
+                             display:flex;align-items:center;justify-content:center;line-height:1;">★</span>
+            </div>
+            <span style="color:#71717a;font-size:12px;">Черговий кухар (+{{ number_format($data['duty_bonus'] ?? 0, 0, '.', ' ') }} ₴)</span>
         </div>
     </div>
 
