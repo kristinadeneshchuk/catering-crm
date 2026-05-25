@@ -87,7 +87,7 @@ class EmployeeAttendance extends Page
 
     /**
      * Призначити / зняти чергового кухаря на день.
-     * Один черговий на день. Якщо змінювати — спершу зняти з попереднього.
+     * Один черговий на день. Якщо зміни на день ще немає — створюємо її автоматично.
      */
     public function toggleDuty(int $employeeId, string $date): void
     {
@@ -101,48 +101,55 @@ class EmployeeAttendance extends Page
             return;
         }
 
-        $shift = EmployeeShift::where('employee_id', $employeeId)->where('date', $date)->first();
-
-        if (!$shift) {
-            Notification::make()
-                ->title('Спочатку відмітьте зміну, потім призначайте чергового')
-                ->warning()
-                ->send();
-            return;
-        }
-
         $bonus = $this->dutyBonus();
 
-        DB::transaction(function () use ($shift, $employee, $employeeId, $date, $bonus) {
-            if ($shift->is_duty) {
-                // Знімаємо чергування — мінусуємо бонус з rate і balance
+        DB::transaction(function () use ($employee, $employeeId, $date, $bonus) {
+            $shift = EmployeeShift::where('employee_id', $employeeId)->where('date', $date)->first();
+
+            if ($shift && $shift->is_duty) {
+                // Знімаємо чергування — мінусуємо бонус з rate і balance.
+                // Сама зміна лишається.
                 $shift->update([
                     'is_duty' => false,
                     'rate'    => max(0, (float) $shift->rate - $bonus),
                 ]);
                 $employee->decrement('balance', $bonus);
-            } else {
-                // Перевіряємо, що на цей день ще немає чергового
-                $existingDuty = EmployeeShift::where('date', $date)
-                    ->where('is_duty', true)
-                    ->where('employee_id', '!=', $employeeId)
-                    ->first();
+                return;
+            }
 
-                if ($existingDuty) {
-                    $other = Employee::find($existingDuty->employee_id);
-                    Notification::make()
-                        ->title('На цей день вже призначено чергового')
-                        ->body('Спочатку зніміть чергування з: ' . ($other?->name ?? '—'))
-                        ->danger()
-                        ->send();
-                    return;
-                }
+            // Перевіряємо, що на цей день ще немає іншого чергового
+            $existingDuty = EmployeeShift::where('date', $date)
+                ->where('is_duty', true)
+                ->where('employee_id', '!=', $employeeId)
+                ->first();
 
+            if ($existingDuty) {
+                $other = Employee::find($existingDuty->employee_id);
+                Notification::make()
+                    ->title('На цей день вже призначено чергового')
+                    ->body('Спочатку зніміть чергування з: ' . ($other?->name ?? '—'))
+                    ->danger()
+                    ->send();
+                return;
+            }
+
+            if ($shift) {
+                // Зміна вже є, але без чергування — додаємо бонус.
                 $shift->update([
                     'is_duty' => true,
                     'rate'    => (float) $shift->rate + $bonus,
                 ]);
                 $employee->increment('balance', $bonus);
+            } else {
+                // Зміни ще немає — створюємо одразу зі статусом "черговий".
+                $baseRate = (float) $employee->base_rate;
+                EmployeeShift::create([
+                    'employee_id' => $employeeId,
+                    'date'        => $date,
+                    'rate'        => $baseRate + $bonus,
+                    'is_duty'     => true,
+                ]);
+                $employee->increment('balance', $baseRate + $bonus);
             }
         });
     }
