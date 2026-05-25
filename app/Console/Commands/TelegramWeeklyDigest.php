@@ -239,8 +239,12 @@ class TelegramWeeklyDigest extends Command
             $lines[] = "   {$icon} {$arrow}{$diff}% до мин. тижня";
         }
 
-        // Залишок продукції на складі
-        $stockValue = (float) Ingredient::selectRaw('SUM(stock * price_per_kg)')->value(DB::raw('SUM(stock * price_per_kg)'));
+        // Залишок продукції на складі (та сама формула, що на сторінці "Поточний залишок")
+        $stockValue = Ingredient::get()->sum(function ($i) {
+            $unit = mb_strtolower(trim((string) ($i->unit ?? 'кг')));
+            $mult = in_array($unit, ['г', 'g', 'мл', 'ml']) ? 0.001 : 1.0;
+            return max(0, (float) $i->stock * $mult * (float) $i->average_price);
+        });
         $lines[] = "   Залишок на складі: <b>" . number_format($stockValue, 0, '.', ' ') . " ₴</b>";
         $lines[] = "";
 
@@ -270,7 +274,8 @@ class TelegramWeeklyDigest extends Command
             $lines[] = "   {$icon} {$arrow}{$diff}% до мин. тижня";
         }
 
-        $packStockValue = (float) Packaging::selectRaw('SUM(stock * price)')->value(DB::raw('SUM(stock * price)'));
+        // Залишок тари на складі (та сама формула, що на сторінці "Поточний залишок")
+        $packStockValue = Packaging::get()->sum(fn ($p) => max(0, (float) $p->stock * (float) $p->price));
         $lines[] = "   Залишок на складі: <b>" . number_format($packStockValue, 0, '.', ' ') . " ₴</b>";
         $lines[] = "";
 
