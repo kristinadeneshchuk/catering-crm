@@ -193,7 +193,10 @@ class AntLogisticsService
     // Крок 2: POST /Request/Comps/edit — додати точки доставки
     // -------------------------------------------------------------------------
 
-    public function pushDailyOrders(string $date, string $shift = 'all'): int
+    /**
+     * @return array{pushed:int,failed:int,total:int,skipped:array<int,array{client_id:int,client_name:string,reason:string}>}
+     */
+    public function pushDailyOrders(string $date, string $shift = 'all'): array
     {
         $this->ensureAuthenticated();
 
@@ -202,6 +205,9 @@ class AntLogisticsService
         $dateFmt      = Carbon::parse($date)->format('d.m.Y'); // формат Ant: dd.MM.yyyy
 
         $extIdent    = 'crm_' . $deliveryDate . ($shift !== 'all' ? '_' . $shift : '');
+
+        // Збираємо клієнтів, яких довелось пропустити — для нотифікації менеджеру.
+        $skipped = [];
 
         // --- 1. Тягнемо OrderDay через resolveDeliveryDate ---
         // Дата доставки враховує закриті слоти (вихідні курʼєрів) та override на день.
@@ -212,7 +218,7 @@ class AntLogisticsService
 
         if ($orderDays->isEmpty()) {
             Log::info('[AntLogistics] No orders to push', ['date' => $deliveryDate, 'shift' => $shift]);
-            return 0;
+            return ['pushed' => 0, 'failed' => 0, 'total' => 0, 'skipped' => []];
         }
 
         // --- 2. Групуємо OrderDay по client_id + час ---
@@ -249,9 +255,15 @@ class AntLogisticsService
             $client    = $mainOrder?->client;
             if (!$client) continue;
 
-            // Вибираємо правильний Comp_Id:
-            // Якщо на цей день є override адреса — шукаємо відповідний ant_comp_id
-            $compId = (string) $client->id; // default
+            // Вибираємо правильний Comp_Id у такому порядку:
+            // 1) override-адреса дня → відповідний ant_comp_id
+            // 2) default-адреса клієнта (is_default=1) → її ant_comp_id
+            // 3) єдина адреса клієнта (неоднозначності немає) → її ant_comp_id
+            // 4) якщо адрес >1 і default не виставлений — ПРОПУСКАЄМО клієнта
+            //    (інакше можна доставити не туди — менеджер має сам вибрати default)
+            // 5) як крайній fallback (немає взагалі адрес) — сирий client->id
+            $compId = null;
+
             if ($mainDay->address) {
                 $matchedAddr = $client->addresses->first(
                     fn ($a) => trim($a->address) === trim($mainDay->address)
@@ -259,6 +271,38 @@ class AntLogisticsService
                 if ($matchedAddr?->ant_comp_id) {
                     $compId = $matchedAddr->ant_comp_id;
                 }
+            }
+
+            if ($compId === null) {
+                $defaultAddr = $client->addresses->firstWhere('is_default', true);
+                if ($defaultAddr?->ant_comp_id) {
+                    $compId = $defaultAddr->ant_comp_id;
+                } elseif ($client->addresses->count() === 1) {
+                    // Єдина адреса — неоднозначності немає, береш її
+                    $only = $client->addresses->first();
+                    if ($only?->ant_comp_id) {
+                        $compId = $only->ant_comp_id;
+                    }
+                } elseif ($client->addresses->count() > 1) {
+                    // Кілька адрес без default — небезпечно, пропускаємо
+                    Log::warning('[AntLogistics] Skip client: multiple addresses without default', [
+                        'client_id'      => $client->id,
+                        'client_name'    => $client->name,
+                        'addresses_cnt'  => $client->addresses->count(),
+                        'order_id'       => $mainOrder?->id,
+                        'date'           => $mainDay->date,
+                    ]);
+                    $skipped[] = [
+                        'client_id'   => (int) $client->id,
+                        'client_name' => (string) $client->name,
+                        'reason'      => 'multiple_addresses_no_default',
+                    ];
+                    continue; // не додаємо в $compRows
+                }
+            }
+
+            if ($compId === null) {
+                $compId = (string) $client->id;
             }
 
             // Час: override на конкретний день → інакше час замовлення
@@ -301,7 +345,12 @@ class AntLogisticsService
             'first_row'         => $compRows[0] ?? null,
         ]);
 
-        // Відправляємо по 100
+        // Відправляємо по 100. Рахуємо лише ті, які Ant справді прийняв,
+        // щоб нотифікація не брехала. Якщо chunk фейлиться через один
+        // некоректний Comp_Id — пробуємо по одному в межах цього chunk'a.
+        $pushed = 0;
+        $failed = 0;
+
         foreach (array_chunk($compRows, 100) as $chunk) {
             $compsResp = $this->http()->post(
                 "{$this->baseUrl}/Request/Comps/edit"
@@ -311,24 +360,57 @@ class AntLogisticsService
                 ['rows' => $chunk]
             );
 
-            if ($compsResp->failed()) {
-                Log::error('[AntLogistics] Request/Comps/edit failed', [
-                    'status' => $compsResp->status(),
-                    'body'   => $compsResp->body(),
-                ]);
-            } else {
+            if (!$compsResp->failed()) {
+                $pushed += count($chunk);
                 Log::info('[AntLogistics] Request comps added', ['count' => count($chunk), 'response' => $compsResp->json()]);
+                continue;
+            }
+
+            // Chunk не пройшов — швидше за все одна точка некоректна.
+            // Пробуємо по одній щоб відсіяти бракованих і відправити решту.
+            Log::warning('[AntLogistics] Request/Comps/edit chunk failed, retrying per-row', [
+                'status'     => $compsResp->status(),
+                'chunk_size' => count($chunk),
+                'body'       => substr($compsResp->body(), 0, 500),
+            ]);
+
+            foreach ($chunk as $singleRow) {
+                $oneResp = $this->http()->post(
+                    "{$this->baseUrl}/Request/Comps/edit"
+                    . "?Session_Ident={$this->sessionIdent}"
+                    . "&Date_Data={$dateFmt}"
+                    . "&Ext_Ident={$extIdent}",
+                    ['rows' => [$singleRow]]
+                );
+
+                if ($oneResp->failed()) {
+                    $failed++;
+                    Log::error('[AntLogistics] Request/Comps/edit single row failed', [
+                        'comp_id' => $singleRow['Comp_Id'] ?? '?',
+                        'status'  => $oneResp->status(),
+                        'body'    => substr($oneResp->body(), 0, 300),
+                    ]);
+                } else {
+                    $pushed++;
+                }
             }
         }
 
-        $pushed = count($compRows);
         Log::info('[AntLogistics] pushDailyOrders done', [
-            'date'   => $deliveryDate,
-            'shift'  => $shift,
-            'pushed' => $pushed,
+            'date'    => $deliveryDate,
+            'shift'   => $shift,
+            'pushed'  => $pushed,
+            'failed'  => $failed,
+            'total'   => count($compRows),
+            'skipped' => count($skipped),
         ]);
 
-        return $pushed;
+        return [
+            'pushed'  => $pushed,
+            'failed'  => $failed,
+            'total'   => count($compRows),
+            'skipped' => $skipped,
+        ];
     }
 
     // -------------------------------------------------------------------------

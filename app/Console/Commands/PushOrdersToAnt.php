@@ -27,8 +27,22 @@ class PushOrdersToAnt extends Command
         $this->info("Pushing orders to Ant for date={$date}, shift={$shift} ...");
 
         try {
-            $count = $ant->pushDailyOrders($date, $shift);
-            $this->info("Done. {$count} Заявки pushed to Ant Logistics.");
+            $result  = $ant->pushDailyOrders($date, $shift);
+            $pushed  = (int) ($result['pushed'] ?? 0);
+            $total   = (int) ($result['total']  ?? 0);
+            $failed  = (int) ($result['failed'] ?? 0);
+            $skipped = $result['skipped'] ?? [];
+
+            $this->info("Done. {$pushed}/{$total} Заявки pushed.");
+            if ($failed > 0) {
+                $this->warn("Rejected by Ant: {$failed}");
+            }
+            if (!empty($skipped)) {
+                $this->warn('Skipped clients (multiple addresses without default):');
+                foreach ($skipped as $s) {
+                    $this->warn("  - {$s['client_name']} (id={$s['client_id']})");
+                }
+            }
             return self::SUCCESS;
         } catch (\Throwable $e) {
             $this->error('Failed to push orders: ' . $e->getMessage());

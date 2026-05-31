@@ -125,8 +125,39 @@ class LogisticsPage extends Page implements HasForms
                 ])
                 ->action(function (array $data) {
                     try {
-                        $count = app(AntLogisticsService::class)->pushDailyOrders($data['date'], $data['shift']);
-                        Notification::make()->title('Замовлення відправлено')->body("Відправлено точок: {$count}")->success()->send();
+                        $result = app(AntLogisticsService::class)->pushDailyOrders($data['date'], $data['shift']);
+
+                        $pushed  = (int) ($result['pushed'] ?? 0);
+                        $total   = (int) ($result['total']  ?? 0);
+                        $failed  = (int) ($result['failed'] ?? 0);
+                        $skipped = $result['skipped'] ?? [];
+
+                        $lines = ["Відправлено: {$pushed}/{$total}"];
+
+                        if ($failed > 0) {
+                            $lines[] = "Відхилено Ant: {$failed}";
+                        }
+
+                        if (!empty($skipped)) {
+                            $lines[] = '';
+                            $lines[] = '⚠️ Пропущено (кілька адрес без основної):';
+                            foreach ($skipped as $s) {
+                                $lines[] = "• {$s['client_name']} (id={$s['client_id']})";
+                            }
+                            $lines[] = '';
+                            $lines[] = 'Виставте основну адресу в картці клієнта і повторіть відправку.';
+                        }
+
+                        $body  = implode("\n", $lines);
+                        $level = (!empty($skipped) || $failed > 0) ? 'warning' : 'success';
+                        $title = $level === 'success' ? 'Замовлення відправлено' : 'Відправлено з зауваженнями';
+
+                        Notification::make()
+                            ->title($title)
+                            ->body($body)
+                            ->{$level}()
+                            ->persistent()
+                            ->send();
                     } catch (\Throwable $e) {
                         Notification::make()->title('Помилка відправки')->body($e->getMessage())->danger()->send();
                     }
