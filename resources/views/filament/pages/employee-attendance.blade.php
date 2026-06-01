@@ -283,15 +283,13 @@
                         $cpp = $data['cost_per_portion'][$date] ?? null;
                         // Градація:
                         //   80–90  — ідеально (бірюзовий)
-                        //   ≤ 110  — зелено (норма)
-                        //   ≤ 130  — оранжовий (попередження)
-                        //   > 130  — червоний (перевитрата)
+                        //   < 120  — норма (зелений)
+                        //   ≥ 120  — критично (червоний)
                         $cppColor = '#27272a';
                         if ($cpp !== null) {
                             if ($cpp >= 80 && $cpp <= 90)  $cppColor = '#14b8a6';
-                            elseif ($cpp <= 110)           $cppColor = '#22c55e';
-                            elseif ($cpp <= 130)           $cppColor = '#f97316';
-                            else                            $cppColor = '#ef4444';
+                            elseif ($cpp < 120)            $cppColor = '#22c55e';
+                            else                           $cppColor = '#ef4444';
                         }
                     @endphp
                     <td style="text-align:center;padding:12px 4px;">
@@ -370,15 +368,11 @@
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
                 <span style="width:10px;height:10px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
-                <span style="color:#a1a1aa;font-size:12px;"><b style="color:#22c55e;">до 110 ₴</b> — норма</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;">
-                <span style="width:10px;height:10px;border-radius:50%;background:#f97316;display:inline-block;"></span>
-                <span style="color:#a1a1aa;font-size:12px;"><b style="color:#f97316;">115–130 ₴</b> — попередження</span>
+                <span style="color:#a1a1aa;font-size:12px;"><b style="color:#22c55e;">до 120 ₴</b> — норма</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
                 <span style="width:10px;height:10px;border-radius:50%;background:#ef4444;display:inline-block;"></span>
-                <span style="color:#a1a1aa;font-size:12px;"><b style="color:#ef4444;">130+ ₴</b> — перевитрата</span>
+                <span style="color:#a1a1aa;font-size:12px;"><b style="color:#ef4444;">120+ ₴</b> — критично</span>
             </div>
         </div>
         <div style="color:#52525b;font-size:11px;margin-top:10px;line-height:1.5;">
