@@ -279,11 +279,25 @@
                         </span>
                     </td>
                     @foreach($dates as $date)
-                    @php $cpp = $data['cost_per_portion'][$date] ?? null; @endphp
+                    @php
+                        $cpp = $data['cost_per_portion'][$date] ?? null;
+                        // Градація:
+                        //   ≤ 100 — зелений
+                        //   100 < x ≤ 130 — жовтий
+                        //   130 < x ≤ 145 — оранжевий
+                        //   > 145 — червоний
+                        $cppColor = '#27272a';
+                        if ($cpp !== null) {
+                            if ($cpp <= 100)      $cppColor = '#22c55e';
+                            elseif ($cpp <= 130)  $cppColor = '#eab308';
+                            elseif ($cpp <= 145)  $cppColor = '#f97316';
+                            else                  $cppColor = '#ef4444';
+                        }
+                    @endphp
                     <td style="text-align:center;padding:12px 4px;">
                         @if($cpp !== null)
                             <span style="font-size:14px;font-weight:{{ $date === $today ? '700' : '600' }};
-                                         color:{{ $date === $today ? '#fbbf24' : '#d97706' }};">
+                                         color:{{ $cppColor }};">
                                 {{ number_format($cpp, 2, '.', ' ') }} ₴
                             </span>
                         @else
