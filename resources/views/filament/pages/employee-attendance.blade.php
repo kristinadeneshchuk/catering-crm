@@ -268,6 +268,30 @@
                     </td>
                     @endforeach
                 </tr>
+
+                {{-- Собівартість праці на 1 порцію (в рамках поточного фільтра ролей) --}}
+                <tr style="background:#111113;border-top:1px solid #27272a;">
+                    <td class="emp-sticky" style="padding:12px 20px;color:#52525b;font-size:12px;font-weight:500;
+                                background:#111113;border-right:1px solid #27272a;white-space:nowrap;">
+                        ₴ / порція
+                        <span style="color:#3f3f46;font-weight:400;">
+                            ({{ $roleFilter === 'all' ? 'всі' : ($roleFilter === 'cook' ? 'кухня' : ($roleFilter === 'courier' ? "кур'єри" : 'менеджери')) }})
+                        </span>
+                    </td>
+                    @foreach($dates as $date)
+                    @php $cpp = $data['cost_per_portion'][$date] ?? null; @endphp
+                    <td style="text-align:center;padding:12px 4px;">
+                        @if($cpp !== null)
+                            <span style="font-size:14px;font-weight:{{ $date === $today ? '700' : '600' }};
+                                         color:{{ $date === $today ? '#fbbf24' : '#d97706' }};">
+                                {{ number_format($cpp, 2, '.', ' ') }} ₴
+                            </span>
+                        @else
+                            <span style="color:#27272a;font-size:14px;">–</span>
+                        @endif
+                    </td>
+                    @endforeach
+                </tr>
             </tbody>
         </table>
         </div>

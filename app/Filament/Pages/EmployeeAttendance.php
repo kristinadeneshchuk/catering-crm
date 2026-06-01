@@ -196,6 +196,22 @@ class EmployeeAttendance extends Page
             ->groupBy('date')
             ->pluck('cnt', 'date');
 
+        // Собівартість праці на 1 порцію за день:
+        // (сума rate всіх змін співробітників з поточного фільтра в цей день) / (порції цього дня)
+        $filteredEmployeeIds = $employees->pluck('id')->all();
+        $shiftsByDate = $allShifts
+            ->whereIn('employee_id', $filteredEmployeeIds)
+            ->groupBy('date');
+
+        $costPerPortion = [];
+        foreach ($dates as $date) {
+            $dayCost     = (float) ($shiftsByDate->get($date, collect())->sum('rate'));
+            $dayPortions = (int)   ($portions[$date] ?? 0);
+            if ($dayPortions > 0 && $dayCost > 0) {
+                $costPerPortion[$date] = round($dayCost / $dayPortions, 2);
+            }
+        }
+
         $kitchenPositions = ['cook', 'packer', 'cleaner'];
         $posLabels = [
             'cook'    => 'Кухар',
@@ -247,10 +263,11 @@ class EmployeeAttendance extends Page
                 'salary'       => $salary,
                 'absent_today' => $absentToday,
             ],
-            'rows'       => $rows,
-            'portions'   => $portions->toArray(),
-            'today'      => $today,
-            'duty_bonus' => $this->dutyBonus(),
+            'rows'             => $rows,
+            'portions'         => $portions->toArray(),
+            'cost_per_portion' => $costPerPortion,
+            'today'            => $today,
+            'duty_bonus'       => $this->dutyBonus(),
         ];
     }
 }
