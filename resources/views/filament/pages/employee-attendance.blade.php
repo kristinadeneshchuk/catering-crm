@@ -282,16 +282,16 @@
                     @php
                         $cpp = $data['cost_per_portion'][$date] ?? null;
                         // Градація:
-                        //   ≤ 100 — зелений
-                        //   100 < x ≤ 130 — жовтий
-                        //   130 < x ≤ 145 — оранжевий
-                        //   > 145 — червоний
+                        //   80–90  — ідеально (бірюзовий)
+                        //   ≤ 110  — зелено (норма)
+                        //   ≤ 130  — оранжовий (попередження)
+                        //   > 130  — червоний (перевитрата)
                         $cppColor = '#27272a';
                         if ($cpp !== null) {
-                            if ($cpp <= 100)      $cppColor = '#22c55e';
-                            elseif ($cpp <= 130)  $cppColor = '#eab308';
-                            elseif ($cpp <= 145)  $cppColor = '#f97316';
-                            else                  $cppColor = '#ef4444';
+                            if ($cpp >= 80 && $cpp <= 90)  $cppColor = '#14b8a6';
+                            elseif ($cpp <= 110)           $cppColor = '#22c55e';
+                            elseif ($cpp <= 130)           $cppColor = '#f97316';
+                            else                            $cppColor = '#ef4444';
                         }
                     @endphp
                     <td style="text-align:center;padding:12px 4px;">
@@ -355,6 +355,35 @@
                              display:flex;align-items:center;justify-content:center;line-height:1;">★</span>
             </div>
             <span style="color:#71717a;font-size:12px;">Черговий кухар (+{{ number_format($data['duty_bonus'] ?? 0, 0, '.', ' ') }} ₴)</span>
+        </div>
+    </div>
+
+    {{-- ЛЕГЕНДА: собівартість праці на 1 порцію --}}
+    <div style="margin-top:18px;padding:14px 18px;background:#18181b;border:1px solid #27272a;border-radius:12px;">
+        <div style="color:#52525b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">
+            Собівартість праці на 1 порцію — градація
+        </div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;">
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="width:10px;height:10px;border-radius:50%;background:#14b8a6;display:inline-block;"></span>
+                <span style="color:#a1a1aa;font-size:12px;"><b style="color:#14b8a6;">80–90 ₴</b> — ідеально</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="width:10px;height:10px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
+                <span style="color:#a1a1aa;font-size:12px;"><b style="color:#22c55e;">до 110 ₴</b> — норма</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="width:10px;height:10px;border-radius:50%;background:#f97316;display:inline-block;"></span>
+                <span style="color:#a1a1aa;font-size:12px;"><b style="color:#f97316;">115–130 ₴</b> — попередження</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="width:10px;height:10px;border-radius:50%;background:#ef4444;display:inline-block;"></span>
+                <span style="color:#a1a1aa;font-size:12px;"><b style="color:#ef4444;">130+ ₴</b> — перевитрата</span>
+            </div>
+        </div>
+        <div style="color:#52525b;font-size:11px;margin-top:10px;line-height:1.5;">
+            Рахується для поточної вкладки: сума ставок усіх співробітників, які вийшли в цей день,
+            ділиться на кількість порцій. Що нижче — то ефективніше виробництво.
         </div>
     </div>
 
