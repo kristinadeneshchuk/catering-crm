@@ -21,7 +21,6 @@ class PositionResource extends Resource
 {
     protected static ?string $model = Position::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-identification';
     protected static ?string $navigationLabel = 'Посади';
     protected static ?string $pluralModelLabel = 'Посади';
     protected static ?string $modelLabel = 'Посада';
