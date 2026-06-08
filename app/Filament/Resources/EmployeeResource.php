@@ -135,8 +135,24 @@ class EmployeeResource extends Resource
                 IconColumn::make('is_active')
                     ->label('Активний')
                     ->boolean(),
+
+                TextColumn::make('archived_at')
+                    ->label('В архіві з')
+                    ->dateTime('d.m.Y')
+                    ->placeholder('—')
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
+                Tables\Filters\TernaryFilter::make('archived')
+                    ->label('Архів')
+                    ->placeholder('Активні')
+                    ->trueLabel('В архіві')
+                    ->falseLabel('Усі (з архівом)')
+                    ->queries(
+                        true: fn ($query) => $query->whereNotNull('archived_at'),
+                        false: fn ($query) => $query,
+                        blank: fn ($query) => $query->whereNull('archived_at'),
+                    ),
                 Tables\Filters\TernaryFilter::make('is_active')->label('Тільки активні'),
                 Tables\Filters\SelectFilter::make('position')->label('Посада')->options([
                     'cook' => 'Кухар',
@@ -147,6 +163,37 @@ class EmployeeResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
+
+                // Архівувати (приховує зі списків + знімає is_active, історія лишається)
+                Action::make('archive')
+                    ->label('')
+                    ->tooltip('Архівувати')
+                    ->icon('heroicon-o-archive-box')
+                    ->color('gray')
+                    ->requiresConfirmation()
+                    ->modalHeading(fn (Employee $record) => "Архівувати: {$record->name}?")
+                    ->modalDescription('Співробітник зникне зі списків і всіх робочих графіків. Історія (зміни, штрафи, виплати) збережеться. Відновити можна будь-коли.')
+                    ->modalSubmitActionLabel('Архівувати')
+                    ->visible(fn (Employee $record) => is_null($record->archived_at))
+                    ->action(function (Employee $record): void {
+                        $record->update(['archived_at' => now(), 'is_active' => false]);
+                        Notification::make()->title('Співробітника заархівовано')->success()->send();
+                    }),
+
+                // Відновити з архіву
+                Action::make('restore')
+                    ->label('')
+                    ->tooltip('Відновити з архіву')
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->modalHeading(fn (Employee $record) => "Відновити: {$record->name}?")
+                    ->modalSubmitActionLabel('Відновити')
+                    ->visible(fn (Employee $record) => ! is_null($record->archived_at))
+                    ->action(function (Employee $record): void {
+                        $record->update(['archived_at' => null, 'is_active' => true]);
+                        Notification::make()->title('Співробітника відновлено')->success()->send();
+                    }),
 
                 // 🔥 ФІНАЛЬНИЙ БЛОК: ВИПЛАТА ЗП
                 Action::make('pay_salary')
@@ -210,7 +257,15 @@ class EmployeeResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\BulkAction::make('archive')
+                        ->label('Архівувати')
+                        ->icon('heroicon-o-archive-box')
+                        ->color('gray')
+                        ->requiresConfirmation()
+                        ->modalHeading('Архівувати обраних співробітників?')
+                        ->modalDescription('Вони зникнуть зі списків і робочих графіків. Історія збережеться, відновити можна будь-коли.')
+                        ->action(fn (\Illuminate\Database\Eloquent\Collection $records) => $records->each->update(['archived_at' => now(), 'is_active' => false]))
+                        ->deselectRecordsAfterCompletion(),
                 ]),
             ]);
     }
