@@ -84,9 +84,10 @@ class PositionResource extends Resource
                         ->columnSpanFull(),
 
                     TextInput::make('sort_order')
-                        ->label('Порядок')
+                        ->label('Порядок у списках')
                         ->numeric()
-                        ->default(100),
+                        ->default(100)
+                        ->helperText('Лише черговість у списках (менше — вище). На розрахунки не впливає.'),
 
                     Toggle::make('is_active')
                         ->label('Активна')
