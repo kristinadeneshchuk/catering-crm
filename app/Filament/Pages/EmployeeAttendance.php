@@ -172,14 +172,17 @@ class EmployeeAttendance extends Page
         $shiftsCount = $allShifts->count();
         $salary      = round($allShifts->sum('rate'));
 
+        // Помісячні посади (оклад) не беруть участі в табелі змін
+        $perMonthKeys = \App\Models\Position::where('payment_type', 'per_month')->pluck('key')->all();
+
         $absentToday = 0;
         if ($inRange) {
-            $activeCount  = Employee::where('is_active', true)->count();
+            $activeCount  = Employee::where('is_active', true)->whereNotIn('position', $perMonthKeys)->count();
             $presentToday = $allShifts->where('date', $today)->count();
             $absentToday  = max(0, $activeCount - $presentToday);
         }
 
-        $query = Employee::where('is_active', true);
+        $query = Employee::where('is_active', true)->whereNotIn('position', $perMonthKeys);
         if ($this->roleFilter === 'cook') {
             $query->whereIn('position', ['cook', 'packer', 'cleaner']);
         } elseif ($this->roleFilter === 'courier') {
