@@ -331,7 +331,7 @@ class AnalyticsController extends Controller
         $weekdayDates = array_values(array_filter(array_keys($dates), fn ($ymd) => ! Carbon::parse($ymd)->isWeekend()));
         $perMonthKeys = $positionsByKey->filter(fn ($p) => $p->payment_type === 'per_month')->keys()->all();
         if (! empty($perMonthKeys) && ! empty($weekdayDates)) {
-            $monthlyEmployees = Employee::where('is_active', true)
+            $monthlyEmployees = \App\Models\Employee::where('is_active', true)
                 ->whereIn('position', $perMonthKeys)
                 ->get();
             $salarySeries = \App\Models\RateHistory::seriesFor(
