@@ -67,6 +67,16 @@ Route::get('/menu/{token}/dish/{dishId}', [ClientMenuController::class, 'dish'])
 Route::post('/menu/{token}/rate', [ClientMenuController::class, 'rate'])->name('menu.rate');
 
 /**
+ * 👤 ОСОБИСТИЙ КАБІНЕТ КЛІЄНТА (по токену/QR, без пароля)
+ */
+Route::prefix('cabinet/{token}')->name('cabinet.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\ClientCabinetController::class, 'overview'])->name('overview');
+    Route::get('/orders', [\App\Http\Controllers\ClientCabinetController::class, 'orders'])->name('orders');
+    Route::get('/payments', [\App\Http\Controllers\ClientCabinetController::class, 'payments'])->name('payments');
+    Route::get('/deliveries', [\App\Http\Controllers\ClientCabinetController::class, 'deliveries'])->name('deliveries');
+});
+
+/**
  * 🖨️ БЛОК ДРУКУ
  */
 Route::get('/print/stickers', [PrintController::class, 'stickers'])->name('print.stickers');

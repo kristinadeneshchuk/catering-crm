@@ -50,12 +50,28 @@ class Client extends Authenticatable
         'water_option',
         'manager_comment',
         'ant_comp_id',
+        'cabinet_token',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
     ];
+
+    protected static function booted(): void
+    {
+        // Персональний токен кабінету (вхід по лінку/QR, як меню)
+        static::creating(function (Client $client) {
+            if (empty($client->cabinet_token)) {
+                $client->cabinet_token = \Illuminate\Support\Str::random(32);
+            }
+        });
+    }
+
+    public function cabinetUrl(): string
+    {
+        return url('/cabinet/' . $this->cabinet_token);
+    }
 
     protected $casts = [
         'balance' => 'decimal:2',
