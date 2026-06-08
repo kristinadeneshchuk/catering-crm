@@ -327,10 +327,10 @@ class AnalyticsController extends Controller
             $totalPackagingCost    += round($dailyPackaging);
         }
 
-        // 🔥 Помісячні (оклад) ЗП: по кожному робочому дню (Пн–Пт) беремо оклад, що діяв на той день
-        $weekdayDates = array_values(array_filter(array_keys($dates), fn ($ymd) => ! Carbon::parse($ymd)->isWeekend()));
+        // 🔥 Помісячні (оклад) ЗП: по кожному робочому дню (усі дні, крім неділі) беремо оклад, що діяв на той день
+        $workingDates = array_values(array_filter(array_keys($dates), fn ($ymd) => ! Carbon::parse($ymd)->isSunday()));
         $perMonthKeys = $positionsByKey->filter(fn ($p) => $p->payment_type === 'per_month')->keys()->all();
-        if (! empty($perMonthKeys) && ! empty($weekdayDates)) {
+        if (! empty($perMonthKeys) && ! empty($workingDates)) {
             $monthlyEmployees = \App\Models\Employee::where('is_active', true)
                 ->whereIn('position', $perMonthKeys)
                 ->get();
@@ -343,7 +343,7 @@ class AnalyticsController extends Controller
                 $workDays = max(1, (int) ($pos->monthly_working_days ?: 22));
                 $series = $salarySeries['salary:' . $emp->id] ?? null;
                 $cost = 0.0;
-                foreach ($weekdayDates as $ymd) {
+                foreach ($workingDates as $ymd) {
                     // оклад, що діяв на цей день; якщо історії ще немає — поточний
                     $salaryOnDay = empty($series) ? (float) $emp->base_rate : \App\Models\RateHistory::valueOn($series, $ymd);
                     $cost += $salaryOnDay / $workDays;
