@@ -98,6 +98,27 @@ class AnalyticsController extends Controller
 
         $kitchenPositions = ['cook', 'packer', 'cleaner'];
 
+        // 🔥 Рознесення ЗП по брендах в аналітиці проєктів
+        $positionsByKey    = \App\Models\Position::all()->keyBy('key');
+        $projectIdToSlug   = \App\Models\Project::pluck('slug', 'id');     // id => slug
+        $projectSlugToName = \App\Models\Project::pluck('name', 'slug');   // slug => назва
+        $generalSalaryPool   = 0.0;   // ЗП «загальних» ролей — рознесеться пропорційно виручці
+        $projectSalaryDirect = [];    // slug => пряма (брендова) ЗП
+
+        // Хелпер: куди віднести rate співробітника (прямо в бренд чи в загальний пул)
+        $attributeSalary = function ($employee, float $amount) use (&$generalSalaryPool, &$projectSalaryDirect, $positionsByKey, $projectIdToSlug) {
+            if ($amount <= 0) return;
+            $pos = $employee ? ($positionsByKey[$employee->position] ?? null) : null;
+            if ($pos && $pos->split_by_brands && $employee && $employee->project_id) {
+                $slug = $projectIdToSlug[$employee->project_id] ?? null;
+                if ($slug) {
+                    $projectSalaryDirect[$slug] = ($projectSalaryDirect[$slug] ?? 0) + $amount;
+                    return;
+                }
+            }
+            $generalSalaryPool += $amount;
+        };
+
         // Кеш денних меню за (planId, dayNumber) — фактично завантажуємо лише ті, що реально потрібні
         $menuCache = [];
         $resolveMenu = function (\App\Models\Order $order, string $ymd) use (&$menuCache) {
@@ -172,6 +193,8 @@ class AnalyticsController extends Controller
                     } else {
                         $dailyFopOther += $rate;
                     }
+                    // рознесення цієї зміни по брендах
+                    $attributeSalary($shift->employee, $rate);
                 }
             }
             $fopCount[$ymd]        = round($dailyFop);
@@ -300,6 +323,25 @@ class AnalyticsController extends Controller
             $totalPackagingCost    += round($dailyPackaging);
         }
 
+        // 🔥 Помісячні (оклад) ЗП: амортизація по робочих днях (Пн–Пт) у періоді
+        $weekdaysInPeriod = 0;
+        foreach (array_keys($dates) as $ymd) {
+            if (! Carbon::parse($ymd)->isWeekend()) $weekdaysInPeriod++;
+        }
+        $perMonthKeys = $positionsByKey->filter(fn ($p) => $p->payment_type === 'per_month')->keys()->all();
+        if (! empty($perMonthKeys) && $weekdaysInPeriod > 0) {
+            $monthlyEmployees = Employee::where('is_active', true)
+                ->whereIn('position', $perMonthKeys)
+                ->get();
+            foreach ($monthlyEmployees as $emp) {
+                $pos = $positionsByKey[$emp->position] ?? null;
+                if (! $pos) continue;
+                $workDays = max(1, (int) ($pos->monthly_working_days ?: 22));
+                $cost = ((float) $emp->base_rate / $workDays) * $weekdaysInPeriod;
+                $attributeSalary($emp, $cost);
+            }
+        }
+
         // 4. ПІДРАХУНОК ЮНІТ-ЕКОНОМІКИ (Агрегація)
         ksort($unitEconomics); 
         foreach ($unitEconomics as $cal => &$data) {
@@ -320,12 +362,26 @@ class AnalyticsController extends Controller
         }
         unset($data);
 
-        // 5а. АГРЕГАЦІЯ ПРОЄКТІВ
+        // 5а. АГРЕГАЦІЯ ПРОЄКТІВ (+ рознесення ЗП по брендах)
+        // Бренди з прямою ЗП, але без замовлень у періоді — теж показуємо
+        foreach (array_keys($projectSalaryDirect) as $slug) {
+            if (! isset($projectStats[$slug])) {
+                $projectStats[$slug] = [
+                    'name' => $projectSlugToName[$slug] ?? $slug,
+                    'rations' => 0, 'revenue' => 0, 'food_cost' => 0, 'packaging' => 0, 'clients' => [],
+                    'new_clients' => 0, 'new_clients_continued' => 0, 'new_clients_churned' => 0, 'churned_period' => 0,
+                ];
+            }
+        }
         foreach ($projectStats as $slug => &$ps) {
             $ps['unique_clients'] = count($ps['clients']);
             unset($ps['clients']);
-            $ps['profit']  = $ps['revenue'] - $ps['food_cost'] - $ps['packaging'];
-            $ps['margin']  = $ps['revenue'] > 0 ? ($ps['profit'] / $ps['revenue']) * 100 : 0;
+            // ЗП = пряма (брендова) + частка із загального пулу пропорційно виручці бренду
+            $directSalary = $projectSalaryDirect[$slug] ?? 0;
+            $poolShare    = $totalRevenue > 0 ? $generalSalaryPool * ($ps['revenue'] / $totalRevenue) : 0;
+            $ps['salary'] = round($directSalary + $poolShare);
+            $ps['profit'] = $ps['revenue'] - $ps['food_cost'] - $ps['packaging'] - $ps['salary'];
+            $ps['margin'] = $ps['revenue'] > 0 ? ($ps['profit'] / $ps['revenue']) * 100 : 0;
             $ps['revenue_share'] = $totalRevenue > 0 ? ($ps['revenue'] / $totalRevenue) * 100 : 0;
         }
         unset($ps);

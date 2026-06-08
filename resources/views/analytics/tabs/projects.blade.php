@@ -65,6 +65,10 @@
                         <p class="text-zinc-500 text-[10px] uppercase tracking-wider font-semibold mb-1">Собівартість</p>
                         <p class="text-zinc-400 font-semibold">{{ number_format($ps['food_cost'] + $ps['packaging'], 0, '.', ' ') }} ₴</p>
                     </div>
+                    <div>
+                        <p class="text-zinc-500 text-[10px] uppercase tracking-wider font-semibold mb-1">ЗП співробітників</p>
+                        <p class="text-zinc-400 font-semibold">{{ number_format($ps['salary'] ?? 0, 0, '.', ' ') }} ₴</p>
+                    </div>
                 </div>
 
                 {{-- НОВІ / ВІДПАЛИ за період (per-project) --}}
@@ -111,6 +115,7 @@
                         <th class="text-right px-4 py-3 text-zinc-500 text-[11px] uppercase tracking-wider font-semibold">Раціонів</th>
                         <th class="text-right px-4 py-3 text-zinc-500 text-[11px] uppercase tracking-wider font-semibold">Виручка</th>
                         <th class="text-right px-4 py-3 text-zinc-500 text-[11px] uppercase tracking-wider font-semibold">Собівартість</th>
+                        <th class="text-right px-4 py-3 text-zinc-500 text-[11px] uppercase tracking-wider font-semibold">ЗП</th>
                         <th class="text-right px-4 py-3 text-zinc-500 text-[11px] uppercase tracking-wider font-semibold">Профіт</th>
                         <th class="text-right px-4 py-3 text-zinc-500 text-[11px] uppercase tracking-wider font-semibold">Маржа</th>
                         <th class="text-right px-6 py-3 text-zinc-500 text-[11px] uppercase tracking-wider font-semibold">Частка</th>
@@ -130,6 +135,7 @@
                         <td class="px-4 py-4 text-right text-zinc-300">{{ $ps['rations'] }}</td>
                         <td class="px-4 py-4 text-right text-white font-semibold">{{ number_format($ps['revenue'], 0, '.', ' ') }} ₴</td>
                         <td class="px-4 py-4 text-right text-zinc-400">{{ number_format($ps['food_cost'] + $ps['packaging'], 0, '.', ' ') }} ₴</td>
+                        <td class="px-4 py-4 text-right text-zinc-400">{{ number_format($ps['salary'] ?? 0, 0, '.', ' ') }} ₴</td>
                         <td class="px-4 py-4 text-right font-bold" style="color:{{ $ps['profit'] >= 0 ? '#34d399' : '#f43f5e' }};">
                             {{ number_format($ps['profit'], 0, '.', ' ') }} ₴
                         </td>
