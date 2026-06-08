@@ -93,6 +93,15 @@ class ClientResource extends Resource
                                 'Рекомендація' => 'Рекомендація',
                             ])
                             ->searchable(),
+
+                        \Filament\Forms\Components\Placeholder::make('cabinet_link')
+                            ->label('Кабінет клієнта (надішли клієнту цей лінк / QR)')
+                            ->visible(fn ($record) => $record && $record->cabinet_token)
+                            ->content(fn ($record) => new \Illuminate\Support\HtmlString(
+                                '<a href="' . url('/cabinet/' . $record->cabinet_token) . '" target="_blank" style="color:#d97706;text-decoration:underline;word-break:break-all;">'
+                                . url('/cabinet/' . $record->cabinet_token) . '</a>'
+                            ))
+                            ->columnSpanFull(),
                     ])->columns(2),
 
                 Section::make('Налаштування раціону')
