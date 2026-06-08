@@ -26,6 +26,19 @@ class Employee extends Model
         return $this->belongsTo(Project::class, 'project_id');
     }
 
+    protected static function booted(): void
+    {
+        // Датовані оклади: ЗП помісячних посад фіксується в історії «діє з сьогодні»
+        static::saved(function (Employee $employee) {
+            if ($employee->wasRecentlyCreated || $employee->wasChanged('base_rate') || $employee->wasChanged('position')) {
+                $pos = Position::where('key', $employee->position)->first();
+                if ($pos && $pos->payment_type === 'per_month') {
+                    RateHistory::record('salary:' . $employee->id, (float) $employee->base_rate);
+                }
+            }
+        });
+    }
+
     public function scopeArchived($query)
     {
         return $query->whereNotNull('archived_at');

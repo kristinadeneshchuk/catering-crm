@@ -43,9 +43,10 @@ class AnalyticsController extends Controller
         $otherExpenses = (float) $request->input('other_expenses', 1000);
         $activeTab = $request->input('tab', 'dashboard');
 
-        // Оренда та комунальні: місячне значення (розрахунок по днях — після побудови $dates)
+        // Оренда та комунальні: поточне значення (для відображення) + датована історія (для розрахунку по днях)
         $monthlyRent = (float) \App\Models\Setting::where('key', 'monthly_rent')->value('value');
         $monthlyUtilities = (float) \App\Models\Setting::where('key', 'monthly_utilities')->value('value');
+        $costSeries = \App\Models\RateHistory::seriesFor(['monthly_rent', 'monthly_utilities']);
 
         $start = Carbon::parse($startDate);
         $end = Carbon::parse($endDate);
@@ -67,8 +68,11 @@ class AnalyticsController extends Controller
         $utilitiesByDay = [];
         foreach (array_keys($dates) as $ymd) {
             $daysInMonth = Carbon::parse($ymd)->daysInMonth;
-            $rentByDay[$ymd] = $monthlyRent > 0 ? round($monthlyRent / $daysInMonth, 2) : 0;
-            $utilitiesByDay[$ymd] = $monthlyUtilities > 0 ? round($monthlyUtilities / $daysInMonth, 2) : 0;
+            // значення, що діяло саме на цей день
+            $rentOnDay = \App\Models\RateHistory::valueOn($costSeries['monthly_rent'] ?? null, $ymd);
+            $utilOnDay = \App\Models\RateHistory::valueOn($costSeries['monthly_utilities'] ?? null, $ymd);
+            $rentByDay[$ymd] = $rentOnDay > 0 ? round($rentOnDay / $daysInMonth, 2) : 0;
+            $utilitiesByDay[$ymd] = $utilOnDay > 0 ? round($utilOnDay / $daysInMonth, 2) : 0;
         }
 
         // 2. Завантаження даних
@@ -323,21 +327,27 @@ class AnalyticsController extends Controller
             $totalPackagingCost    += round($dailyPackaging);
         }
 
-        // 🔥 Помісячні (оклад) ЗП: амортизація по робочих днях (Пн–Пт) у періоді
-        $weekdaysInPeriod = 0;
-        foreach (array_keys($dates) as $ymd) {
-            if (! Carbon::parse($ymd)->isWeekend()) $weekdaysInPeriod++;
-        }
+        // 🔥 Помісячні (оклад) ЗП: по кожному робочому дню (Пн–Пт) беремо оклад, що діяв на той день
+        $weekdayDates = array_values(array_filter(array_keys($dates), fn ($ymd) => ! Carbon::parse($ymd)->isWeekend()));
         $perMonthKeys = $positionsByKey->filter(fn ($p) => $p->payment_type === 'per_month')->keys()->all();
-        if (! empty($perMonthKeys) && $weekdaysInPeriod > 0) {
+        if (! empty($perMonthKeys) && ! empty($weekdayDates)) {
             $monthlyEmployees = Employee::where('is_active', true)
                 ->whereIn('position', $perMonthKeys)
                 ->get();
+            $salarySeries = \App\Models\RateHistory::seriesFor(
+                $monthlyEmployees->map(fn ($e) => 'salary:' . $e->id)->all()
+            );
             foreach ($monthlyEmployees as $emp) {
                 $pos = $positionsByKey[$emp->position] ?? null;
                 if (! $pos) continue;
                 $workDays = max(1, (int) ($pos->monthly_working_days ?: 22));
-                $cost = ((float) $emp->base_rate / $workDays) * $weekdaysInPeriod;
+                $series = $salarySeries['salary:' . $emp->id] ?? null;
+                $cost = 0.0;
+                foreach ($weekdayDates as $ymd) {
+                    // оклад, що діяв на цей день; якщо історії ще немає — поточний
+                    $salaryOnDay = empty($series) ? (float) $emp->base_rate : \App\Models\RateHistory::valueOn($series, $ymd);
+                    $cost += $salaryOnDay / $workDays;
+                }
                 $attributeSalary($emp, $cost);
             }
         }
