@@ -123,6 +123,13 @@ class EmployeeResource extends Resource
                     ->color(fn ($state) => $state > 0 ? 'danger' : 'success')
                     ->sortable(),
 
+                // Нараховано ЗП за обраний у фільтрі період (сума ставок змін). '—' якщо фільтр не задано.
+                TextColumn::make('accrued_sum')
+                    ->label('Нараховано за період')
+                    ->money('UAH')
+                    ->color('warning')
+                    ->placeholder('—'),
+
                 IconColumn::make('is_active')
                     ->label('Активний')
                     ->boolean(),
@@ -147,6 +154,31 @@ class EmployeeResource extends Resource
                 Tables\Filters\TernaryFilter::make('is_active')->label('Тільки активні'),
                 Tables\Filters\SelectFilter::make('position')->label('Посада')
                     ->options(fn () => \App\Models\Position::orderBy('sort_order')->pluck('name', 'key')),
+
+                // Нараховано ЗП за період: показує суму ставок змін у діапазоні дат
+                Tables\Filters\Filter::make('accrued')
+                    ->label('Нараховано за період')
+                    ->form([
+                        \Filament\Forms\Components\DatePicker::make('from')->label('Нараховано з')->native(false),
+                        \Filament\Forms\Components\DatePicker::make('to')->label('по')->native(false),
+                    ])
+                    ->query(function (\Illuminate\Database\Eloquent\Builder $query, array $data) {
+                        $from = $data['from'] ?? null;
+                        $to   = $data['to'] ?? null;
+                        if ($from || $to) {
+                            $query->withSum(['shifts as accrued_sum' => function ($q) use ($from, $to) {
+                                if ($from) $q->whereDate('date', '>=', $from);
+                                if ($to)   $q->whereDate('date', '<=', $to);
+                            }], 'rate');
+                        }
+                        return $query;
+                    })
+                    ->indicateUsing(function (array $data) {
+                        if (! empty($data['from']) || ! empty($data['to'])) {
+                            return 'Нараховано: ' . ($data['from'] ?? '…') . ' – ' . ($data['to'] ?? '…');
+                        }
+                        return null;
+                    }),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
