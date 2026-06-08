@@ -1868,4 +1868,41 @@ class PrintController extends Controller
 
         return $rows;
     }
+
+    /**
+     * Звіт: клієнти з 1–3 (не скасованими) замовленнями. 4+ не показуємо.
+     * Колонки: клієнт, телефон, тариф (з останнього замовлення), номер замовлення по рахунку.
+     */
+    public function repeatClients(Request $request)
+    {
+        // id клієнтів, у кого всього 1–3 не скасовані замовлення
+        $clientIds = Order::where('status', '!=', 'cancelled')
+            ->select('client_id')
+            ->groupBy('client_id')
+            ->havingRaw('COUNT(*) BETWEEN 1 AND 3')
+            ->pluck('client_id');
+
+        $clients = \App\Models\Client::whereIn('id', $clientIds)
+            ->with(['orders' => function ($q) {
+                $q->where('status', '!=', 'cancelled')
+                    ->orderByDesc('start_date')->orderByDesc('id')
+                    ->with(['tariff', 'projectData']);
+            }])
+            ->get()
+            ->map(function ($c) {
+                $orders = $c->orders;
+                $latest = $orders->first(); // останнє замовлення
+                return [
+                    'name'   => $c->name,
+                    'phone'  => $c->phone,
+                    'tariff' => $latest?->tariff?->name ?? '—',
+                    'brand'  => $latest?->projectData?->name ?? ($latest?->project ?? '—'),
+                    'count'  => $orders->count(), // скільки разів замовляв (1/2/3)
+                ];
+            })
+            ->sortBy([['count', 'asc'], ['name', 'asc']])
+            ->values();
+
+        return view('print.repeat-clients', ['clients' => $clients]);
+    }
 }

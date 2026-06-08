@@ -127,6 +127,7 @@ Route::get('/print/shopping-list', [PrintController::class, 'shoppingList'])->na
 Route::get('/print/mini-manifest', [\App\Http\Controllers\PrintController::class, 'miniManifest'])->name('print.mini-manifest');
 Route::get('/print/assembly-sheet', [\App\Http\Controllers\PrintController::class, 'assemblySheet'])->name('print.assembly-sheet');
 Route::get('/print/cycle-menu', [PrintController::class, 'cycleMenu'])->name('print.cycle-menu');
+Route::get('/print/repeat-clients', [PrintController::class, 'repeatClients'])->name('print.repeat-clients');
 Route::get('/kitchen', [PrintController::class, 'kitchenMenu'])->name('kitchen.menu');
 
 // 🔥 НОВИЙ МАРШРУТ АНАЛІТИКИ (закритий авторизацією)
