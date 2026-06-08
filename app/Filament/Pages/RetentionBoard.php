@@ -126,6 +126,13 @@ class RetentionBoard extends KanbanBoard
                 ->action(function () {
                     $this->generateCalls();
                 }),
+
+            Action::make('repeat_clients_report')
+                ->label('Клієнти 1–3 замовлення')
+                ->icon('heroicon-o-phone-arrow-up-right')
+                ->color('gray')
+                ->url(fn () => route('print.repeat-clients'))
+                ->openUrlInNewTab(),
         ];
     }
 

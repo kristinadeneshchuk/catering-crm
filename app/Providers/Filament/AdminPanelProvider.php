@@ -14,7 +14,6 @@ use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use Filament\Widgets;
 use Filament\Navigation\NavigationGroup; // Імпортуємо NavigationGroup для керування групами
-use Filament\Navigation\NavigationItem;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -65,13 +64,6 @@ class AdminPanelProvider extends PanelProvider
                 NavigationGroup::make('Система')
                     ->icon('heroicon-o-cog-8-tooth')
                     ->collapsed(),
-            ])
-            ->navigationItems([
-                // Друкований звіт: клієнти з 1–3 замовленнями (top-level, відкривається в новій вкладці)
-                NavigationItem::make('Клієнти 1–3 замовлення')
-                    ->icon('heroicon-o-phone-arrow-up-right')
-                    ->url(fn () => route('print.repeat-clients'), shouldOpenInNewTab: true)
-                    ->sort(3),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
