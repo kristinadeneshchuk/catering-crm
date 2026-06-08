@@ -123,12 +123,25 @@ class EmployeeResource extends Resource
                     ->color(fn ($state) => $state > 0 ? 'danger' : 'success')
                     ->sortable(),
 
-                // Нараховано ЗП за обраний у фільтрі період (сума ставок змін). '—' якщо фільтр не задано.
-                TextColumn::make('accrued_sum')
+                // Борг (нараховано ЗП) за обраний у фільтрі діапазон дат. '—' якщо діапазон не задано.
+                TextColumn::make('accrued_period')
                     ->label('Нараховано за період')
                     ->money('UAH')
+                    ->weight('bold')
                     ->color('warning')
-                    ->placeholder('—'),
+                    ->placeholder('—')
+                    ->state(function (Employee $record, $livewire) {
+                        $f    = $livewire->tableFilters['accrued'] ?? [];
+                        $from = $f['from'] ?? null;
+                        $to   = $f['to'] ?? null;
+                        if (! $from && ! $to) {
+                            return null; // діапазон не задано
+                        }
+                        $q = $record->shifts();
+                        if ($from) $q->whereDate('date', '>=', \Illuminate\Support\Carbon::parse($from)->toDateString());
+                        if ($to)   $q->whereDate('date', '<=', \Illuminate\Support\Carbon::parse($to)->toDateString());
+                        return (float) $q->sum('rate');
+                    }),
 
                 IconColumn::make('is_active')
                     ->label('Активний')
@@ -162,17 +175,8 @@ class EmployeeResource extends Resource
                         \Filament\Forms\Components\DatePicker::make('from')->label('Нараховано з')->native(false),
                         \Filament\Forms\Components\DatePicker::make('to')->label('по')->native(false),
                     ])
-                    ->query(function (\Illuminate\Database\Eloquent\Builder $query, array $data) {
-                        $from = $data['from'] ?? null;
-                        $to   = $data['to'] ?? null;
-                        if ($from || $to) {
-                            $query->withSum(['shifts as accrued_sum' => function ($q) use ($from, $to) {
-                                if ($from) $q->whereDate('date', '>=', $from);
-                                if ($to)   $q->whereDate('date', '<=', $to);
-                            }], 'rate');
-                        }
-                        return $query;
-                    })
+                    // Рядки не фільтруємо — дати читає колонка «Нараховано за період»
+                    ->query(fn (\Illuminate\Database\Eloquent\Builder $query) => $query)
                     ->indicateUsing(function (array $data) {
                         if (! empty($data['from']) || ! empty($data['to'])) {
                             return 'Нараховано: ' . ($data['from'] ?? '…') . ' – ' . ($data['to'] ?? '…');
