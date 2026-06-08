@@ -57,23 +57,27 @@ class EmployeeResource extends Resource
 
                         Select::make('position')
                             ->label('Посада')
-                            ->options([
-                                'cook' => 'Кухар',
-                                'courier' => 'Кур\'єр',
-                                'manager' => 'Менеджер',
-                                'packer' => 'Пакувальник',
-                                'cleaner' => 'Прибиральниця',
-                                'admin' => 'Адміністратор',
-                            ])
+                            ->options(fn () => \App\Models\Position::where('is_active', true)->orderBy('sort_order')->pluck('name', 'key'))
                             ->required()
-                            ->searchable(),
+                            ->searchable()
+                            ->live(),
 
                         TextInput::make('base_rate')
-                            ->label('Ставка за зміну')
+                            ->label(fn (\Filament\Forms\Get $get) =>
+                                optional(\App\Models\Position::where('key', $get('position'))->first())->payment_type === 'per_month'
+                                    ? 'Оклад за місяць'
+                                    : 'Ставка за зміну')
                             ->numeric()
                             ->prefix('₴')
                             ->default(0)
                             ->required(),
+
+                        Select::make('project_id')
+                            ->label('Бренд (для аналітики)')
+                            ->options(fn () => \App\Models\Project::where('is_active', true)->pluck('name', 'id'))
+                            ->searchable()
+                            ->nullable()
+                            ->helperText('Для посад із розділенням витрат по брендах — ЗП піде в аналітику цього бренду.'),
 
                         TextInput::make('balance')
                             ->label('Поточний баланс (Борг перед ним)')
@@ -104,21 +108,8 @@ class EmployeeResource extends Resource
                     ->label('Посада')
                     ->sortable()
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'cook' => 'Кухар',
-                        'courier' => 'Кур\'єр',
-                        'manager' => 'Менеджер',
-                        'packer' => 'Пакувальник',
-                        'cleaner' => 'Прибиральниця',
-                        'admin' => 'Адмін',
-                        default => $state,
-                    })
-                    ->color(fn (string $state): string => match ($state) {
-                        'cook' => 'warning',
-                        'courier' => 'info',
-                        'manager' => 'success',
-                        default => 'gray',
-                    }),
+                    ->formatStateUsing(fn ($state, Employee $record): string => $record->positionData?->name ?? $state)
+                    ->color(fn ($state, Employee $record): string => $record->positionData?->color ?? 'gray'),
 
                 TextColumn::make('base_rate')
                     ->label('Ставка')
@@ -154,12 +145,8 @@ class EmployeeResource extends Resource
                         blank: fn ($query) => $query->whereNull('archived_at'),
                     ),
                 Tables\Filters\TernaryFilter::make('is_active')->label('Тільки активні'),
-                Tables\Filters\SelectFilter::make('position')->label('Посада')->options([
-                    'cook' => 'Кухар',
-                    'courier' => 'Кур\'єр',
-                    'manager' => 'Менеджер',
-                    'cleaner' => 'Прибиральниця',
-                ]),
+                Tables\Filters\SelectFilter::make('position')->label('Посада')
+                    ->options(fn () => \App\Models\Position::orderBy('sort_order')->pluck('name', 'key')),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
