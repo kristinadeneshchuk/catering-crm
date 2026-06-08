@@ -254,7 +254,8 @@
                                                     {{ $item['name'] }}
                                                 </td>
                                                 <td class="text-center font-bold">{{ round($item['weight_brutto_sum'] ?? $item['weight_brutto'] ?? 0) }}</td>
-                                                <td class="text-center">{{ round($item['weight_netto_sum'] ?? $item['weight_netto'] ?? $item['weight_output'] ?? 0) }}</td>
+                                                {{-- Для ПФ показуємо вихід ПФ (а не суму нетто сирих інгредієнтів) --}}
+                                                <td class="text-center">{{ round($item['type'] === 'pf' ? ($item['weight_output'] ?? 0) : ($item['weight_netto_sum'] ?? $item['weight_netto'] ?? 0)) }}</td>
                                             </tr>
                                         @endforeach
                                         <tr class="sum-row">
@@ -287,7 +288,8 @@
                                                         {{ $item['name'] }}
                                                     </td>
                                                     <td class="text-center font-bold">{{ round($item['weight_brutto_sum'] ?? $item['weight_brutto'] ?? 0) }}</td>
-                                                    <td class="text-center">{{ round($item['weight_netto_sum'] ?? $item['weight_netto'] ?? $item['weight_output'] ?? 0) }}</td>
+                                                    {{-- Для вкладеного ПФ показуємо його вихід, а не суму сирого --}}
+                                                    <td class="text-center">{{ round($item['type'] === 'pf' ? ($item['weight_output'] ?? 0) : ($item['weight_netto_sum'] ?? $item['weight_netto'] ?? 0)) }}</td>
                                                 </tr>
                                             @endforeach
                                             <tr class="sum-row">
