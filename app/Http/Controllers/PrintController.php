@@ -1875,6 +1875,12 @@ class PrintController extends Controller
      */
     public function repeatClients(Request $request)
     {
+        $fTariff   = $request->input('tariff_id');
+        $fBrand    = $request->input('brand');      // slug проєкту
+        $fMonth    = $request->input('month');      // YYYY-MM (по даті закінчення)
+        $fDateFrom = $request->input('date_from');
+        $fDateTo   = $request->input('date_to');
+
         // id клієнтів, у кого всього 1–3 не скасовані замовлення
         $clientIds = Order::where('status', '!=', 'cancelled')
             ->select('client_id')
@@ -1890,19 +1896,41 @@ class PrintController extends Controller
             }])
             ->get()
             ->map(function ($c) {
-                $orders = $c->orders;
-                $latest = $orders->first(); // останнє замовлення
+                $o = $c->orders->first(); // останнє замовлення
                 return [
-                    'name'   => $c->name,
-                    'phone'  => $c->phone,
-                    'tariff' => $latest?->tariff?->name ?? '—',
-                    'brand'  => $latest?->projectData?->name ?? ($latest?->project ?? '—'),
-                    'count'  => $orders->count(), // скільки разів замовляв (1/2/3)
+                    'id'         => $c->id,
+                    'name'       => $c->name,
+                    'phone'      => $c->phone,
+                    'tariff'     => $o?->tariff?->name ?? '—',
+                    'tariff_id'  => $o?->tariff_id,
+                    'brand'      => $o?->projectData?->name ?? ($o?->project ?? '—'),
+                    'brand_slug' => $o?->project,
+                    'count'      => $c->orders->count(), // 1/2/3
+                    'start'      => $o?->start_date ? \Carbon\Carbon::parse($o->start_date)->format('Y-m-d') : null,
+                    'end'        => $o?->end_date ? \Carbon\Carbon::parse($o->end_date)->format('Y-m-d') : null,
                 ];
-            })
-            ->sortBy([['count', 'asc'], ['name', 'asc']])
-            ->values();
+            });
 
-        return view('print.repeat-clients', ['clients' => $clients]);
+        // Фільтри (по останньому замовленню)
+        if ($fTariff)   $clients = $clients->where('tariff_id', (int) $fTariff);
+        if ($fBrand)    $clients = $clients->where('brand_slug', $fBrand);
+        if ($fMonth)    $clients = $clients->filter(fn ($r) => $r['end'] && substr($r['end'], 0, 7) === $fMonth);
+        if ($fDateFrom) $clients = $clients->filter(fn ($r) => $r['end'] && $r['end'] >= $fDateFrom);
+        if ($fDateTo)   $clients = $clients->filter(fn ($r) => $r['end'] && $r['end'] <= $fDateTo);
+
+        $clients = $clients->sortBy([['count', 'asc'], ['name', 'asc']])->values();
+
+        return view('print.repeat-clients', [
+            'clients' => $clients,
+            'tariffs' => \App\Models\Tariff::orderBy('name')->pluck('name', 'id'),
+            'brands'  => \App\Models\Project::where('is_active', true)->orderBy('name')->pluck('name', 'slug'),
+            'filters' => [
+                'tariff_id' => $fTariff,
+                'brand'     => $fBrand,
+                'month'     => $fMonth,
+                'date_from' => $fDateFrom,
+                'date_to'   => $fDateTo,
+            ],
+        ]);
     }
 }

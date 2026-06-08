@@ -7,24 +7,30 @@
     <style>
         * { box-sizing: border-box; }
         body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #1e293b; margin: 0; padding: 24px; background: #f8fafc; }
-        .wrap { max-width: 1000px; margin: 0 auto; }
+        .wrap { max-width: 1100px; margin: 0 auto; }
         h1 { font-size: 22px; margin: 0 0 4px; }
         .sub { color: #64748b; font-size: 13px; margin-bottom: 16px; }
-        .summary { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+        .summary { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
         .chip { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 14px; font-size: 13px; }
         .chip b { font-size: 18px; display: block; }
+        .filters { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+        .filters .fld { display: flex; flex-direction: column; gap: 4px; }
+        .filters label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #64748b; }
+        .filters select, .filters input { padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; background: #fff; min-width: 150px; }
+        .btn { padding: 8px 16px; border-radius: 8px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
+        .btn-primary { background: #f59e0b; color: #fff; }
+        .btn-reset { background: #f1f5f9; color: #475569; }
         table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
         th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #eef2f7; font-size: 13px; }
         th { background: #f1f5f9; color: #475569; text-transform: uppercase; font-size: 11px; letter-spacing: .04em; }
         tr:last-child td { border-bottom: none; }
-        td.num { text-align: center; width: 46px; color: #94a3b8; }
+        td.id { color: #94a3b8; font-variant-numeric: tabular-nums; }
         .cnt { display: inline-block; min-width: 22px; text-align: center; border-radius: 6px; padding: 2px 8px; font-weight: 700; color: #fff; }
-        .cnt-1 { background: #ef4444; }
-        .cnt-2 { background: #f59e0b; }
-        .cnt-3 { background: #10b981; }
+        .cnt-1 { background: #ef4444; } .cnt-2 { background: #f59e0b; } .cnt-3 { background: #10b981; }
         .phone { font-variant-numeric: tabular-nums; white-space: nowrap; }
         .brand { color: #64748b; }
-        @media print { body { background: #fff; padding: 0; } .chip, table { border-color: #cbd5e1; } }
+        .date { white-space: nowrap; color: #475569; font-variant-numeric: tabular-nums; }
+        @media print { body { background: #fff; padding: 0; } .filters { display: none; } }
     </style>
 </head>
 <body>
@@ -36,10 +42,45 @@
     @endphp
 
     <h1>Клієнти з 1–3 замовленнями</h1>
-    <div class="sub">Хто замовляв 1, 2 або 3 рази (4+ не показуємо) — кандидати на дотиск до наступного замовлення.</div>
+    <div class="sub">Хто замовляв 1, 2 або 3 рази (4+ не показуємо). Фільтр по місяцю/даті — за <b>датою закінчення</b> замовлення (тобто «був на замовленні і не продовжив»).</div>
+
+    <form class="filters" method="GET" action="{{ route('print.repeat-clients') }}">
+        <div class="fld">
+            <label>Тариф</label>
+            <select name="tariff_id">
+                <option value="">Усі</option>
+                @foreach($tariffs as $id => $name)
+                    <option value="{{ $id }}" @selected((string)($filters['tariff_id'] ?? '') === (string)$id)>{{ $name }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="fld">
+            <label>Бренд</label>
+            <select name="brand">
+                <option value="">Усі</option>
+                @foreach($brands as $slug => $name)
+                    <option value="{{ $slug }}" @selected(($filters['brand'] ?? '') === $slug)>{{ $name }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="fld">
+            <label>Місяць (закінчення)</label>
+            <input type="month" name="month" value="{{ $filters['month'] ?? '' }}">
+        </div>
+        <div class="fld">
+            <label>Дата закінч. з</label>
+            <input type="date" name="date_from" value="{{ $filters['date_from'] ?? '' }}">
+        </div>
+        <div class="fld">
+            <label>по</label>
+            <input type="date" name="date_to" value="{{ $filters['date_to'] ?? '' }}">
+        </div>
+        <button type="submit" class="btn btn-primary">Застосувати</button>
+        <a href="{{ route('print.repeat-clients') }}" class="btn btn-reset">Скинути</a>
+    </form>
 
     <div class="summary">
-        <div class="chip">Усього <b>{{ $clients->count() }}</b></div>
+        <div class="chip">Знайдено <b>{{ $clients->count() }}</b></div>
         <div class="chip">1 замовлення <b>{{ $c1 }}</b></div>
         <div class="chip">2 замовлення <b>{{ $c2 }}</b></div>
         <div class="chip">3 замовлення <b>{{ $c3 }}</b></div>
@@ -48,26 +89,28 @@
     <table>
         <thead>
             <tr>
-                <th>#</th>
+                <th>ID</th>
                 <th>Клієнт</th>
                 <th>Телефон</th>
                 <th>Тариф</th>
                 <th>Бренд</th>
-                <th style="text-align:center;">Замовлення №</th>
+                <th>Замовлення (період)</th>
+                <th style="text-align:center;">№</th>
             </tr>
         </thead>
         <tbody>
-            @forelse($clients as $i => $cl)
+            @forelse($clients as $cl)
                 <tr>
-                    <td class="num">{{ $i + 1 }}</td>
+                    <td class="id">{{ $cl['id'] }}</td>
                     <td>{{ $cl['name'] }}</td>
                     <td class="phone">{{ $cl['phone'] }}</td>
                     <td>{{ $cl['tariff'] }}</td>
                     <td class="brand">{{ $cl['brand'] }}</td>
+                    <td class="date">{{ $cl['start'] ? \Carbon\Carbon::parse($cl['start'])->format('d.m.y') : '—' }} – {{ $cl['end'] ? \Carbon\Carbon::parse($cl['end'])->format('d.m.y') : '—' }}</td>
                     <td style="text-align:center;"><span class="cnt cnt-{{ $cl['count'] }}">{{ $cl['count'] }}</span></td>
                 </tr>
             @empty
-                <tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:24px;">Немає клієнтів у цьому діапазоні</td></tr>
+                <tr><td colspan="7" style="text-align:center; color:#94a3b8; padding:24px;">Немає клієнтів за цими фільтрами</td></tr>
             @endforelse
         </tbody>
     </table>
