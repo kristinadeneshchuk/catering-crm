@@ -67,20 +67,33 @@ class EmployeeAttendance extends Page
         $shift = EmployeeShift::where('employee_id', $employeeId)->where('date', $date)->first();
 
         DB::transaction(function () use ($employee, $shift, $employeeId, $date) {
-            if ($shift) {
-                // Видаляємо зміну — відкочуємо повну суму (включно з можливою доплатою чергового)
+            // Базова ставка за день (для кур'єра — вартість маршрутів)
+            if ($employee->position === 'courier') {
+                $base = (float) DeliveryRoute::where('date', $date)
+                    ->where('employee_id', $employeeId)
+                    ->sum('calculated_cost');
+            } else {
+                $base = (float) $employee->base_rate;
+            }
+            $bonus = $this->dutyBonus();
+
+            // Цикл: немає → повна → половина → немає
+            if (! $shift) {
+                EmployeeShift::create([
+                    'employee_id' => $employeeId, 'date' => $date,
+                    'rate' => $base, 'is_duty' => false, 'is_half' => false,
+                ]);
+                $employee->increment('balance', $base);
+            } elseif (! $shift->is_half) {
+                // повна → половина: відкочуємо стару суму, ставимо пів-ставки (+ бонус чергового, якщо є)
+                $employee->decrement('balance', $shift->rate);
+                $newRate = $base / 2 + ($shift->is_duty ? $bonus : 0);
+                $shift->update(['is_half' => true, 'rate' => $newRate]);
+                $employee->increment('balance', $newRate);
+            } else {
+                // половина → немає
                 $employee->decrement('balance', $shift->rate);
                 $shift->delete();
-            } else {
-                if ($employee->position === 'courier') {
-                    $rate = (float) DeliveryRoute::where('date', $date)
-                        ->where('employee_id', $employeeId)
-                        ->sum('calculated_cost');
-                } else {
-                    $rate = (float) $employee->base_rate;
-                }
-                EmployeeShift::create(['employee_id' => $employeeId, 'date' => $date, 'rate' => $rate, 'is_duty' => false]);
-                $employee->increment('balance', $rate);
             }
         });
     }
@@ -244,6 +257,7 @@ class EmployeeAttendance extends Page
                     $days[$date] = [
                         'status'  => 'present',
                         'is_duty' => (bool) $empShifts[$date]->is_duty,
+                        'is_half' => (bool) $empShifts[$date]->is_half,
                     ];
                 } elseif ($date > $today) {
                     $days[$date] = ['status' => 'future', 'is_duty' => false];

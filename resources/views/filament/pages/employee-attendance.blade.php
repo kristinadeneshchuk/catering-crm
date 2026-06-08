@@ -184,19 +184,27 @@
                         $dayInfo = $row['days'][$date] ?? ['status' => 'future', 'is_duty' => false];
                         $status  = $dayInfo['status'];
                         $isDuty  = $dayInfo['is_duty'];
+                        $isHalf  = $dayInfo['is_half'] ?? false;
                     @endphp
                     <td style="text-align:center;padding:6px 4px;">
                         <div style="position:relative;display:inline-block;width:34px;height:34px;">
                             @if($status === 'present')
+                                @php $fill = $isDuty ? '#78350f' : ($row['is_kitchen'] ? '#14532d' : '#1e3a5f'); @endphp
                                 <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
+                                    title="{{ $isHalf ? 'Пів зміни (клік — прибрати)' : 'Повна зміна (клік — зробити пів зміни)' }}"
                                     style="width:34px;height:34px;border-radius:50%;
-                                           background:{{ $isDuty ? '#78350f' : ($row['is_kitchen'] ? '#14532d' : '#1e3a5f') }};
+                                           background:{{ $isHalf ? 'linear-gradient(90deg, ' . $fill . ' 50%, #27272a 50%)' : $fill }};
+                                           {{ $isHalf ? 'border:2px solid ' . $fill . ';' : '' }}
                                            {{ $isDuty ? 'box-shadow:0 0 0 2px #f59e0b;' : '' }}
                                            display:inline-flex;align-items:center;justify-content:center;">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                         stroke="{{ $isDuty ? '#fbbf24' : ($row['is_kitchen'] ? '#22c55e' : '#60a5fa') }}" stroke-width="2.8">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
-                                    </svg>
+                                    @if($isHalf)
+                                        <span style="font-size:13px;font-weight:800;color:#e4e4e7;line-height:1;">½</span>
+                                    @else
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                             stroke="{{ $isDuty ? '#fbbf24' : ($row['is_kitchen'] ? '#22c55e' : '#60a5fa') }}" stroke-width="2.8">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                                        </svg>
+                                    @endif
                                 </button>
                             @elseif($status === 'absent_today')
                                 <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
