@@ -194,13 +194,21 @@ class EmployeeAttendance extends Page
         $posOrder  = ['cook' => 1, 'packer' => 2, 'manager' => 3, 'admin' => 4, 'courier' => 5, 'cleaner' => 6];
         $employees = $query->get()->sortBy(fn ($e) => $posOrder[$e->position] ?? 99)->values();
 
-        $portions = OrderDay::whereBetween('date', [$rangeStart, $rangeEnd])
+        // Порції доставляються наступного дня після зміни (готують сьогодні на завтра).
+        // Тому беремо порції з діапазону +1 день і зіставляємо працю дня X з порціями дня X+1.
+        $portionsRaw = OrderDay::whereBetween('date', [$rangeStart, \Carbon\Carbon::parse($rangeEnd)->addDay()->format('Y-m-d')])
             ->selectRaw('date, COUNT(*) as cnt')
             ->groupBy('date')
             ->pluck('cnt', 'date');
 
-        // Собівартість праці на 1 порцію за день:
-        // (сума rate всіх змін співробітників з поточного фільтра в цей день) / (порції цього дня)
+        // Порції, які виробляє зміна цього дня = доставка наступного дня
+        $producedPortions = [];
+        foreach ($dates as $date) {
+            $nextDay = \Carbon\Carbon::parse($date)->addDay()->format('Y-m-d');
+            $producedPortions[$date] = (int) ($portionsRaw[$nextDay] ?? 0);
+        }
+
+        // Собівартість праці на 1 порцію: праця дня / порції, які ця зміна виробила (наступний день)
         $filteredEmployeeIds = $employees->pluck('id')->all();
         $shiftsByDate = $allShifts
             ->whereIn('employee_id', $filteredEmployeeIds)
@@ -209,7 +217,7 @@ class EmployeeAttendance extends Page
         $costPerPortion = [];
         foreach ($dates as $date) {
             $dayCost     = (float) ($shiftsByDate->get($date, collect())->sum('rate'));
-            $dayPortions = (int)   ($portions[$date] ?? 0);
+            $dayPortions = (int)   ($producedPortions[$date] ?? 0);
             if ($dayPortions > 0 && $dayCost > 0) {
                 $costPerPortion[$date] = round($dayCost / $dayPortions, 2);
             }
@@ -267,7 +275,7 @@ class EmployeeAttendance extends Page
                 'absent_today' => $absentToday,
             ],
             'rows'             => $rows,
-            'portions'         => $portions->toArray(),
+            'portions'         => $producedPortions,
             'cost_per_portion' => $costPerPortion,
             'today'            => $today,
             'duty_bonus'       => $this->dutyBonus(),
