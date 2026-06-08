@@ -34,3 +34,14 @@ jobs:
             git pull origin main
             php artisan config:clear
             php artisan view:clear
+
+  deploy-horenko:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to horenko-production (new server)
+        uses: appleboy/ssh-action@master
+        with:
+          host: 88.99.169.99
+          username: root
+          key: ${{ secrets.HORENKO_SSH_KEY }}
+          script: /usr/local/bin/crm-deploy
