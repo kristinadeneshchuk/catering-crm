@@ -312,6 +312,31 @@
             letter-spacing: 1.5px;
         }
 
+        /* ── Акцент на QR (плашка + стрілка + рамка) ── */
+        .qr-callout {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            background: #facc15;
+            color: #1f2937;
+            border-radius: 6px;
+            padding: 3px 7px;
+            line-height: 1.05;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+            max-width: 30mm;
+        }
+        .qr-callout-title { font-size: 7pt; font-weight: 900; letter-spacing: 0.3px; text-transform: uppercase; }
+        .qr-callout-sub   { font-size: 4.5pt; font-weight: 700; margin-top: 0.5px; }
+        .qr-arrow { font-size: 11pt; font-weight: 900; color: #f59e0b; margin: 0 1px; line-height: 1; }
+        .qr-accent {
+            border: 2px solid #1f2937;
+            border-radius: 6px;
+            padding: 2px;
+            background: #fff;
+        }
+
         .circles-row {
             display: flex;
             gap: 2px;
@@ -384,6 +409,11 @@
         body.fmt-large .no-icon-badge    { width: 24px; height: 24px; }
         body.fmt-large .no-icon-badge svg { width: 16px; height: 16px; }
         body.fmt-large .footer-text      { font-size: 7pt; }
+        body.fmt-large .qr-callout       { padding: 5px 11px; border-radius: 9px; max-width: 38mm; }
+        body.fmt-large .qr-callout-title { font-size: 10pt; }
+        body.fmt-large .qr-callout-sub   { font-size: 6.5pt; }
+        body.fmt-large .qr-arrow         { font-size: 16pt; }
+        body.fmt-large .qr-accent        { border-width: 3px; border-radius: 9px; padding: 3px; }
         body.fmt-large .qr-placeholder canvas { width: 80px !important; height: 80px !important; }
         body.fmt-large .qr-placeholder.print-ready img { width: 80px !important; height: 80px !important; }
 
@@ -582,15 +612,16 @@
             </div>
 
             {{-- Підпис --}}
-            <div class="sticker-footer">
-                <div style="display:flex;flex-direction:column;justify-content:flex-end;">
-                    <span class="footer-text">Смачного від {{ $project?->name ?? 'BRAND' }}!</span>
-                    @if(!empty($man['menu_token']))
-                        <span style="font-size:4pt;color:#dc2626;margin-top:0.8mm;letter-spacing:0.2px;font-weight:700;">Відскануй QR щоб побачити меню!</span>
-                    @endif
-                </div>
+            <div class="sticker-footer" style="justify-content:flex-end;gap:1.5mm;">
                 @if(!empty($man['menu_token']))
-                    <div class="qr-placeholder" data-url="{{ url('/menu/' . $man['menu_token']) }}" style="width:50px;height:50px;margin-right:1.5mm;margin-bottom:1mm;"></div>
+                    <div class="qr-callout">
+                        <span class="qr-callout-title">Меню тут</span>
+                        <span class="qr-callout-sub">скануй та оцінюй страви ⭐</span>
+                    </div>
+                    <span class="qr-arrow">➜</span>
+                    <div class="qr-placeholder qr-accent" data-url="{{ url('/menu/' . $man['menu_token']) }}" style="width:50px;height:50px;margin-bottom:1mm;"></div>
+                @else
+                    <span class="footer-text">Смачного від {{ $project?->name ?? 'BRAND' }}!</span>
                 @endif
             </div>
 
