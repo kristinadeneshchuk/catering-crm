@@ -42,9 +42,9 @@ class EditDailyMenu extends EditRecord
         ]);
 
         $record->updateQuietly([
-            'cached_cost_950'  => DailyMenuResource::calculatePlanCost($record, 950,  [1, 3, 5]),
-            'cached_cost_1500' => DailyMenuResource::calculatePlanCost($record, 1500, [1, 2, 3, 4, 5]),
-            'cached_cost_2500' => DailyMenuResource::calculatePlanCost($record, 2500, [1, 2, 3, 4, 5]),
+            'cached_cost_950'  => DailyMenuResource::calculatePlanCost($record, 950),
+            'cached_cost_1500' => DailyMenuResource::calculatePlanCost($record, 1500),
+            'cached_cost_2500' => DailyMenuResource::calculatePlanCost($record, 2500),
         ]);
     }
 }

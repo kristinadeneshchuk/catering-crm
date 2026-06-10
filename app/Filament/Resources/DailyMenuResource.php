@@ -334,9 +334,9 @@ class DailyMenuResource extends Resource
 
                         foreach ($records as $record) {
                             $record->updateQuietly([
-                                'cached_cost_950'  => self::calculatePlanCost($record, 950,  MealPlan::getAllowedSortOrders(950)),
-                                'cached_cost_1500' => self::calculatePlanCost($record, 1500, MealPlan::getAllowedSortOrders(1500)),
-                                'cached_cost_2500' => self::calculatePlanCost($record, 2500, MealPlan::getAllowedSortOrders(2500)),
+                                'cached_cost_950'  => self::calculatePlanCost($record, 950),
+                                'cached_cost_1500' => self::calculatePlanCost($record, 1500),
+                                'cached_cost_2500' => self::calculatePlanCost($record, 2500),
                             ]);
                         }
                     })
@@ -887,8 +887,12 @@ class DailyMenuResource extends Resource
 
     // ─── Plan cost ────────────────────────────────────────────────────────────
 
-    public static function calculatePlanCost(DailyMenu $record, int $targetKcal, array $allowedSortOrders): float
+    public static function calculatePlanCost(DailyMenu $record, int $targetKcal, array $allowedSortOrders = []): float
     {
+        // Завжди беремо набір прийомів саме для цієї калорійності — щоб не було
+        // розбіжностей між різними шляхами розрахунку (save / job / кнопка).
+        $allowedSortOrders = MealPlan::getAllowedSortOrders($targetKcal);
+
         $menuItems = $record->menuItems->filter(function ($item) use ($allowedSortOrders) {
             return $item->dish && in_array($item->mealType?->sort_order, $allowedSortOrders);
         });
@@ -897,14 +901,24 @@ class DailyMenuResource extends Resource
             return 0.0;
         }
 
+        // Нормалізуємо % прийомів до 100% (як у картках страв і шкалі БЖУ),
+        // інакше при сумі % ≠ 100 собівартість виходить занижена/завищена.
+        $totalPct = 0.0;
+        foreach ($menuItems as $item) {
+            $totalPct += $item->custom_energy_percent !== null
+                ? (float) $item->custom_energy_percent
+                : (float) ($item->mealType?->energy_percent ?? 0);
+        }
+        $normFactor = ($totalPct > 0.5 && abs($totalPct - 100) > 0.5) ? 100.0 / $totalPct : 1.0;
+
         $totalCost = 0.0;
 
         foreach ($menuItems as $item) {
             $dish = $item->dish;
 
-            $p = $item->custom_energy_percent !== null
+            $p = ($item->custom_energy_percent !== null
                 ? (float) $item->custom_energy_percent
-                : (float) ($item->mealType?->energy_percent ?? 0);
+                : (float) ($item->mealType?->energy_percent ?? 0)) * $normFactor;
 
             $mealKcal = ($p > 0)
                 ? $targetKcal * ($p / 100.0)
