@@ -33,35 +33,48 @@ class DebtsList extends Widget
 
     protected function getViewData(): array
     {
-        $orders = Order::with('client')
-            ->where('is_paid', false)
-            ->whereIn('status', ['active', 'new'])
-            ->where(function ($q) {
-                $q->where('final_price', '>', 0)
-                  ->orWhere('total_price', '>', 0);
-            })
-            ->orderBy($this->sortBy, $this->sortDir)
+        // Борг = від'ємний баланс клієнта (джерело правди, його веде Client::syncBalance()).
+        // НЕ покладаємось на прапорець is_paid окремих замовлень — він буває застарілий
+        // і не ловить боржників із завершеними замовленнями.
+        $rows = \App\Models\Client::query()
+            ->where('balance', '<', 0)
+            ->with(['orders' => fn ($q) => $q->orderByDesc('start_date')->orderByDesc('id')])
             ->get()
-            ->map(function ($order) {
-                $due = (float) ($order->final_price > 0 ? $order->final_price : $order->total_price);
+            ->map(function ($client) {
+                $orders = $client->orders;
+                // Контекстне замовлення: спершу активне/нове, інакше — останнє
+                $order = $orders->firstWhere('status', 'active')
+                      ?? $orders->firstWhere('status', 'new')
+                      ?? $orders->first();
+                $isActive = $order && in_array($order->status, ['active', 'new'], true);
+
                 return [
-                    'order_id'    => $order->id,
-                    'client_id'   => $order->client_id,
-                    'client_name' => $order->client?->name ?? '—',
-                    'client_url'  => $order->client_id
-                        ? ClientResource::getUrl('edit', ['record' => $order->client_id])
-                        : null,
-                    'start_date'  => $order->start_date?->format('d.m.Y') ?? '—',
-                    'end_date'    => $order->end_date?->format('d.m.Y') ?? '—',
-                    'start_raw'   => $order->start_date?->timestamp ?? 0,
-                    'duration'    => $order->duration,
-                    'due'         => $due,
-                    'status'      => $order->status,
+                    'order_id'    => $order?->id,
+                    'client_id'   => $client->id,
+                    'client_name' => $client->name ?? '—',
+                    'client_url'  => ClientResource::getUrl('edit', ['record' => $client->id]),
+                    'start_date'  => $order?->start_date?->format('d.m.Y') ?? '—',
+                    'end_date'    => $order?->end_date?->format('d.m.Y') ?? '—',
+                    'start_raw'   => $order?->start_date?->timestamp ?? 0,
+                    'duration'    => $order?->duration ?? 0,
+                    'due'         => -(float) $client->balance,           // сам борг (= скільки винні)
+                    'status'      => $isActive ? $order->status : 'finished',
                 ];
             });
 
+        // Сортування рядків
+        $sortKey = match ($this->sortBy) {
+            'final_price' => 'due',
+            'start_date'  => 'start_raw',
+            'status'      => 'status',
+            default       => 'client_name',
+        };
+        $rows = $this->sortDir === 'desc'
+            ? $rows->sortByDesc($sortKey)->values()
+            : $rows->sortBy($sortKey)->values();
+
         return [
-            'debtsList' => $orders,
+            'debtsList' => $rows,
             'sortBy'    => $this->sortBy,
             'sortDir'   => $this->sortDir,
         ];

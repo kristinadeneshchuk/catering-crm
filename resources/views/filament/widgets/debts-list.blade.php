@@ -1,9 +1,9 @@
 <x-filament-widgets::widget>
     <x-filament::section>
-        <x-slot name="heading">Замовлення очікуючі оплати</x-slot>
+        <x-slot name="heading">Клієнти з боргом</x-slot>
         <x-slot name="headerEnd">
             <div style="display:flex; align-items:center; gap:1rem;">
-                <span style="font-size:0.75rem; color:#9ca3af;">{{ $debtsList->count() }} замовлень</span>
+                <span style="font-size:0.75rem; color:#9ca3af;">{{ $debtsList->count() }} клієнтів</span>
                 <span style="font-size:0.9rem; font-weight:700; color:#f87171;">
                     {{ number_format($debtsList->sum('due'), 0, '.', ' ') }} ₴
                 </span>
@@ -12,27 +12,27 @@
 
         @if($debtsList->isEmpty())
             <div style="padding:2rem; text-align:center; color:#4ade80; font-size:0.875rem;">
-                ✓ Усі замовлення оплачені
+                ✓ Боржників немає
             </div>
         @else
-            {{-- Статистика зверху --}}
+            {{-- Статистика зверху: активні (на підписці) vs завершені, але винні --}}
             @php
-                $totalNew    = $debtsList->where('status', 'new')->count();
-                $totalActive = $debtsList->where('status', 'active')->count();
-                $sumNew      = $debtsList->where('status', 'new')->sum('due');
-                $sumActive   = $debtsList->where('status', 'active')->sum('due');
+                $activeDebtors   = $debtsList->whereIn('status', ['active', 'new']);
+                $finishedDebtors = $debtsList->where('status', 'finished');
+                $totalActive = $activeDebtors->count();   $sumActive   = $activeDebtors->sum('due');
+                $totalFin    = $finishedDebtors->count(); $sumFin      = $finishedDebtors->sum('due');
             @endphp
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:1rem;">
-                <div style="background:rgba(55,65,81,0.4); border:1px solid #374151; border-radius:0.5rem; padding:0.75rem 1rem;">
-                    <p style="font-size:0.7rem; color:#9ca3af; margin:0 0 0.25rem; text-transform:uppercase; letter-spacing:0.05em;">Нові</p>
-                    <p style="font-size:1.1rem; font-weight:700; color:#f87171; margin:0;">{{ number_format($sumNew, 0, '.', ' ') }} ₴
-                        <span style="font-size:0.75rem; color:#9ca3af; font-weight:400;">({{ $totalNew }} замовл.)</span>
+                <div style="background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.2); border-radius:0.5rem; padding:0.75rem 1rem;">
+                    <p style="font-size:0.7rem; color:#9ca3af; margin:0 0 0.25rem; text-transform:uppercase; letter-spacing:0.05em;">Активні (на підписці)</p>
+                    <p style="font-size:1.1rem; font-weight:700; color:#fb923c; margin:0;">{{ number_format($sumActive, 0, '.', ' ') }} ₴
+                        <span style="font-size:0.75rem; color:#9ca3af; font-weight:400;">({{ $totalActive }} кл.)</span>
                     </p>
                 </div>
-                <div style="background:rgba(16,185,129,0.05); border:1px solid rgba(16,185,129,0.2); border-radius:0.5rem; padding:0.75rem 1rem;">
-                    <p style="font-size:0.7rem; color:#9ca3af; margin:0 0 0.25rem; text-transform:uppercase; letter-spacing:0.05em;">Активні</p>
-                    <p style="font-size:1.1rem; font-weight:700; color:#fb923c; margin:0;">{{ number_format($sumActive, 0, '.', ' ') }} ₴
-                        <span style="font-size:0.75rem; color:#9ca3af; font-weight:400;">({{ $totalActive }} замовл.)</span>
+                <div style="background:rgba(248,113,113,0.06); border:1px solid rgba(248,113,113,0.25); border-radius:0.5rem; padding:0.75rem 1rem;">
+                    <p style="font-size:0.7rem; color:#9ca3af; margin:0 0 0.25rem; text-transform:uppercase; letter-spacing:0.05em;">Завершені — стягнути</p>
+                    <p style="font-size:1.1rem; font-weight:700; color:#f87171; margin:0;">{{ number_format($sumFin, 0, '.', ' ') }} ₴
+                        <span style="font-size:0.75rem; color:#9ca3af; font-weight:400;">({{ $totalFin }} кл.)</span>
                     </p>
                 </div>
             </div>
@@ -67,7 +67,7 @@
                             </th>
                             <th wire:click="sortByColumn('final_price')"
                                 style="{{ $thBase }}{{ $sortBy === 'final_price' ? $thActive : $thGray }}text-align:right;">
-                                До оплати{!! $arrow('final_price') !!}
+                                Борг{!! $arrow('final_price') !!}
                             </th>
                         </tr>
                     </thead>
@@ -77,7 +77,7 @@
                             onmouseover="this.style.background='rgba(55,65,81,0.3)'"
                             onmouseout="this.style.background='transparent'">
                             <td style="padding:0.5rem 0.75rem; font-size:0.75rem; color:#6b7280; white-space:nowrap;">
-                                #{{ $row['order_id'] }}
+                                {{ $row['order_id'] ? '#'.$row['order_id'] : '—' }}
                             </td>
                             <td style="padding:0.5rem 0.75rem; font-size:0.8rem; font-weight:500;">
                                 @if($row['client_url'])
@@ -99,9 +99,13 @@
                                     <span style="display:inline-flex; align-items:center; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); color:#34d399; font-size:0.65rem; font-weight:600; padding:0.125rem 0.5rem; border-radius:9999px; white-space:nowrap;">
                                         Активний
                                     </span>
-                                @else
+                                @elseif($row['status'] === 'new')
                                     <span style="display:inline-flex; align-items:center; background:rgba(55,65,81,0.5); border:1px solid #374151; color:#9ca3af; font-size:0.65rem; font-weight:600; padding:0.125rem 0.5rem; border-radius:9999px; white-space:nowrap;">
                                         Новий
+                                    </span>
+                                @else
+                                    <span style="display:inline-flex; align-items:center; background:rgba(248,113,113,0.12); border:1px solid rgba(248,113,113,0.35); color:#f87171; font-size:0.65rem; font-weight:600; padding:0.125rem 0.5rem; border-radius:9999px; white-space:nowrap;">
+                                        Завершено
                                     </span>
                                 @endif
                             </td>
