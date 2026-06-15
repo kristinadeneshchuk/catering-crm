@@ -11,6 +11,7 @@ class TelegramService
     private ?string $ownerChatId;
     private ?string $managerChatId;
     private ?string $cookChatId;
+    private ?string $kitchenChatId;
 
     public function __construct()
     {
@@ -18,6 +19,7 @@ class TelegramService
         $this->ownerChatId = config('services.telegram.owner_chat_id');
         $this->managerChatId = config('services.telegram.manager_chat_id');
         $this->cookChatId = config('services.telegram.cook_chat_id');
+        $this->kitchenChatId = config('services.telegram.kitchen_chat_id');
     }
 
     public function sendToOwner(string $text): void
@@ -44,6 +46,13 @@ class TelegramService
                 $chatId = trim($chatId);
                 if ($chatId) $this->send($chatId, $text);
             }
+        }
+    }
+
+    public function sendToKitchen(string $text): void
+    {
+        if ($this->kitchenChatId) {
+            $this->send($this->kitchenChatId, $text);
         }
     }
 

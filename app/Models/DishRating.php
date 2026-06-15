@@ -72,7 +72,9 @@ class DishRating extends Model
                 $lines[] = "💬 <b>Коментар:</b> {$rating->comment}";
             }
 
-            app(TelegramService::class)->sendToOwnerManagerCook(implode("\n", $lines));
+            $telegram = app(TelegramService::class);
+            $telegram->sendToOwnerAndManager(implode("\n", $lines));
+            $telegram->sendToKitchen(implode("\n", $lines));
         });
     }
 }

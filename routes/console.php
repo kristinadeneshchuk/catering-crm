@@ -15,6 +15,7 @@ Schedule::command('activitylog:clean')->dailyAt('03:30');
 Schedule::command('telegram:morning-pulse')->dailyAt('11:00');
 Schedule::command('telegram:evening-summary')->dailyAt('18:00');
 Schedule::command('telegram:weekly-digest')->weeklyOn(1, '09:00'); // 1 = понеділок
+Schedule::command('telegram:kitchen-daily-summary')->dailyAt('20:00');
 
 // Instagram polling — для Message Requests (перших звернень нових клієнтів),
 // які не приходять через webhook навіть після публікації app.
