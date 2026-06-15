@@ -74,9 +74,16 @@ class MenuPlan extends Model
     /**
      * Дефолтний план — використовується для замовлень без явного menu_plan_id.
      */
+    private static ?self $defaultCache = null;
+    private static bool $defaultLoaded = false;
+
     public static function default(): ?MenuPlan
     {
-        return static::query()->where('is_default', true)->first()
-            ?? static::query()->orderBy('id')->first();
+        if (!self::$defaultLoaded) {
+            self::$defaultCache = static::query()->where('is_default', true)->first()
+                ?? static::query()->orderBy('id')->first();
+            self::$defaultLoaded = true;
+        }
+        return self::$defaultCache;
     }
 }

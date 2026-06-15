@@ -620,6 +620,7 @@ public function form(Form $form): Form
                 'menuPlan',
                 'replacements.replacementProduct',
                 'replacements.replacementDish.dishIngredients.ingredient',
+                'replacements.replacementDish.dishIngredients.childDish.dishIngredients.ingredient',
                 'projectData',
             ])
             ->get();
@@ -732,6 +733,24 @@ public function form(Form $form): Form
             }
 
             // === ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану ===
+            // Preload all dishes for individual clients in one query to avoid N+1
+            $individualDishIds = [];
+            foreach ($planOrders as $order) {
+                if ($order->menu_type !== 'individual') continue;
+                $orderPlan = $this->orderPlans[$order->id] ?? null;
+                if (!$orderPlan || empty($orderPlan['items'])) continue;
+                foreach ($orderPlan['items'] as $item) {
+                    $individualDishIds[] = $item['dish_id'];
+                }
+            }
+            $individualDishesMap = collect();
+            if (!empty($individualDishIds)) {
+                $individualDishesMap = Dish::with([
+                    'dishIngredients.ingredient',
+                    'dishIngredients.childDish.dishIngredients.ingredient',
+                ])->whereIn('id', array_unique($individualDishIds))->get()->keyBy('id');
+            }
+
             $planIndividuals = [];
             foreach ($planOrders as $order) {
                 if ($order->menu_type !== 'individual') continue;
@@ -743,10 +762,7 @@ public function form(Form $form): Form
                 $meals = [];
 
                 foreach ($orderPlan['items'] as $item) {
-                    $dish = Dish::with(
-                        'dishIngredients.ingredient',
-                        'dishIngredients.childDish.dishIngredients.ingredient'
-                    )->find($item['dish_id']);
+                    $dish = $individualDishesMap->get($item['dish_id']);
                     if (!$dish) continue;
 
                     $weight = (int)$item['weight'];
