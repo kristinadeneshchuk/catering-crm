@@ -31,6 +31,10 @@
         .brand { color: #64748b; }
         .date { white-space: nowrap; color: #475569; font-variant-numeric: tabular-nums; }
         @media print { body { background: #fff; padding: 0; } .filters { display: none; } }
+        .called-cb { width: 18px; height: 18px; cursor: pointer; accent-color: #10b981; }
+        tr.called td { opacity: .45; }
+        tr.called td:first-child::after { content: ' ✓'; color: #10b981; font-weight: 700; }
+        .called-label { display: flex; align-items: center; justify-content: center; gap: 6px; }
     </style>
 </head>
 <body>
@@ -96,11 +100,12 @@
                 <th>Бренд</th>
                 <th>Замовлення (період)</th>
                 <th style="text-align:center;">№</th>
+                <th style="text-align:center;">Дзвонила</th>
             </tr>
         </thead>
         <tbody>
             @forelse($clients as $cl)
-                <tr>
+                <tr data-key="{{ $cl['id'] }}">
                     <td class="id">{{ $cl['id'] }}</td>
                     <td>{{ $cl['name'] }}</td>
                     <td class="phone">{{ $cl['phone'] }}</td>
@@ -108,12 +113,38 @@
                     <td class="brand">{{ $cl['brand'] }}</td>
                     <td class="date">{{ $cl['start'] ? \Carbon\Carbon::parse($cl['start'])->format('d.m.y') : '—' }} – {{ $cl['end'] ? \Carbon\Carbon::parse($cl['end'])->format('d.m.y') : '—' }}</td>
                     <td style="text-align:center;"><span class="cnt cnt-{{ $cl['count'] }}">{{ $cl['count'] }}</span></td>
+                    <td style="text-align:center;">
+                        <label class="called-label">
+                            <input type="checkbox" class="called-cb" data-key="{{ $cl['id'] }}">
+                        </label>
+                    </td>
                 </tr>
             @empty
-                <tr><td colspan="7" style="text-align:center; color:#94a3b8; padding:24px;">Немає клієнтів за цими фільтрами</td></tr>
+                <tr><td colspan="8" style="text-align:center; color:#94a3b8; padding:24px;">Немає клієнтів за цими фільтрами</td></tr>
             @endforelse
         </tbody>
     </table>
 </div>
+<script>
+const LS_KEY = 'repeat_clients_called';
+function loadCalled() {
+    try { return new Set(JSON.parse(localStorage.getItem(LS_KEY) || '[]')); }
+    catch { return new Set(); }
+}
+function saveCalled(set) {
+    localStorage.setItem(LS_KEY, JSON.stringify([...set]));
+}
+const called = loadCalled();
+document.querySelectorAll('.called-cb').forEach(cb => {
+    const key = cb.dataset.key;
+    const row = cb.closest('tr');
+    if (called.has(key)) { cb.checked = true; row.classList.add('called'); }
+    cb.addEventListener('change', () => {
+        if (cb.checked) { called.add(key); row.classList.add('called'); }
+        else { called.delete(key); row.classList.remove('called'); }
+        saveCalled(called);
+    });
+});
+</script>
 </body>
 </html>
