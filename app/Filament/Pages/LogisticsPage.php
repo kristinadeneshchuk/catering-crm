@@ -303,25 +303,14 @@ class LogisticsPage extends Page implements HasForms
                 }),
 
             Action::make('pull_route_details')
-                ->label('Деталі маршрутів')
-                ->form([
-                    Grid::make(2)->schema([
-                        \Filament\Forms\Components\DatePicker::make('date')
-                            ->label('Дата маршруту')
-                            ->default(now()->format('Y-m-d'))
-                            ->required(),
-                        Select::make('shift')
-                            ->label('Зміна')
-                            ->options(['all' => 'Всі', 'morning' => 'Ранок', 'evening' => 'Вечір'])
-                            ->default('all')
-                            ->required(),
-                    ]),
-                ])
-                ->action(function (array $data) {
+                ->label('Точки маршрутів')
+                ->action(function () {
+                    $date  = $this->data['date']  ?? now()->format('Y-m-d');
+                    $shift = $this->data['shift'] ?? 'all';
                     try {
-                        $count = app(AntLogisticsService::class)->pullRouteDetails($data['date'], $data['shift']);
-                        $this->form->fill(['date' => $data['date'], 'shift' => $data['shift']]);
+                        $count = app(AntLogisticsService::class)->pullRouteDetails($date, $shift);
                         $this->loadRoutes();
+                        $this->loadMileage();
                         Notification::make()->title("Завантажено маршрутів: {$count}")->success()->send();
                     } catch (\Throwable $e) {
                         Notification::make()->title('Помилка: ' . $e->getMessage())->danger()->send();

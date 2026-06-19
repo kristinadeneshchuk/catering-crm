@@ -50,11 +50,11 @@
                     Маршрути ↓
                 </button>
 
-                {{-- Деталі маршрутів --}}
+                {{-- Точки маршрутів --}}
                 <button wire:click="mountAction('pull_route_details')"
                     style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;border:none;cursor:pointer;transition:all .15s;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;box-shadow:0 0 16px #6d28d940;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
-                    Деталі ↓
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
+                    Точки ↓
                 </button>
 
                 {{-- Роздільник --}}
@@ -209,7 +209,7 @@
     <div style="text-align:center;padding:60px 20px;color:#3f3f46;">
         <div style="font-size:48px;margin-bottom:16px;">🚚</div>
         <p style="font-size:16px;color:#52525b;font-weight:600;">Немає даних маршрутів за цю дату</p>
-        <p style="font-size:13px;color:#3f3f46;margin-top:6px;">Натисни «Деталі ↓» щоб завантажити з АНТ</p>
+        <p style="font-size:13px;color:#3f3f46;margin-top:6px;">Натисни «Точки ↓» щоб завантажити з АНТ</p>
     </div>
     @endif
 
