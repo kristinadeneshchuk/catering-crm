@@ -145,6 +145,10 @@ class AnalyticsController extends Controller
         };
         
         $allIngredients = Ingredient::all()->keyBy('id');
+        // Прокачуємо середні ціни одним SQL — інакше FoodCostService робить
+        // окремий запит на кожен інгредієнт у кожній порції (95k+ запитів,
+        // 27 секунд на типовому періоді).
+        Ingredient::preloadAveragePrices();
 
         // 🔥 Компенсація кур'єрам (пальне + амортизація) — окремо від ФОП
         $mileageLogs = \App\Models\CourierMileageLog::whereBetween('date', [$startDate, $endDate])

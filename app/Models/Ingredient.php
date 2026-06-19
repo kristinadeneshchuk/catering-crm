@@ -31,8 +31,18 @@ class Ingredient extends Model
         'carbs_100g' => 'float',
     ];
 
+    // Per-process кеш середніх цін (заповнюється preloadAveragePrices або
+    // ліниво в getAveragePriceAttribute). Знімає N+1 в аналітиці, друці
+    // тех-карт, дашборді складу — там, де ціну читають для багатьох
+    // інгредієнтів за один запит.
+    protected static array $avgPriceCache = [];
+
     public function getAveragePriceAttribute(): float
     {
+        if (array_key_exists($this->id, self::$avgPriceCache)) {
+            return self::$avgPriceCache[$this->id];
+        }
+
         $avgData = \App\Models\StockDocumentItem::query()
             ->where('itemable_id', $this->id)
             ->where('itemable_type', self::class)
@@ -40,11 +50,44 @@ class Ingredient extends Model
             ->selectRaw('SUM(qty * price) as total_cost, SUM(qty) as total_qty')
             ->first();
 
-        if ($avgData && $avgData->total_qty > 0) {
-            return (float) ($avgData->total_cost / $avgData->total_qty);
+        $price = ($avgData && $avgData->total_qty > 0)
+            ? (float) ($avgData->total_cost / $avgData->total_qty)
+            : (float) $this->price_per_kg;
+
+        return self::$avgPriceCache[$this->id] = $price;
+    }
+
+    /**
+     * Завантажує середні ціни всіх інгредієнтів одним SQL і кладе в кеш.
+     * Викликати на початку важких запитів (аналітика, друк) — далі
+     * \$ingredient->average_price бере з пам'яті, без SQL.
+     */
+    public static function preloadAveragePrices(): void
+    {
+        // Стартова заливка: для кожного інгредієнта — fallback на price_per_kg
+        foreach (self::query()->get(['id', 'price_per_kg']) as $ing) {
+            self::$avgPriceCache[$ing->id] = (float) $ing->price_per_kg;
         }
 
-        return (float) $this->price_per_kg;
+        // Зважена середня з прибуткових накладних — одним SQL.
+        $rows = \Illuminate\Support\Facades\DB::table('stock_document_items as sdi')
+            ->join('stock_documents as sd', 'sd.id', '=', 'sdi.stock_document_id')
+            ->where('sd.type', 'receipt')
+            ->where('sdi.itemable_type', self::class)
+            ->selectRaw('sdi.itemable_id as id, SUM(sdi.qty * sdi.price) as total_cost, SUM(sdi.qty) as total_qty')
+            ->groupBy('sdi.itemable_id')
+            ->get();
+
+        foreach ($rows as $r) {
+            if ((float) $r->total_qty > 0) {
+                self::$avgPriceCache[$r->id] = (float) $r->total_cost / (float) $r->total_qty;
+            }
+        }
+    }
+
+    public static function clearAveragePriceCache(): void
+    {
+        self::$avgPriceCache = [];
     }
 
     public function getTotalSpentAttribute(): float
