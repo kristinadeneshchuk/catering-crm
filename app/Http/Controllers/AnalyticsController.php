@@ -100,10 +100,12 @@ class AnalyticsController extends Controller
             ->get()
             ->groupBy('date');
 
-        $kitchenPositions = ['cook', 'packer', 'cleaner'];
-
-        // 🔥 Рознесення ЗП по брендах в аналітиці проєктів
+        // Бакети ФОП тепер беремо з Position.group:
+        //   kitchen   → ФОП — кухня (тільки кухарі)
+        //   couriers  → ФОП — курʼєри
+        //   решта     → ФОП — інше (менеджмент + маркетинг + інше + пакувальники/прибиральниці)
         $positionsByKey    = \App\Models\Position::all()->keyBy('key');
+        $positionGroup     = $positionsByKey->mapWithKeys(fn ($p, $key) => [$key => $p->group ?? 'other']);
         $projectIdToSlug   = \App\Models\Project::pluck('slug', 'id');     // id => slug
         $projectSlugToName = \App\Models\Project::pluck('name', 'slug');   // slug => назва
         $generalSalaryPool   = 0.0;   // ЗП «загальних» ролей — рознесеться пропорційно виручці
@@ -144,18 +146,6 @@ class AnalyticsController extends Controller
         
         $allIngredients = Ingredient::all()->keyBy('id');
 
-        // Витрати на доставку по датах (з таблиці delivery_routes)
-        $deliveryRoutes = DeliveryRoute::whereBetween('date', [$startDate, $endDate])
-            ->get()
-            ->groupBy(fn ($r) => \Carbon\Carbon::parse($r->date)->format('Y-m-d'));
-        $deliveryCostByDate = [];
-        $totalDeliveryCost  = 0;
-        foreach ($deliveryRoutes as $ymd => $dayRoutes) {
-            $cost = round((float) $dayRoutes->sum('calculated_cost'));
-            $deliveryCostByDate[$ymd] = $cost;
-            $totalDeliveryCost += $cost;
-        }
-
         // 🔥 Компенсація кур'єрам (пальне + амортизація) — окремо від ФОП
         $mileageLogs = \App\Models\CourierMileageLog::whereBetween('date', [$startDate, $endDate])
             ->get()
@@ -177,6 +167,7 @@ class AnalyticsController extends Controller
         $foodCostCount = []; $totalFoodCost = 0;
         $fopCount = []; $totalFop = 0;
         $fopKitchenCount = []; $totalFopKitchen = 0;
+        $fopCouriersCount = []; $totalFopCouriers = 0;
         $fopOtherCount = []; $totalFopOther = 0;
         $discountCount = []; $totalDiscount = 0;
         $packagingCount = []; $totalPackagingCost = 0;
@@ -198,14 +189,17 @@ class AnalyticsController extends Controller
             $rationsCount[$ymd] = $count;
             $totalRations += $count;
 
-            // ФОП за день (загальний + розбивка кухня / інше)
-            $dailyFop = 0; $dailyFopKitchen = 0; $dailyFopOther = 0;
+            // ФОП за день (загальний + розбивка кухня / курʼєри / інше)
+            $dailyFop = 0; $dailyFopKitchen = 0; $dailyFopCouriers = 0; $dailyFopOther = 0;
             if ($allShifts->has($ymd)) {
                 foreach ($allShifts->get($ymd) as $shift) {
                     $rate = (float) $shift->rate;
                     $dailyFop += $rate;
-                    if (in_array($shift->employee?->position, $kitchenPositions, true)) {
+                    $group = $positionGroup[$shift->employee?->position] ?? 'other';
+                    if ($group === 'kitchen') {
                         $dailyFopKitchen += $rate;
+                    } elseif ($group === 'couriers') {
+                        $dailyFopCouriers += $rate;
                     } else {
                         $dailyFopOther += $rate;
                     }
@@ -213,12 +207,14 @@ class AnalyticsController extends Controller
                     $attributeSalary($shift->employee, $rate);
                 }
             }
-            $fopCount[$ymd]        = round($dailyFop);
-            $fopKitchenCount[$ymd] = round($dailyFopKitchen);
-            $fopOtherCount[$ymd]   = round($dailyFopOther);
-            $totalFop        += round($dailyFop);
-            $totalFopKitchen += round($dailyFopKitchen);
-            $totalFopOther   += round($dailyFopOther);
+            $fopCount[$ymd]          = round($dailyFop);
+            $fopKitchenCount[$ymd]   = round($dailyFopKitchen);
+            $fopCouriersCount[$ymd]  = round($dailyFopCouriers);
+            $fopOtherCount[$ymd]     = round($dailyFopOther);
+            $totalFop         += round($dailyFop);
+            $totalFopKitchen  += round($dailyFopKitchen);
+            $totalFopCouriers += round($dailyFopCouriers);
+            $totalFopOther    += round($dailyFopOther);
 
             $dailyRevenue = 0;
             $dailyFoodCost = 0;
@@ -354,14 +350,41 @@ class AnalyticsController extends Controller
                 if (! $pos) continue;
                 $workDays = max(1, (int) ($pos->monthly_working_days ?: 22));
                 $series = $salarySeries['salary:' . $emp->id] ?? null;
+                $group  = $pos->group ?? 'other';
                 $cost = 0.0;
                 foreach ($workingDates as $ymd) {
                     // оклад, що діяв на цей день; якщо історії ще немає — поточний
                     $salaryOnDay = empty($series) ? (float) $emp->base_rate : \App\Models\RateHistory::valueOn($series, $ymd);
-                    $cost += $salaryOnDay / $workDays;
+                    $share = $salaryOnDay / $workDays;
+                    $cost += $share;
+                    // Помісячні теж попадають у ФОП-бакети дашборду —
+                    // інакше зарплата маркетинга/менеджменту була б невидима у стовпцях ФОП.
+                    if ($group === 'kitchen') {
+                        $fopKitchenCount[$ymd]   = ($fopKitchenCount[$ymd]   ?? 0) + $share;
+                        $totalFopKitchen += $share;
+                    } elseif ($group === 'couriers') {
+                        $fopCouriersCount[$ymd]  = ($fopCouriersCount[$ymd]  ?? 0) + $share;
+                        $totalFopCouriers += $share;
+                    } else {
+                        $fopOtherCount[$ymd]     = ($fopOtherCount[$ymd]     ?? 0) + $share;
+                        $totalFopOther   += $share;
+                    }
+                    $fopCount[$ymd] = ($fopCount[$ymd] ?? 0) + $share;
+                    $totalFop += $share;
                 }
                 $attributeSalary($emp, $cost);
             }
+            // Округлюємо знов після per-month додавання (могли вийти float-«хвости»)
+            foreach ($fopCount as $ymd => $v) {
+                $fopCount[$ymd]         = round($v);
+                $fopKitchenCount[$ymd]  = round($fopKitchenCount[$ymd]  ?? 0);
+                $fopCouriersCount[$ymd] = round($fopCouriersCount[$ymd] ?? 0);
+                $fopOtherCount[$ymd]    = round($fopOtherCount[$ymd]    ?? 0);
+            }
+            $totalFop         = round($totalFop);
+            $totalFopKitchen  = round($totalFopKitchen);
+            $totalFopCouriers = round($totalFopCouriers);
+            $totalFopOther    = round($totalFopOther);
         }
 
         // Компенсація кур'єрам — у загальний пул, щоб розкласти по брендах разом із ЗП
@@ -829,6 +852,7 @@ class AnalyticsController extends Controller
             'foodCostCount', 'totalFoodCost',
             'fopCount', 'totalFop',
             'fopKitchenCount', 'totalFopKitchen',
+            'fopCouriersCount', 'totalFopCouriers',
             'fopOtherCount', 'totalFopOther',
             'discountCount', 'totalDiscount',  // 🔥 Знижки
             'spoilagePercent', 'otherExpenses', 'activeTab',
@@ -837,7 +861,6 @@ class AnalyticsController extends Controller
             'cashReceivedPeriod', 'cashReceivedByAccount', 'cashBalance', 'prepaidValue',
             'totalClientDebt', 'debtorClientsCount',
             'packagingCount', 'totalPackagingCost',
-            'deliveryCostByDate', 'totalDeliveryCost',
             'courierCompByDate', 'totalCourierComp',
             'projectStats',
             'individualStats',
