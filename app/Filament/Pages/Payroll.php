@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Models\Account;
 use App\Models\CourierMileageLog;
 use App\Models\Employee;
 use App\Models\EmployeePenalty;
@@ -11,11 +10,8 @@ use App\Models\OrderDay;
 use App\Models\Position;
 use App\Models\RateHistory;
 use App\Models\Setting;
-use App\Models\Transaction;
 use Carbon\Carbon;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Illuminate\Support\Facades\DB;
 
 class Payroll extends Page
 {
@@ -33,14 +29,6 @@ class Payroll extends Page
     public string $startDate = '';
     public string $endDate   = '';
     public string $groupFilter = 'all';
-
-    // Модалка історії
-    public ?int $selectedEmployeeId = null;
-
-    // Виплата
-    public ?float $payoutAmount   = null;
-    public ?string $payoutComment = null;
-    public ?int $payoutAccountId  = null;
 
     public function mount(): void
     {
@@ -283,156 +271,4 @@ class Payroll extends Page
         return $perPortion;
     }
 
-    /**
-     * Історія начислень/списань для співробітника за весь час (для модалки).
-     */
-    public function getEmployeeHistory(int $employeeId): array
-    {
-        $emp = Employee::findOrFail($employeeId);
-
-        $events = [];
-
-        // Зміни
-        $shifts = EmployeeShift::where('employee_id', $employeeId)
-            ->orderBy('date', 'desc')
-            ->limit(200)
-            ->get();
-        foreach ($shifts as $s) {
-            $label = 'Зміна';
-            if ($s->is_duty)  $label .= ' ⭐ черговий';
-            if ($s->is_half)  $label .= ' (½)';
-            $events[] = [
-                'date'   => $s->date,
-                'amount' => (float) $s->rate,
-                'kind'   => 'shift',
-                'label'  => $label,
-            ];
-        }
-
-        // Штрафи
-        $pens = EmployeePenalty::where('employee_id', $employeeId)
-            ->orderBy('date', 'desc')
-            ->get();
-        foreach ($pens as $p) {
-            $events[] = [
-                'date'   => $p->date,
-                'amount' => -(float) $p->amount,
-                'kind'   => 'penalty',
-                'label'  => 'Штраф' . ($p->reason ? ': ' . $p->reason : ''),
-            ];
-        }
-
-        // Компенсація
-        if ($emp->position === 'courier') {
-            $logs = CourierMileageLog::where('employee_id', $employeeId)
-                ->orderBy('date', 'desc')
-                ->get();
-            foreach ($logs as $l) {
-                if ($l->compensation > 0) {
-                    $events[] = [
-                        'date'   => $l->date,
-                        'amount' => (float) $l->compensation,
-                        'kind'   => 'comp',
-                        'label'  => "Компенсація ({$l->km} км × {$l->amortization}₴ + пальне " . (int) $l->fuel_uah . '₴)',
-                    ];
-                }
-            }
-        }
-
-        // Виплати (Transaction)
-        $txs = Transaction::where('employee_id', $employeeId)
-            ->orderBy('date', 'desc')
-            ->get();
-        foreach ($txs as $t) {
-            $events[] = [
-                'date'   => $t->date,
-                'amount' => -(float) abs($t->amount),
-                'kind'   => 'payout',
-                'label'  => 'Виплата' . ($t->comment ? ': ' . $t->comment : ''),
-            ];
-        }
-
-        // Сортуємо за датою (новіше → старіше)
-        usort($events, function ($a, $b) {
-            $da = $a['date'] instanceof \Carbon\Carbon ? $a['date']->format('Y-m-d') : (string) $a['date'];
-            $db = $b['date'] instanceof \Carbon\Carbon ? $b['date']->format('Y-m-d') : (string) $b['date'];
-            return strcmp($db, $da);
-        });
-
-        return [
-            'employee' => [
-                'id'       => $emp->id,
-                'name'     => $emp->name,
-                'position' => $emp->position,
-                'balance'  => (float) $emp->balance,
-            ],
-            'events' => $events,
-        ];
-    }
-
-    public function openHistory(int $employeeId): void
-    {
-        $this->selectedEmployeeId = $employeeId;
-        $emp = Employee::find($employeeId);
-        $this->payoutAmount   = $emp ? (float) $emp->balance : null;
-        $this->payoutComment  = null;
-        // Дефолтний рахунок — позначений is_default, або перший
-        $this->payoutAccountId = Account::where('is_default', true)->value('id')
-            ?? Account::orderBy('id')->value('id');
-    }
-
-    public function closeHistory(): void
-    {
-        $this->selectedEmployeeId = null;
-        $this->payoutAmount   = null;
-        $this->payoutComment  = null;
-        $this->payoutAccountId = null;
-    }
-
-    public function getAccountOptions(): array
-    {
-        return Account::orderBy('name')->pluck('name', 'id')->all();
-    }
-
-    public function payout(): void
-    {
-        if (! $this->selectedEmployeeId || ! $this->payoutAmount || $this->payoutAmount <= 0) {
-            Notification::make()->title('Вкажіть суму > 0')->danger()->send();
-            return;
-        }
-        if (! $this->payoutAccountId) {
-            Notification::make()->title('Виберіть рахунок списання')->danger()->send();
-            return;
-        }
-
-        $emp     = Employee::findOrFail($this->selectedEmployeeId);
-        $account = Account::findOrFail($this->payoutAccountId);
-        $amount  = round((float) $this->payoutAmount, 2);
-        $comment = $this->payoutComment ?: ('Виплата ЗП: ' . $emp->name);
-
-        DB::transaction(function () use ($emp, $account, $amount, $comment) {
-            // 1. Зменшуємо борг компанії перед співробітником
-            $emp->decrement('balance', $amount);
-
-            // 2. Транзакцію бачить PaymentObserver і автоматично віднімає з рахунку
-            Transaction::create([
-                'employee_id' => $emp->id,
-                'order_id'    => null,
-                'account_id'  => $account->id,
-                'amount'      => $amount,
-                'type'        => 'expense',
-                'category'    => 'Виплата ЗП',
-                'date'        => now(),
-                'comment'     => $comment,
-                'user_id'     => auth()->id(),
-            ]);
-        });
-
-        Notification::make()
-            ->title('Виплачено ' . number_format($amount, 2, '.', ' ') . ' ₴ — ' . $emp->name)
-            ->success()
-            ->send();
-
-        $this->closeHistory();
-    }
 }

@@ -218,46 +218,51 @@ class EmployeeResource extends Resource
                         Notification::make()->title('Співробітника відновлено')->success()->send();
                     }),
 
-                // 🔥 ФІНАЛЬНИЙ БЛОК: ВИПЛАТА ЗП
+                // 🔥 ІСТОРІЯ + ВИПЛАТА ЗП
                 Action::make('pay_salary')
-                    ->label('Виплатити ЗП')
+                    ->label('Історія / Виплата')
                     ->icon('heroicon-o-banknotes')
                     ->color('success')
-                    // Показуємо кнопку лише якщо ми щось винні людині
-                    ->visible(fn (Employee $record) => $record->balance > 0)
-                    ->modalHeading(fn (Employee $record) => "Виплата для: {$record->name}")
-                    ->modalDescription('Оберіть рахунок для списання та підтвердіть суму.')
-                    ->modalSubmitActionLabel('Підтвердити виплату')
-                    
-                    ->form([
+                    ->modalHeading(fn (Employee $record) => $record->name)
+                    ->modalDescription('Хронологія всіх нарахувань і списань. Якщо є борг — внизу можна виплатити.')
+                    ->modalContent(fn (Employee $record) => view('filament.components.employee-history', ['employee' => $record]))
+                    ->modalSubmitActionLabel('Виплатити')
+                    ->modalCancelActionLabel('Закрити')
+                    ->modalSubmitAction(fn ($action, Employee $record) => $record->balance > 0 ? $action : false)
+                    ->form(fn (Employee $record) => $record->balance > 0 ? [
                         Select::make('account_id')
                             ->label('Рахунок списання')
                             ->options(fn () => Account::pluck('name', 'id'))
                             ->required()
                             ->searchable()
+                            ->default(fn () => Account::where('is_default', true)->value('id') ?? Account::orderBy('id')->value('id'))
                             ->placeholder('Виберіть касу або картку'),
 
                         TextInput::make('amount')
                             ->label('Сума до виплати')
                             ->numeric()
                             ->required()
-                            ->default(fn (Employee $record) => $record->balance)
+                            ->default(fn () => $record->balance)
                             ->suffix('₴')
-                            ->hint(fn (Employee $record) => "Борг: " . number_format($record->balance, 0) . " ₴"),
-                    ])
-                        ->action(function (Employee $record, array $data): void {
-                        DB::transaction(function () use ($record, $data) {
-                            $amount = (float) $data['amount'];
-                            $account = Account::findOrFail($data['account_id']);
+                            ->hint("Борг: " . number_format($record->balance, 0) . " ₴"),
 
-                            // 1. Зменшуємо борг співробітника (це робимо вручну, бо це не транзакція клієнта)
+                        TextInput::make('comment')
+                            ->label('Коментар (необов\'язково)')
+                            ->placeholder('напр. зарплата за червень'),
+                    ] : [])
+                    ->action(function (Employee $record, array $data): void {
+                        if ($record->balance <= 0) {
+                            Notification::make()->title('Немає боргу для виплати')->warning()->send();
+                            return;
+                        }
+
+                        DB::transaction(function () use ($record, $data) {
+                            $amount  = (float) $data['amount'];
+                            $account = Account::findOrFail($data['account_id']);
+                            $comment = $data['comment'] ?? null;
+
                             $record->decrement('balance', $amount);
 
-                            // ❌ РЯДОК $account->decrement(...) ВИДАЛЕНО, щоб не було подвійного списання
-
-                            // 2. Створюємо фінансову транзакцію. 
-                            // Автоматика вашої системи (Observer) сама побачить тип 'expense' 
-                            // і відніме суму від балансу рахунку $account->id.
                             Transaction::create([
                                 'employee_id' => $record->id,
                                 'order_id'    => null,
@@ -266,7 +271,7 @@ class EmployeeResource extends Resource
                                 'type'        => 'expense',
                                 'category'    => 'Виплата ЗП',
                                 'date'        => now(),
-                                'comment'     => "Виплата ЗП: {$record->name}",
+                                'comment'     => $comment ?: "Виплата ЗП: {$record->name}",
                                 'user_id'     => auth()->id(),
                             ]);
                         });

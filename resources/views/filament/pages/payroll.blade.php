@@ -16,23 +16,6 @@
         color-scheme: dark;
     }
     .pr-input:focus { border-color: #3b82f6; }
-    .pr-row-clickable:hover { background: #ffffff08 !important; cursor: pointer; }
-    .pr-modal-overlay {
-        position: fixed; inset: 0;
-        background: rgba(0,0,0,.7);
-        z-index: 50;
-        display: flex; align-items: center; justify-content: center;
-        padding: 20px;
-        backdrop-filter: blur(4px);
-    }
-    .pr-modal {
-        background: #18181b;
-        border: 1px solid #27272a;
-        border-radius: 16px;
-        max-width: 720px; width: 100%;
-        max-height: 90vh;
-        overflow-y: auto;
-    }
     .fi-page-header { display: none !important; }
 </style>
 @endpush
@@ -52,7 +35,7 @@
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
         <div>
             <h1 style="font-size:24px;font-weight:800;color:#f4f4f5;line-height:1.2;margin:0;">Зарплати</h1>
-            <p style="font-size:13px;color:#71717a;margin-top:2px;">Нарахування за період · клік на рядок — історія + виплата</p>
+            <p style="font-size:13px;color:#71717a;margin-top:2px;">Зведення нарахувань за період. Деталі та виплата — у «Співробітники» (кнопка «Історія / Виплата»).</p>
         </div>
 
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -124,8 +107,7 @@
                         </td></tr>
                         @php $prevGroup = $row['group']; @endphp
                     @endif
-                    <tr class="pr-row-clickable" style="border-bottom:1px solid #1f1f22;transition:background .1s;"
-                        wire:click="openHistory({{ $row['id'] }})">
+                    <tr style="border-bottom:1px solid #1f1f22;">
 
                         <td style="padding:11px 16px;">
                             <div style="color:#f4f4f5;font-weight:600;">{{ $row['name'] }}</div>
@@ -180,97 +162,65 @@
     </div>
 
     {{-- ГРН / ПОРЦІЯ ПО ГРУПАХ --}}
-    <div style="background:#18181b;border:1px solid #27272a;border-radius:16px;padding:18px 22px;">
-        <h2 style="font-size:14px;font-weight:800;color:#f4f4f5;margin:0 0 4px;">Грн / порція по групах</h2>
-        <p style="font-size:12px;color:#71717a;margin:0 0 14px;">
-            Кухня — на порції наступного дня (готують сьогодні на завтра). Кур'єри — на порції того самого дня. Менеджмент / маркетинг — на всі порції періоду.
-        </p>
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-            @foreach(['kitchen','couriers','management','marketing','other'] as $g)
-                @if(isset($perPortion[$g]))
-                <div style="background:#111113;border:1px solid #27272a;border-radius:12px;padding:14px 16px;">
-                    <p style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">{{ $groups[$g] ?? $g }}</p>
-                    <p style="color:#34d399;font-size:22px;font-weight:900;line-height:1;">{{ $perPortion[$g]['rate'] }} ₴</p>
-                    <p style="color:#52525b;font-size:11px;margin-top:6px;">
-                        {{ number_format($perPortion[$g]['fop'], 0, '.', ' ') }} ₴ / {{ $perPortion[$g]['portions'] }} порц
-                    </p>
-                </div>
-                @endif
-            @endforeach
-        </div>
+    <div style="background:#18181b;border:1px solid #27272a;border-radius:12px;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <tbody>
+                @foreach(['kitchen','couriers','management','marketing','other'] as $g)
+                    @if(isset($perPortion[$g]))
+                        @php
+                            $cpp = $perPortion[$g]['rate'];
+                            $color = '#27272a';
+                            if ($cpp > 0) {
+                                if ($cpp >= 80 && $cpp <= 90)  $color = '#14b8a6';
+                                elseif ($cpp < 120)            $color = '#22c55e';
+                                else                           $color = '#ef4444';
+                            }
+                        @endphp
+                        <tr style="border-bottom:1px solid #1f1f22;">
+                            <td style="padding:10px 16px;color:#a1a1aa;font-size:12px;font-weight:600;">
+                                ₴ / порція <span style="color:#3f3f46;font-weight:400;">({{ mb_strtolower($groups[$g] ?? $g) }})</span>
+                            </td>
+                            <td style="padding:10px 16px;text-align:right;color:#52525b;font-size:11px;">
+                                {{ number_format($perPortion[$g]['fop'], 0, '.', ' ') }} ₴ / {{ $perPortion[$g]['portions'] }} порц
+                            </td>
+                            <td style="padding:10px 16px;text-align:right;color:{{ $color }};font-weight:700;font-size:14px;width:120px;">
+                                @if($cpp > 0)
+                                    {{ number_format($cpp, 2, '.', ' ') }} ₴
+                                @else
+                                    <span style="color:#27272a;">–</span>
+                                @endif
+                            </td>
+                        </tr>
+                    @endif
+                @endforeach
+            </tbody>
+        </table>
     </div>
 
-    {{-- МОДАЛКА ІСТОРІЇ + ВИПЛАТА --}}
-    @if($selectedEmployeeId)
-        @php $history = $this->getEmployeeHistory($selectedEmployeeId); @endphp
-        <div class="pr-modal-overlay" wire:click.self="closeHistory">
-            <div class="pr-modal">
-                <div style="padding:20px 24px;border-bottom:1px solid #27272a;display:flex;align-items:center;justify-content:space-between;">
-                    <div>
-                        <h3 style="font-size:18px;font-weight:800;color:#f4f4f5;margin:0;">{{ $history['employee']['name'] }}</h3>
-                        <p style="color:#71717a;font-size:12px;margin-top:2px;">Поточний баланс: <b style="color:{{ $history['employee']['balance'] > 0 ? '#34d399' : ($history['employee']['balance'] < 0 ? '#f87171' : '#a1a1aa') }};">{{ number_format($history['employee']['balance'], 2, '.', ' ') }} ₴</b></p>
-                    </div>
-                    <button wire:click="closeHistory" style="background:transparent;border:none;color:#71717a;font-size:24px;cursor:pointer;line-height:1;">×</button>
-                </div>
-
-                {{-- Виплата --}}
-                <div style="padding:18px 24px;background:#111113;border-bottom:1px solid #27272a;">
-                    <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
-                        <div style="flex:1;min-width:130px;">
-                            <label style="display:block;color:#71717a;font-size:11px;font-weight:700;margin-bottom:4px;letter-spacing:.05em;text-transform:uppercase;">Сума, ₴</label>
-                            <input type="number" step="0.01" wire:model="payoutAmount" class="pr-input" style="width:100%;">
-                        </div>
-                        <div style="flex:1;min-width:160px;">
-                            <label style="display:block;color:#71717a;font-size:11px;font-weight:700;margin-bottom:4px;letter-spacing:.05em;text-transform:uppercase;">Рахунок списання</label>
-                            <select wire:model="payoutAccountId" class="pr-input" style="width:100%;cursor:pointer;">
-                                <option value="">— виберіть —</option>
-                                @foreach($this->getAccountOptions() as $accId => $accName)
-                                    <option value="{{ $accId }}">{{ $accName }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div style="flex:2;min-width:180px;">
-                            <label style="display:block;color:#71717a;font-size:11px;font-weight:700;margin-bottom:4px;letter-spacing:.05em;text-transform:uppercase;">Коментар</label>
-                            <input type="text" wire:model="payoutComment" class="pr-input" style="width:100%;" placeholder="напр. зарплата за червень">
-                        </div>
-                        <button wire:click="payout"
-                                style="padding:9px 18px;border-radius:10px;background:#065f46;color:#fff;border:none;font-weight:700;font-size:13px;cursor:pointer;">
-                            Виплатити
-                        </button>
-                    </div>
-                </div>
-
-                {{-- Стрічка подій --}}
-                <div style="padding:8px 0;">
-                    @forelse($history['events'] as $ev)
-                        @php
-                            $color = match($ev['kind']) {
-                                'shift'   => '#f4f4f5',
-                                'penalty' => '#f87171',
-                                'comp'    => '#fbbf24',
-                                'payout'  => '#60a5fa',
-                                default   => '#a1a1aa',
-                            };
-                            $sign = $ev['amount'] >= 0 ? '+' : '−';
-                            $amt  = number_format(abs($ev['amount']), 2, '.', ' ');
-                            $dateStr = $ev['date'] instanceof \Carbon\Carbon ? $ev['date']->format('d.m.Y') : \Carbon\Carbon::parse($ev['date'])->format('d.m.Y');
-                        @endphp
-                        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 24px;border-bottom:1px solid #1f1f22;">
-                            <div style="flex:1;">
-                                <div style="color:#f4f4f5;font-size:13px;">{{ $ev['label'] }}</div>
-                                <div style="color:#52525b;font-size:11px;margin-top:2px;">{{ $dateStr }}</div>
-                            </div>
-                            <div style="color:{{ $color }};font-weight:700;font-size:14px;">
-                                {{ $sign }}{{ $amt }} ₴
-                            </div>
-                        </div>
-                    @empty
-                        <div style="padding:30px 24px;text-align:center;color:#52525b;font-size:13px;">Подій ще немає.</div>
-                    @endforelse
-                </div>
+    {{-- Легенда градації --}}
+    <div style="margin-top:14px;padding:12px 18px;background:#18181b;border:1px solid #27272a;border-radius:12px;">
+        <div style="color:#52525b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+            Собівартість праці на 1 порцію — градація
+        </div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;">
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="width:10px;height:10px;border-radius:50%;background:#14b8a6;display:inline-block;"></span>
+                <span style="color:#a1a1aa;font-size:12px;"><b style="color:#14b8a6;">80–90 ₴</b> — ідеально</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="width:10px;height:10px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
+                <span style="color:#a1a1aa;font-size:12px;"><b style="color:#22c55e;">до 120 ₴</b> — норма</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="width:10px;height:10px;border-radius:50%;background:#ef4444;display:inline-block;"></span>
+                <span style="color:#a1a1aa;font-size:12px;"><b style="color:#ef4444;">120+ ₴</b> — критично</span>
             </div>
         </div>
-    @endif
+        <p style="color:#52525b;font-size:11px;margin:8px 0 0;">
+            Кухня рахується на порції наступного дня (готують сьогодні на завтра). Кур'єри — на порції того самого дня. Менеджмент / маркетинг — на всі порції періоду.
+        </p>
+    </div>
+
 
 </div>
 </x-filament-panels::page>
