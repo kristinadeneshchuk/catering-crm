@@ -156,45 +156,42 @@
                     <td style="padding:14px 16px;text-align:right;color:#fbbf24;font-weight:900;font-size:14px;">{{ number_format($tot['compensation'], 0, '.', ' ') }} ₴</td>
                     <td style="padding:14px 16px;text-align:right;color:#34d399;font-weight:900;font-size:18px;">{{ number_format($tot['sum'], 0, '.', ' ') }} ₴</td>
                 </tr>
+
+                @php
+                    // Для строки "грн/порция" беремо ключ що відповідає поточному фільтру:
+                    //  - all → 'all' (сума ФОПів усіх груп / порції періоду)
+                    //  - kitchen / couriers / management / marketing / other → відповідна група
+                    $cppKey = $groupFilter === 'all' ? 'all' : $groupFilter;
+                    $cppData = $perPortion[$cppKey] ?? null;
+                    $cpp     = $cppData['rate'] ?? 0;
+                    $cppColor = '#27272a';
+                    if ($cpp > 0) {
+                        if ($cpp >= 80 && $cpp <= 90)  $cppColor = '#14b8a6';
+                        elseif ($cpp < 120)            $cppColor = '#22c55e';
+                        else                           $cppColor = '#ef4444';
+                    }
+                    $cppScope = $groupFilter === 'all' ? 'всі' : mb_strtolower($groups[$groupFilter] ?? $groupFilter);
+                @endphp
+                <tr style="background:#111113;border-top:1px solid #27272a;">
+                    <td colspan="2" style="padding:12px 16px;color:#a1a1aa;font-size:12px;font-weight:600;">
+                        ₴ / порція <span style="color:#3f3f46;font-weight:400;">({{ $cppScope }})</span>
+                    </td>
+                    <td colspan="4" style="padding:12px 16px;text-align:right;color:#52525b;font-size:11px;">
+                        @if($cppData)
+                            {{ number_format($cppData['fop'], 0, '.', ' ') }} ₴ / {{ $cppData['portions'] }} порц
+                        @endif
+                    </td>
+                    <td style="padding:12px 16px;text-align:right;color:{{ $cppColor }};font-weight:800;font-size:16px;">
+                        @if($cpp > 0)
+                            {{ number_format($cpp, 2, '.', ' ') }} ₴
+                        @else
+                            <span style="color:#27272a;">–</span>
+                        @endif
+                    </td>
+                </tr>
             </tfoot>
         </table>
         </div>
-    </div>
-
-    {{-- ГРН / ПОРЦІЯ ПО ГРУПАХ --}}
-    <div style="background:#18181b;border:1px solid #27272a;border-radius:12px;overflow:hidden;">
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-            <tbody>
-                @foreach(['kitchen','couriers','management','marketing','other'] as $g)
-                    @if(isset($perPortion[$g]))
-                        @php
-                            $cpp = $perPortion[$g]['rate'];
-                            $color = '#27272a';
-                            if ($cpp > 0) {
-                                if ($cpp >= 80 && $cpp <= 90)  $color = '#14b8a6';
-                                elseif ($cpp < 120)            $color = '#22c55e';
-                                else                           $color = '#ef4444';
-                            }
-                        @endphp
-                        <tr style="border-bottom:1px solid #1f1f22;">
-                            <td style="padding:10px 16px;color:#a1a1aa;font-size:12px;font-weight:600;">
-                                ₴ / порція <span style="color:#3f3f46;font-weight:400;">({{ mb_strtolower($groups[$g] ?? $g) }})</span>
-                            </td>
-                            <td style="padding:10px 16px;text-align:right;color:#52525b;font-size:11px;">
-                                {{ number_format($perPortion[$g]['fop'], 0, '.', ' ') }} ₴ / {{ $perPortion[$g]['portions'] }} порц
-                            </td>
-                            <td style="padding:10px 16px;text-align:right;color:{{ $color }};font-weight:700;font-size:14px;width:120px;">
-                                @if($cpp > 0)
-                                    {{ number_format($cpp, 2, '.', ' ') }} ₴
-                                @else
-                                    <span style="color:#27272a;">–</span>
-                                @endif
-                            </td>
-                        </tr>
-                    @endif
-                @endforeach
-            </tbody>
-        </table>
     </div>
 
     {{-- Легенда градації --}}
@@ -217,10 +214,9 @@
             </div>
         </div>
         <p style="color:#52525b;font-size:11px;margin:8px 0 0;">
-            Кухня рахується на порції наступного дня (готують сьогодні на завтра). Кур'єри — на порції того самого дня. Менеджмент / маркетинг — на всі порції періоду.
+            Кухня — на порції наступного дня (готують сьогодні на завтра). Кур'єри — на порції того самого дня. Менеджмент / маркетинг — на всі порції періоду. «Всі» — сума ФОПів усіх груп ділиться на порції періоду.
         </p>
     </div>
-
 
 </div>
 </x-filament-panels::page>

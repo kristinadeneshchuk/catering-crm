@@ -245,6 +245,7 @@ class Payroll extends Page
         }
 
         $perPortion = [];
+        $allFop = 0;
 
         foreach (['kitchen', 'couriers', 'management', 'marketing', 'other'] as $group) {
             if (! isset($groupTotals[$group])) continue;
@@ -265,6 +266,19 @@ class Payroll extends Page
                 'fop'      => round($numer, 0),
                 'portions' => $denom,
                 'rate'     => $denom > 0 ? round($numer / $denom, 2) : 0,
+            ];
+
+            $allFop += $numer;
+        }
+
+        // Підсумок «всі» — сума ФОПів усіх груп ділиться на порції періоду
+        // (як «собівартість праці на 1 продану порцію»). Знаменник той самий
+        // що для менеджменту/маркетингу — порції за період.
+        if (! empty($perPortion)) {
+            $perPortion['all'] = [
+                'fop'      => round($allFop, 0),
+                'portions' => $totalPortionsInPeriod,
+                'rate'     => $totalPortionsInPeriod > 0 ? round($allFop / $totalPortionsInPeriod, 2) : 0,
             ];
         }
 
