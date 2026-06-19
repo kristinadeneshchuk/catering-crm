@@ -32,7 +32,9 @@ class Payroll extends Page
 
     public function mount(): void
     {
-        $this->startDate = Carbon::now()->startOfMonth()->format('Y-m-d');
+        // Дефолт — сьогодні. mount() викликається при кожному відкритті
+        // сторінки, тож менеджер завжди бачить нарахування за поточну дату.
+        $this->startDate = Carbon::now()->format('Y-m-d');
         $this->endDate   = Carbon::now()->format('Y-m-d');
     }
 
@@ -175,7 +177,6 @@ class Payroll extends Page
                 'penalty'        => round($penaltyAmount, 2),
                 'compensation'   => round($compensation, 2),
                 'sum'            => round($sum, 2),
-                'balance'        => round((float) $emp->balance, 2),
             ];
             $rows[] = $row;
 

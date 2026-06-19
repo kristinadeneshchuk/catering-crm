@@ -111,11 +111,6 @@
 
                         <td style="padding:11px 16px;">
                             <div style="color:#f4f4f5;font-weight:600;">{{ $row['name'] }}</div>
-                            @if($row['balance'] != 0)
-                                <div style="color:{{ $row['balance'] > 0 ? '#34d399' : '#f87171' }};font-size:11px;margin-top:2px;">
-                                    Баланс: {{ number_format($row['balance'], 2, '.', ' ') }} ₴
-                                </div>
-                            @endif
                         </td>
 
                         <td style="padding:11px 16px;color:#a1a1aa;font-size:12px;">
