@@ -238,7 +238,8 @@
                         <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 12px;width:130px;">Поч. км</th>
                         <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 12px;width:130px;">Кін. км</th>
                         <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 12px;">Пробіг</th>
-                        <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 12px;width:140px;">Пальне ₴</th>
+                        <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 12px;width:130px;">Ціна літра ₴</th>
+                        <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 12px;">Пальне ₴</th>
                         <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 12px;">Амортизація</th>
                         <th style="text-align:right;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 16px;">Компенсація</th>
                     </tr>
@@ -250,7 +251,16 @@
                         $eid    = $row['employee_id'];
                     @endphp
                     <tr style="border-bottom:1px solid #1f1f22;{{ $isEven ? '' : 'background:#111113;' }}">
-                        <td style="padding:10px 16px;color:#f4f4f5;font-weight:600;">{{ $row['name'] }}</td>
+                        <td style="padding:10px 16px;">
+                            <div style="color:#f4f4f5;font-weight:600;">{{ $row['name'] }}</div>
+                            <div style="color:#52525b;font-size:11px;margin-top:2px;">
+                                @if($row['consumption'] > 0)
+                                    Витрата: {{ rtrim(rtrim(number_format($row['consumption'], 2, '.', ''), '0'), '.') }} л/100 км
+                                @else
+                                    <span style="color:#f87171;">Витрата не задана</span>
+                                @endif
+                            </div>
+                        </td>
 
                         <td style="padding:8px 12px;text-align:center;">
                             <input type="number"
@@ -280,12 +290,23 @@
 
                         <td style="padding:8px 12px;text-align:center;">
                             <input type="number" step="0.01"
-                                   value="{{ $row['fuel_uah'] > 0 ? $row['fuel_uah'] : '' }}"
-                                   wire:change="saveMileage({{ $eid }}, 'fuel_uah', $event.target.value)"
+                                   value="{{ $row['fuel_price_per_liter'] > 0 ? $row['fuel_price_per_liter'] : '' }}"
+                                   wire:change="saveMileage({{ $eid }}, 'fuel_price_per_liter', $event.target.value)"
                                    placeholder="0"
-                                   style="width:110px;background:#27272a;border:1px solid #3f3f46;border-radius:8px;padding:6px 10px;color:#fb923c;font-size:13px;text-align:center;outline:none;font-weight:600;"
+                                   style="width:100px;background:#27272a;border:1px solid #3f3f46;border-radius:8px;padding:6px 10px;color:#fb923c;font-size:13px;text-align:center;outline:none;font-weight:600;"
                                    onfocus="this.style.borderColor='#3b82f6'"
                                    onblur="this.style.borderColor='#3f3f46'">
+                        </td>
+
+                        <td style="padding:10px 12px;text-align:center;color:#fb923c;font-weight:600;">
+                            @if($row['fuel_cost'] > 0)
+                                {{ number_format($row['fuel_cost'], 0, '.', ' ') }} ₴
+                                <div style="color:#52525b;font-size:10px;margin-top:2px;">
+                                    {{ rtrim(rtrim(number_format($row['liters_used'], 2, '.', ''), '0'), '.') }} л
+                                </div>
+                            @else
+                                <span style="color:#3f3f46;">—</span>
+                            @endif
                         </td>
 
                         <td style="padding:10px 12px;text-align:center;color:#fbbf24;font-weight:600;">
@@ -303,6 +324,7 @@
                         <td style="padding:14px 16px;color:#a1a1aa;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;">Разом</td>
                         <td colspan="2"></td>
                         <td style="padding:14px 12px;text-align:center;color:#a78bfa;font-weight:900;font-size:15px;">{{ $totalMileageKm }} км</td>
+                        <td></td>
                         <td style="padding:14px 12px;text-align:center;color:#fb923c;font-weight:900;font-size:15px;">{{ number_format($totalMileageFuel, 0, '.', ' ') }} ₴</td>
                         <td style="padding:14px 12px;text-align:center;color:#fbbf24;font-weight:900;font-size:15px;">{{ number_format($totalMileageAmort, 0, '.', ' ') }} ₴</td>
                         <td style="padding:14px 16px;text-align:right;color:#34d399;font-weight:900;font-size:18px;">{{ number_format($totalMileageComp, 0, '.', ' ') }} ₴</td>

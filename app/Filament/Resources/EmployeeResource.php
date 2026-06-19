@@ -84,8 +84,17 @@ class EmployeeResource extends Resource
                             ->numeric()
                             ->prefix('₴')
                             ->default(0)
-                            ->disabled() 
-                            ->dehydrated(), 
+                            ->disabled()
+                            ->dehydrated(),
+
+                        TextInput::make('fuel_consumption')
+                            ->label('Витрата пального (л / 100 км)')
+                            ->numeric()
+                            ->step('0.01')
+                            ->suffix('л / 100 км')
+                            ->placeholder('напр. 9.5')
+                            ->helperText('Середня витрата машини курʼєра. CRM рахує спалене пальне за день автоматично.')
+                            ->visible(fn (\Filament\Forms\Get $get) => $get('position') === 'courier'),
 
                         Toggle::make('is_active')
                             ->label('Працює')

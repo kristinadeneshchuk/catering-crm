@@ -6,11 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 
 class Employee extends Model
 {
-    protected $fillable = ['name', 'ant_driver_name', 'position', 'project_id', 'base_rate', 'balance', 'is_active', 'archived_at'];
+    protected $fillable = ['name', 'ant_driver_name', 'position', 'project_id', 'base_rate', 'balance', 'is_active', 'archived_at', 'fuel_consumption'];
 
     protected $casts = [
-        'is_active'   => 'boolean',
-        'archived_at' => 'datetime',
+        'is_active'        => 'boolean',
+        'archived_at'      => 'datetime',
+        'fuel_consumption' => 'decimal:2',
     ];
 
     // Посада-довідник (звʼязок за стабільним ключем, як Order->projectData за slug).
@@ -104,11 +105,15 @@ class Employee extends Model
         if ($this->position === 'courier') {
             foreach ($this->mileageLogs()->orderBy('date', 'desc')->get() as $l) {
                 if ($l->compensation > 0) {
+                    $consumptionStr = rtrim(rtrim(number_format((float) ($l->fuel_consumption ?? 0), 2, '.', ''), '0'), '.');
+                    $priceStr       = rtrim(rtrim(number_format((float) $l->fuel_price_per_liter, 2, '.', ''), '0'), '.');
+                    $amortStr       = rtrim(rtrim(number_format((float) $l->amort_per_km, 2, '.', ''), '0'), '.');
                     $events[] = [
                         'date'   => $l->date,
                         'amount' => (float) $l->compensation,
                         'kind'   => 'comp',
-                        'label'  => "Компенсація ({$l->km} км × " . rtrim(rtrim(number_format((float) $l->amort_per_km, 2, '.', ''), '0'), '.') . "₴ + пальне " . (int) $l->fuel_uah . '₴)',
+                        // Формула: пальне (км × витрата ÷ 100 × ціна) + амортизація (км × ставка)
+                        'label'  => "Компенсація ({$l->km} км × {$consumptionStr} л/100 × {$priceStr}₴ + амортизація {$amortStr} ₴/км)",
                     ];
                 }
             }

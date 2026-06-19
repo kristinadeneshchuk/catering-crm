@@ -6,12 +6,17 @@ use Illuminate\Database\Eloquent\Model;
 
 class CourierMileageLog extends Model
 {
-    protected $fillable = ['employee_id', 'date', 'start_km', 'end_km', 'fuel_uah', 'amort_per_km'];
+    protected $fillable = [
+        'employee_id', 'date',
+        'start_km', 'end_km',
+        'fuel_price_per_liter', 'fuel_consumption', 'amort_per_km',
+    ];
 
     protected $casts = [
-        'date'         => 'date',
-        'fuel_uah'     => 'decimal:2',
-        'amort_per_km' => 'decimal:2',
+        'date'                 => 'date',
+        'fuel_price_per_liter' => 'decimal:2',
+        'fuel_consumption'     => 'decimal:2',
+        'amort_per_km'         => 'decimal:2',
     ];
 
     public function employee(): \Illuminate\Database\Eloquent\Relations\BelongsTo
@@ -26,24 +31,41 @@ class CourierMileageLog extends Model
     }
 
     /**
-     * Поточна ставка амортизації з налаштувань — використовується ПРИ СТВОРЕННІ
-     * нового логу (далі знімок зберігається в колонку amort_per_km).
+     * Поточна ставка амортизації — використовується ПРИ СТВОРЕННІ нового логу;
+     * далі знімок зберігається в колонку amort_per_km.
      */
     public static function currentAmortPerKm(): float
     {
         return (float) (Setting::where('key', 'amort_per_km')->value('value') ?? 1);
     }
 
+    /**
+     * Витрачено літрів за день: пробіг × витрата машини / 100.
+     */
+    public function getLitersUsedAttribute(): float
+    {
+        $consumption = (float) ($this->fuel_consumption ?? 0);
+        return round(($this->km * $consumption) / 100, 2);
+    }
+
+    /**
+     * Вартість спаленого пального: літри × ціна літра.
+     */
+    public function getFuelCostAttribute(): float
+    {
+        return round($this->liters_used * (float) ($this->fuel_price_per_liter ?? 0), 2);
+    }
+
     public function getAmortizationAttribute(): float
     {
-        // Беремо знімок із власної колонки, а не з live-settings — щоб після зміни
-        // налаштування історичні нарахування лишались консистентними з balance.
+        // Знімок, а не live-setting — щоб історичні нарахування лишались
+        // консистентними з тим, що вже списано в balance.
         $rate = $this->amort_per_km !== null ? (float) $this->amort_per_km : self::currentAmortPerKm();
         return round($this->km * $rate, 2);
     }
 
     public function getCompensationAttribute(): float
     {
-        return round((float) $this->fuel_uah + $this->amortization, 2);
+        return round($this->fuel_cost + $this->amortization, 2);
     }
 }

@@ -122,35 +122,41 @@ class LogisticsPage extends Page implements HasForms
             ->keyBy('employee_id');
 
         $rows = [];
-        $sumKm = 0; $sumFuel = 0; $sumAmort = 0; $sumComp = 0;
+        $sumKm = 0; $sumLiters = 0; $sumFuelCost = 0; $sumAmort = 0; $sumComp = 0;
 
         foreach ($couriers as $c) {
             $log = $logs->get($c->id);
-            $km = $log ? $log->km : 0;
-            $amort = $log ? $log->amortization : 0;
-            $comp = $log ? $log->compensation : 0;
+            $km          = $log ? $log->km : 0;
+            $liters      = $log ? $log->liters_used : 0;
+            $fuelCost    = $log ? $log->fuel_cost : 0;
+            $amort       = $log ? $log->amortization : 0;
+            $comp        = $log ? $log->compensation : 0;
 
             $rows[] = [
-                'employee_id' => $c->id,
-                'name'        => $c->name,
-                'log_id'      => $log?->id,
-                'start_km'    => $log?->start_km,
-                'end_km'      => $log?->end_km,
-                'fuel_uah'    => $log ? (float) $log->fuel_uah : 0,
-                'km'          => $km,
-                'amortization'=> $amort,
-                'compensation'=> $comp,
+                'employee_id'          => $c->id,
+                'name'                 => $c->name,
+                'consumption'          => (float) ($c->fuel_consumption ?? 0),
+                'log_id'               => $log?->id,
+                'start_km'             => $log?->start_km,
+                'end_km'               => $log?->end_km,
+                'fuel_price_per_liter' => $log ? (float) $log->fuel_price_per_liter : 0,
+                'km'                   => $km,
+                'liters_used'          => $liters,
+                'fuel_cost'            => $fuelCost,
+                'amortization'         => $amort,
+                'compensation'         => $comp,
             ];
 
-            $sumKm    += $km;
-            $sumFuel  += $log ? (float) $log->fuel_uah : 0;
-            $sumAmort += $amort;
-            $sumComp  += $comp;
+            $sumKm       += $km;
+            $sumLiters   += $liters;
+            $sumFuelCost += $fuelCost;
+            $sumAmort    += $amort;
+            $sumComp     += $comp;
         }
 
         $this->mileageRows = $rows;
         $this->totalMileageKm    = round($sumKm, 1);
-        $this->totalMileageFuel  = round($sumFuel, 2);
+        $this->totalMileageFuel  = round($sumFuelCost, 2);
         $this->totalMileageAmort = round($sumAmort, 2);
         $this->totalMileageComp  = round($sumComp, 2);
     }
@@ -161,7 +167,7 @@ class LogisticsPage extends Page implements HasForms
      */
     public function saveMileage(int $employeeId, string $field, $value): void
     {
-        if (! in_array($field, ['start_km', 'end_km', 'fuel_uah'], true)) {
+        if (! in_array($field, ['start_km', 'end_km', 'fuel_price_per_liter'], true)) {
             return;
         }
 
@@ -169,7 +175,7 @@ class LogisticsPage extends Page implements HasForms
         $employee = Employee::findOrFail($employeeId);
 
         $value = $value === '' || $value === null ? null : $value;
-        if ($field === 'fuel_uah') {
+        if ($field === 'fuel_price_per_liter') {
             $value = $value === null ? 0 : round((float) $value, 2);
         } elseif ($value !== null) {
             $value = (int) $value;
@@ -185,11 +191,12 @@ class LogisticsPage extends Page implements HasForms
             $oldComp = $log?->compensation ?? 0;
 
             if (! $log) {
-                // Створюємо вперше — фіксуємо знімок ставки амортизації
+                // Створюємо вперше — фіксуємо знімок ставки амортизації І витрати машини.
                 $log = new CourierMileageLog([
-                    'employee_id'  => $employeeId,
-                    'date'         => $date,
-                    'amort_per_km' => CourierMileageLog::currentAmortPerKm(),
+                    'employee_id'      => $employeeId,
+                    'date'             => $date,
+                    'amort_per_km'     => CourierMileageLog::currentAmortPerKm(),
+                    'fuel_consumption' => (float) ($employee->fuel_consumption ?? 0),
                 ]);
             }
 
