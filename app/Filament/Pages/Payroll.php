@@ -86,12 +86,29 @@ class Payroll extends Page
         $positions = Position::all()->keyBy('key');
         $courierBaseRate = (float) (Setting::where('key', 'courier_base_rate')->value('value') ?: 700);
 
-        // Усі співробітники (включно з помісячними)
-        $employees = Employee::whereNull('archived_at')
-            ->where('is_active', true)
-            ->get()
-            ->sortBy('name')
-            ->values();
+        // Збираємо ID співробітників, у яких є рухи в періоді:
+        //   - зміни, штрафи, пробіг (тобто реально щось накапало)
+        // + усіх активних per_month (оклад капає навіть якщо не було подій).
+        // Так архівовані / неактивні, що відпрацювали частину періоду, не зникають з звіту.
+        $perMonthKeys = $positions->filter(fn ($p) => $p->payment_type === 'per_month')->keys()->all();
+
+        $movementIds = collect()
+            ->merge(EmployeeShift::whereBetween('date', [$start, $end])->pluck('employee_id'))
+            ->merge(EmployeePenalty::whereBetween('date', [$start, $end])->pluck('employee_id'))
+            ->merge(CourierMileageLog::whereBetween('date', [$start, $end])->pluck('employee_id'))
+            ->unique();
+
+        $activeMonthlyIds = empty($perMonthKeys) ? collect() :
+            Employee::where('is_active', true)
+                ->whereNull('archived_at')
+                ->whereIn('position', $perMonthKeys)
+                ->pluck('id');
+
+        $employeeIds = $movementIds->merge($activeMonthlyIds)->unique()->values();
+
+        $employees = $employeeIds->isEmpty()
+            ? collect()
+            : Employee::whereIn('id', $employeeIds)->get()->sortBy('name')->values();
 
         // Зміни на період
         $shiftsByEmp = EmployeeShift::with('employee')
