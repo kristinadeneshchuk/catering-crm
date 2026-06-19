@@ -770,9 +770,8 @@ class AntLogisticsService
                     'model_auto'          => $route['ModelAuto'] ?? null,
                     'registration_number' => $route['Registration_Number'] ?? null,
                     'count_comps'         => $countComps,
-                    'distance_calc'       => $route['distance_calc'] ?? null,
-                    'distance_fact'       => isset($route['distance']) && $route['distance'] > 0 ? round($route['distance'] / 1000, 2) : ($route['distance_fact'] ?? null),
-                    'fuel_city'           => $route['Fuel_City'] ?? null,
+                    // distance_calc / distance_fact / fuel_city з Ant більше не використовуємо —
+                    // пробіг і пальне менеджер вносить вручну в courier_mileage_logs.
                     'route_time_b'        => $route['RouteTime_B'] ?? null,
                     'route_time_e'        => $route['RouteTime_E'] ?? null,
                     'ant_cost_route'      => $antCost,

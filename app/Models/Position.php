@@ -7,8 +7,16 @@ use Illuminate\Database\Eloquent\Model;
 class Position extends Model
 {
     protected $fillable = [
-        'key', 'name', 'color', 'payment_type',
+        'key', 'name', 'color', 'payment_type', 'group',
         'monthly_working_days', 'split_by_brands', 'is_active', 'sort_order',
+    ];
+
+    public const GROUPS = [
+        'kitchen'    => 'Кухня',
+        'couriers'   => "Кур'єри",
+        'management' => 'Менеджмент',
+        'marketing'  => 'Маркетинг',
+        'other'      => 'Інше',
     ];
 
     protected $casts = [

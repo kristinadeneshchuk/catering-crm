@@ -67,6 +67,13 @@ class PositionResource extends Resource
                         ->live()
                         ->helperText('Помісячні не потрапляють у табель змін.'),
 
+                    Select::make('group')
+                        ->label('Група')
+                        ->options(\App\Models\Position::GROUPS)
+                        ->default('other')
+                        ->required()
+                        ->helperText('Визначає вкладку у «Зарплати» та розрахунок грн/порція.'),
+
                     TextInput::make('monthly_working_days')
                         ->label('Робочих днів на місяць')
                         ->numeric()
@@ -107,6 +114,11 @@ class PositionResource extends Resource
                     ->badge()
                     ->formatStateUsing(fn (string $state) => $state === 'per_month' ? 'За місяць' : 'За зміну')
                     ->color(fn (string $state) => $state === 'per_month' ? 'info' : 'gray'),
+
+                TextColumn::make('group')
+                    ->label('Група')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state) => \App\Models\Position::GROUPS[$state] ?? $state),
 
                 TextColumn::make('monthly_working_days')
                     ->label('Роб. днів')

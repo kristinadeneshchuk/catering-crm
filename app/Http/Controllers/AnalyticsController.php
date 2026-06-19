@@ -156,6 +156,18 @@ class AnalyticsController extends Controller
             $totalDeliveryCost += $cost;
         }
 
+        // 🔥 Компенсація кур'єрам (пальне + амортизація) — окремо від ФОП
+        $mileageLogs = \App\Models\CourierMileageLog::whereBetween('date', [$startDate, $endDate])
+            ->get()
+            ->groupBy(fn ($l) => \Carbon\Carbon::parse($l->date)->format('Y-m-d'));
+        $courierCompByDate  = [];
+        $totalCourierComp   = 0;
+        foreach ($mileageLogs as $ymd => $dayLogs) {
+            $comp = round((float) $dayLogs->sum(fn ($l) => $l->compensation));
+            $courierCompByDate[$ymd] = $comp;
+            $totalCourierComp += $comp;
+        }
+
         // Завантаження пакувальних матеріалів (тільки з проставленим типом)
         $allPackaging = Packaging::whereNotNull('packaging_type')->get()->keyBy('id');
 
@@ -350,6 +362,11 @@ class AnalyticsController extends Controller
                 }
                 $attributeSalary($emp, $cost);
             }
+        }
+
+        // Компенсація кур'єрам — у загальний пул, щоб розкласти по брендах разом із ЗП
+        if ($totalCourierComp > 0) {
+            $generalSalaryPool += $totalCourierComp;
         }
 
         // 4. ПІДРАХУНОК ЮНІТ-ЕКОНОМІКИ (Агрегація)
@@ -821,6 +838,7 @@ class AnalyticsController extends Controller
             'totalClientDebt', 'debtorClientsCount',
             'packagingCount', 'totalPackagingCost',
             'deliveryCostByDate', 'totalDeliveryCost',
+            'courierCompByDate', 'totalCourierComp',
             'projectStats',
             'individualStats',
             'refusalReasonStats'

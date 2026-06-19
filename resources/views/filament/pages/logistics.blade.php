@@ -78,8 +78,6 @@
         </div>
     </div>
 
-    @if($totalRoutes > 0)
-
     {{-- КАРТКИ ПІДСУМКІВ --}}
     <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
 
@@ -94,25 +92,29 @@
         </div>
 
         <div style="background:#18181b;border:1px solid #2e1065;border-radius:14px;padding:16px 18px;">
-            <p style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Кілометрів</p>
-            <p style="color:#a78bfa;font-size:26px;font-weight:900;line-height:1;">{{ $totalKm }} <span style="font-size:13px;color:#52525b;">км</span></p>
-        </div>
-
-        <div style="background:#18181b;border:1px solid #431407;border-radius:14px;padding:16px 18px;">
-            <p style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Паливо</p>
-            <p style="color:#fb923c;font-size:26px;font-weight:900;line-height:1;">{{ $totalFuel }} <span style="font-size:13px;color:#52525b;">л</span></p>
+            <p style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Пробіг кур'єрів</p>
+            <p style="color:#a78bfa;font-size:26px;font-weight:900;line-height:1;">{{ $totalMileageKm }} <span style="font-size:13px;color:#52525b;">км</span></p>
         </div>
 
         <div style="background:linear-gradient(135deg,#052e16,#0a1f14);border:1px solid #065f46;border-radius:14px;padding:16px 18px;position:relative;overflow:hidden;">
             <div style="position:absolute;top:-10px;right:-10px;width:60px;height:60px;background:#34d39915;border-radius:50%;"></div>
-            <p style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Витрати (наші)</p>
+            <p style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">ЗП кур'єрів</p>
             <p style="color:#34d399;font-size:22px;font-weight:900;line-height:1;">{{ number_format($totalCost, 0, '.', ' ') }} ₴</p>
             @if($totalAntCost > 0)
                 <p style="color:#4b5563;font-size:11px;margin-top:4px;">АНТ: {{ number_format($totalAntCost, 0, '.', ' ') }} ₴</p>
             @endif
         </div>
 
+        <div style="background:linear-gradient(135deg,#1f1d0a,#1c1812);border:1px solid #92400e;border-radius:14px;padding:16px 18px;position:relative;overflow:hidden;">
+            <div style="position:absolute;top:-10px;right:-10px;width:60px;height:60px;background:#fbbf2415;border-radius:50%;"></div>
+            <p style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Компенсація</p>
+            <p style="color:#fbbf24;font-size:22px;font-weight:900;line-height:1;">{{ number_format($totalMileageComp, 0, '.', ' ') }} ₴</p>
+            <p style="color:#4b5563;font-size:11px;margin-top:4px;">пальне + амортизація</p>
+        </div>
+
     </div>
+
+    @if($totalRoutes > 0)
 
     {{-- ТАБЛИЦЯ --}}
     <div style="background:#18181b;border:1px solid #27272a;border-radius:16px;overflow:hidden;">
@@ -123,9 +125,6 @@
                     <th style="text-align:left;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 16px;">Водій</th>
                     <th style="text-align:left;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 16px;">Авто</th>
                     <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 16px;">Точок</th>
-                    <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 16px;">Км план</th>
-                    <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 16px;">Км факт</th>
-                    <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 16px;">Паливо</th>
                     <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 16px;">Виїзд</th>
                     <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 16px;">Повернення</th>
                     <th style="text-align:right;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 16px;">Ставка</th>
@@ -170,20 +169,6 @@
                         </span>
                     </td>
 
-                    <td style="padding:12px 16px;text-align:center;color:#52525b;">
-                        {{ $route['distance_calc'] ? round($route['distance_calc'], 1) . ' км' : '—' }}
-                    </td>
-
-                    <td style="padding:12px 16px;text-align:center;">
-                        <span style="{{ $route['distance_fact'] ? 'color:#a78bfa;font-weight:600;' : 'color:#3f3f46;' }}">
-                            {{ $route['distance_fact'] ? round($route['distance_fact'], 1) . ' км' : '—' }}
-                        </span>
-                    </td>
-
-                    <td style="padding:12px 16px;text-align:center;color:#fb923c;">
-                        {{ $route['fuel_city'] ? round($route['fuel_city'], 2) . ' л' : '—' }}
-                    </td>
-
                     <td style="padding:12px 16px;text-align:center;color:#71717a;font-size:12px;">
                         @if($route['route_time_b'])
                             {{ \Illuminate\Support\Str::afterLast($route['route_time_b'], ' ') }}
@@ -213,9 +198,6 @@
                 <tr style="border-top:2px solid #3f3f46;background:linear-gradient(135deg,#111113,#18181b);">
                     <td colspan="3" style="padding:14px 16px;color:#a1a1aa;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;">Разом</td>
                     <td style="padding:14px 16px;text-align:center;color:#60a5fa;font-weight:900;font-size:15px;">{{ $totalStops }}</td>
-                    <td style="padding:14px 16px;text-align:center;color:#3f3f46;">—</td>
-                    <td style="padding:14px 16px;text-align:center;color:#a78bfa;font-weight:900;font-size:15px;">{{ $totalKm }} км</td>
-                    <td style="padding:14px 16px;text-align:center;color:#fb923c;font-weight:900;font-size:15px;">{{ $totalFuel }} л</td>
                     <td colspan="2"></td>
                     <td style="padding:14px 16px;text-align:right;color:#34d399;font-weight:900;font-size:18px;">{{ number_format($totalCost, 0, '.', ' ') }} ₴</td>
                 </tr>
@@ -230,6 +212,106 @@
         <p style="font-size:13px;color:#3f3f46;margin-top:6px;">Натисни «Деталі ↓» щоб завантажити з АНТ</p>
     </div>
     @endif
+
+    {{-- ПРОБІГ КУР'ЄРІВ --}}
+    <div style="background:#18181b;border:1px solid #27272a;border-radius:16px;overflow:hidden;">
+        <div style="padding:18px 22px;border-bottom:1px solid #27272a;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div>
+                <h2 style="font-size:16px;font-weight:800;color:#f4f4f5;margin:0;">Пробіг кур'єрів</h2>
+                <p style="font-size:12px;color:#71717a;margin-top:2px;">На обрану дату. Вноси одометр (поч/кін) та пальне — компенсація рахується автоматично.</p>
+            </div>
+            <div style="display:flex;gap:14px;font-size:12px;color:#71717a;">
+                <span>Амортизація: <b style="color:#fbbf24;">{{ rtrim(rtrim(number_format($amortPerKm, 2, '.', ''), '0'), '.') }} ₴/км</b></span>
+            </div>
+        </div>
+
+        @if(count($mileageRows) === 0)
+            <div style="text-align:center;padding:40px 20px;color:#52525b;font-size:13px;">
+                Немає активних кур'єрів.
+            </div>
+        @else
+        <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead>
+                    <tr style="border-bottom:1px solid #27272a;background:#111113;">
+                        <th style="text-align:left;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 16px;">Кур'єр</th>
+                        <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 12px;width:130px;">Поч. км</th>
+                        <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 12px;width:130px;">Кін. км</th>
+                        <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 12px;">Пробіг</th>
+                        <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 12px;width:140px;">Пальне ₴</th>
+                        <th style="text-align:center;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 12px;">Амортизація</th>
+                        <th style="text-align:right;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:12px 16px;">Компенсація</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($mileageRows as $i => $row)
+                    @php
+                        $isEven = $i % 2 === 0;
+                        $eid    = $row['employee_id'];
+                    @endphp
+                    <tr style="border-bottom:1px solid #1f1f22;{{ $isEven ? '' : 'background:#111113;' }}">
+                        <td style="padding:10px 16px;color:#f4f4f5;font-weight:600;">{{ $row['name'] }}</td>
+
+                        <td style="padding:8px 12px;text-align:center;">
+                            <input type="number"
+                                   value="{{ $row['start_km'] }}"
+                                   wire:change="saveMileage({{ $eid }}, 'start_km', $event.target.value)"
+                                   placeholder="—"
+                                   style="width:100px;background:#27272a;border:1px solid #3f3f46;border-radius:8px;padding:6px 10px;color:#f4f4f5;font-size:13px;text-align:center;outline:none;"
+                                   onfocus="this.style.borderColor='#3b82f6'"
+                                   onblur="this.style.borderColor='#3f3f46'">
+                        </td>
+
+                        <td style="padding:8px 12px;text-align:center;">
+                            <input type="number"
+                                   value="{{ $row['end_km'] }}"
+                                   wire:change="saveMileage({{ $eid }}, 'end_km', $event.target.value)"
+                                   placeholder="—"
+                                   style="width:100px;background:#27272a;border:1px solid #3f3f46;border-radius:8px;padding:6px 10px;color:#f4f4f5;font-size:13px;text-align:center;outline:none;"
+                                   onfocus="this.style.borderColor='#3b82f6'"
+                                   onblur="this.style.borderColor='#3f3f46'">
+                        </td>
+
+                        <td style="padding:8px 12px;text-align:center;">
+                            <span style="{{ $row['km'] > 0 ? 'color:#a78bfa;font-weight:700;' : 'color:#3f3f46;' }}">
+                                {{ $row['km'] > 0 ? $row['km'] . ' км' : '—' }}
+                            </span>
+                        </td>
+
+                        <td style="padding:8px 12px;text-align:center;">
+                            <input type="number" step="0.01"
+                                   value="{{ $row['fuel_uah'] > 0 ? $row['fuel_uah'] : '' }}"
+                                   wire:change="saveMileage({{ $eid }}, 'fuel_uah', $event.target.value)"
+                                   placeholder="0"
+                                   style="width:110px;background:#27272a;border:1px solid #3f3f46;border-radius:8px;padding:6px 10px;color:#fb923c;font-size:13px;text-align:center;outline:none;font-weight:600;"
+                                   onfocus="this.style.borderColor='#3b82f6'"
+                                   onblur="this.style.borderColor='#3f3f46'">
+                        </td>
+
+                        <td style="padding:10px 12px;text-align:center;color:#fbbf24;font-weight:600;">
+                            {{ $row['amortization'] > 0 ? number_format($row['amortization'], 0, '.', ' ') . ' ₴' : '—' }}
+                        </td>
+
+                        <td style="padding:10px 16px;text-align:right;color:#34d399;font-weight:800;font-size:14px;">
+                            {{ $row['compensation'] > 0 ? number_format($row['compensation'], 0, '.', ' ') . ' ₴' : '—' }}
+                        </td>
+                    </tr>
+                    @endforeach
+                </tbody>
+                <tfoot>
+                    <tr style="border-top:2px solid #3f3f46;background:linear-gradient(135deg,#111113,#18181b);">
+                        <td style="padding:14px 16px;color:#a1a1aa;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;">Разом</td>
+                        <td colspan="2"></td>
+                        <td style="padding:14px 12px;text-align:center;color:#a78bfa;font-weight:900;font-size:15px;">{{ $totalMileageKm }} км</td>
+                        <td style="padding:14px 12px;text-align:center;color:#fb923c;font-weight:900;font-size:15px;">{{ number_format($totalMileageFuel, 0, '.', ' ') }} ₴</td>
+                        <td style="padding:14px 12px;text-align:center;color:#fbbf24;font-weight:900;font-size:15px;">{{ number_format($totalMileageAmort, 0, '.', ' ') }} ₴</td>
+                        <td style="padding:14px 16px;text-align:right;color:#34d399;font-weight:900;font-size:18px;">{{ number_format($totalMileageComp, 0, '.', ' ') }} ₴</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        @endif
+    </div>
 
 </div>
 </x-filament-panels::page>

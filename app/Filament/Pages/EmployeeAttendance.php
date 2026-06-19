@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\CourierMileageLog;
 use App\Models\DeliveryRoute;
 use App\Models\Employee;
 use App\Models\EmployeeShift;
@@ -182,6 +183,16 @@ class EmployeeAttendance extends Page
         $allShifts   = EmployeeShift::whereBetween('date', [$rangeStart, $rangeEnd])->get();
         $shiftsByEmp = $allShifts->groupBy('employee_id');
 
+        // Прапорці пробігу кур'єрів: employee_id => [Y-m-d => true|false]
+        $mileageFlags = [];
+        $mileageRows = CourierMileageLog::whereBetween('date', [$rangeStart, $rangeEnd])
+            ->get(['employee_id', 'date', 'start_km', 'end_km', 'fuel_uah']);
+        foreach ($mileageRows as $m) {
+            $ymd = $m->date instanceof \Carbon\Carbon ? $m->date->format('Y-m-d') : (string) $m->date;
+            $filled = ($m->start_km !== null && $m->end_km !== null) || (float) $m->fuel_uah > 0;
+            $mileageFlags[$m->employee_id][$ymd] = $filled;
+        }
+
         $shiftsCount = $allShifts->count();
         $salary      = round($allShifts->sum('rate'));
 
@@ -252,20 +263,38 @@ class EmployeeAttendance extends Page
             $days          = [];
             $absentEmployee = false;
 
+            $isCourier = $emp->position === 'courier';
             foreach ($dates as $date) {
-                if ($empShifts->has($date)) {
+                $hasShift   = $empShifts->has($date);
+                $hasMileage = ($mileageFlags[$emp->id][$date] ?? false);
+
+                // Показуємо значок:
+                //   ✓ якщо є пробіг (навіть без зміни — менеджер ще не позначив зміну);
+                //   ! якщо є зміна, але пробіг не внесено;
+                //   нічого — якщо ні зміни ні пробігу (вихідний / майбутнє).
+                $mileageState = null;
+                if ($isCourier && $date <= $today) {
+                    if ($hasMileage) {
+                        $mileageState = 'ok';
+                    } elseif ($hasShift) {
+                        $mileageState = 'missing';
+                    }
+                }
+
+                if ($hasShift) {
                     $days[$date] = [
                         'status'  => 'present',
                         'is_duty' => (bool) $empShifts[$date]->is_duty,
                         'is_half' => (bool) $empShifts[$date]->is_half,
+                        'mileage' => $mileageState,
                     ];
                 } elseif ($date > $today) {
-                    $days[$date] = ['status' => 'future', 'is_duty' => false];
+                    $days[$date] = ['status' => 'future', 'is_duty' => false, 'mileage' => null];
                 } elseif ($date === $today) {
-                    $days[$date] = ['status' => 'absent_today', 'is_duty' => false];
+                    $days[$date] = ['status' => 'absent_today', 'is_duty' => false, 'mileage' => $mileageState];
                     $absentEmployee = true;
                 } else {
-                    $days[$date] = ['status' => 'off', 'is_duty' => false];
+                    $days[$date] = ['status' => 'off', 'is_duty' => false, 'mileage' => $mileageState];
                 }
             }
 

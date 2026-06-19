@@ -228,6 +228,26 @@
                                              display:inline-block;width:34px;text-align:center;line-height:34px;">–</span>
                             @endif
 
+                            {{-- Прапорець пробігу — для кур'єрів (минулі і сьогоднішній день) --}}
+                            @php $mil = $dayInfo['mileage'] ?? null; @endphp
+                            @if($row['position'] === 'courier' && $mil !== null)
+                                @if($mil === 'ok')
+                                    <span title="Пробіг внесено"
+                                          style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;
+                                                 background:#052e16;border:1.5px solid #34d399;
+                                                 display:inline-flex;align-items:center;justify-content:center;line-height:1;z-index:2;">
+                                        <span style="font-size:10px;color:#34d399;font-weight:800;">✓</span>
+                                    </span>
+                                @else
+                                    <span title="Пробіг не внесено"
+                                          style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;
+                                                 background:#3b2800;border:1.5px solid #fbbf24;
+                                                 display:inline-flex;align-items:center;justify-content:center;line-height:1;z-index:2;">
+                                        <span style="font-size:11px;color:#fbbf24;font-weight:800;">!</span>
+                                    </span>
+                                @endif
+                            @endif
+
                             {{-- Зірочка чергового — показуємо завжди для кухаря --}}
                             @if($row['is_cook'])
                                 <button wire:click="toggleDuty({{ $row['id'] }}, '{{ $date }}')"

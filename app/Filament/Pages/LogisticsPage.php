@@ -2,7 +2,9 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\CourierMileageLog;
 use App\Models\DeliveryRoute;
+use App\Models\Employee;
 use App\Models\Setting;
 use App\Traits\RestrictCookAccess;
 use App\Services\AntLogisticsService;
@@ -19,6 +21,7 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\DB;
 
 class LogisticsPage extends Page implements HasForms
 {
@@ -33,13 +36,19 @@ class LogisticsPage extends Page implements HasForms
     public ?array $data = [];
     public array $routes = [];
 
-    // Підсумки
+    // Підсумки маршрутів
     public int   $totalRoutes   = 0;
     public int   $totalStops    = 0;
-    public float $totalKm       = 0;
-    public float $totalFuel     = 0;
     public float $totalCost     = 0;
     public float $totalAntCost  = 0;
+
+    // Пробіг кур'єрів
+    public array $mileageRows   = [];
+    public float $totalMileageKm   = 0;
+    public float $totalMileageFuel = 0;
+    public float $totalMileageAmort = 0;
+    public float $totalMileageComp  = 0;
+    public float $amortPerKm = 1;
 
     public function mount(): void
     {
@@ -48,6 +57,7 @@ class LogisticsPage extends Page implements HasForms
             'shift' => 'all',
         ]);
         $this->loadRoutes();
+        $this->loadMileage();
     }
 
     public function form(Form $form): Form
@@ -58,7 +68,10 @@ class LogisticsPage extends Page implements HasForms
                     ->label('Дата')
                     ->required()
                     ->live()
-                    ->afterStateUpdated(fn () => $this->loadRoutes()),
+                    ->afterStateUpdated(function () {
+                        $this->loadRoutes();
+                        $this->loadMileage();
+                    }),
 
                 Select::make('shift')
                     ->label('Зміна')
@@ -85,10 +98,112 @@ class LogisticsPage extends Page implements HasForms
         $this->routes      = $routeCollection->toArray();
         $this->totalRoutes = $routeCollection->count();
         $this->totalStops  = (int) $routeCollection->sum('count_comps');
-        $this->totalKm     = round((float) $routeCollection->sum(fn ($r) => $r->distance_fact ?? $r->distance_calc ?? 0), 1);
-        $this->totalFuel   = round((float) $routeCollection->sum('fuel_city'), 2);
         $this->totalCost   = round((float) $routeCollection->sum('calculated_cost'), 2);
         $this->totalAntCost = round((float) $routeCollection->sum('ant_cost_route'), 2);
+    }
+
+    /**
+     * Завантажити пробіг кур'єрів на обрану дату.
+     * Показуємо всіх активних кур'єрів (а не тільки тих що в маршрутах) — менеджер вносить вручну.
+     */
+    public function loadMileage(): void
+    {
+        $date = $this->data['date'] ?? now()->format('Y-m-d');
+        $this->amortPerKm = CourierMileageLog::currentAmortPerKm();
+
+        $couriers = Employee::where('is_active', true)
+            ->where('position', 'courier')
+            ->whereNull('archived_at')
+            ->orderBy('name')
+            ->get();
+
+        $logs = CourierMileageLog::whereDate('date', $date)
+            ->get()
+            ->keyBy('employee_id');
+
+        $rows = [];
+        $sumKm = 0; $sumFuel = 0; $sumAmort = 0; $sumComp = 0;
+
+        foreach ($couriers as $c) {
+            $log = $logs->get($c->id);
+            $km = $log ? $log->km : 0;
+            $amort = $log ? $log->amortization : 0;
+            $comp = $log ? $log->compensation : 0;
+
+            $rows[] = [
+                'employee_id' => $c->id,
+                'name'        => $c->name,
+                'log_id'      => $log?->id,
+                'start_km'    => $log?->start_km,
+                'end_km'      => $log?->end_km,
+                'fuel_uah'    => $log ? (float) $log->fuel_uah : 0,
+                'km'          => $km,
+                'amortization'=> $amort,
+                'compensation'=> $comp,
+            ];
+
+            $sumKm    += $km;
+            $sumFuel  += $log ? (float) $log->fuel_uah : 0;
+            $sumAmort += $amort;
+            $sumComp  += $comp;
+        }
+
+        $this->mileageRows = $rows;
+        $this->totalMileageKm    = round($sumKm, 1);
+        $this->totalMileageFuel  = round($sumFuel, 2);
+        $this->totalMileageAmort = round($sumAmort, 2);
+        $this->totalMileageComp  = round($sumComp, 2);
+    }
+
+    /**
+     * Зберегти одне поле пробігу (inline-сейв).
+     * При зміні компенсації коригуємо balance кур'єра на дельту.
+     */
+    public function saveMileage(int $employeeId, string $field, $value): void
+    {
+        if (! in_array($field, ['start_km', 'end_km', 'fuel_uah'], true)) {
+            return;
+        }
+
+        $date = $this->data['date'] ?? now()->format('Y-m-d');
+        $employee = Employee::findOrFail($employeeId);
+
+        $value = $value === '' || $value === null ? null : $value;
+        if ($field === 'fuel_uah') {
+            $value = $value === null ? 0 : round((float) $value, 2);
+        } elseif ($value !== null) {
+            $value = (int) $value;
+        }
+
+        DB::transaction(function () use ($employeeId, $date, $field, $value, $employee) {
+            // lockForUpdate щоб не було гонки при одночасному вводі двома менеджерами
+            $log = CourierMileageLog::where('employee_id', $employeeId)
+                ->whereDate('date', $date)
+                ->lockForUpdate()
+                ->first();
+
+            $oldComp = $log?->compensation ?? 0;
+
+            if (! $log) {
+                // Створюємо вперше — фіксуємо знімок ставки амортизації
+                $log = new CourierMileageLog([
+                    'employee_id'  => $employeeId,
+                    'date'         => $date,
+                    'amort_per_km' => CourierMileageLog::currentAmortPerKm(),
+                ]);
+            }
+
+            $log->{$field} = $value;
+            $log->save();
+
+            $newComp = $log->compensation;
+            $delta = round($newComp - $oldComp, 2);
+            if (abs($delta) > 0.001) {
+                $employee->increment('balance', $delta);
+            }
+        });
+
+        $this->loadMileage();
     }
 
     protected function getHeaderActions(): array
@@ -241,7 +356,7 @@ class LogisticsPage extends Page implements HasForms
             Action::make('settings')
                 ->label('Ставки кур\'єрів')
                 ->form([
-                    Grid::make(3)->schema([
+                    Grid::make(2)->schema([
                         TextInput::make('courier_base_rate')
                             ->label('Базова ставка (₴)')
                             ->numeric()
@@ -254,16 +369,23 @@ class LogisticsPage extends Page implements HasForms
                             ->label('Доплата за точку (₴)')
                             ->numeric()
                             ->default(fn () => Setting::where('key', 'courier_extra_per_stop')->value('value') ?: 50),
+                        TextInput::make('amort_per_km')
+                            ->label('Амортизація (₴/км)')
+                            ->numeric()
+                            ->step('0.01')
+                            ->default(fn () => Setting::where('key', 'amort_per_km')->value('value') ?: 1)
+                            ->helperText('Скільки нараховувати кур\'єру за кожен км його авто'),
                     ]),
                 ])
                 ->action(function (array $data) {
-                    foreach (['courier_base_rate', 'courier_base_stops', 'courier_extra_per_stop'] as $key) {
+                    foreach (['courier_base_rate', 'courier_base_stops', 'courier_extra_per_stop', 'amort_per_km'] as $key) {
                         Setting::updateOrCreate(['key' => $key], ['value' => $data[$key]]);
                     }
                     DeliveryRoute::all()->each(fn ($r) => $r->update([
                         'calculated_cost' => DeliveryRoute::calculateCourierCost($r->count_comps),
                     ]));
                     $this->loadRoutes();
+                    $this->loadMileage();
                     Notification::make()->title('Ставки збережено та перераховано')->success()->send();
                 }),
         ];

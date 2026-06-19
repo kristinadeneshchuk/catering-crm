@@ -63,4 +63,9 @@ class Employee extends Model
     {
         return $this->hasMany(EmployeePenalty::class);
     }
+
+    public function mileageLogs(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CourierMileageLog::class);
+    }
 }
