@@ -186,10 +186,10 @@ class EmployeeAttendance extends Page
         // Прапорці пробігу кур'єрів: employee_id => [Y-m-d => true|false]
         $mileageFlags = [];
         $mileageRows = CourierMileageLog::whereBetween('date', [$rangeStart, $rangeEnd])
-            ->get(['employee_id', 'date', 'start_km', 'end_km', 'fuel_uah']);
+            ->get(['employee_id', 'date', 'start_km', 'end_km', 'fuel_price_per_liter']);
         foreach ($mileageRows as $m) {
             $ymd = $m->date instanceof \Carbon\Carbon ? $m->date->format('Y-m-d') : (string) $m->date;
-            $filled = ($m->start_km !== null && $m->end_km !== null) || (float) $m->fuel_uah > 0;
+            $filled = ($m->start_km !== null && $m->end_km !== null) || (float) $m->fuel_price_per_liter > 0;
             $mileageFlags[$m->employee_id][$ymd] = $filled;
         }
 
