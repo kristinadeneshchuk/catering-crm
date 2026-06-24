@@ -749,15 +749,17 @@ class AntLogisticsService
             }
 
             // Автоматичний матч водія → Employee
+            $courier    = null;
             $employeeId = null;
             if ($driver) {
                 $key = mb_strtolower(trim($driver));
-                $employeeId = $employeesByAntName->get($key)?->id;
+                $courier    = $employeesByAntName->get($key);
+                $employeeId = $courier?->id;
             }
 
             $countComps = (int) ($route['Count_Comps'] ?? 0);
             $antCost    = (float) ($route['Cost_Route'] ?? 0);
-            $ourCost    = DeliveryRoute::calculateCourierCost($countComps);
+            $ourCost    = DeliveryRoute::calculateCourierCost($countComps, $courier);
 
             DeliveryRoute::updateOrCreate(
                 ['date' => $date, 'ant_route_id' => $routeId],

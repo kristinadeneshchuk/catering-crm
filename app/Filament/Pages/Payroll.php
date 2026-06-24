@@ -58,20 +58,15 @@ class Payroll extends Page
 
     /**
      * Розкладає rate зміни на (база, бонус).
-     * Курʼєр: база = courier_base_rate (× 0.5 якщо half), бонус = решта (доплати за точки).
-     * Кухар і ін. per_shift: база = employee.base_rate (× 0.5 якщо half), бонус = решта (бонус чергового).
+     * Per_shift (включно з кур'єром): база = employee.base_rate (× 0.5 якщо half),
+     * бонус = решта (доплати за точки для кур'єра, бонус чергового для кухаря).
      */
-    protected function splitRate(EmployeeShift $shift, Employee $emp, float $courierBaseRate): array
+    protected function splitRate(EmployeeShift $shift, Employee $emp): array
     {
         $half = $shift->is_half ? 0.5 : 1.0;
         $rate = (float) $shift->rate;
 
-        if ($emp->position === 'courier') {
-            $base = round($courierBaseRate * $half, 2);
-        } else {
-            $base = round((float) $emp->base_rate * $half, 2);
-        }
-
+        $base  = round((float) $emp->base_rate * $half, 2);
         $base  = min($base, $rate);
         $bonus = max(0, round($rate - $base, 2));
 
@@ -84,7 +79,6 @@ class Payroll extends Page
         $dates = $this->workingDates($start, $end);
 
         $positions = Position::all()->keyBy('key');
-        $courierBaseRate = (float) (Setting::where('key', 'courier_base_rate')->value('value') ?: 700);
 
         // Збираємо ID співробітників, у яких є рухи в періоді:
         //   - зміни, штрафи, пробіг (тобто реально щось накапало)
@@ -151,7 +145,7 @@ class Payroll extends Page
             if ($pos->payment_type === 'per_shift') {
                 $empShifts = $shiftsByEmp->get($emp->id, collect());
                 foreach ($empShifts as $shift) {
-                    $split = $this->splitRate($shift, $emp, $courierBaseRate);
+                    $split = $this->splitRate($shift, $emp);
                     $salary += $split['base'];
                     $bonus  += $split['bonus'];
                 }

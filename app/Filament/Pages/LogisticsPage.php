@@ -361,17 +361,15 @@ class LogisticsPage extends Page implements HasForms
                 ->label('Ставки кур\'єрів')
                 ->form([
                     Grid::make(2)->schema([
-                        TextInput::make('courier_base_rate')
-                            ->label('Базова ставка (₴)')
-                            ->numeric()
-                            ->default(fn () => Setting::where('key', 'courier_base_rate')->value('value') ?: 700),
                         TextInput::make('courier_base_stops')
                             ->label('Ліміт точок')
                             ->numeric()
+                            ->helperText('Скільки точок входить у базову ставку кур\'єра')
                             ->default(fn () => Setting::where('key', 'courier_base_stops')->value('value') ?: 12),
                         TextInput::make('courier_extra_per_stop')
                             ->label('Доплата за точку (₴)')
                             ->numeric()
+                            ->helperText('Скільки доплачувати за кожну точку понад ліміт')
                             ->default(fn () => Setting::where('key', 'courier_extra_per_stop')->value('value') ?: 50),
                         TextInput::make('amort_per_km')
                             ->label('Амортизація (₴/км)')
@@ -382,11 +380,11 @@ class LogisticsPage extends Page implements HasForms
                     ]),
                 ])
                 ->action(function (array $data) {
-                    foreach (['courier_base_rate', 'courier_base_stops', 'courier_extra_per_stop', 'amort_per_km'] as $key) {
+                    foreach (['courier_base_stops', 'courier_extra_per_stop', 'amort_per_km'] as $key) {
                         Setting::updateOrCreate(['key' => $key], ['value' => $data[$key]]);
                     }
-                    DeliveryRoute::all()->each(fn ($r) => $r->update([
-                        'calculated_cost' => DeliveryRoute::calculateCourierCost($r->count_comps),
+                    DeliveryRoute::with('employee')->get()->each(fn ($r) => $r->update([
+                        'calculated_cost' => DeliveryRoute::calculateCourierCost($r->count_comps, $r->employee),
                     ]));
                     $this->loadRoutes();
                     $this->loadMileage();
