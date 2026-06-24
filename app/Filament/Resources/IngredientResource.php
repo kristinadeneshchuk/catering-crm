@@ -55,6 +55,8 @@ class IngredientResource extends Resource
                                     ->label('Група/Тип')
                                     ->options(function () {
                                         return Ingredient::query()
+                                            ->whereNotNull('group')
+                                            ->where('group', '!=', '')
                                             ->distinct()
                                             ->pluck('group', 'group')
                                             ->toArray();
@@ -186,6 +188,8 @@ class IngredientResource extends Resource
                     ->label('Група')
                     ->options(function () {
                         return Ingredient::query()
+                            ->whereNotNull('group')
+                            ->where('group', '!=', '')
                             ->distinct()
                             ->pluck('group', 'group')
                             ->toArray();
