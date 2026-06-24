@@ -200,6 +200,14 @@ class LogisticsPage extends Page implements HasForms
                 ]);
             }
 
+            // Само-вилікування: якщо лог було створено до того, як кур'єру задали
+            // витрату, у знімку залишився 0 і пальне рахується як 0. Підтягуємо знімок
+            // з кур'єра при першому ж дотику до рядка.
+            if ((float) ($log->fuel_consumption ?? 0) <= 0
+                && (float) ($employee->fuel_consumption ?? 0) > 0) {
+                $log->fuel_consumption = (float) $employee->fuel_consumption;
+            }
+
             $log->{$field} = $value;
             $log->save();
 
