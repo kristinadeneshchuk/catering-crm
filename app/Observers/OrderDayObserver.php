@@ -18,7 +18,14 @@ class OrderDayObserver
     public function created(OrderDay $orderDay): void
     {
         $this->syncOrder($orderDay);
-        $this->syncRouteCost($orderDay);
+        // Якщо при створенні вже виставлено extra_delivery_fee і прив'язано маршрут — додаємо в нього.
+        if ((float) $orderDay->extra_delivery_fee > 0 && $orderDay->ant_route_num) {
+            $this->applyExtraDelta(
+                $orderDay->ant_route_num,
+                $orderDay->resolveDeliveryDate(),
+                (float) $orderDay->extra_delivery_fee,
+            );
+        }
     }
 
     /**
@@ -33,19 +40,30 @@ class OrderDayObserver
         }
 
         if ($orderDay->wasChanged(['extra_delivery_fee', 'ant_route_num', 'date', 'delivery_date_override'])) {
-            // Перерахувати старий маршрут (якщо переприв'язали або зсунули дату доставки) і новий.
+            $oldExtra    = (float) $orderDay->getOriginal('extra_delivery_fee');
+            $newExtra    = (float) $orderDay->extra_delivery_fee;
             $oldRouteNum = $orderDay->getOriginal('ant_route_num');
-            if ($oldRouteNum) {
-                $oldDeliveryDate = $this->resolveOriginalDeliveryDate($orderDay);
-                $newRouteNum     = $orderDay->ant_route_num;
-                $newDeliveryDate = $orderDay->resolveDeliveryDate();
-                if ((int) $oldRouteNum !== (int) $newRouteNum
-                    || !$oldDeliveryDate->startOfDay()->equalTo($newDeliveryDate->startOfDay())
-                ) {
-                    $this->recalcRouteByKey($oldRouteNum, $oldDeliveryDate);
+            $newRouteNum = $orderDay->ant_route_num;
+            $oldDeliveryDate = $oldRouteNum ? $this->resolveOriginalDeliveryDate($orderDay) : null;
+            $newDeliveryDate = $newRouteNum ? $orderDay->resolveDeliveryDate() : null;
+
+            $sameRoute = $oldRouteNum
+                && $newRouteNum
+                && (int) $oldRouteNum === (int) $newRouteNum
+                && $oldDeliveryDate?->startOfDay()->equalTo($newDeliveryDate->startOfDay());
+
+            if ($sameRoute) {
+                // Звичайний кейс: чекбокс на тому ж маршруті — дельта = newExtra - oldExtra.
+                $this->applyExtraDelta($newRouteNum, $newDeliveryDate, $newExtra - $oldExtra);
+            } else {
+                // Маршрут/дата доставки змінились — старий втрачає oldExtra, новий отримує newExtra.
+                if ($oldRouteNum) {
+                    $this->applyExtraDelta($oldRouteNum, $oldDeliveryDate, -$oldExtra);
+                }
+                if ($newRouteNum) {
+                    $this->applyExtraDelta($newRouteNum, $newDeliveryDate, $newExtra);
                 }
             }
-            $this->syncRouteCost($orderDay);
         }
     }
 
@@ -70,7 +88,14 @@ class OrderDayObserver
     public function deleted(OrderDay $orderDay): void
     {
         $this->syncOrder($orderDay);
-        $this->syncRouteCost($orderDay);
+        // Якщо день мав extra і був прив'язаний — зняти суму з маршруту.
+        if ((float) $orderDay->extra_delivery_fee > 0 && $orderDay->ant_route_num) {
+            $this->applyExtraDelta(
+                $orderDay->ant_route_num,
+                $orderDay->resolveDeliveryDate(),
+                -(float) $orderDay->extra_delivery_fee,
+            );
+        }
     }
 
     private function syncOrder(OrderDay $orderDay): void
@@ -85,18 +110,12 @@ class OrderDayObserver
     }
 
     /**
-     * Перерахувати calculated_cost маршруту, якому належить цей OrderDay,
-     * та синхронізувати зміну в табелі (EmployeeShift.rate + Employee.balance).
+     * Застосувати дельту extra_delivery_fee до маршруту:
+     *  - оновити DeliveryRoute.calculated_cost (повний перерахунок через recalcCost),
+     *  - якщо менеджер уже відмітив зміну курьєра — зрушити EmployeeShift.rate і Employee.balance
+     *    рівно на дельту, без захоплення сторонніх переоцінок базових тарифів.
      */
-    private function syncRouteCost(OrderDay $orderDay): void
-    {
-        if (!$orderDay->ant_route_num) {
-            return;
-        }
-        $this->recalcRouteByKey($orderDay->ant_route_num, $orderDay->resolveDeliveryDate());
-    }
-
-    private function recalcRouteByKey($routeNum, $date): void
+    private function applyExtraDelta($routeNum, ?\Carbon\Carbon $date, float $delta): void
     {
         if (!$routeNum || !$date) {
             return;
@@ -110,24 +129,17 @@ class OrderDayObserver
             return;
         }
 
-        $oldCost = (float) $route->calculated_cost;
-        $newCost = $route->recalcCost();
-        $delta   = round($newCost - $oldCost, 2);
+        DB::transaction(function () use ($route, $delta) {
+            // Завжди вирівнюємо calculated_cost до фактичного recalcCost (base + extras).
+            $newCost = $route->recalcCost();
+            if (abs((float) $route->calculated_cost - $newCost) >= 0.005) {
+                $route->update(['calculated_cost' => $newCost]);
+            }
 
-        if (abs($delta) < 0.005) {
-            return;
-        }
-
-        DB::transaction(function () use ($route, $newCost, $delta) {
-            $route->update(['calculated_cost' => $newCost]);
-
-            if (!$route->employee_id) {
+            if (abs($delta) < 0.005 || !$route->employee_id) {
                 return;
             }
 
-            // Якщо менеджер уже відмітив зміну курьєра на цю дату — донести дельту в rate і balance.
-            // Маршрутів на дату може бути декілька → дельта саме цього маршруту переноситься 1:1.
-            // Дальня доставка — окрема плата, не «половина зміни», тому is_half не ділимо.
             $shift = EmployeeShift::where('employee_id', $route->employee_id)
                 ->whereDate('date', $route->date)
                 ->first();
@@ -137,9 +149,7 @@ class OrderDayObserver
             }
 
             $shift->update(['rate' => max(0, (float) $shift->rate + $delta)]);
-
-            $employee = Employee::find($route->employee_id);
-            $employee?->increment('balance', $delta);
+            Employee::find($route->employee_id)?->increment('balance', $delta);
         });
     }
 }
