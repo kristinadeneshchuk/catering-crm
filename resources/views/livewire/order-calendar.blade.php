@@ -243,6 +243,21 @@
                     @endif
                 </div>
 
+                {{-- Доплата за дальню доставку --}}
+                @php
+                    $farFeeValue = (float) (\App\Models\Setting::where('key', 'far_delivery_fee')->value('value') ?: 0);
+                @endphp
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <label class="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300 cursor-pointer">
+                        <input type="checkbox" wire:model="modalIsFarDelivery"
+                            class="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500" />
+                        <span>📍 Дальня доставка (+{{ rtrim(rtrim(number_format($farFeeValue, 2, '.', ''), '0'), '.') }} ₴)</span>
+                    </label>
+                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1 ml-6">
+                        Додаткова плата за далекий заїзд — включається у вартість для клієнта і нараховується кур'єру.
+                    </p>
+                </div>
+
                 {{-- Знижка на день --}}
                 <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
                     <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Знижка на цей день</label>

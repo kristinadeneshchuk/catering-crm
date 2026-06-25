@@ -491,6 +491,32 @@ class AntLogisticsService
             'updated'       => $updated,
         ]);
 
+        // Mass-update вище не тригерить OrderDayObserver, тому вручну перераховуємо
+        // calculated_cost усіх маршрутів цієї дати (підхопить уже виставлені
+        // extra_delivery_fee + врахує переприв'язки клієнтів між маршрутами).
+        DeliveryRoute::whereDate('date', $deliveryDate)
+            ->with('employee')
+            ->get()
+            ->each(function (DeliveryRoute $route) {
+                $oldCost = (float) $route->calculated_cost;
+                $newCost = $route->recalcCost();
+                $delta   = round($newCost - $oldCost, 2);
+                if (abs($delta) < 0.005) {
+                    return;
+                }
+                $route->update(['calculated_cost' => $newCost]);
+                // Якщо менеджер уже відмітив зміну — донести дельту.
+                if ($route->employee_id) {
+                    $shift = \App\Models\EmployeeShift::where('employee_id', $route->employee_id)
+                        ->whereDate('date', $route->date)
+                        ->first();
+                    if ($shift) {
+                        $shift->update(['rate' => max(0, (float) $shift->rate + $delta)]);
+                        \App\Models\Employee::find($route->employee_id)?->increment('balance', $delta);
+                    }
+                }
+            });
+
         return $updated;
     }
 
@@ -761,7 +787,7 @@ class AntLogisticsService
             $antCost    = (float) ($route['Cost_Route'] ?? 0);
             $ourCost    = DeliveryRoute::calculateCourierCost($countComps, $courier);
 
-            DeliveryRoute::updateOrCreate(
+            $createdRoute = DeliveryRoute::updateOrCreate(
                 ['date' => $date, 'ant_route_id' => $routeId],
                 [
                     'shift'               => $shift,
@@ -780,6 +806,12 @@ class AntLogisticsService
                     'calculated_cost'     => $ourCost,
                 ]
             );
+
+            // Підхопити доплати «дальня доставка» з уже існуючих OrderDay цього маршруту.
+            $fullCost = $createdRoute->recalcCost();
+            if ((float) $createdRoute->calculated_cost !== $fullCost) {
+                $createdRoute->update(['calculated_cost' => $fullCost]);
+            }
 
             $saved++;
         }

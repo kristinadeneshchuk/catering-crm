@@ -20,6 +20,7 @@ class OrderDay extends Model
                 'address', 'address_entrance', 'address_apartment', 'address_floor',
                 'delivery_comment', 'delivery_time', 'delivery_date_override',
                 'discount_type', 'discount_value', 'discount_amount',
+                'extra_delivery_fee',
                 'ant_route_num', 'ant_route_pos', 'ant_driver', 'ant_delivery_group',
             ])
             ->logOnlyDirty()
@@ -32,6 +33,7 @@ class OrderDay extends Model
         'address', 'address_entrance', 'address_apartment', 'address_floor',
         'delivery_comment', 'delivery_time', 'delivery_date_override',
         'discount_type', 'discount_value', 'discount_amount',
+        'extra_delivery_fee',
         'ant_route_num', 'ant_route_pos', 'ant_driver', 'ant_delivery_group',
     ];
 
@@ -41,6 +43,7 @@ class OrderDay extends Model
         'is_completed'           => 'boolean',
         'discount_value'         => 'decimal:2',
         'discount_amount'        => 'decimal:2',
+        'extra_delivery_fee'     => 'decimal:2',
     ];
 
     protected static function booted(): void

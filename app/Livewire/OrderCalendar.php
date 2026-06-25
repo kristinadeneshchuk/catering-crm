@@ -10,6 +10,7 @@ use App\Models\CalorieRange;
 use App\Models\TariffPrice;
 use Carbon\Carbon;
 use Filament\Notifications\Notification;
+use App\Models\Setting;
 use App\Services\ScheduleService;
 
 class OrderCalendar extends Component
@@ -49,6 +50,9 @@ class OrderCalendar extends Component
 
     // Override дати доставки (нерегулярний перенос на іншу дату — рідкісне виключення)
     public ?string $modalDeliveryDateOverride = null;
+
+    // Доплата за дальню доставку (фіксована з settings.far_delivery_fee)
+    public bool $modalIsFarDelivery = false;
 
     public function mount(?Order $order = null)
     {
@@ -164,6 +168,7 @@ class OrderCalendar extends Component
         $this->modalDeliveryDateOverride = $day->delivery_date_override
             ? Carbon::parse($day->delivery_date_override)->format('Y-m-d')
             : null;
+        $this->modalIsFarDelivery = (float) $day->extra_delivery_fee > 0;
         $this->addressSearch  = '';
         $this->addressResults = [];
         // Завантажуємо адреси клієнта
@@ -215,6 +220,7 @@ class OrderCalendar extends Component
         $this->modalDiscountValue = null;
         $this->modalDeliveryTime = null;
         $this->modalDeliveryDateOverride = null;
+        $this->modalIsFarDelivery = false;
     }
 
     public function searchAddress(): void
@@ -246,6 +252,10 @@ class OrderCalendar extends Component
         $day = OrderDay::find($this->modalDayId);
         if (!$day) return;
 
+        $farFee = $this->modalIsFarDelivery
+            ? (float) (Setting::where('key', 'far_delivery_fee')->value('value') ?: 0)
+            : 0;
+
         $day->update([
             'address'          => $this->modalAddress ?: null,
             'address_entrance' => $this->modalEntrance ?: null,
@@ -258,6 +268,7 @@ class OrderCalendar extends Component
             'discount_value'   => ($this->modalDiscountType && $this->modalDiscountValue !== null && $this->modalDiscountValue !== '')
                 ? (float) $this->modalDiscountValue
                 : null,
+            'extra_delivery_fee' => $farFee,
         ]);
 
         $this->closeAddressModal();

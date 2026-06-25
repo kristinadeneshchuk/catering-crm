@@ -24,6 +24,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\ViewField;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\IconColumn;
@@ -288,6 +289,27 @@ class OrderResource extends Resource
                             ->readOnly()
                             ->dehydrated()
                             ->helperText('total_price − всі знижки'),
+
+                        Placeholder::make('extra_delivery_total')
+                            ->label('Доплата за дальні дні')
+                            ->content(function ($record) {
+                                if (!$record) return '—';
+                                $sum = (float) $record->orderDays()->sum('extra_delivery_fee');
+                                return $sum > 0
+                                    ? '+ ' . number_format($sum, 2, '.', ' ') . ' ₴'
+                                    : '—';
+                            })
+                            ->helperText('Сума по всіх днях, де відмічена «дальня доставка».'),
+
+                        Placeholder::make('full_price_with_delivery')
+                            ->label('Повна вартість для клієнта')
+                            ->content(function ($record) {
+                                if (!$record) return '—';
+                                $extra = (float) $record->orderDays()->sum('extra_delivery_fee');
+                                $full  = (float) $record->final_price + $extra;
+                                return number_format($full, 2, '.', ' ') . ' ₴';
+                            })
+                            ->helperText('final_price + доплати за дальні дні. Цю суму озвучуємо клієнту.'),
                     ]),
 
                 // === СЕКЦІЯ 4: ДОДАТКОВІ РАЦІОНИ (сімейні замовлення) ===

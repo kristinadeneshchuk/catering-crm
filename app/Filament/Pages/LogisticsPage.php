@@ -377,14 +377,22 @@ class LogisticsPage extends Page implements HasForms
                             ->step('0.01')
                             ->default(fn () => Setting::where('key', 'amort_per_km')->value('value') ?: 1)
                             ->helperText('Скільки нараховувати кур\'єру за кожен км його авто'),
+                        TextInput::make('far_delivery_fee')
+                            ->label('Доплата за дальню доставку (₴)')
+                            ->numeric()
+                            ->step('1')
+                            ->default(fn () => Setting::where('key', 'far_delivery_fee')->value('value') ?: 150)
+                            ->helperText('Менеджер відмічає галочку на дні замовлення — ця сума додається до вартості і до ЗП курьєра.'),
                     ]),
                 ])
                 ->action(function (array $data) {
-                    foreach (['courier_base_stops', 'courier_extra_per_stop', 'amort_per_km'] as $key) {
-                        Setting::updateOrCreate(['key' => $key], ['value' => $data[$key]]);
+                    foreach (['courier_base_stops', 'courier_extra_per_stop', 'amort_per_km', 'far_delivery_fee'] as $key) {
+                        if (array_key_exists($key, $data)) {
+                            Setting::updateOrCreate(['key' => $key], ['value' => $data[$key]]);
+                        }
                     }
                     DeliveryRoute::with('employee')->get()->each(fn ($r) => $r->update([
-                        'calculated_cost' => DeliveryRoute::calculateCourierCost($r->count_comps, $r->employee),
+                        'calculated_cost' => $r->recalcCost(),
                     ]));
                     $this->loadRoutes();
                     $this->loadMileage();

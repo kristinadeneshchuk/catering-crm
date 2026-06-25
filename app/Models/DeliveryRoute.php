@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\OrderDay;
 use App\Models\Setting;
 
 class DeliveryRoute extends Model
@@ -45,6 +46,30 @@ class DeliveryRoute extends Model
         }
 
         return $baseRate + ($stops - $baseStops) * $extraPerStop;
+    }
+
+    /**
+     * Сума доплат «дальня доставка» по всіх OrderDay цього маршруту (та сама дата + ant_route_num).
+     */
+    public function extraDeliveryFee(): float
+    {
+        if (!$this->ant_route_num || !$this->date) {
+            return 0;
+        }
+
+        return (float) OrderDay::query()
+            ->where('ant_route_num', $this->ant_route_num)
+            ->whereDate('date', $this->date)
+            ->sum('extra_delivery_fee');
+    }
+
+    /**
+     * Повна вартість маршруту для кур'єра = базова ставка по точках + сума доплат за дальні доставки.
+     */
+    public function recalcCost(): float
+    {
+        return static::calculateCourierCost((int) $this->count_comps, $this->employee)
+             + $this->extraDeliveryFee();
     }
 
     /**
