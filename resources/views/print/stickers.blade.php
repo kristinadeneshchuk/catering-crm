@@ -125,6 +125,14 @@
             margin-top: 1px;
         }
 
+        .sticker.has-changes .client-id {
+            font-size: 12px;
+            font-weight: 900;
+            padding: 2px 6px;
+            margin-top: 1.5px;
+            letter-spacing: 0.3px;
+        }
+
         .calories {
             font-size: 10px;
             font-weight: 900;
@@ -300,7 +308,7 @@
                     : null;
             @endphp
 
-            <div class="sticker">
+            <div class="sticker @if(!empty($sticker['changes'])) has-changes @endif">
 
                 <div>
                     <div class="sticker-header">
