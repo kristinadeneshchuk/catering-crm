@@ -23,7 +23,8 @@ class OrderDayObserver
 
     /**
      * Якщо у дня змінилась дата — підлаштувати end_date парента.
-     * Якщо змінилась extra_delivery_fee / ant_route_num / date — перерахувати маршрут(и).
+     * Якщо змінилась extra_delivery_fee / ant_route_num / date / delivery_date_override —
+     * перерахувати маршрут(и).
      */
     public function updated(OrderDay $orderDay): void
     {
@@ -31,17 +32,35 @@ class OrderDayObserver
             $this->syncOrder($orderDay);
         }
 
-        if ($orderDay->wasChanged(['extra_delivery_fee', 'ant_route_num', 'date'])) {
-            // Перерахувати старий маршрут (якщо переприв'язали) і новий.
+        if ($orderDay->wasChanged(['extra_delivery_fee', 'ant_route_num', 'date', 'delivery_date_override'])) {
+            // Перерахувати старий маршрут (якщо переприв'язали або зсунули дату доставки) і новий.
             $oldRouteNum = $orderDay->getOriginal('ant_route_num');
-            $oldDate     = $orderDay->getOriginal('date');
-            if ($oldRouteNum && $oldDate &&
-                ($oldRouteNum !== $orderDay->ant_route_num || (string) $oldDate !== (string) $orderDay->date)
-            ) {
-                $this->recalcRouteByKey($oldRouteNum, $oldDate);
+            if ($oldRouteNum) {
+                $oldDeliveryDate = $this->resolveOriginalDeliveryDate($orderDay);
+                $newRouteNum     = $orderDay->ant_route_num;
+                $newDeliveryDate = $orderDay->resolveDeliveryDate();
+                if ((int) $oldRouteNum !== (int) $newRouteNum
+                    || !$oldDeliveryDate->startOfDay()->equalTo($newDeliveryDate->startOfDay())
+                ) {
+                    $this->recalcRouteByKey($oldRouteNum, $oldDeliveryDate);
+                }
             }
             $this->syncRouteCost($orderDay);
         }
+    }
+
+    private function resolveOriginalDeliveryDate(OrderDay $orderDay): \Carbon\Carbon
+    {
+        $originalOverride = $orderDay->getOriginal('delivery_date_override');
+        if ($originalOverride) {
+            return \Carbon\Carbon::parse($originalOverride);
+        }
+        $originalDate = $orderDay->getOriginal('date');
+        $isEvening = \App\Services\ScheduleService::isEvening($orderDay->order?->schedule_type);
+        return \App\Services\ScheduleService::computeDeliveryDate(
+            \Carbon\Carbon::parse($originalDate),
+            $isEvening,
+        );
     }
 
     /**
@@ -71,10 +90,13 @@ class OrderDayObserver
      */
     private function syncRouteCost(OrderDay $orderDay): void
     {
-        $this->recalcRouteByKey($orderDay->ant_route_num, $orderDay->date);
+        if (!$orderDay->ant_route_num) {
+            return;
+        }
+        $this->recalcRouteByKey($orderDay->ant_route_num, $orderDay->resolveDeliveryDate());
     }
 
-    private function recalcRouteByKey(?string $routeNum, $date): void
+    private function recalcRouteByKey($routeNum, $date): void
     {
         if (!$routeNum || !$date) {
             return;

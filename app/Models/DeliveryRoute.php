@@ -49,7 +49,11 @@ class DeliveryRoute extends Model
     }
 
     /**
-     * Сума доплат «дальня доставка» по всіх OrderDay цього маршруту (та сама дата + ant_route_num).
+     * Сума доплат «дальня доставка» по всіх OrderDay цього маршруту.
+     *
+     * УВАГА: OrderDay.date — це дата ЇЖІ, а DeliveryRoute.date — дата ДОСТАВКИ.
+     * Для вечірніх замовлень і delivery_date_override вони різняться, тому
+     * матчимо за реальною датою доставки через resolveDeliveryDate().
      */
     public function extraDeliveryFee(): float
     {
@@ -57,9 +61,14 @@ class DeliveryRoute extends Model
             return 0;
         }
 
+        $routeDate = \Carbon\Carbon::parse($this->date)->startOfDay();
+
         return (float) OrderDay::query()
             ->where('ant_route_num', $this->ant_route_num)
-            ->whereDate('date', $this->date)
+            ->where('extra_delivery_fee', '>', 0)
+            ->with('order')
+            ->get()
+            ->filter(fn ($d) => $d->resolveDeliveryDate()->startOfDay()->equalTo($routeDate))
             ->sum('extra_delivery_fee');
     }
 
