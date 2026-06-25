@@ -289,27 +289,30 @@ class OrderResource extends Resource
                             ->readOnly()
                             ->dehydrated()
                             ->helperText('total_price − всі знижки'),
+                    ]),
 
+                // === СЕКЦІЯ 3.5: ПІДСУМОК ДЛЯ КЛІЄНТА (завжди відкритий) ===
+                Section::make('Підсумок для клієнта')
+                    ->description('Цю суму озвучуємо клієнту — з усіма знижками і доплатою за дальню доставку.')
+                    ->columns(2)
+                    ->visible(fn ($record) => $record !== null)
+                    ->schema([
                         Placeholder::make('extra_delivery_total')
                             ->label('Доплата за дальні дні')
                             ->content(function ($record) {
-                                if (!$record) return '—';
                                 $sum = (float) $record->orderDays()->sum('extra_delivery_fee');
                                 return $sum > 0
                                     ? '+ ' . number_format($sum, 2, '.', ' ') . ' ₴'
                                     : '—';
-                            })
-                            ->helperText('Сума по всіх днях, де відмічена «дальня доставка».'),
+                            }),
 
                         Placeholder::make('full_price_with_delivery')
-                            ->label('Повна вартість для клієнта')
+                            ->label('💰 Повна вартість для клієнта')
                             ->content(function ($record) {
-                                if (!$record) return '—';
                                 $extra = (float) $record->orderDays()->sum('extra_delivery_fee');
                                 $full  = (float) $record->final_price + $extra;
                                 return number_format($full, 2, '.', ' ') . ' ₴';
-                            })
-                            ->helperText('final_price + доплати за дальні дні. Цю суму озвучуємо клієнту.'),
+                            }),
                     ]),
 
                 // === СЕКЦІЯ 4: ДОДАТКОВІ РАЦІОНИ (сімейні замовлення) ===
@@ -493,11 +496,21 @@ class OrderResource extends Resource
                 TextColumn::make('final_price')
                     ->label('До сплати')
                     ->money('UAH')
+                    ->state(function ($record) {
+                        $extra = (float) $record->orderDays()->sum('extra_delivery_fee');
+                        return (float) $record->final_price + $extra;
+                    })
                     ->description(function ($record) {
                         $totalDiscount = (float) $record->total_price - (float) $record->final_price;
-                        return $totalDiscount > 0
-                            ? '−₴' . number_format($totalDiscount, 2) . ' знижка'
-                            : null;
+                        $extra         = (float) $record->orderDays()->sum('extra_delivery_fee');
+                        $parts = [];
+                        if ($totalDiscount > 0) {
+                            $parts[] = '−₴' . number_format($totalDiscount, 2) . ' знижка';
+                        }
+                        if ($extra > 0) {
+                            $parts[] = '+₴' . number_format($extra, 2) . ' далека';
+                        }
+                        return $parts ? implode(' · ', $parts) : null;
                     })
                     ->sortable(),
 
