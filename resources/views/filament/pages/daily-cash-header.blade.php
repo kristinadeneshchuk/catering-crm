@@ -44,7 +44,7 @@
 
     {{-- Залишки на рахунках + прихід сьогодні по рахунках --}}
     <div style="background:#18181b;border:1px solid #27272a;border-radius:14px;padding:14px 18px;margin-bottom:12px;">
-        <div class="dcr-tile-label">Залишки на рахунках (зараз)</div>
+        <div class="dcr-tile-label">Залишки на рахунках (за весь час)</div>
         <div style="display:flex;flex-wrap:wrap;gap:20px 26px;font-size:13px;">
             @foreach ($summary['accounts']['rows'] as $acc)
                 <div>
