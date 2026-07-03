@@ -85,20 +85,38 @@ class OrderResource extends Resource
                             ->dehydrated() 
                             ->helperText('Розраховується автоматично'),
 
-                        Select::make('tariff_id')
-                            ->label('Тариф')
-                            ->relationship('tariff', 'name', fn (Builder $query) => $query->where('is_active', true))
-                            // 🔥 Динамічна назва проєкту з бази (або резервна зі старого поля)
-                            ->getOptionLabelFromRecordUsing(fn ($record) =>
-                                "{$record->name} (" . ($record->projectData?->name ?? $record->project) . ")"
-                            )
+                        Select::make('project')
+                            ->label('Бренд')
+                            ->options(fn () => \App\Models\Project::where('is_active', true)
+                                ->orderBy('name')->pluck('name', 'slug'))
                             ->required()
                             ->live()
+                            ->searchable()
+                            ->preload()
+                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                // Змінили бренд — скидаємо тариф, бо його треба обрати заново з нового переліку
+                                if ($get('tariff_id')) {
+                                    $tariff = Tariff::find($get('tariff_id'));
+                                    if ($tariff && $tariff->project !== $state) {
+                                        $set('tariff_id', null);
+                                    }
+                                }
+                            }),
+
+                        Select::make('tariff_id')
+                            ->label('Тариф')
+                            ->relationship('tariff', 'name', fn (Builder $query, Get $get) =>
+                                $query->where('is_active', true)
+                                      ->when($get('project'), fn ($q, $p) => $q->where('project', $p))
+                            )
+                            ->getOptionLabelFromRecordUsing(fn ($record) => $record->name)
+                            ->required()
+                            ->live()
+                            ->disabled(fn (Get $get) => empty($get('project')))
+                            ->helperText(fn (Get $get) => empty($get('project')) ? 'Спочатку оберіть бренд' : null)
                             ->afterStateUpdated(function ($state, Set $set, Get $get) {
                                 $tariff = Tariff::find($state);
                                 if ($tariff) {
-                                    // Оновлюємо проєкт при зміні тарифу
-                                    $set('project', $tariff->project);
                                     // Підставляємо план меню з тарифу (перезаписує системний дефолт);
                                     // якщо у тарифа план не вказано — лишаємо поточне значення.
                                     if (!empty($tariff->default_menu_plan_id)) {
@@ -149,10 +167,6 @@ class OrderResource extends Resource
 
                         Hidden::make('status')
                             ->default('new'),
-
-                        // 🔥 Оновлено на новий системний slug
-                        Hidden::make('project')
-                            ->default(null),
                     ]),
 
                 // === СЕКЦІЯ 2: Дати та Логістика ===
@@ -340,23 +354,36 @@ class OrderResource extends Resource
                                 // ID дочірнього замовлення (для редагування)
                                 Hidden::make('order_id'),
 
-                                Select::make('tariff_id')
-                                    ->label('Тариф')
-                                    ->options(fn () => Tariff::where('is_active', true)
-                                        ->get()
-                                        ->mapWithKeys(fn ($t) => [
-                                            $t->id => $t->name . ' (' . ($t->projectData?->name ?? $t->project) . ')'
-                                        ]))
+                                Select::make('project')
+                                    ->label('Бренд')
+                                    ->options(fn () => \App\Models\Project::where('is_active', true)
+                                        ->orderBy('name')->pluck('name', 'slug'))
                                     ->required()
                                     ->live()
                                     ->searchable()
                                     ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                        $tariff = Tariff::find($state);
-                                        if ($tariff) {
-                                            $set('project', $tariff->project);
-                                            if (!empty($tariff->default_menu_plan_id)) {
-                                                $set('menu_plan_id', $tariff->default_menu_plan_id);
+                                        if ($get('tariff_id')) {
+                                            $tariff = Tariff::find($get('tariff_id'));
+                                            if ($tariff && $tariff->project !== $state) {
+                                                $set('tariff_id', null);
                                             }
+                                        }
+                                    }),
+
+                                Select::make('tariff_id')
+                                    ->label('Тариф')
+                                    ->options(fn (Get $get) => Tariff::where('is_active', true)
+                                        ->when($get('project'), fn ($q, $p) => $q->where('project', $p))
+                                        ->pluck('name', 'id'))
+                                    ->required()
+                                    ->live()
+                                    ->searchable()
+                                    ->disabled(fn (Get $get) => empty($get('project')))
+                                    ->helperText(fn (Get $get) => empty($get('project')) ? 'Спочатку оберіть бренд' : null)
+                                    ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                        $tariff = Tariff::find($state);
+                                        if ($tariff && !empty($tariff->default_menu_plan_id)) {
+                                            $set('menu_plan_id', $tariff->default_menu_plan_id);
                                         }
                                         static::updateRationPrice($state, (int) $get('calories'), $set);
                                     }),
@@ -409,8 +436,6 @@ class OrderResource extends Resource
                                     ->default('active')
                                     ->required()
                                     ->helperText('На паузі — не їде в логістику і не фасується'),
-
-                                Hidden::make('project'),
                             ])
                             ->columns(5)
                             ->dehydrated(false),
