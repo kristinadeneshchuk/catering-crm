@@ -3,52 +3,72 @@
     $fmt = fn ($v) => number_format((float) $v, 0, '.', ' ');
 @endphp
 
-<div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-gray-900">
-    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div class="text-sm font-semibold text-gray-700 dark:text-gray-200">
-            🧾 Каса за день
+@push('styles')
+<style>
+    .dcr-wrap { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif; }
+    .dcr-wrap * { box-sizing: border-box; }
+    .dcr-input {
+        background: #27272a;
+        border: 1.5px solid #3f3f46;
+        border-radius: 10px;
+        padding: 8px 14px;
+        color: #f4f4f5;
+        font-size: 13px;
+        font-weight: 600;
+        outline: none;
+        cursor: pointer;
+        color-scheme: dark;
+    }
+    .dcr-input:focus { border-color: #3b82f6; }
+    .dcr-tile-label {
+        color:#71717a;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;
+    }
+    .dcr-tile-value { font-size:22px;font-weight:900;line-height:1; }
+    .dcr-tile-hint { color:#52525b;font-size:11px;margin-top:6px; }
+</style>
+@endpush
+
+<div class="dcr-wrap" style="margin-bottom:18px;">
+
+    {{-- Шапка з датою --}}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:12px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:18px;">🧾</span>
+            <h2 style="font-size:16px;font-weight:800;color:#f4f4f5;margin:0;">Каса за день</h2>
         </div>
-        <div class="flex items-center gap-2">
-            <label class="text-xs text-gray-500 dark:text-gray-400">Дата:</label>
-            <input type="date" wire:model.live="cashDate"
-                   class="rounded-md border-gray-300 bg-white px-2 py-1 text-sm dark:border-white/10 dark:bg-gray-800 dark:text-gray-100" />
+        <div style="display:flex;align-items:center;gap:8px;">
+            <span style="color:#71717a;font-size:12px;">Дата:</span>
+            <input type="date" wire:model.live="cashDate" class="dcr-input">
         </div>
     </div>
 
-    {{-- Рахунки: залишки прямо зараз (не на дату — це поточний стан кас) --}}
-    <div class="mb-4 rounded-lg bg-gray-50 p-3 dark:bg-white/5">
-        <div class="mb-1 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-            Залишки на рахунках (зараз)
-        </div>
-        <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm">
+    {{-- Залишки на рахунках + прихід сьогодні по рахунках --}}
+    <div style="background:#18181b;border:1px solid #27272a;border-radius:14px;padding:14px 18px;margin-bottom:12px;">
+        <div class="dcr-tile-label">Залишки на рахунках (зараз)</div>
+        <div style="display:flex;flex-wrap:wrap;gap:20px 26px;font-size:13px;">
             @foreach ($summary['accounts']['rows'] as $acc)
-                <div class="whitespace-nowrap">
-                    <span class="text-gray-500 dark:text-gray-400">{{ $acc['name'] }}:</span>
-                    <span class="font-semibold {{ $acc['balance'] < 0 ? 'text-rose-600' : 'text-gray-900 dark:text-gray-100' }}">
+                <div>
+                    <span style="color:#71717a;">{{ $acc['name'] }}:</span>
+                    <span style="font-weight:700;color:{{ $acc['balance'] < 0 ? '#f87171' : '#f4f4f5' }};">
                         {{ $fmt($acc['balance']) }} ₴
                     </span>
                 </div>
             @endforeach
-            <div class="whitespace-nowrap border-l border-gray-300 pl-4 dark:border-white/20">
-                <span class="text-gray-500 dark:text-gray-400">Разом:</span>
-                <span class="font-bold text-gray-900 dark:text-gray-100">{{ $fmt($summary['accounts']['total']) }} ₴</span>
+            <div style="border-left:1px solid #3f3f46;padding-left:20px;">
+                <span style="color:#71717a;">Разом:</span>
+                <span style="font-weight:900;color:#f4f4f5;">{{ $fmt($summary['accounts']['total']) }} ₴</span>
             </div>
         </div>
 
-        {{-- Розбивка приходу дня по рахунках — для звіряння готівки/картки --}}
         @if (! empty($summary['incomeByAccount']))
-            <div class="mt-2 border-t border-gray-200 pt-2 dark:border-white/10">
-                <div class="mb-1 text-xs uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-                    Прийшло сьогодні
-                </div>
-                <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm">
+            <div style="border-top:1px solid #27272a;margin-top:12px;padding-top:12px;">
+                <div class="dcr-tile-label" style="color:#34d399;">Прийшло сьогодні</div>
+                <div style="display:flex;flex-wrap:wrap;gap:20px 26px;font-size:13px;">
                     @foreach ($summary['incomeByAccount'] as $row)
-                        <div class="whitespace-nowrap">
-                            <span class="text-gray-500 dark:text-gray-400">{{ $row['name'] }}:</span>
-                            <span class="font-semibold text-emerald-700 dark:text-emerald-300">
-                                +{{ $fmt($row['total']) }} ₴
-                            </span>
-                            <span class="text-xs text-gray-400">({{ $row['count'] }})</span>
+                        <div>
+                            <span style="color:#71717a;">{{ $row['name'] }}:</span>
+                            <span style="font-weight:700;color:#34d399;">+{{ $fmt($row['total']) }} ₴</span>
+                            <span style="color:#52525b;font-size:11px;">({{ $row['count'] }})</span>
                         </div>
                     @endforeach
                 </div>
@@ -56,75 +76,80 @@
         @endif
     </div>
 
-    {{-- Рух дня — 4 плитки --}}
-    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-500/30 dark:bg-emerald-500/10">
-            <div class="text-xs text-emerald-800 dark:text-emerald-300">📥 Прихід дня</div>
-            <div class="mt-1 text-lg font-bold text-emerald-700 dark:text-emerald-300">+{{ $fmt($summary['income']['sum']) }} ₴</div>
-            <div class="text-xs text-emerald-700/70 dark:text-emerald-300/70">{{ $summary['income']['count'] }} оплат</div>
+    {{-- 4 плитки руху дня --}}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3" style="margin-bottom:12px;">
+        {{-- Прихід --}}
+        <div style="background:#18181b;border:1px solid #065f46;border-radius:14px;padding:16px 18px;">
+            <p class="dcr-tile-label">📥 Прихід дня</p>
+            <p class="dcr-tile-value" style="color:#34d399;">+{{ $fmt($summary['income']['sum']) }} ₴</p>
+            <p class="dcr-tile-hint">{{ $summary['income']['count'] }} оплат</p>
         </div>
-        <div class="rounded-lg border border-rose-200 bg-rose-50 p-3 dark:border-rose-500/30 dark:bg-rose-500/10">
-            <div class="text-xs text-rose-800 dark:text-rose-300">📤 Витрати дня</div>
-            <div class="mt-1 text-lg font-bold text-rose-700 dark:text-rose-300">−{{ $fmt($summary['expenses']['sum']) }} ₴</div>
-            <div class="text-xs text-rose-700/70 dark:text-rose-300/70">{{ $summary['expenses']['count'] }} шт.</div>
+        {{-- Витрати --}}
+        <div style="background:#18181b;border:1px solid #7f1d1d;border-radius:14px;padding:16px 18px;">
+            <p class="dcr-tile-label">📤 Витрати дня</p>
+            <p class="dcr-tile-value" style="color:#f87171;">−{{ $fmt($summary['expenses']['sum']) }} ₴</p>
+            <p class="dcr-tile-hint">{{ $summary['expenses']['count'] }} шт.</p>
         </div>
-        <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
-            <div class="text-xs text-amber-800 dark:text-amber-300">💰 Виплати ЗП</div>
-            <div class="mt-1 text-lg font-bold text-amber-700 dark:text-amber-300">−{{ $fmt($summary['salaries']['sum']) }} ₴</div>
-            <div class="text-xs text-amber-700/70 dark:text-amber-300/70">{{ $summary['salaries']['count'] }} шт.</div>
+        {{-- Виплати ЗП --}}
+        <div style="background:#18181b;border:1px solid #92400e;border-radius:14px;padding:16px 18px;">
+            <p class="dcr-tile-label">💰 Виплати ЗП</p>
+            <p class="dcr-tile-value" style="color:#fbbf24;">−{{ $fmt($summary['salaries']['sum']) }} ₴</p>
+            <p class="dcr-tile-hint">{{ $summary['salaries']['count'] }} шт.</p>
         </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-500/30 dark:bg-slate-500/10">
-            <div class="text-xs text-slate-800 dark:text-slate-300">🏭 Закупівлі</div>
-            <div class="mt-1 text-lg font-bold text-slate-700 dark:text-slate-300">−{{ $fmt($summary['purchases']['sum']) }} ₴</div>
-            <div class="text-xs text-slate-700/70 dark:text-slate-300/70">{{ $summary['purchases']['count'] }} шт.</div>
+        {{-- Закупівлі --}}
+        <div style="background:#18181b;border:1px solid #334155;border-radius:14px;padding:16px 18px;">
+            <p class="dcr-tile-label">🏭 Закупівлі</p>
+            <p class="dcr-tile-value" style="color:#94a3b8;">−{{ $fmt($summary['purchases']['sum']) }} ₴</p>
+            <p class="dcr-tile-hint">{{ $summary['purchases']['count'] }} шт.</p>
         </div>
     </div>
 
-    {{-- ФОП і неоплачені --}}
-    <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <div class="rounded-lg border border-indigo-200 bg-indigo-50 p-3 dark:border-indigo-500/30 dark:bg-indigo-500/10">
-            <div class="flex items-center justify-between">
-                <div class="text-xs text-indigo-800 dark:text-indigo-300">📊 ФОП нараховано за день</div>
-                <div class="text-lg font-bold text-indigo-700 dark:text-indigo-300">−{{ $fmt($summary['fop']['total']) }} ₴</div>
+    {{-- ФОП + Не оплатили --}}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div style="background:#18181b;border:1px solid #1e3a5f;border-radius:14px;padding:16px 18px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <p class="dcr-tile-label" style="margin-bottom:0;">📊 ФОП нараховано за день</p>
+                <p class="dcr-tile-value" style="color:#60a5fa;">−{{ $fmt($summary['fop']['total']) }} ₴</p>
             </div>
-            <div class="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-indigo-700/80 dark:text-indigo-300/80">
-                <span>Кухня: <b>{{ $fmt($summary['fop']['kitchen']) }} ₴</b></span>
-                <span>Курʼєри: <b>{{ $fmt($summary['fop']['couriers']) }} ₴</b></span>
-                <span>Інше: <b>{{ $fmt($summary['fop']['other']) }} ₴</b></span>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:#a1a1aa;margin-top:8px;">
+                <span>Кухня: <b style="color:#f4f4f5;">{{ $fmt($summary['fop']['kitchen']) }} ₴</b></span>
+                <span>Курʼєри: <b style="color:#f4f4f5;">{{ $fmt($summary['fop']['couriers']) }} ₴</b></span>
+                <span>Інше: <b style="color:#f4f4f5;">{{ $fmt($summary['fop']['other']) }} ₴</b></span>
             </div>
         </div>
 
         <div x-data="{ open: false }"
-             class="rounded-lg border border-orange-200 bg-orange-50 p-3 dark:border-orange-500/30 dark:bg-orange-500/10">
+             style="background:#18181b;border:1px solid #7c2d12;border-radius:14px;padding:16px 18px;">
             <button type="button" @click="open = !open"
-                    class="flex w-full items-center justify-between">
-                <div class="text-xs text-orange-800 dark:text-orange-300">
+                    style="width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:0;cursor:pointer;padding:0;">
+                <p class="dcr-tile-label" style="margin-bottom:0;">
                     ⚠️ Не оплатили сьогодні
                     @if ($summary['unpaid']['count'] > 0)
-                        · <b>{{ $summary['unpaid']['count'] }}</b> клієнт(и)
+                        · <span style="color:#f4f4f5;">{{ $summary['unpaid']['count'] }}</span> клієнт(и)
                     @endif
-                </div>
-                <div class="text-lg font-bold text-orange-700 dark:text-orange-300">
+                </p>
+                <p class="dcr-tile-value" style="color:#fb923c;">
                     {{ $fmt($summary['unpaid']['sum']) }} ₴
                     @if ($summary['unpaid']['count'] > 0)
-                        <span class="ml-1 text-xs" x-text="open ? '▲' : '▼'"></span>
+                        <span style="font-size:11px;color:#71717a;margin-left:4px;" x-text="open ? '▲' : '▼'"></span>
                     @endif
-                </div>
+                </p>
             </button>
+
             @if ($summary['unpaid']['count'] > 0)
-                <div x-show="open" x-transition class="mt-2 max-h-56 overflow-auto text-xs">
-                    <table class="w-full">
+                <div x-show="open" x-transition style="margin-top:12px;max-height:220px;overflow:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:12px;">
                         <tbody>
                         @foreach ($summary['unpaid']['rows'] as $row)
-                            <tr class="border-t border-orange-200/50 dark:border-orange-500/20">
-                                <td class="py-1 pr-2">
+                            <tr style="border-top:1px solid #27272a;">
+                                <td style="padding:6px 0;">
                                     <a href="{{ \App\Filament\Resources\ClientResource::getUrl('edit', ['record' => $row['id']]) }}"
-                                       class="font-medium text-orange-800 hover:underline dark:text-orange-200">
+                                       style="color:#f4f4f5;text-decoration:none;font-weight:600;">
                                         {{ $row['name'] }}
                                     </a>
                                 </td>
-                                <td class="py-1 pr-2 text-orange-700/70 dark:text-orange-300/70">{{ $row['phone'] }}</td>
-                                <td class="py-1 text-right font-semibold text-rose-700 dark:text-rose-300">
+                                <td style="padding:6px 8px;color:#71717a;">{{ $row['phone'] }}</td>
+                                <td style="padding:6px 0;text-align:right;color:#f87171;font-weight:700;">
                                     {{ $fmt($row['debt']) }} ₴
                                 </td>
                             </tr>
