@@ -61,16 +61,27 @@
         </div>
 
         @if (! empty($summary['incomeByAccount']))
+            @php $totalInflow = array_sum(array_column($summary['incomeByAccount'], 'total')); @endphp
             <div style="border-top:1px solid #27272a;margin-top:12px;padding-top:12px;">
                 <div class="dcr-tile-label" style="color:#34d399;">Прийшло сьогодні</div>
                 <div style="display:flex;flex-wrap:wrap;gap:20px 26px;font-size:13px;">
                     @foreach ($summary['incomeByAccount'] as $row)
                         <div>
                             <span style="color:#71717a;">{{ $row['name'] }}:</span>
-                            <span style="font-weight:700;color:#34d399;">+{{ $fmt($row['total']) }} ₴</span>
-                            <span style="color:#52525b;font-size:11px;">({{ $row['count'] }})</span>
+                            @if ($row['total'] > 0)
+                                <span style="font-weight:700;color:#34d399;">+{{ $fmt($row['total']) }} ₴</span>
+                                <span style="color:#52525b;font-size:11px;">({{ $row['count'] }})</span>
+                            @else
+                                <span style="font-weight:600;color:#52525b;">0 ₴</span>
+                            @endif
                         </div>
                     @endforeach
+                    <div style="border-left:1px solid #3f3f46;padding-left:20px;">
+                        <span style="color:#71717a;">Разом:</span>
+                        <span style="font-weight:900;color:{{ $totalInflow > 0 ? '#34d399' : '#71717a' }};">
+                            {{ $totalInflow > 0 ? '+' : '' }}{{ $fmt($totalInflow) }} ₴
+                        </span>
+                    </div>
                 </div>
             </div>
         @endif

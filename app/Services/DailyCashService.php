@@ -78,30 +78,30 @@ class DailyCashService
     /**
      * Прихід дня в розрізі рахунків — щоб менеджер міг звіряти
      * «скільки готівки, скільки на картку, скільки на моно» окремо.
-     * Правила відбору — ті самі що в income().
+     * Показуємо ВСІ рахунки навіть з нулями — щоб порядок і склад збігалися
+     * зі стрічкою «Залишки на рахунках» вище.
      */
     protected function incomeByAccount(string $ymd): array
     {
-        $rows = Transaction::whereDate('date', $ymd)
+        $agg = Transaction::whereDate('date', $ymd)
             ->where('type', 'income')
             ->whereNotNull('account_id')
             ->whereNull('employee_id')
             ->whereNull('stock_document_id')
             ->selectRaw('account_id, SUM(amount) as total, COUNT(*) as cnt')
             ->groupBy('account_id')
-            ->with('account:id,name')
-            ->orderByDesc('total')
             ->get()
-            ->map(fn ($r) => [
-                'account_id' => $r->account_id,
-                'name'       => $r->account?->name ?? '—',
-                'total'      => (float) $r->total,
-                'count'      => (int) $r->cnt,
+            ->keyBy('account_id');
+
+        return Account::orderBy('is_default', 'desc')->orderBy('name')->get()
+            ->map(fn ($a) => [
+                'account_id' => $a->id,
+                'name'       => $a->name,
+                'total'      => (float) ($agg[$a->id]->total ?? 0),
+                'count'      => (int)   ($agg[$a->id]->cnt   ?? 0),
             ])
             ->values()
             ->all();
-
-        return $rows;
     }
 
     /**
