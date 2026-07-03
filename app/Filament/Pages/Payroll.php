@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\CourierMileageLog;
 use App\Models\Employee;
+use App\Models\EmployeeBonus;
 use App\Models\EmployeePenalty;
 use App\Models\EmployeeShift;
 use App\Models\OrderDay;
@@ -89,6 +90,7 @@ class Payroll extends Page
         $movementIds = collect()
             ->merge(EmployeeShift::whereBetween('date', [$start, $end])->pluck('employee_id'))
             ->merge(EmployeePenalty::whereBetween('date', [$start, $end])->pluck('employee_id'))
+            ->merge(EmployeeBonus::whereBetween('date', [$start, $end])->pluck('employee_id'))
             ->merge(CourierMileageLog::whereBetween('date', [$start, $end])->pluck('employee_id'))
             ->unique();
 
@@ -112,6 +114,11 @@ class Payroll extends Page
 
         // Штрафи на період
         $penaltiesByEmp = EmployeePenalty::whereBetween('date', [$start, $end])
+            ->get()
+            ->groupBy('employee_id');
+
+        // Премії на період (додаються до колонки «Бонус»)
+        $bonusesByEmp = EmployeeBonus::whereBetween('date', [$start, $end])
             ->get()
             ->groupBy('employee_id');
 
@@ -160,6 +167,9 @@ class Payroll extends Page
                     $salary += $salaryOnDay / $workDays;
                 }
             }
+
+            // Премії періоду — плюсуємо у бонус (окремої колонки нема)
+            $bonus += (float) ($bonusesByEmp->get($emp->id, collect())->sum('amount'));
 
             // Штраф
             $penaltyAmount = (float) ($penaltiesByEmp->get($emp->id, collect())->sum('amount'));

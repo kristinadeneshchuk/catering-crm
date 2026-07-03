@@ -100,6 +100,12 @@ class AnalyticsController extends Controller
             ->get()
             ->groupBy('date');
 
+        // Премії за період — теж ФОП, група — за посадою співробітника
+        $allBonuses = \App\Models\EmployeeBonus::whereBetween('date', [$startDate, $endDate])
+            ->with('employee')
+            ->get()
+            ->groupBy(fn ($b) => \Carbon\Carbon::parse($b->date)->format('Y-m-d'));
+
         // Бакети ФОП тепер беремо з Position.group:
         //   kitchen   → ФОП — кухня (тільки кухарі)
         //   couriers  → ФОП — курʼєри
@@ -209,6 +215,22 @@ class AnalyticsController extends Controller
                     }
                     // рознесення цієї зміни по брендах
                     $attributeSalary($shift->employee, $rate);
+                }
+            }
+            if ($allBonuses->has($ymd)) {
+                foreach ($allBonuses->get($ymd) as $bonusRec) {
+                    $amount = (float) $bonusRec->amount;
+                    if ($amount <= 0) continue;
+                    $dailyFop += $amount;
+                    $group = $positionGroup[$bonusRec->employee?->position] ?? 'other';
+                    if ($group === 'kitchen') {
+                        $dailyFopKitchen += $amount;
+                    } elseif ($group === 'couriers') {
+                        $dailyFopCouriers += $amount;
+                    } else {
+                        $dailyFopOther += $amount;
+                    }
+                    $attributeSalary($bonusRec->employee, $amount);
                 }
             }
             $fopCount[$ymd]          = round($dailyFop);

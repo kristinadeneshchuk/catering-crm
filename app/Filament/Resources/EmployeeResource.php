@@ -321,6 +321,7 @@ class EmployeeResource extends Resource
     {
         return [
             RelationManagers\PenaltiesRelationManager::class,
+            RelationManagers\BonusesRelationManager::class,
         ];
     }
 

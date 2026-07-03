@@ -65,6 +65,11 @@ class Employee extends Model
         return $this->hasMany(EmployeePenalty::class);
     }
 
+    public function bonuses(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(EmployeeBonus::class);
+    }
+
     public function mileageLogs(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(CourierMileageLog::class);
@@ -98,6 +103,16 @@ class Employee extends Model
                 'amount' => -(float) $p->amount,
                 'kind'   => 'penalty',
                 'label'  => 'Штраф' . ($p->reason ? ': ' . $p->reason : ''),
+            ];
+        }
+
+        // Премії
+        foreach ($this->bonuses()->orderBy('date', 'desc')->get() as $b) {
+            $events[] = [
+                'date'   => $b->date,
+                'amount' => (float) $b->amount,
+                'kind'   => 'bonus',
+                'label'  => 'Премія' . ($b->reason ? ': ' . $b->reason : ''),
             ];
         }
 
