@@ -247,6 +247,15 @@ class EmployeeResource extends Resource
                             ->default(fn () => Account::where('is_default', true)->value('id') ?? Account::orderBy('id')->value('id'))
                             ->placeholder('Виберіть касу або картку'),
 
+                        \Filament\Forms\Components\DatePicker::make('date')
+                            ->label('Дата виплати')
+                            ->required()
+                            ->native(false)
+                            ->displayFormat('d.m.Y')
+                            ->default(now())
+                            ->maxDate(now())
+                            ->helperText('Можна поставити минулу дату — щоб закрити борг попередніх місяців.'),
+
                         TextInput::make('amount')
                             ->label('Сума до виплати')
                             ->numeric()
@@ -269,6 +278,7 @@ class EmployeeResource extends Resource
                             $amount  = (float) $data['amount'];
                             $account = Account::findOrFail($data['account_id']);
                             $comment = $data['comment'] ?? null;
+                            $date    = ! empty($data['date']) ? \Illuminate\Support\Carbon::parse($data['date']) : now();
 
                             $record->decrement('balance', $amount);
 
@@ -279,7 +289,7 @@ class EmployeeResource extends Resource
                                 'amount'      => $amount,
                                 'type'        => 'expense',
                                 'category'    => 'Виплата ЗП',
-                                'date'        => now(),
+                                'date'        => $date,
                                 'comment'     => $comment ?: "Виплата ЗП: {$record->name}",
                                 'user_id'     => auth()->id(),
                             ]);
