@@ -172,7 +172,14 @@ class TransactionResource extends Resource
                     ->relationship('account', 'name'),
             ])
             ->actions([
-                Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
+                Tables\Actions\EditAction::make()
+                    ->label('')
+                    ->tooltip(fn (Transaction $record): string =>
+                        static::canManagerEdit($record) ? 'Змінити' : 'Тільки адмін може редагувати минулі транзакції'
+                    )
+                    ->hidden(fn (Transaction $record): bool =>
+                        auth()->user()?->role === 'manager' && ! static::canManagerEdit($record)
+                    ),
 
                 DeleteAction::make()
                     ->label('Скасувати')
@@ -195,5 +202,25 @@ class TransactionResource extends Resource
             'create' => Pages\CreateTransaction::route('/create'),
             'edit' => Pages\EditTransaction::route('/{record}/edit'),
         ];
+    }
+
+    /**
+     * Менеджер може редагувати тільки сьогоднішні грошові транзакції.
+     * Бухгалтерські записи (без account_id — «Нове замовлення / Зміна замовлення»)
+     * автоматично створюються Order-моделлю, вручну їх краще не чіпати.
+     * Адмін — будь-які. Використовується і в списку, і в EditTransaction.
+     */
+    public static function canManagerEdit(Transaction $record): bool
+    {
+        if (auth()->user()?->role === 'admin') {
+            return true;
+        }
+        if (auth()->user()?->role === 'manager') {
+            $recordDate = \Illuminate\Support\Carbon::parse($record->date)->format('Y-m-d');
+            $isToday    = $recordDate === \Illuminate\Support\Carbon::now()->format('Y-m-d');
+            $isMoneyTx  = ! is_null($record->account_id);
+            return $isToday && $isMoneyTx;
+        }
+        return false;
     }
 }
