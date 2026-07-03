@@ -42,21 +42,40 @@
         </div>
     </div>
 
-    {{-- Залишки на рахунках + прихід сьогодні по рахунках --}}
+    {{-- Рух по рахунках за тиждень (7 днів включно) + прихід сьогодні --}}
+    @php
+        $weekFrom = \Carbon\Carbon::parse($summary['week_from'])->format('d.m');
+        $weekTo   = \Carbon\Carbon::parse($summary['week_to'])->format('d.m');
+        $weekNetTotal = array_sum(array_column($summary['weekNetByAccount'], 'net'));
+        $weekInTotal  = array_sum(array_column($summary['weekNetByAccount'], 'in'));
+        $weekOutTotal = array_sum(array_column($summary['weekNetByAccount'], 'out'));
+    @endphp
     <div style="background:#18181b;border:1px solid #27272a;border-radius:14px;padding:14px 18px;margin-bottom:12px;">
-        <div class="dcr-tile-label">Залишки на рахунках (за весь час)</div>
-        <div style="display:flex;flex-wrap:wrap;gap:20px 26px;font-size:13px;">
-            @foreach ($summary['accounts']['rows'] as $acc)
+        <div class="dcr-tile-label">Рух по рахунках за тиждень ({{ $weekFrom }} — {{ $weekTo }})</div>
+        <div style="display:flex;flex-wrap:wrap;gap:16px 26px;font-size:13px;">
+            @foreach ($summary['weekNetByAccount'] as $row)
                 <div>
-                    <span style="color:#71717a;">{{ $acc['name'] }}:</span>
-                    <span style="font-weight:700;color:{{ $acc['balance'] < 0 ? '#f87171' : '#f4f4f5' }};">
-                        {{ $fmt($acc['balance']) }} ₴
-                    </span>
+                    <div style="color:#71717a;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">{{ $row['name'] }}</div>
+                    <div style="font-weight:800;color:{{ $row['net'] >= 0 ? '#34d399' : '#f87171' }};font-size:15px;line-height:1.1;">
+                        {{ $row['net'] >= 0 ? '+' : '−' }}{{ $fmt(abs($row['net'])) }} ₴
+                    </div>
+                    <div style="font-size:11px;color:#52525b;">
+                        <span style="color:#34d399;">+{{ $fmt($row['in']) }}</span>
+                        <span> / </span>
+                        <span style="color:#f87171;">−{{ $fmt($row['out']) }}</span>
+                    </div>
                 </div>
             @endforeach
             <div style="border-left:1px solid #3f3f46;padding-left:20px;">
-                <span style="color:#71717a;">Разом:</span>
-                <span style="font-weight:900;color:#f4f4f5;">{{ $fmt($summary['accounts']['total']) }} ₴</span>
+                <div style="color:#71717a;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Разом</div>
+                <div style="font-weight:900;color:{{ $weekNetTotal >= 0 ? '#34d399' : '#f87171' }};font-size:15px;line-height:1.1;">
+                    {{ $weekNetTotal >= 0 ? '+' : '−' }}{{ $fmt(abs($weekNetTotal)) }} ₴
+                </div>
+                <div style="font-size:11px;color:#52525b;">
+                    <span style="color:#34d399;">+{{ $fmt($weekInTotal) }}</span>
+                    <span> / </span>
+                    <span style="color:#f87171;">−{{ $fmt($weekOutTotal) }}</span>
+                </div>
             </div>
         </div>
 

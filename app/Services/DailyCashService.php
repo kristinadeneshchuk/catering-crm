@@ -25,18 +25,21 @@ class DailyCashService
 {
     public function summarize(string $date): array
     {
-        $ymd = Carbon::parse($date)->format('Y-m-d');
+        $ymd      = Carbon::parse($date)->format('Y-m-d');
+        $weekFrom = Carbon::parse($ymd)->subDays(6)->format('Y-m-d');
 
         return [
-            'date'             => $ymd,
-            'accounts'         => $this->accounts(),
-            'income'           => $this->income($ymd),
-            'incomeByAccount'  => $this->incomeByAccount($ymd),
-            'expenses'         => $this->generalExpenses($ymd),
-            'salaries'         => $this->salaryPayouts($ymd),
-            'purchases'        => $this->purchases($ymd),
-            'fop'              => $this->fopAccrued($ymd),
-            'unpaid'           => $this->unpaidClients($ymd),
+            'date'               => $ymd,
+            'week_from'          => $weekFrom,
+            'week_to'            => $ymd,
+            'income'             => $this->income($ymd),
+            'incomeByAccount'    => $this->incomeByAccount($ymd),
+            'weekNetByAccount'   => $this->netByAccountRange($weekFrom, $ymd),
+            'expenses'           => $this->generalExpenses($ymd),
+            'salaries'           => $this->salaryPayouts($ymd),
+            'purchases'          => $this->purchases($ymd),
+            'fop'                => $this->fopAccrued($ymd),
+            'unpaid'             => $this->unpaidClients($ymd),
         ];
     }
 
@@ -76,14 +79,19 @@ class DailyCashService
     }
 
     /**
-     * Прихід дня в розрізі рахунків — щоб менеджер міг звіряти
-     * «скільки готівки, скільки на картку, скільки на моно» окремо.
+     * Прихід у розрізі рахунків за один день.
      * Показуємо ВСІ рахунки навіть з нулями — щоб порядок і склад збігалися
-     * зі стрічкою «Залишки на рахунках» вище.
+     * з тижневим розрізом.
      */
     protected function incomeByAccount(string $ymd): array
     {
-        $agg = Transaction::whereDate('date', $ymd)
+        return $this->incomeByAccountRange($ymd, $ymd);
+    }
+
+    /** Прихід у розрізі рахунків за період (включно). */
+    protected function incomeByAccountRange(string $from, string $to): array
+    {
+        $agg = Transaction::whereBetween('date', [$from, $to])
             ->where('type', 'income')
             ->whereNotNull('account_id')
             ->whereNull('employee_id')
@@ -100,6 +108,43 @@ class DailyCashService
                 'total'      => (float) ($agg[$a->id]->total ?? 0),
                 'count'      => (int)   ($agg[$a->id]->cnt   ?? 0),
             ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Чистий рух по рахунках за період: усі income (+) мінус усі expense/refund (−).
+     * Показує на скільки виріс/впав кожен рахунок за тиждень (склад «прихід − усі списання»).
+     * ВРАХОВУЄМО і ЗП, і закупівлі — це реальні списання з рахунку.
+     */
+    protected function netByAccountRange(string $from, string $to): array
+    {
+        $income = Transaction::whereBetween('date', [$from, $to])
+            ->where('type', 'income')
+            ->whereNotNull('account_id')
+            ->selectRaw('account_id, SUM(amount) as total')
+            ->groupBy('account_id')
+            ->pluck('total', 'account_id');
+
+        $outgoing = Transaction::whereBetween('date', [$from, $to])
+            ->whereIn('type', ['expense', 'refund'])
+            ->whereNotNull('account_id')
+            ->selectRaw('account_id, SUM(amount) as total')
+            ->groupBy('account_id')
+            ->pluck('total', 'account_id');
+
+        return Account::orderBy('is_default', 'desc')->orderBy('name')->get()
+            ->map(function ($a) use ($income, $outgoing) {
+                $in  = (float) ($income[$a->id] ?? 0);
+                $out = (float) ($outgoing[$a->id] ?? 0);
+                return [
+                    'account_id' => $a->id,
+                    'name'       => $a->name,
+                    'in'         => $in,
+                    'out'        => $out,
+                    'net'        => $in - $out,
+                ];
+            })
             ->values()
             ->all();
     }
