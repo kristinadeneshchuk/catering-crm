@@ -6,10 +6,12 @@ use Illuminate\Support\ServiceProvider;
 use App\Models\Transaction;
 use App\Models\Order;
 use App\Models\OrderDay;
+use App\Models\DeliveryRoute;
 use App\Models\StockDocumentItem;
 use App\Observers\PaymentObserver;
 use App\Observers\OrderObserver;
 use App\Observers\OrderDayObserver;
+use App\Observers\DeliveryRouteObserver;
 use App\Observers\StockDocumentItemObserver;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
@@ -40,6 +42,9 @@ class AppServiceProvider extends ServiceProvider
 
         // Після кожного надходження товару — оновлюємо кеш собівартості меню
         StockDocumentItem::observe(StockDocumentItemObserver::class);
+
+        // Маршрут курʼєра створився/змінився з ANT → переоцінюємо ставку зміни у Табелі
+        DeliveryRoute::observe(DeliveryRouteObserver::class);
 
         // Kitchen notification bell — show for all roles in top bar
         FilamentView::registerRenderHook(
