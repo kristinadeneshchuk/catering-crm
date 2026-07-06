@@ -10,7 +10,9 @@ use App\Filament\Resources\OrderResource\RelationManagers\DeliveryCalendarRelati
 use App\Filament\Resources\OrderResource\RelationManagers\ActivityLogsRelationManager;
 use App\Models\Order;
 use App\Models\Client;
+use App\Models\Account;
 use App\Models\Tariff;
+use Filament\Notifications\Notification;
 use App\Models\CalorieRange;
 use App\Models\TariffPrice;
 use App\Services\ScheduleService;
@@ -516,7 +518,74 @@ class OrderResource extends Resource
                     ->falseIcon('heroicon-o-x-circle')
                     ->trueColor('success')
                     ->falseColor('danger')
-                    ->alignCenter(),
+                    ->alignCenter()
+                    // Клік по іконці оплати → одразу модалка «Нова оплата» для цього замовлення
+                    // (той самий діалог, що й у вкладці «Оплата», але без переходу в замовлення).
+                    ->action(
+                        Tables\Actions\Action::make('quickPayment')
+                            ->modalHeading('Нова оплата')
+                            ->modalWidth('lg')
+                            ->fillForm(function ($record) {
+                                $due  = (float) $record->final_price + (float) $record->orderDays()->sum('extra_delivery_fee');
+                                $paid = (float) $record->transactions()->where('type', 'income')->sum('amount')
+                                      - (float) $record->transactions()->where('type', 'refund')->sum('amount');
+                                $outstanding = round(max(0, $due - $paid), 2);
+
+                                return [
+                                    'type'   => 'income',
+                                    'date'   => now(),
+                                    'amount' => $outstanding > 0 ? $outstanding : null,
+                                ];
+                            })
+                            ->form([
+                                Select::make('type')
+                                    ->label('Операція')
+                                    ->options([
+                                        'income' => 'Оплата замовлення (+)',
+                                        'refund' => 'Повернення коштів (-)',
+                                    ])
+                                    ->default('income')
+                                    ->required(),
+
+                                Select::make('account_id')
+                                    ->label('Рахунок / Каса')
+                                    ->options(fn () => Account::orderBy('name')->pluck('name', 'id'))
+                                    ->searchable()
+                                    ->required()
+                                    ->placeholder('Оберіть рахунок (Готівка, Mono...)'),
+
+                                TextInput::make('amount')
+                                    ->label('Сума')
+                                    ->numeric()
+                                    ->prefix('₴')
+                                    ->required(),
+
+                                DatePicker::make('date')
+                                    ->label('Дата платежу')
+                                    ->default(now())
+                                    ->required(),
+
+                                Textarea::make('comment')
+                                    ->label('Коментар')
+                                    ->columnSpanFull(),
+                            ])
+                            ->action(function (array $data, $record) {
+                                $record->transactions()->create([
+                                    'type'       => $data['type'],
+                                    'account_id' => $data['account_id'],
+                                    'amount'     => $data['amount'],
+                                    'date'       => $data['date'],
+                                    'comment'    => $data['comment'] ?? null,
+                                    'user_id'    => auth()->id(),
+                                    'category'   => $data['type'] === 'income' ? 'Оплата клієнта' : 'Повернення коштів',
+                                ]);
+
+                                Notification::make()
+                                    ->title('Оплату внесено')
+                                    ->success()
+                                    ->send();
+                            }),
+                    ),
 
                 TextColumn::make('final_price')
                     ->label('До сплати')
