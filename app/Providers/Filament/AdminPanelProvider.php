@@ -73,6 +73,7 @@ class AdminPanelProvider extends PanelProvider
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
             ->widgets([
                 Widgets\AccountWidget::class,
+                \App\Filament\Widgets\PublicMenuLink::class,
                 \App\Filament\Widgets\ProductionLoadList::class,
                 \App\Filament\Widgets\DebtsList::class,
             ])
