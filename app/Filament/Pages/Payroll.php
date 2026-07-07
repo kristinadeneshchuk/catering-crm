@@ -33,10 +33,22 @@ class Payroll extends Page
 
     public function mount(): void
     {
-        // Дефолт — сьогодні. mount() викликається при кожному відкритті
-        // сторінки, тож менеджер завжди бачить нарахування за поточну дату.
-        $this->startDate = Carbon::now()->format('Y-m-d');
-        $this->endDate   = Carbon::now()->format('Y-m-d');
+        // Запам'ятовуємо вибір дати per-user: якщо менеджер уже обирав період —
+        // при поверненні на сторінку показуємо саме його, а не «сьогодні».
+        // Скидається лише коли вручну змінить дату.
+        $today = Carbon::now()->format('Y-m-d');
+        $this->startDate = auth()->user()->uiPref('payroll.start', $today);
+        $this->endDate   = auth()->user()->uiPref('payroll.end', $today);
+    }
+
+    public function updatedStartDate($value): void
+    {
+        auth()->user()->setUiPref('payroll.start', $value);
+    }
+
+    public function updatedEndDate($value): void
+    {
+        auth()->user()->setUiPref('payroll.end', $value);
     }
 
     protected function dateRange(): array

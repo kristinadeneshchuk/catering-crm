@@ -52,8 +52,9 @@ class LogisticsPage extends Page implements HasForms
 
     public function mount(): void
     {
+        // Запам'ятовуємо вибір дати per-user — щоб не скидалась на сьогодні щоразу.
         $this->form->fill([
-            'date'  => now()->format('Y-m-d'),
+            'date'  => auth()->user()->uiPref('logistics.date', now()->format('Y-m-d')),
             'shift' => 'all',
         ]);
         $this->loadRoutes();
@@ -69,6 +70,7 @@ class LogisticsPage extends Page implements HasForms
                     ->required()
                     ->live()
                     ->afterStateUpdated(function () {
+                        auth()->user()->setUiPref('logistics.date', $this->data['date'] ?? null);
                         $this->loadRoutes();
                         $this->loadMileage();
                     }),

@@ -31,8 +31,21 @@ class EmployeeAttendance extends Page
 
     public function mount(): void
     {
-        $this->startDate = Carbon::now()->startOfWeek(Carbon::MONDAY)->format('Y-m-d');
-        $this->endDate   = Carbon::now()->format('Y-m-d');
+        // Запам'ятовуємо вибір per-user — щоб діапазон не скидався щоразу.
+        $defStart = Carbon::now()->startOfWeek(Carbon::MONDAY)->format('Y-m-d');
+        $defEnd   = Carbon::now()->format('Y-m-d');
+        $this->startDate = auth()->user()->uiPref('attendance.start', $defStart);
+        $this->endDate   = auth()->user()->uiPref('attendance.end', $defEnd);
+    }
+
+    public function updatedStartDate($value): void
+    {
+        auth()->user()->setUiPref('attendance.start', $value);
+    }
+
+    public function updatedEndDate($value): void
+    {
+        auth()->user()->setUiPref('attendance.end', $value);
     }
 
     public function getDates(): array
