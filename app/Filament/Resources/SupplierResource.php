@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Traits\RestrictCookAccess;
+use App\Traits\AllowCookAccess;
 
 use App\Filament\Resources\SupplierResource\Pages;
 use App\Models\Supplier;
@@ -17,7 +17,7 @@ use Filament\Tables\Columns\TextColumn;
 
 class SupplierResource extends Resource
 {
-    use RestrictCookAccess;
+    use AllowCookAccess;
     protected static ?string $model = Supplier::class;
 
     // 🔥 Помещаем в ваш "Довідник"

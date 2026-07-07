@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Traits\RestrictCookAccess;
+use App\Traits\AllowCookAccess;
 
 use App\Filament\Resources\StockDocumentResource\Pages;
 use App\Models\StockDocument;
@@ -35,7 +35,7 @@ use Filament\Tables\Columns\TextColumn;
 
 class StockDocumentResource extends Resource
 {
-    use RestrictCookAccess;
+    use AllowCookAccess;
     protected static ?string $model = StockDocument::class;
     protected static ?string $navigationGroup = 'Склад';
     protected static ?int $navigationSort = 1;

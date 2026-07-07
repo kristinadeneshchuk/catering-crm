@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Traits\RestrictCookAccess;
+use App\Traits\AllowCookAccess;
 
 use App\Filament\Resources\IngredientResource\Pages;
 use App\Models\Allergen;
@@ -19,7 +19,7 @@ use Filament\Forms\Components\TextInput;
 
 class IngredientResource extends Resource
 {
-    use RestrictCookAccess;
+    use AllowCookAccess;
     protected static ?string $model = Ingredient::class;
     protected static ?string $navigationGroup = 'Довідник';
     protected static ?int $navigationSort = 2;
@@ -27,11 +27,6 @@ class IngredientResource extends Resource
     protected static ?string $pluralModelLabel = 'Інгредієнти';
     protected static ?string $modelLabel = 'Інгредієнт';
     
-    public static function canViewAny(): bool
-    {
-        return auth()->user()->role === 'admin' || auth()->user()->role === 'manager';
-    }
-
     public static function form(Form $form): Form
     {
         return $form

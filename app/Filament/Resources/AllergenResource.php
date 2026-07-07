@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Traits\RestrictCookAccess;
+use App\Traits\AllowCookAccess;
 
 use App\Filament\Resources\AllergenResource\Pages;
 use App\Models\Allergen;
@@ -15,18 +15,13 @@ use Filament\Tables\Table;
 
 class AllergenResource extends Resource
 {
-    use RestrictCookAccess;
+    use AllowCookAccess;
     protected static ?string $model = Allergen::class;
     protected static ?string $navigationGroup = 'Довідник';
     protected static ?int $navigationSort = 3;
     protected static ?string $navigationLabel = 'Алергени';
     protected static ?string $pluralModelLabel = 'Алергени';
     protected static ?string $modelLabel = 'Алерген';
-
-    public static function canViewAny(): bool
-    {
-        return auth()->user()->role === 'admin' || auth()->user()->role === 'manager';
-    }
 
     public static function form(Form $form): Form
     {

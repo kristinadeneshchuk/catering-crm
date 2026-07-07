@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Traits\RestrictCookAccess;
+use App\Traits\AllowCookAccess;
 
 use App\Filament\Resources\InventoryResource\RelationManagers\ItemsRelationManager;
 use App\Filament\Resources\InventoryResource\Pages;
@@ -26,7 +26,7 @@ use Illuminate\Support\HtmlString;
 
 class InventoryResource extends Resource
 {
-    use RestrictCookAccess;
+    use AllowCookAccess;
     protected static ?string $model = Inventory::class;
     protected static ?string $navigationGroup = 'Склад';
     protected static ?int $navigationSort = 3;

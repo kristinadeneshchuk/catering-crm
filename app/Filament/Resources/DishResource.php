@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Traits\RestrictCookAccess;
+use App\Traits\AllowCookAccess;
 
 use App\Filament\Resources\DishResource\Pages;
 use App\Models\Dish;
@@ -24,18 +24,13 @@ use Filament\Forms\Components\RichEditor;
 
 class DishResource extends Resource
 {
-    use RestrictCookAccess;
+    use AllowCookAccess;
     protected static ?string $model = Dish::class;
     protected static ?string $navigationGroup = 'Довідник';
     protected static ?int $navigationSort = 1;
     protected static ?string $navigationLabel = 'Страви (Техкарти)';
     protected static ?string $pluralModelLabel = 'Страви (Техкарти)';
     protected static ?string $modelLabel = 'Страва';
-
-    public static function canViewAny(): bool
-    {
-        return auth()->user()->role === 'admin' || auth()->user()->role === 'manager';
-    }
 
     public static function form(Form $form): Form
     {

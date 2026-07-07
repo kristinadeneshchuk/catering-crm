@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Traits\RestrictCookAccess;
+use App\Traits\AllowCookAccess;
 
 use App\Filament\Resources\WarehouseResource\Pages;
 use App\Models\Warehouse;
@@ -15,7 +15,7 @@ use Filament\Tables\Actions;
 
 class WarehouseResource extends Resource
 {
-    use RestrictCookAccess;
+    use AllowCookAccess;
     protected static ?string $model = Warehouse::class;
 
     protected static ?string $navigationGroup = 'Довідник';
