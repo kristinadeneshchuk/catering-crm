@@ -110,10 +110,11 @@ class OrderDayObserver
     }
 
     /**
-     * Застосувати дельту extra_delivery_fee до маршруту:
-     *  - оновити DeliveryRoute.calculated_cost (повний перерахунок через recalcCost),
-     *  - якщо менеджер уже відмітив зміну курьєра — зрушити EmployeeShift.rate і Employee.balance
-     *    рівно на дельту, без захоплення сторонніх переоцінок базових тарифів.
+     * Застосувати дельту extra_delivery_fee до маршруту.
+     * Оновлюємо DeliveryRoute.calculated_cost — Observer маршруту сам викличе
+     * CourierShiftPricingService::reprice(), яка перерахує EmployeeShift.rate
+     * і скорегує баланс курʼєра з єдиної формули (base_rate × виїзди + надбавки).
+     * $delta більше не потрібна — залишена в сигнатурі для сумісності викликів.
      */
     private function applyExtraDelta($routeNum, ?\Carbon\Carbon $date, float $delta): void
     {
@@ -129,36 +130,19 @@ class OrderDayObserver
             return;
         }
 
-        DB::transaction(function () use ($route, $delta) {
-            // Завжди вирівнюємо calculated_cost до фактичного recalcCost (base + extras).
+        DB::transaction(function () use ($route) {
             $newCost = $route->recalcCost();
             if (abs((float) $route->calculated_cost - $newCost) >= 0.005) {
+                // Тригерить DeliveryRouteObserver → reprice → синк shift.rate + balance.
                 $route->update(['calculated_cost' => $newCost]);
+            } else {
+                // Cost не змінився, але extra міг помінятись всередині tie (рідкісний
+                // випадок). Викликаємо reprice явно, щоб shift оновився.
+                if ($route->employee_id) {
+                    app(\App\Services\CourierShiftPricingService::class)
+                        ->reprice((int) $route->employee_id, \Carbon\Carbon::parse($route->date)->format('Y-m-d'), $route->shift);
+                }
             }
-
-            if (abs($delta) < 0.005 || !$route->employee_id) {
-                return;
-            }
-
-            // Мапимо ранкові/вечірні маршрути на відповідний слот зміни.
-            $preferredSlots = match ($route->shift) {
-                'morning' => [EmployeeShift::SLOT_MORNING, EmployeeShift::SLOT_FULL],
-                'evening' => [EmployeeShift::SLOT_EVENING, EmployeeShift::SLOT_FULL],
-                default   => [EmployeeShift::SLOT_FULL, EmployeeShift::SLOT_MORNING, EmployeeShift::SLOT_EVENING],
-            };
-
-            $shift = EmployeeShift::where('employee_id', $route->employee_id)
-                ->whereDate('date', $route->date)
-                ->whereIn('shift_slot', $preferredSlots)
-                ->orderByRaw("FIELD(shift_slot, '" . implode("','", $preferredSlots) . "')")
-                ->first();
-
-            if (!$shift) {
-                return;
-            }
-
-            $shift->update(['rate' => max(0, (float) $shift->rate + $delta)]);
-            Employee::find($route->employee_id)?->increment('balance', $delta);
         });
     }
 }

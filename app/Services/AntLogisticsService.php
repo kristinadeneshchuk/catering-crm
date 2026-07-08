@@ -443,10 +443,6 @@ class AntLogisticsService
         $dayCollections = $this->collectOrderDaysForDelivery($deliveryDate, $shift);
         $daysByClient   = $dayCollections['days']->groupBy(fn ($d) => (int) ($d->order?->client_id ?? 0));
 
-        // Snapshot сум extra_delivery_fee per route_num ДО переприв'язки,
-        // щоб після mass-update пораhувати дельту і донести її до EmployeeShift/balance.
-        $extraBefore = $this->snapshotExtraByRoute($deliveryDate);
-
         // 2. Для кожного маршруту завантажуємо точки і оновлюємо order_days
         $totalComps = 0;
         $updated    = 0;
@@ -495,69 +491,20 @@ class AntLogisticsService
             'updated'       => $updated,
         ]);
 
-        // Mass-update вище не тригерить OrderDayObserver, тому вручну:
-        //  1) перераховуємо calculated_cost усіх маршрутів цієї дати,
-        //  2) донасосуємо EmployeeShift/balance тільки на дельту EXTRA (а не на повну
-        //     різницю cost — щоб не змішувати з переоцінками базового тарифу).
-        $extraAfter = $this->snapshotExtraByRoute($deliveryDate);
-
+        // Mass-update вище не тригерить OrderDayObserver, тому вручну перераховуємо
+        // calculated_cost усіх маршрутів дати. Це тригерить DeliveryRouteObserver →
+        // reprice, яка сама донасосує shift.rate + balance за єдиною формулою.
         DeliveryRoute::whereDate('date', $deliveryDate)
             ->with('employee')
             ->get()
-            ->each(function (DeliveryRoute $route) use ($extraBefore, $extraAfter) {
+            ->each(function (DeliveryRoute $route) {
                 $newCost = $route->recalcCost();
                 if (abs((float) $route->calculated_cost - $newCost) >= 0.005) {
                     $route->update(['calculated_cost' => $newCost]);
                 }
-
-                $num = (int) $route->ant_route_num;
-                $deltaExtra = round(($extraAfter[$num] ?? 0) - ($extraBefore[$num] ?? 0), 2);
-
-                if (abs($deltaExtra) < 0.005 || !$route->employee_id) {
-                    return;
-                }
-
-                // Мапимо ранкові/вечірні маршрути на відповідний слот зміни.
-                $preferredSlots = match ($route->shift) {
-                    'morning' => [\App\Models\EmployeeShift::SLOT_MORNING, \App\Models\EmployeeShift::SLOT_FULL],
-                    'evening' => [\App\Models\EmployeeShift::SLOT_EVENING, \App\Models\EmployeeShift::SLOT_FULL],
-                    default   => [\App\Models\EmployeeShift::SLOT_FULL, \App\Models\EmployeeShift::SLOT_MORNING, \App\Models\EmployeeShift::SLOT_EVENING],
-                };
-
-                $sh = \App\Models\EmployeeShift::where('employee_id', $route->employee_id)
-                    ->whereDate('date', $route->date)
-                    ->whereIn('shift_slot', $preferredSlots)
-                    ->orderByRaw("FIELD(shift_slot, '" . implode("','", $preferredSlots) . "')")
-                    ->first();
-                if (!$sh) {
-                    return;
-                }
-
-                $sh->update(['rate' => max(0, (float) $sh->rate + $deltaExtra)]);
-                \App\Models\Employee::find($route->employee_id)?->increment('balance', $deltaExtra);
             });
 
         return $updated;
-    }
-
-    /**
-     * Поточна сума extra_delivery_fee по маршрутах (route_num → сума), для заданої дати доставки.
-     */
-    private function snapshotExtraByRoute(string $deliveryDate): array
-    {
-        $target = Carbon::parse($deliveryDate)->startOfDay();
-        $out = [];
-        \App\Models\OrderDay::where('extra_delivery_fee', '>', 0)
-            ->whereNotNull('ant_route_num')
-            ->with('order')
-            ->get()
-            ->each(function ($d) use ($target, &$out) {
-                if ($d->resolveDeliveryDate()->startOfDay()->equalTo($target)) {
-                    $num = (int) $d->ant_route_num;
-                    $out[$num] = ($out[$num] ?? 0) + (float) $d->extra_delivery_fee;
-                }
-            });
-        return $out;
     }
 
     // -------------------------------------------------------------------------
