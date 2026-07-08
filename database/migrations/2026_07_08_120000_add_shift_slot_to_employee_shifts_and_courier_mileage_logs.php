@@ -33,15 +33,18 @@ return new class extends Migration
             });
         }
 
-        if ($this->indexExists('courier_mileage_logs', 'courier_mileage_logs_employee_id_date_unique')) {
-            Schema::table('courier_mileage_logs', function (Blueprint $table) {
-                $table->dropUnique('courier_mileage_logs_employee_id_date_unique');
-            });
-        }
-
+        // Порядок важливий: спочатку створюємо новий unique (він покриє FK
+        // employee_id), і тільки потім знімаємо старий — інакше MySQL не дозволить
+        // дропнути індекс "потрібний для foreign key".
         if (! $this->indexExists('courier_mileage_logs', 'courier_mileage_logs_emp_date_slot_unique')) {
             Schema::table('courier_mileage_logs', function (Blueprint $table) {
                 $table->unique(['employee_id', 'date', 'shift_slot'], 'courier_mileage_logs_emp_date_slot_unique');
+            });
+        }
+
+        if ($this->indexExists('courier_mileage_logs', 'courier_mileage_logs_employee_id_date_unique')) {
+            Schema::table('courier_mileage_logs', function (Blueprint $table) {
+                $table->dropUnique('courier_mileage_logs_employee_id_date_unique');
             });
         }
     }
