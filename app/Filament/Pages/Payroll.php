@@ -71,8 +71,9 @@ class Payroll extends Page
 
     /**
      * Розкладає rate зміни на (база, бонус).
-     * - Курʼєр: base_rate — це ціна одного виїзду. full = 2 виїзди = 2×base_rate,
-     *   half = 1 виїзд = base_rate. Все йде у "базу", бонусу немає.
+     * - Курʼєр: base_rate — це ціна одного виїзду. full = 2 виїзди, half = 1 виїзд.
+     *   База = base_rate × кількість виїздів (700 або 1400 при ставці 700).
+     *   Бонус = решта (доплати за точки понад ліміт + дальня доставка).
      * - Кухня/офіс: база = base_rate × (0.5 якщо half), бонус = решта (доплата за
      *   точки, бонус чергового тощо).
      */
@@ -81,8 +82,11 @@ class Payroll extends Page
         $rate = (float) $shift->rate;
 
         if ($emp->position === 'courier') {
-            // Уся ставка — це база (виїзди × ціна виїзду). Бонус=0.
-            return ['base' => round($rate, 2), 'bonus' => 0.0];
+            $trips = $shift->is_half ? 1 : 2;
+            $base  = round((float) $emp->base_rate * $trips, 2);
+            $base  = min($base, $rate);
+            $bonus = max(0, round($rate - $base, 2));
+            return ['base' => $base, 'bonus' => $bonus];
         }
 
         $half = $shift->is_half ? 0.5 : 1.0;

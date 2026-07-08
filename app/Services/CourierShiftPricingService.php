@@ -32,12 +32,70 @@ class CourierShiftPricingService
      */
     public function reprice(int $employeeId, string $date, ?string $routeShift = null): bool
     {
-        // ВІДКЛЮЧЕНО з переходом на модель "base_rate = ціна одного виїзду".
-        // Ставка кур'єра тепер керується виключно кліком у Табелі:
-        //   full = 2 × base_rate (2 виїзди), half = base_rate (1 виїзд).
-        // Маршрути з ANT не переоцінюють зміну автоматично — інакше після синку
-        // ставка, поставлена менеджером вручну, затиралася б сумою маршрутів.
-        // (Доплати за "дальню доставку" все ще додаються через OrderDayObserver.)
-        return false;
+        $employee = Employee::find($employeeId);
+        if (! $employee || $employee->position !== 'courier') {
+            return false;
+        }
+
+        $shifts = EmployeeShift::where('employee_id', $employeeId)
+            ->whereDate('date', $date)
+            ->orderBy('id')
+            ->get();
+
+        if ($shifts->isEmpty()) {
+            return false;
+        }
+
+        // Консолідуємо старі split-рядки (morning+evening) у один 'full'.
+        if ($shifts->count() >= 2) {
+            $totalRate = (float) $shifts->sum('rate');
+            $anyDuty   = $shifts->contains('is_duty', true);
+            $anyHalf   = $shifts->contains('is_half', true);
+            $keep = $shifts->first();
+            $keep->update([
+                'shift_slot' => EmployeeShift::SLOT_FULL,
+                'rate'       => $totalRate,
+                'is_duty'    => $anyDuty,
+                'is_half'    => $anyHalf,
+            ]);
+            foreach ($shifts->skip(1) as $s) {
+                $s->delete();
+            }
+            $shift = $keep->fresh();
+        } else {
+            $shift = $shifts->first();
+        }
+
+        $baseRate = (float) $employee->base_rate;
+        $trips    = $shift->is_half ? 1 : 2;
+        $basePart = $baseRate * $trips;
+        $extras   = self::calcExtras($employeeId, $date, $baseRate);
+        $newRate  = $basePart + $extras;
+        $oldRate  = (float) $shift->rate;
+
+        if (abs($newRate - $oldRate) < 0.01) {
+            return false;
+        }
+
+        DB::transaction(function () use ($shift, $employee, $newRate, $oldRate) {
+            $shift->update(['rate' => $newRate]);
+            $employee->increment('balance', $newRate - $oldRate);
+        });
+
+        return true;
+    }
+
+    /**
+     * Сума "надбавок" курʼєра за день:
+     *  доплата за точки понад ліміт + доплата за дальню доставку
+     *  (= route.recalcCost - base_rate по кожному маршруту).
+     * base_rate — це ціна одного виїзду; надбавки додаються поверх кліку в Табелі.
+     */
+    public static function calcExtras(int $employeeId, string $date, float $baseRate): float
+    {
+        return (float) DeliveryRoute::where('employee_id', $employeeId)
+            ->whereDate('date', $date)
+            ->get()
+            ->sum(fn ($r) => max(0, (float) $r->recalcCost() - $baseRate));
     }
 }

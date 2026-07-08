@@ -121,12 +121,16 @@ class EmployeeAttendance extends Page
 
             // 2) Ставки:
             //    - Курʼєр: base_rate — це ціна ОДНОГО виїзду.
-            //      full = 2 виїзди = 2 × base_rate; half = 1 виїзд = base_rate.
-            //    - Кухня/офіс: full = base_rate; half = base_rate/2.
-            $baseRate = (float) $employee->base_rate;
+            //      full = 2 виїзди = 2 × base_rate + надбавки (доп точки + дальня доставка).
+            //      half = 1 виїзд = base_rate + надбавки.
+            //    - Кухня/офіс: full = base_rate; half = base_rate/2 (надбавок нема).
+            $baseRate  = (float) $employee->base_rate;
             $isCourier = $employee->position === 'courier';
-            $fullRate  = $isCourier ? $baseRate * 2 : $baseRate;
-            $halfRate  = $baseRate; // для курʼєра = 1 виїзд, для інших = ½ ставки
+            $extras    = $isCourier
+                ? \App\Services\CourierShiftPricingService::calcExtras($employeeId, $date, $baseRate)
+                : 0.0;
+            $fullRate  = ($isCourier ? $baseRate * 2 : $baseRate) + $extras;
+            $halfRate  = ($isCourier ? $baseRate : $baseRate / 2) + $extras;
             $bonus     = $this->dutyBonus();
 
             // 3) Порожній стаб (rate=0 без duty/half) поводиться як «немає».
