@@ -231,9 +231,19 @@ class ClientResource extends Resource
                                     ->onColor('success')
                                     ->columnSpanFull(),
 
-                                Select::make('address')
+                                Select::make('address_search')
                                     ->label('Адреса')
                                     ->searchable()
+                                    ->dehydrated(false)
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, callable $set) {
+                                        if ($state && str_contains((string) $state, '|||')) {
+                                            [$lat, $lng, $address] = explode('|||', $state, 3);
+                                            $set('lat', $lat);
+                                            $set('lng', $lng);
+                                            $set('address', $address);
+                                        }
+                                    })
                                     ->getSearchResultsUsing(function (string $search) {
                                         if (strlen($search) < 3) return [];
                                         $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
@@ -249,14 +259,22 @@ class ClientResource extends Resource
                                         $results = json_decode($response, true) ?? [];
                                         $options = [];
                                         foreach ($results as $r) {
-                                            $label = $r['display_name'] ?? '';
-                                            $options[$label] = $label;
+                                            $value = ($r['lat'] ?? '') . '|||' . ($r['lon'] ?? '') . '|||' . ($r['display_name'] ?? '');
+                                            $options[$value] = $r['display_name'] ?? '';
                                         }
                                         return $options;
                                     })
-                                    ->required()
                                     ->placeholder('Почніть вводити вулицю...')
                                     ->columnSpanFull(),
+
+                                TextInput::make('address')
+                                    ->label('Адреса (можна редагувати)')
+                                    ->required()
+                                    ->placeholder('Оберіть з пошуку або введіть вручну')
+                                    ->columnSpanFull(),
+
+                                \Filament\Forms\Components\Hidden::make('lat'),
+                                \Filament\Forms\Components\Hidden::make('lng'),
 
                                 TextInput::make('address_entrance')->label('Під\'їзд'),
                                 TextInput::make('address_apartment')->label('Кв/офіс'),

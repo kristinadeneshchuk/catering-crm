@@ -25,6 +25,8 @@ class CreateClient extends CreateRecord
             $this->record->addresses()->create([
                 'label'             => $addressData['label'] ?? 'Адреса',
                 'address'           => $addressData['address'],
+                'lat'               => $addressData['lat'] ?? null,
+                'lng'               => $addressData['lng'] ?? null,
                 'address_entrance'  => $addressData['address_entrance'] ?? null,
                 'address_apartment' => $addressData['address_apartment'] ?? null,
                 'address_floor'     => $addressData['address_floor'] ?? null,
