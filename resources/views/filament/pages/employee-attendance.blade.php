@@ -181,40 +181,21 @@
                     {{-- Клітинки днів --}}
                     @foreach($dates as $date)
                     @php
-                        $dayInfo = $row['days'][$date] ?? ['status' => 'future', 'is_duty' => false, 'is_split' => false, 'slots' => []];
+                        $dayInfo = $row['days'][$date] ?? ['status' => 'future', 'is_duty' => false];
                         $status  = $dayInfo['status'];
                         $isDuty  = $dayInfo['is_duty'];
                         $isHalf  = $dayInfo['is_half'] ?? false;
-                        $isSplit = $dayInfo['is_split'] ?? false;
-                        $slots   = $dayInfo['slots'] ?? [];
-                        $canSplit = $row['position'] === 'courier'; // Розділення на утро/вечер тільки для кур'єрів
+                        $isCourier = $row['position'] === 'courier';
+                        // Для курʼєра терміни інші: 1 круг = 2 виїзди, ½ = 1 виїзд.
+                        $tipFull = $isCourier ? '2 виїзди (клік — 1 виїзд)' : 'Повна зміна (клік — зробити пів зміни)';
+                        $tipHalf = $isCourier ? '1 виїзд (клік — прибрати)' : 'Пів зміни (клік — прибрати)';
                     @endphp
                     <td style="text-align:center;padding:6px 4px;">
                         <div style="position:relative;display:inline-block;width:34px;height:34px;">
-                            @if($status === 'present' && $isSplit)
-                                {{-- Дві підклітинки: ранок зверху, вечір знизу --}}
-                                @foreach(['morning' => ['#3b2800', '#fbbf24', '🌅'], 'evening' => ['#1e1b4b', '#a5b4fc', '🌙']] as $slotKey => $slotStyle)
-                                    @php
-                                        [$slotBg, $slotIcon, $emoji] = $slotStyle;
-                                        $slotInfo = $slots[$slotKey] ?? null;
-                                        $slotHalf = $slotInfo ? ($slotInfo['is_half'] ?? false) : false;
-                                        $slotEmpty = $slotInfo ? ($slotInfo['is_empty'] ?? true) : true;
-                                    @endphp
-                                    <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}', '{{ $slotKey }}')"
-                                        class="emp-cell-btn"
-                                        title="{{ $slotKey === 'morning' ? 'Ранок' : 'Вечір' }} — {{ $slotEmpty ? 'не позначено' : ($slotHalf ? 'пів зміни' : 'повна зміна') }}"
-                                        style="display:block;width:34px;height:15px;margin-bottom:{{ $slotKey === 'morning' ? '2px' : '0' }};
-                                               border-radius:{{ $slotKey === 'morning' ? '8px 8px 3px 3px' : '3px 3px 8px 8px' }};
-                                               background:{{ $slotEmpty ? '#1f1f22' : ($slotHalf ? 'linear-gradient(90deg, ' . $slotBg . ' 50%, #27272a 50%)' : $slotBg) }};
-                                               border:{{ $slotEmpty ? '1px dashed #3f3f46' : 'none' }};
-                                               display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1;color:{{ $slotIcon }};">
-                                        {{ $slotEmpty ? '·' : ($slotHalf ? '½' : $emoji) }}
-                                    </button>
-                                @endforeach
-                            @elseif($status === 'present')
+                            @if($status === 'present')
                                 @php $fill = $isDuty ? '#78350f' : ($row['is_kitchen'] ? '#14532d' : '#1e3a5f'); @endphp
-                                <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}', 'full')" class="emp-cell-btn"
-                                    title="{{ $isHalf ? 'Пів зміни (клік — прибрати)' : 'Повна зміна (клік — зробити пів зміни)' }}"
+                                <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
+                                    title="{{ $isHalf ? $tipHalf : $tipFull }}"
                                     style="width:34px;height:34px;border-radius:50%;
                                            background:{{ $isHalf ? 'linear-gradient(90deg, ' . $fill . ' 50%, #27272a 50%)' : $fill }};
                                            {{ $isHalf ? 'border:2px solid ' . $fill . ';' : '' }}
@@ -230,7 +211,7 @@
                                     @endif
                                 </button>
                             @elseif($status === 'absent_today')
-                                <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}', 'full')" class="emp-cell-btn"
+                                <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
                                     style="width:34px;height:34px;border-radius:50%;
                                            border:2px dashed #f87171;
                                            background:transparent;
@@ -239,7 +220,7 @@
                                     !
                                 </button>
                             @elseif($status === 'off')
-                                <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}', 'full')" class="emp-cell-btn"
+                                <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
                                     style="width:34px;height:34px;border-radius:50%;
                                            background:transparent;border:none;
                                            display:inline-flex;align-items:center;justify-content:center;
@@ -249,28 +230,6 @@
                             @else
                                 <span style="color:#27272a;font-size:17px;font-weight:300;
                                              display:inline-block;width:34px;text-align:center;line-height:34px;">–</span>
-                            @endif
-
-                            {{-- Кнопка розділення дня (тільки для кур'єрів, не в майбутньому) --}}
-                            @if($canSplit && $status !== 'future')
-                                @if($isSplit)
-                                    <button wire:click="mergeShift({{ $row['id'] }}, '{{ $date }}')"
-                                        wire:confirm="Обʼєднати ранок і вечір у одну зміну?"
-                                        title="Обʼєднати в одну зміну"
-                                        style="position:absolute;bottom:-8px;left:-8px;width:16px;height:16px;border-radius:50%;
-                                               background:#27272a;border:1px solid #3f3f46;color:#a1a1aa;
-                                               font-size:9px;font-weight:800;cursor:pointer;padding:0;line-height:1;z-index:2;">
-                                        ⇔
-                                    </button>
-                                @else
-                                    <button wire:click="splitShift({{ $row['id'] }}, '{{ $date }}')"
-                                        title="Розділити на ранок і вечір"
-                                        style="position:absolute;bottom:-8px;left:-8px;width:16px;height:16px;border-radius:50%;
-                                               background:#1e3a5f;border:1px solid #1e40af;color:#60a5fa;
-                                               font-size:9px;font-weight:800;cursor:pointer;padding:0;line-height:1;z-index:2;opacity:.5;">
-                                        ×2
-                                    </button>
-                                @endif
                             @endif
 
                             {{-- Прапорець пробігу — для кур'єрів (минулі і сьогоднішній день) --}}
@@ -400,7 +359,14 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
                 </svg>
             </div>
-            <span style="color:#71717a;font-size:12px;">Доставка / офіс — вийшов</span>
+            <span style="color:#71717a;font-size:12px;">Доставка / офіс — вийшов <span style="color:#52525b;">(курʼєр: 2 виїзди)</span></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <div style="width:20px;height:20px;border-radius:50%;background:linear-gradient(90deg,#1e3a5f 50%,#27272a 50%);border:2px solid #1e3a5f;
+                        display:flex;align-items:center;justify-content:center;">
+                <span style="font-size:11px;font-weight:800;color:#e4e4e7;line-height:1;">½</span>
+            </div>
+            <span style="color:#71717a;font-size:12px;">Пів зміни <span style="color:#52525b;">(курʼєр: 1 виїзд, ½ ставки)</span></span>
         </div>
         <div style="display:flex;align-items:center;gap:6px;">
             <div style="width:20px;height:20px;border-radius:50%;border:2px dashed #f87171;
