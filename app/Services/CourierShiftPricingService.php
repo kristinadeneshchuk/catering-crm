@@ -32,62 +32,12 @@ class CourierShiftPricingService
      */
     public function reprice(int $employeeId, string $date, ?string $routeShift = null): bool
     {
-        $employee = Employee::find($employeeId);
-        if (! $employee || $employee->position !== 'courier') {
-            return false;
-        }
-
-        $shifts = EmployeeShift::where('employee_id', $employeeId)
-            ->whereDate('date', $date)
-            ->get();
-
-        if ($shifts->isEmpty()) {
-            return false;
-        }
-
-        // Мапа slot → route.shift для запиту суми маршрутів.
-        $slotToRouteShift = [
-            EmployeeShift::SLOT_MORNING => 'morning',
-            EmployeeShift::SLOT_EVENING => 'evening',
-            EmployeeShift::SLOT_FULL    => null, // full = усі маршрути дня
-        ];
-
-        $anyChanged = false;
-
-        foreach ($shifts as $shift) {
-            // Якщо переоцінка викликана конкретним маршрутом — оновлюємо тільки відповідний слот.
-            if ($routeShift !== null) {
-                $expectedSlot = $routeShift === 'morning'
-                    ? EmployeeShift::SLOT_MORNING
-                    : EmployeeShift::SLOT_EVENING;
-                // Якщо у працівника один "full" слот — все ще оновлюємо його (гібридний випадок).
-                if ($shift->shift_slot !== EmployeeShift::SLOT_FULL && $shift->shift_slot !== $expectedSlot) {
-                    continue;
-                }
-            }
-
-            $routeQuery = DeliveryRoute::where('employee_id', $employeeId)
-                ->whereDate('date', $date);
-            $mapped = $slotToRouteShift[$shift->shift_slot] ?? null;
-            if ($mapped !== null) {
-                $routeQuery->where('shift', $mapped);
-            }
-            $routeSum = (float) $routeQuery->sum('calculated_cost');
-
-            $newRate = $shift->is_half ? round($routeSum / 2, 2) : $routeSum;
-            $oldRate = (float) $shift->rate;
-
-            if (abs($newRate - $oldRate) < 0.01) {
-                continue;
-            }
-
-            DB::transaction(function () use ($shift, $employee, $newRate, $oldRate) {
-                $shift->update(['rate' => $newRate]);
-                $employee->increment('balance', $newRate - $oldRate);
-            });
-            $anyChanged = true;
-        }
-
-        return $anyChanged;
+        // ВІДКЛЮЧЕНО з переходом на модель "base_rate = ціна одного виїзду".
+        // Ставка кур'єра тепер керується виключно кліком у Табелі:
+        //   full = 2 × base_rate (2 виїзди), half = base_rate (1 виїзд).
+        // Маршрути з ANT не переоцінюють зміну автоматично — інакше після синку
+        // ставка, поставлена менеджером вручну, затиралася б сумою маршрутів.
+        // (Доплати за "дальню доставку" все ще додаються через OrderDayObserver.)
+        return false;
     }
 }
