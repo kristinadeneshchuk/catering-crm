@@ -249,23 +249,48 @@
                     @php
                         $isEven = $i % 2 === 0;
                         $eid    = $row['employee_id'];
+                        $slot   = $row['shift_slot'];
+                        $slotLabel = $slot === 'morning' ? '🌅 Ранок' : ($slot === 'evening' ? '🌙 Вечір' : null);
                     @endphp
                     <tr style="border-bottom:1px solid #1f1f22;{{ $isEven ? '' : 'background:#111113;' }}">
                         <td style="padding:10px 16px;">
-                            <div style="color:#f4f4f5;font-weight:600;">{{ $row['name'] }}</div>
-                            <div style="color:#52525b;font-size:11px;margin-top:2px;">
-                                @if($row['consumption'] > 0)
-                                    Витрата: {{ rtrim(rtrim(number_format($row['consumption'], 2, '.', ''), '0'), '.') }} л/100 км
-                                @else
-                                    <span style="color:#f87171;">Витрата не задана</span>
-                                @endif
-                            </div>
+                            @if($row['is_first_of_courier'])
+                                <div style="color:#f4f4f5;font-weight:600;">{{ $row['name'] }}</div>
+                                <div style="color:#52525b;font-size:11px;margin-top:2px;">
+                                    @if($row['consumption'] > 0)
+                                        Витрата: {{ rtrim(rtrim(number_format($row['consumption'], 2, '.', ''), '0'), '.') }} л/100 км
+                                    @else
+                                        <span style="color:#f87171;">Витрата не задана</span>
+                                    @endif
+                                </div>
+                                <div style="margin-top:6px;">
+                                    @if($row['is_split'])
+                                        <button type="button"
+                                                wire:click="mergeDay({{ $eid }})"
+                                                wire:confirm="Об'єднати ранок і вечір в одну зміну? Пробіг вечора буде видалено."
+                                                style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;font-size:10px;background:#27272a;color:#a1a1aa;border:1px solid #3f3f46;border-radius:6px;cursor:pointer;">
+                                            ⇔ Одна зміна
+                                        </button>
+                                    @else
+                                        <button type="button"
+                                                wire:click="splitDay({{ $eid }})"
+                                                style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;font-size:10px;background:#1e3a5f;color:#60a5fa;border:1px solid #1e40af;border-radius:6px;cursor:pointer;">
+                                            🌗 Ранок / Вечір
+                                        </button>
+                                    @endif
+                                </div>
+                            @endif
+                            @if($slotLabel)
+                                <div style="margin-top:6px;padding:2px 8px;display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;background:{{ $slot === 'morning' ? '#3b2800' : '#1e1b4b' }};color:{{ $slot === 'morning' ? '#fbbf24' : '#a5b4fc' }};border-radius:6px;">
+                                    {{ $slotLabel }}
+                                </div>
+                            @endif
                         </td>
 
                         <td style="padding:8px 12px;text-align:center;">
                             <input type="number"
                                    value="{{ $row['start_km'] }}"
-                                   wire:change="saveMileage({{ $eid }}, 'start_km', $event.target.value)"
+                                   wire:change="saveMileage({{ $eid }}, '{{ $slot }}', 'start_km', $event.target.value)"
                                    placeholder="—"
                                    style="width:100px;background:#27272a;border:1px solid #3f3f46;border-radius:8px;padding:6px 10px;color:#f4f4f5;font-size:13px;text-align:center;outline:none;"
                                    onfocus="this.style.borderColor='#3b82f6'"
@@ -275,7 +300,7 @@
                         <td style="padding:8px 12px;text-align:center;">
                             <input type="number"
                                    value="{{ $row['end_km'] }}"
-                                   wire:change="saveMileage({{ $eid }}, 'end_km', $event.target.value)"
+                                   wire:change="saveMileage({{ $eid }}, '{{ $slot }}', 'end_km', $event.target.value)"
                                    placeholder="—"
                                    style="width:100px;background:#27272a;border:1px solid #3f3f46;border-radius:8px;padding:6px 10px;color:#f4f4f5;font-size:13px;text-align:center;outline:none;"
                                    onfocus="this.style.borderColor='#3b82f6'"
@@ -291,7 +316,7 @@
                         <td style="padding:8px 12px;text-align:center;">
                             <input type="number" step="0.01"
                                    value="{{ $row['fuel_price_per_liter'] > 0 ? $row['fuel_price_per_liter'] : '' }}"
-                                   wire:change="saveMileage({{ $eid }}, 'fuel_price_per_liter', $event.target.value)"
+                                   wire:change="saveMileage({{ $eid }}, '{{ $slot }}', 'fuel_price_per_liter', $event.target.value)"
                                    placeholder="0"
                                    style="width:100px;background:#27272a;border:1px solid #3f3f46;border-radius:8px;padding:6px 10px;color:#fb923c;font-size:13px;text-align:center;outline:none;font-weight:600;"
                                    onfocus="this.style.borderColor='#3b82f6'"

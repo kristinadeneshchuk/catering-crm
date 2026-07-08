@@ -6,8 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 
 class CourierMileageLog extends Model
 {
+    public const SLOT_FULL = 'full';
+    public const SLOT_MORNING = 'morning';
+    public const SLOT_EVENING = 'evening';
+
     protected $fillable = [
-        'employee_id', 'date',
+        'employee_id', 'date', 'shift_slot',
         'start_km', 'end_km',
         'fuel_price_per_liter', 'fuel_consumption', 'amort_per_km',
     ];

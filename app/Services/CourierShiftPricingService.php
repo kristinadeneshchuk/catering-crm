@@ -26,37 +26,68 @@ class CourierShiftPricingService
      *
      * Повертає true якщо ставку змінили, false якщо зміна не знайдена або значення вже актуальне.
      */
-    public function reprice(int $employeeId, string $date): bool
+    /**
+     * $routeShift — 'morning'|'evening'|null. Якщо задано — переоцінюємо тільки
+     * зміну відповідного слоту (morning route → morning shift), інакше — усі слоти на цю дату.
+     */
+    public function reprice(int $employeeId, string $date, ?string $routeShift = null): bool
     {
         $employee = Employee::find($employeeId);
         if (! $employee || $employee->position !== 'courier') {
             return false;
         }
 
-        $shift = EmployeeShift::where('employee_id', $employeeId)
+        $shifts = EmployeeShift::where('employee_id', $employeeId)
             ->whereDate('date', $date)
-            ->first();
-        if (! $shift) {
+            ->get();
+
+        if ($shifts->isEmpty()) {
             return false;
         }
 
-        $routeSum = (float) DeliveryRoute::where('employee_id', $employeeId)
-            ->whereDate('date', $date)
-            ->sum('calculated_cost');
+        // Мапа slot → route.shift для запиту суми маршрутів.
+        $slotToRouteShift = [
+            EmployeeShift::SLOT_MORNING => 'morning',
+            EmployeeShift::SLOT_EVENING => 'evening',
+            EmployeeShift::SLOT_FULL    => null, // full = усі маршрути дня
+        ];
 
-        // Для пів-зміни ділимо на 2 (курʼєр не буває черговим — bonus ігноруємо).
-        $newRate = $shift->is_half ? round($routeSum / 2, 2) : $routeSum;
-        $oldRate = (float) $shift->rate;
+        $anyChanged = false;
 
-        if (abs($newRate - $oldRate) < 0.01) {
-            return false;
+        foreach ($shifts as $shift) {
+            // Якщо переоцінка викликана конкретним маршрутом — оновлюємо тільки відповідний слот.
+            if ($routeShift !== null) {
+                $expectedSlot = $routeShift === 'morning'
+                    ? EmployeeShift::SLOT_MORNING
+                    : EmployeeShift::SLOT_EVENING;
+                // Якщо у працівника один "full" слот — все ще оновлюємо його (гібридний випадок).
+                if ($shift->shift_slot !== EmployeeShift::SLOT_FULL && $shift->shift_slot !== $expectedSlot) {
+                    continue;
+                }
+            }
+
+            $routeQuery = DeliveryRoute::where('employee_id', $employeeId)
+                ->whereDate('date', $date);
+            $mapped = $slotToRouteShift[$shift->shift_slot] ?? null;
+            if ($mapped !== null) {
+                $routeQuery->where('shift', $mapped);
+            }
+            $routeSum = (float) $routeQuery->sum('calculated_cost');
+
+            $newRate = $shift->is_half ? round($routeSum / 2, 2) : $routeSum;
+            $oldRate = (float) $shift->rate;
+
+            if (abs($newRate - $oldRate) < 0.01) {
+                continue;
+            }
+
+            DB::transaction(function () use ($shift, $employee, $newRate, $oldRate) {
+                $shift->update(['rate' => $newRate]);
+                $employee->increment('balance', $newRate - $oldRate);
+            });
+            $anyChanged = true;
         }
 
-        DB::transaction(function () use ($shift, $employee, $newRate, $oldRate) {
-            $shift->update(['rate' => $newRate]);
-            $employee->increment('balance', $newRate - $oldRate);
-        });
-
-        return true;
+        return $anyChanged;
     }
 }

@@ -140,8 +140,17 @@ class OrderDayObserver
                 return;
             }
 
+            // Мапимо ранкові/вечірні маршрути на відповідний слот зміни.
+            $preferredSlots = match ($route->shift) {
+                'morning' => [EmployeeShift::SLOT_MORNING, EmployeeShift::SLOT_FULL],
+                'evening' => [EmployeeShift::SLOT_EVENING, EmployeeShift::SLOT_FULL],
+                default   => [EmployeeShift::SLOT_FULL, EmployeeShift::SLOT_MORNING, EmployeeShift::SLOT_EVENING],
+            };
+
             $shift = EmployeeShift::where('employee_id', $route->employee_id)
                 ->whereDate('date', $route->date)
+                ->whereIn('shift_slot', $preferredSlots)
+                ->orderByRaw("FIELD(shift_slot, '" . implode("','", $preferredSlots) . "')")
                 ->first();
 
             if (!$shift) {

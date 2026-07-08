@@ -517,8 +517,17 @@ class AntLogisticsService
                     return;
                 }
 
+                // Мапимо ранкові/вечірні маршрути на відповідний слот зміни.
+                $preferredSlots = match ($route->shift) {
+                    'morning' => [\App\Models\EmployeeShift::SLOT_MORNING, \App\Models\EmployeeShift::SLOT_FULL],
+                    'evening' => [\App\Models\EmployeeShift::SLOT_EVENING, \App\Models\EmployeeShift::SLOT_FULL],
+                    default   => [\App\Models\EmployeeShift::SLOT_FULL, \App\Models\EmployeeShift::SLOT_MORNING, \App\Models\EmployeeShift::SLOT_EVENING],
+                };
+
                 $sh = \App\Models\EmployeeShift::where('employee_id', $route->employee_id)
                     ->whereDate('date', $route->date)
+                    ->whereIn('shift_slot', $preferredSlots)
+                    ->orderByRaw("FIELD(shift_slot, '" . implode("','", $preferredSlots) . "')")
                     ->first();
                 if (!$sh) {
                     return;

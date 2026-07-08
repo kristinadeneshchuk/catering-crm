@@ -75,39 +75,174 @@ class EmployeeAttendance extends Page
         return (float) (Setting::where('key', 'duty_cook_bonus')->value('value') ?? 0);
     }
 
-    public function toggleShift(int $employeeId, string $date): void
+    public function toggleShift(int $employeeId, string $date, string $slot = EmployeeShift::SLOT_FULL): void
     {
-        $employee = Employee::findOrFail($employeeId);
-        $shift = EmployeeShift::where('employee_id', $employeeId)->where('date', $date)->first();
+        if (! in_array($slot, [EmployeeShift::SLOT_FULL, EmployeeShift::SLOT_MORNING, EmployeeShift::SLOT_EVENING], true)) {
+            return;
+        }
 
-        DB::transaction(function () use ($employee, $shift, $employeeId, $date) {
+        $employee = Employee::findOrFail($employeeId);
+        $shift = EmployeeShift::where('employee_id', $employeeId)
+            ->where('date', $date)
+            ->where('shift_slot', $slot)
+            ->first();
+
+        DB::transaction(function () use ($employee, $shift, $employeeId, $date, $slot) {
             // Базова ставка за день (для кур'єра — вартість маршрутів)
             if ($employee->position === 'courier') {
-                $base = (float) DeliveryRoute::where('date', $date)
-                    ->where('employee_id', $employeeId)
-                    ->sum('calculated_cost');
+                $routeQ = DeliveryRoute::where('date', $date)
+                    ->where('employee_id', $employeeId);
+                // Ранкові/вечірні маршрути мапляться на відповідний слот.
+                if ($slot === EmployeeShift::SLOT_MORNING) {
+                    $routeQ->where('shift', 'morning');
+                } elseif ($slot === EmployeeShift::SLOT_EVENING) {
+                    $routeQ->where('shift', 'evening');
+                }
+                $base = (float) $routeQ->sum('calculated_cost');
             } else {
                 $base = (float) $employee->base_rate;
             }
             $bonus = $this->dutyBonus();
 
-            // Цикл: немає → повна → половина → немає
+            // Порожня slot-заглушка (створена splitShift) поводиться як «немає зміни».
+            $isEmpty = $shift && (float) $shift->rate <= 0.001 && ! $shift->is_half && ! $shift->is_duty;
+
+            // Цикл: немає → повна → половина → немає (незалежно для кожного слоту)
             if (! $shift) {
                 EmployeeShift::create([
-                    'employee_id' => $employeeId, 'date' => $date,
-                    'rate' => $base, 'is_duty' => false, 'is_half' => false,
+                    'employee_id' => $employeeId,
+                    'date'        => $date,
+                    'shift_slot'  => $slot,
+                    'rate'        => $base,
+                    'is_duty'     => false,
+                    'is_half'     => false,
                 ]);
                 $employee->increment('balance', $base);
+            } elseif ($isEmpty) {
+                // Активуємо порожній slot: rate=base, is_half=false. Duty не вмикаємо (окрема кнопка).
+                $shift->update(['rate' => $base, 'is_half' => false]);
+                $employee->increment('balance', $base);
             } elseif (! $shift->is_half) {
-                // повна → половина: відкочуємо стару суму, ставимо пів-ставки (+ бонус чергового, якщо є)
                 $employee->decrement('balance', $shift->rate);
                 $newRate = $base / 2 + ($shift->is_duty ? $bonus : 0);
                 $shift->update(['is_half' => true, 'rate' => $newRate]);
                 $employee->increment('balance', $newRate);
             } else {
-                // половина → немає
                 $employee->decrement('balance', $shift->rate);
                 $shift->delete();
+            }
+        });
+    }
+
+    /**
+     * Розділити день на дві зміни (ранок+вечір).
+     * Існуюча зміна 'full' стає 'morning', вечірня створюється порожньою.
+     * Якщо зміни ще не було — просто створюємо порожню morning-мітку (менеджер клацне для активації).
+     *
+     * Для курʼєрів: після перейменування переоцінюємо ставку morning-зміни
+     * тільки по ранкових маршрутах — інакше вона несла б повний денний rate.
+     * Дельту знімаємо з балансу.
+     */
+    public function splitShift(int $employeeId, string $date): void
+    {
+        $employee = Employee::findOrFail($employeeId);
+
+        DB::transaction(function () use ($employeeId, $date, $employee) {
+            $full = EmployeeShift::where('employee_id', $employeeId)
+                ->where('date', $date)
+                ->where('shift_slot', EmployeeShift::SLOT_FULL)
+                ->first();
+
+            if ($full) {
+                $oldRate = (float) $full->rate;
+                $full->update(['shift_slot' => EmployeeShift::SLOT_MORNING]);
+
+                if ($employee->position === 'courier') {
+                    $morningRoutes = (float) DeliveryRoute::where('employee_id', $employeeId)
+                        ->whereDate('date', $date)
+                        ->where('shift', 'morning')
+                        ->sum('calculated_cost');
+                    $newRate = $full->is_half ? round($morningRoutes / 2, 2) : $morningRoutes;
+                    if (abs($newRate - $oldRate) > 0.001) {
+                        $full->update(['rate' => $newRate]);
+                        $employee->increment('balance', $newRate - $oldRate);
+                    }
+                }
+            }
+
+            // Створюємо порожню вечірню зміну (rate=0) — менеджер клацне щоб активувати.
+            EmployeeShift::firstOrCreate([
+                'employee_id' => $employeeId,
+                'date'        => $date,
+                'shift_slot'  => EmployeeShift::SLOT_EVENING,
+            ], [
+                'rate' => 0, 'is_duty' => false, 'is_half' => false,
+            ]);
+
+            // Якщо ранкової взагалі не було — теж створюємо порожню, щоб позначити split-режим.
+            EmployeeShift::firstOrCreate([
+                'employee_id' => $employeeId,
+                'date'        => $date,
+                'shift_slot'  => EmployeeShift::SLOT_MORNING,
+            ], [
+                'rate' => 0, 'is_duty' => false, 'is_half' => false,
+            ]);
+        });
+    }
+
+    /**
+     * Обʼєднати ранок+вечір назад у одну зміну.
+     * Вечірню зміну знімаємо (з коригуванням балансу), ранкову перейменовуємо у 'full'.
+     * Якщо ранкова була порожня (rate=0) — теж видаляємо, повертаючи "порожній день".
+     *
+     * Для курʼєрів: після перейменування переоцінюємо ставку 'full'-зміни
+     * по ВСІХ маршрутах дня (не тільки ранкових). Дельту вносимо в баланс.
+     */
+    public function mergeShift(int $employeeId, string $date): void
+    {
+        $employee = Employee::findOrFail($employeeId);
+
+        DB::transaction(function () use ($employeeId, $date, $employee) {
+            foreach ([EmployeeShift::SLOT_EVENING, EmployeeShift::SLOT_MORNING] as $slot) {
+                $s = EmployeeShift::where('employee_id', $employeeId)
+                    ->where('date', $date)
+                    ->where('shift_slot', $slot)
+                    ->first();
+                if (! $s) continue;
+
+                if ($slot === EmployeeShift::SLOT_EVENING) {
+                    if ((float) $s->rate > 0) {
+                        $employee->decrement('balance', (float) $s->rate);
+                    }
+                    $s->delete();
+                } else {
+                    // morning: якщо rate=0 — просто видаляємо, інакше перетворюємо на 'full'
+                    if ((float) $s->rate <= 0.001) {
+                        $s->delete();
+                    } else {
+                        $existsFull = EmployeeShift::where('employee_id', $employeeId)
+                            ->where('date', $date)
+                            ->where('shift_slot', EmployeeShift::SLOT_FULL)
+                            ->exists();
+                        if ($existsFull) {
+                            $employee->decrement('balance', (float) $s->rate);
+                            $s->delete();
+                        } else {
+                            $oldRate = (float) $s->rate;
+                            $s->update(['shift_slot' => EmployeeShift::SLOT_FULL]);
+                            if ($employee->position === 'courier') {
+                                $allRoutes = (float) DeliveryRoute::where('employee_id', $employeeId)
+                                    ->whereDate('date', $date)
+                                    ->sum('calculated_cost');
+                                $newRate = $s->is_half ? round($allRoutes / 2, 2) : $allRoutes;
+                                if (abs($newRate - $oldRate) > 0.001) {
+                                    $s->update(['rate' => $newRate]);
+                                    $employee->increment('balance', $newRate - $oldRate);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         });
     }
@@ -131,7 +266,13 @@ class EmployeeAttendance extends Page
         $bonus = $this->dutyBonus();
 
         DB::transaction(function () use ($employee, $employeeId, $date, $bonus) {
-            $shift = EmployeeShift::where('employee_id', $employeeId)->where('date', $date)->first();
+            // Чергування працює тільки в режимі одної зміни на день.
+            // Якщо день розділено на ранок+вечір — беремо ранкову зміну.
+            $shift = EmployeeShift::where('employee_id', $employeeId)
+                ->where('date', $date)
+                ->whereIn('shift_slot', [EmployeeShift::SLOT_FULL, EmployeeShift::SLOT_MORNING])
+                ->orderByRaw("FIELD(shift_slot, 'full', 'morning')")
+                ->first();
 
             if ($shift && $shift->is_duty) {
                 // Знімаємо чергування — мінусуємо бонус з rate і balance.
@@ -196,6 +337,10 @@ class EmployeeAttendance extends Page
         $allShifts   = EmployeeShift::whereBetween('date', [$rangeStart, $rangeEnd])->get();
         $shiftsByEmp = $allShifts->groupBy('employee_id');
 
+        // «Реальні» зміни (не порожні slot-заглушки, створені splitShift без активації).
+        // Використовуємо для лічильників — щоб щойно розділений день (0₴+0₴) не рахувався як +2 зміни.
+        $realShifts = $allShifts->filter(fn ($s) => (float) $s->rate > 0.001 || $s->is_duty || $s->is_half);
+
         // Прапорці пробігу кур'єрів: employee_id => [Y-m-d => true|false]
         $mileageFlags = [];
         $mileageRows = CourierMileageLog::whereBetween('date', [$rangeStart, $rangeEnd])
@@ -203,19 +348,21 @@ class EmployeeAttendance extends Page
         foreach ($mileageRows as $m) {
             $ymd = $m->date instanceof \Carbon\Carbon ? $m->date->format('Y-m-d') : (string) $m->date;
             $filled = ($m->start_km !== null && $m->end_km !== null) || (float) $m->fuel_price_per_liter > 0;
-            $mileageFlags[$m->employee_id][$ymd] = $filled;
+            // Або-або: якщо на день є хоч один заповнений слот — вважаємо, що пробіг внесено.
+            $mileageFlags[$m->employee_id][$ymd] = ($mileageFlags[$m->employee_id][$ymd] ?? false) || $filled;
         }
 
-        $shiftsCount = $allShifts->count();
-        $salary      = round($allShifts->sum('rate'));
+        $shiftsCount = $realShifts->count();
+        $salary      = round($realShifts->sum('rate'));
 
         // Помісячні посади (оклад) не беруть участі в табелі змін
         $perMonthKeys = \App\Models\Position::where('payment_type', 'per_month')->pluck('key')->all();
 
         $absentToday = 0;
         if ($inRange) {
-            $activeCount  = Employee::where('is_active', true)->whereNotIn('position', $perMonthKeys)->count();
-            $presentToday = $allShifts->where('date', $today)->count();
+            $activeCount = Employee::where('is_active', true)->whereNotIn('position', $perMonthKeys)->count();
+            // Присутні сьогодні = унікальні співробітники, у яких хоча б один реальний слот сьогодні.
+            $presentToday = $realShifts->where('date', $today)->pluck('employee_id')->unique()->count();
             $absentToday  = max(0, $activeCount - $presentToday);
         }
 
@@ -272,19 +419,17 @@ class EmployeeAttendance extends Page
 
         $rows = [];
         foreach ($employees as $emp) {
-            $empShifts     = $shiftsByEmp->get($emp->id, collect())->keyBy('date');
+            // Групуємо зміни по даті: на 1 (date) може бути 1 або 2 записи (full | morning+evening).
+            $empShifts     = $shiftsByEmp->get($emp->id, collect())->groupBy('date');
             $days          = [];
             $absentEmployee = false;
 
             $isCourier = $emp->position === 'courier';
             foreach ($dates as $date) {
-                $hasShift   = $empShifts->has($date);
+                $dayShifts  = $empShifts->get($date, collect());
+                $hasShift   = $dayShifts->isNotEmpty();
                 $hasMileage = ($mileageFlags[$emp->id][$date] ?? false);
 
-                // Показуємо значок:
-                //   ✓ якщо є пробіг (навіть без зміни — менеджер ще не позначив зміну);
-                //   ! якщо є зміна, але пробіг не внесено;
-                //   нічого — якщо ні зміни ні пробігу (вихідний / майбутнє).
                 $mileageState = null;
                 if ($isCourier && $date <= $today) {
                     if ($hasMileage) {
@@ -295,19 +440,37 @@ class EmployeeAttendance extends Page
                 }
 
                 if ($hasShift) {
+                    $isSplit = $dayShifts->contains(fn ($s) => in_array($s->shift_slot, [
+                        EmployeeShift::SLOT_MORNING,
+                        EmployeeShift::SLOT_EVENING,
+                    ], true));
+
+                    $slots = [];
+                    foreach ($dayShifts as $s) {
+                        $slots[$s->shift_slot] = [
+                            'is_duty' => (bool) $s->is_duty,
+                            'is_half' => (bool) $s->is_half,
+                            'is_empty' => (float) $s->rate <= 0.001,
+                        ];
+                    }
+
+                    // Для сумісності зі старим шаблоном — беремо флаги першої знайденої зміни.
+                    $first = $dayShifts->first();
                     $days[$date] = [
-                        'status'  => 'present',
-                        'is_duty' => (bool) $empShifts[$date]->is_duty,
-                        'is_half' => (bool) $empShifts[$date]->is_half,
-                        'mileage' => $mileageState,
+                        'status'   => 'present',
+                        'is_duty'  => (bool) $first->is_duty,
+                        'is_half'  => (bool) $first->is_half,
+                        'is_split' => $isSplit,
+                        'slots'    => $slots,
+                        'mileage'  => $mileageState,
                     ];
                 } elseif ($date > $today) {
-                    $days[$date] = ['status' => 'future', 'is_duty' => false, 'mileage' => null];
+                    $days[$date] = ['status' => 'future', 'is_duty' => false, 'is_split' => false, 'slots' => [], 'mileage' => null];
                 } elseif ($date === $today) {
-                    $days[$date] = ['status' => 'absent_today', 'is_duty' => false, 'mileage' => $mileageState];
+                    $days[$date] = ['status' => 'absent_today', 'is_duty' => false, 'is_split' => false, 'slots' => [], 'mileage' => $mileageState];
                     $absentEmployee = true;
                 } else {
-                    $days[$date] = ['status' => 'off', 'is_duty' => false, 'mileage' => $mileageState];
+                    $days[$date] = ['status' => 'off', 'is_duty' => false, 'is_split' => false, 'slots' => [], 'mileage' => $mileageState];
                 }
             }
 

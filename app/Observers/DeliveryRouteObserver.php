@@ -25,11 +25,12 @@ class DeliveryRouteObserver
     {
         // Якщо перевʼязали маршрут з одного курʼєра на іншого або переносили дату —
         // перерахуємо і стару, і нову зміну, щоб не лишалось «сирітських» +700 у попередника.
-        if ($route->wasChanged('employee_id') || $route->wasChanged('date')) {
-            $oldEmp  = $route->getOriginal('employee_id');
-            $oldDate = $route->getOriginal('date');
+        if ($route->wasChanged('employee_id') || $route->wasChanged('date') || $route->wasChanged('shift')) {
+            $oldEmp   = $route->getOriginal('employee_id');
+            $oldDate  = $route->getOriginal('date');
+            $oldShift = $route->getOriginal('shift');
             if ($oldEmp && $oldDate) {
-                $this->pricing->reprice((int) $oldEmp, $this->ymd($oldDate));
+                $this->pricing->reprice((int) $oldEmp, $this->ymd($oldDate), $oldShift);
             }
         }
         $this->repriceRoute($route);
@@ -45,7 +46,7 @@ class DeliveryRouteObserver
         if (! $route->employee_id || ! $route->date) {
             return;
         }
-        $this->pricing->reprice((int) $route->employee_id, $this->ymd($route->date));
+        $this->pricing->reprice((int) $route->employee_id, $this->ymd($route->date), $route->shift);
     }
 
     /** DeliveryRoute->date іноді приходить рядком, іноді як Carbon — нормалізуємо. */

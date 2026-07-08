@@ -99,11 +99,21 @@ class Payroll extends Page
         // Так архівовані / неактивні, що відпрацювали частину періоду, не зникають з звіту.
         $perMonthKeys = $positions->filter(fn ($p) => $p->payment_type === 'per_month')->keys()->all();
 
+        // Не рахуємо порожні slot-заглушки (rate=0 без duty/half) — вони зʼявляються,
+        // коли менеджер клацнув «розділити день» але жоден слот ще не активований.
         $movementIds = collect()
-            ->merge(EmployeeShift::whereBetween('date', [$start, $end])->pluck('employee_id'))
+            ->merge(EmployeeShift::whereBetween('date', [$start, $end])
+                ->where(function ($q) {
+                    $q->where('rate', '>', 0.001)->orWhere('is_duty', true)->orWhere('is_half', true);
+                })
+                ->pluck('employee_id'))
             ->merge(EmployeePenalty::whereBetween('date', [$start, $end])->pluck('employee_id'))
             ->merge(EmployeeBonus::whereBetween('date', [$start, $end])->pluck('employee_id'))
-            ->merge(CourierMileageLog::whereBetween('date', [$start, $end])->pluck('employee_id'))
+            ->merge(CourierMileageLog::whereBetween('date', [$start, $end])
+                ->where(function ($q) {
+                    $q->whereNotNull('start_km')->orWhereNotNull('end_km')->orWhere('fuel_price_per_liter', '>', 0);
+                })
+                ->pluck('employee_id'))
             ->unique();
 
         $activeMonthlyIds = empty($perMonthKeys) ? collect() :

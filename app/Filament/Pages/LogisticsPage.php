@@ -107,6 +107,10 @@ class LogisticsPage extends Page implements HasForms
     /**
      * Завантажити пробіг кур'єрів на обрану дату.
      * Показуємо всіх активних кур'єрів (а не тільки тих що в маршрутах) — менеджер вносить вручну.
+     *
+     * Режим "розділення" вмикається, коли існує хоча б один лог зі слотом
+     * morning/evening для цього курʼєра на цю дату — тоді показуємо 2 рядки
+     * (ранок + вечір). Інакше — 1 рядок (slot=full), стара поведінка.
      */
     public function loadMileage(): void
     {
@@ -119,41 +123,58 @@ class LogisticsPage extends Page implements HasForms
             ->orderBy('name')
             ->get();
 
-        $logs = CourierMileageLog::whereDate('date', $date)
+        $logsByEmp = CourierMileageLog::whereDate('date', $date)
             ->get()
-            ->keyBy('employee_id');
+            ->groupBy('employee_id');
 
         $rows = [];
         $sumKm = 0; $sumLiters = 0; $sumFuelCost = 0; $sumAmort = 0; $sumComp = 0;
 
         foreach ($couriers as $c) {
-            $log = $logs->get($c->id);
-            $km          = $log ? $log->km : 0;
-            $liters      = $log ? $log->liters_used : 0;
-            $fuelCost    = $log ? $log->fuel_cost : 0;
-            $amort       = $log ? $log->amortization : 0;
-            $comp        = $log ? $log->compensation : 0;
+            $logs = $logsByEmp->get($c->id, collect());
+            $isSplit = $logs->contains(fn ($l) => in_array($l->shift_slot, [
+                CourierMileageLog::SLOT_MORNING,
+                CourierMileageLog::SLOT_EVENING,
+            ], true));
 
-            $rows[] = [
-                'employee_id'          => $c->id,
-                'name'                 => $c->name,
-                'consumption'          => (float) ($c->fuel_consumption ?? 0),
-                'log_id'               => $log?->id,
-                'start_km'             => $log?->start_km,
-                'end_km'               => $log?->end_km,
-                'fuel_price_per_liter' => $log ? (float) $log->fuel_price_per_liter : 0,
-                'km'                   => $km,
-                'liters_used'          => $liters,
-                'fuel_cost'            => $fuelCost,
-                'amortization'         => $amort,
-                'compensation'         => $comp,
-            ];
+            $slots = $isSplit
+                ? [CourierMileageLog::SLOT_MORNING, CourierMileageLog::SLOT_EVENING]
+                : [CourierMileageLog::SLOT_FULL];
 
-            $sumKm       += $km;
-            $sumLiters   += $liters;
-            $sumFuelCost += $fuelCost;
-            $sumAmort    += $amort;
-            $sumComp     += $comp;
+            $first = true;
+            foreach ($slots as $slot) {
+                $log = $logs->firstWhere('shift_slot', $slot);
+                $km       = $log ? $log->km : 0;
+                $liters   = $log ? $log->liters_used : 0;
+                $fuelCost = $log ? $log->fuel_cost : 0;
+                $amort    = $log ? $log->amortization : 0;
+                $comp     = $log ? $log->compensation : 0;
+
+                $rows[] = [
+                    'employee_id'          => $c->id,
+                    'name'                 => $c->name,
+                    'consumption'          => (float) ($c->fuel_consumption ?? 0),
+                    'shift_slot'           => $slot,
+                    'is_split'             => $isSplit,
+                    'is_first_of_courier'  => $first,
+                    'log_id'               => $log?->id,
+                    'start_km'             => $log?->start_km,
+                    'end_km'               => $log?->end_km,
+                    'fuel_price_per_liter' => $log ? (float) $log->fuel_price_per_liter : 0,
+                    'km'                   => $km,
+                    'liters_used'          => $liters,
+                    'fuel_cost'            => $fuelCost,
+                    'amortization'         => $amort,
+                    'compensation'         => $comp,
+                ];
+
+                $sumKm       += $km;
+                $sumLiters   += $liters;
+                $sumFuelCost += $fuelCost;
+                $sumAmort    += $amort;
+                $sumComp     += $comp;
+                $first = false;
+            }
         }
 
         $this->mileageRows = $rows;
@@ -167,9 +188,16 @@ class LogisticsPage extends Page implements HasForms
      * Зберегти одне поле пробігу (inline-сейв).
      * При зміні компенсації коригуємо balance кур'єра на дельту.
      */
-    public function saveMileage(int $employeeId, string $field, $value): void
+    public function saveMileage(int $employeeId, string $slot, string $field, $value): void
     {
         if (! in_array($field, ['start_km', 'end_km', 'fuel_price_per_liter'], true)) {
+            return;
+        }
+        if (! in_array($slot, [
+            CourierMileageLog::SLOT_FULL,
+            CourierMileageLog::SLOT_MORNING,
+            CourierMileageLog::SLOT_EVENING,
+        ], true)) {
             return;
         }
 
@@ -183,28 +211,25 @@ class LogisticsPage extends Page implements HasForms
             $value = (int) $value;
         }
 
-        DB::transaction(function () use ($employeeId, $date, $field, $value, $employee) {
-            // lockForUpdate щоб не було гонки при одночасному вводі двома менеджерами
+        DB::transaction(function () use ($employeeId, $date, $slot, $field, $value, $employee) {
             $log = CourierMileageLog::where('employee_id', $employeeId)
                 ->whereDate('date', $date)
+                ->where('shift_slot', $slot)
                 ->lockForUpdate()
                 ->first();
 
             $oldComp = $log?->compensation ?? 0;
 
             if (! $log) {
-                // Створюємо вперше — фіксуємо знімок ставки амортизації І витрати машини.
                 $log = new CourierMileageLog([
                     'employee_id'      => $employeeId,
                     'date'             => $date,
+                    'shift_slot'       => $slot,
                     'amort_per_km'     => CourierMileageLog::currentAmortPerKm(),
                     'fuel_consumption' => (float) ($employee->fuel_consumption ?? 0),
                 ]);
             }
 
-            // Само-вилікування: якщо лог було створено до того, як кур'єру задали
-            // витрату, у знімку залишився 0 і пальне рахується як 0. Підтягуємо знімок
-            // з кур'єра при першому ж дотику до рядка.
             if ((float) ($log->fuel_consumption ?? 0) <= 0
                 && (float) ($employee->fuel_consumption ?? 0) > 0) {
                 $log->fuel_consumption = (float) $employee->fuel_consumption;
@@ -217,6 +242,95 @@ class LogisticsPage extends Page implements HasForms
             $delta = round($newComp - $oldComp, 2);
             if (abs($delta) > 0.001) {
                 $employee->increment('balance', $delta);
+            }
+        });
+
+        $this->loadMileage();
+    }
+
+    /**
+     * Розділити день кур'єра на ранок+вечір.
+     * Якщо є лог 'full' — перейменовуємо його в 'morning' (зберігаємо всі значення),
+     * створюємо порожній 'evening'. Якщо логу ще не було — просто позначаємо режим
+     * створенням порожнього morning-логу.
+     */
+    public function splitDay(int $employeeId): void
+    {
+        $date = $this->data['date'] ?? now()->format('Y-m-d');
+        $employee = Employee::findOrFail($employeeId);
+
+        DB::transaction(function () use ($employeeId, $date, $employee) {
+            $full = CourierMileageLog::where('employee_id', $employeeId)
+                ->whereDate('date', $date)
+                ->where('shift_slot', CourierMileageLog::SLOT_FULL)
+                ->lockForUpdate()
+                ->first();
+
+            if ($full) {
+                $full->update(['shift_slot' => CourierMileageLog::SLOT_MORNING]);
+            }
+
+            // Позначаємо режим існуванням morning-запису (створюємо, якщо не було).
+            CourierMileageLog::firstOrCreate([
+                'employee_id' => $employeeId,
+                'date'        => $date,
+                'shift_slot'  => CourierMileageLog::SLOT_MORNING,
+            ], [
+                'amort_per_km'     => CourierMileageLog::currentAmortPerKm(),
+                'fuel_consumption' => (float) ($employee->fuel_consumption ?? 0),
+            ]);
+        });
+
+        $this->loadMileage();
+    }
+
+    /**
+     * Обʼєднати ранок+вечір назад у одну зміну.
+     * Компенсацію вечірнього логу знімаємо з балансу, лог видаляємо.
+     * Ранковий лог перейменовуємо назад у 'full'.
+     */
+    public function mergeDay(int $employeeId): void
+    {
+        $date = $this->data['date'] ?? now()->format('Y-m-d');
+        $employee = Employee::findOrFail($employeeId);
+
+        DB::transaction(function () use ($employeeId, $date, $employee) {
+            $evening = CourierMileageLog::where('employee_id', $employeeId)
+                ->whereDate('date', $date)
+                ->where('shift_slot', CourierMileageLog::SLOT_EVENING)
+                ->lockForUpdate()
+                ->first();
+
+            if ($evening) {
+                $comp = (float) $evening->compensation;
+                if ($comp > 0.001) {
+                    $employee->decrement('balance', $comp);
+                }
+                $evening->delete();
+            }
+
+            $morning = CourierMileageLog::where('employee_id', $employeeId)
+                ->whereDate('date', $date)
+                ->where('shift_slot', CourierMileageLog::SLOT_MORNING)
+                ->lockForUpdate()
+                ->first();
+
+            if ($morning) {
+                // Якщо в цей день чомусь уже є "full" (руками з іншої вкладки) — не робимо конфлікт.
+                $existsFull = CourierMileageLog::where('employee_id', $employeeId)
+                    ->whereDate('date', $date)
+                    ->where('shift_slot', CourierMileageLog::SLOT_FULL)
+                    ->exists();
+
+                if ($existsFull) {
+                    $comp = (float) $morning->compensation;
+                    if ($comp > 0.001) {
+                        $employee->decrement('balance', $comp);
+                    }
+                    $morning->delete();
+                } else {
+                    $morning->update(['shift_slot' => CourierMileageLog::SLOT_FULL]);
+                }
             }
         });
 
