@@ -15,13 +15,17 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('employees', function (Blueprint $table) {
-            $table->string('mileage_unit', 2)->default('km')->after('fuel_consumption');
-        });
+        if (! Schema::hasColumn('employees', 'mileage_unit')) {
+            Schema::table('employees', function (Blueprint $table) {
+                $table->string('mileage_unit', 2)->default('km')->after('fuel_consumption');
+            });
+        }
 
-        Schema::table('courier_mileage_logs', function (Blueprint $table) {
-            $table->string('mileage_unit', 2)->default('km')->after('fuel_consumption');
-        });
+        if (! Schema::hasColumn('courier_mileage_logs', 'mileage_unit')) {
+            Schema::table('courier_mileage_logs', function (Blueprint $table) {
+                $table->string('mileage_unit', 2)->default('km')->after('fuel_consumption');
+            });
+        }
     }
 
     public function down(): void

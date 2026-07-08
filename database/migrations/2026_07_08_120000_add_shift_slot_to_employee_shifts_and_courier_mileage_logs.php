@@ -13,24 +13,47 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('employee_shifts', function (Blueprint $table) {
-            $table->string('shift_slot', 10)->default('full')->after('date');
-        });
+        // Ідемпотентно: перевіряємо кожен крок — щоб можна було догнати міграцію
+        // навіть якщо частина уже застосована руками або впала на середині.
+        if (! Schema::hasColumn('employee_shifts', 'shift_slot')) {
+            Schema::table('employee_shifts', function (Blueprint $table) {
+                $table->string('shift_slot', 10)->default('full')->after('date');
+            });
+        }
 
-        Schema::table('courier_mileage_logs', function (Blueprint $table) {
-            $table->string('shift_slot', 10)->default('full')->after('date');
-        });
+        if (! Schema::hasColumn('courier_mileage_logs', 'shift_slot')) {
+            Schema::table('courier_mileage_logs', function (Blueprint $table) {
+                $table->string('shift_slot', 10)->default('full')->after('date');
+            });
+        }
 
-        // Розширюємо унікальний ключ, щоб можна було 2 записи на день (ранок+вечір).
-        Schema::table('employee_shifts', function (Blueprint $table) {
-            // employee_shifts у 2026_03_16 не мав явного unique — тільки логіка. Створюємо новий.
-            $table->unique(['employee_id', 'date', 'shift_slot'], 'employee_shifts_emp_date_slot_unique');
-        });
+        if (! $this->indexExists('employee_shifts', 'employee_shifts_emp_date_slot_unique')) {
+            Schema::table('employee_shifts', function (Blueprint $table) {
+                $table->unique(['employee_id', 'date', 'shift_slot'], 'employee_shifts_emp_date_slot_unique');
+            });
+        }
 
-        Schema::table('courier_mileage_logs', function (Blueprint $table) {
-            $table->dropUnique(['employee_id', 'date']);
-            $table->unique(['employee_id', 'date', 'shift_slot'], 'courier_mileage_logs_emp_date_slot_unique');
-        });
+        if ($this->indexExists('courier_mileage_logs', 'courier_mileage_logs_employee_id_date_unique')) {
+            Schema::table('courier_mileage_logs', function (Blueprint $table) {
+                $table->dropUnique('courier_mileage_logs_employee_id_date_unique');
+            });
+        }
+
+        if (! $this->indexExists('courier_mileage_logs', 'courier_mileage_logs_emp_date_slot_unique')) {
+            Schema::table('courier_mileage_logs', function (Blueprint $table) {
+                $table->unique(['employee_id', 'date', 'shift_slot'], 'courier_mileage_logs_emp_date_slot_unique');
+            });
+        }
+    }
+
+    private function indexExists(string $table, string $index): bool
+    {
+        $conn = Schema::getConnection();
+        $db   = $conn->getDatabaseName();
+        return (int) $conn->selectOne(
+            'SELECT COUNT(1) AS c FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ?',
+            [$db, $table, $index]
+        )->c > 0;
     }
 
     public function down(): void
