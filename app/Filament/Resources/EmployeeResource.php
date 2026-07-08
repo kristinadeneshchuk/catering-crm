@@ -96,6 +96,17 @@ class EmployeeResource extends Resource
                             ->helperText('Середня витрата машини курʼєра. CRM рахує спалене пальне за день автоматично.')
                             ->visible(fn (\Filament\Forms\Get $get) => $get('position') === 'courier'),
 
+                        Select::make('mileage_unit')
+                            ->label('Одиниця пробігу')
+                            ->options([
+                                'km' => 'Кілометри (км)',
+                                'mi' => 'Милі (мі) — CRM конвертує × 1.6',
+                            ])
+                            ->default('km')
+                            ->required()
+                            ->helperText('Якщо в авто одометр у милях (імпорт з США тощо) — обери «Милі». CRM автоматично перекладе в км для всіх розрахунків (компенсація, амортизація, пальне).')
+                            ->visible(fn (\Filament\Forms\Get $get) => $get('position') === 'courier'),
+
                         Toggle::make('is_active')
                             ->label('Працює')
                             ->default(true)

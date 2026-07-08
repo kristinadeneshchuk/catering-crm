@@ -150,6 +150,11 @@ class LogisticsPage extends Page implements HasForms
                 $amort    = $log ? $log->amortization : 0;
                 $comp     = $log ? $log->compensation : 0;
 
+                // Одиниця пробігу: беремо зі знімка на логу (для історичної консистентності),
+                // а якщо логу ще нема — з поточного налаштування курʼєра.
+                $unit = $log?->mileage_unit ?? ($c->mileage_unit ?? 'km');
+                $rawDiff = $log ? $log->raw_diff : 0;
+
                 $rows[] = [
                     'employee_id'          => $c->id,
                     'name'                 => $c->name,
@@ -161,6 +166,8 @@ class LogisticsPage extends Page implements HasForms
                     'start_km'             => $log?->start_km,
                     'end_km'               => $log?->end_km,
                     'fuel_price_per_liter' => $log ? (float) $log->fuel_price_per_liter : 0,
+                    'mileage_unit'         => $unit,
+                    'raw_diff'             => $rawDiff,
                     'km'                   => $km,
                     'liters_used'          => $liters,
                     'fuel_cost'            => $fuelCost,
@@ -227,6 +234,7 @@ class LogisticsPage extends Page implements HasForms
                     'shift_slot'       => $slot,
                     'amort_per_km'     => CourierMileageLog::currentAmortPerKm(),
                     'fuel_consumption' => (float) ($employee->fuel_consumption ?? 0),
+                    'mileage_unit'     => $employee->mileage_unit ?? 'km',
                 ]);
             }
 
@@ -278,6 +286,7 @@ class LogisticsPage extends Page implements HasForms
             ], [
                 'amort_per_km'     => CourierMileageLog::currentAmortPerKm(),
                 'fuel_consumption' => (float) ($employee->fuel_consumption ?? 0),
+                'mileage_unit'     => $employee->mileage_unit ?? 'km',
             ]);
         });
 

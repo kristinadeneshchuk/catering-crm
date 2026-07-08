@@ -251,11 +251,22 @@
                         $eid    = $row['employee_id'];
                         $slot   = $row['shift_slot'];
                         $slotLabel = $slot === 'morning' ? '🌅 Ранок' : ($slot === 'evening' ? '🌙 Вечір' : null);
+                        $unit   = $row['mileage_unit'] ?? 'km';
+                        $unitLabel = $unit === 'mi' ? 'мі' : 'км';
+                        $isMi   = $unit === 'mi';
                     @endphp
                     <tr style="border-bottom:1px solid #1f1f22;{{ $isEven ? '' : 'background:#111113;' }}">
                         <td style="padding:10px 16px;">
                             @if($row['is_first_of_courier'])
-                                <div style="color:#f4f4f5;font-weight:600;">{{ $row['name'] }}</div>
+                                <div style="color:#f4f4f5;font-weight:600;">
+                                    {{ $row['name'] }}
+                                    @if($isMi)
+                                        <span title="Одометр у милях — CRM перекладає × 1.6"
+                                              style="display:inline-block;margin-left:6px;padding:1px 6px;background:#3b2800;color:#fbbf24;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.03em;">
+                                            мі → км
+                                        </span>
+                                    @endif
+                                </div>
                                 <div style="color:#52525b;font-size:11px;margin-top:2px;">
                                     @if($row['consumption'] > 0)
                                         Витрата: {{ rtrim(rtrim(number_format($row['consumption'], 2, '.', ''), '0'), '.') }} л/100 км
@@ -288,29 +299,42 @@
                         </td>
 
                         <td style="padding:8px 12px;text-align:center;">
-                            <input type="number"
-                                   value="{{ $row['start_km'] }}"
-                                   wire:change="saveMileage({{ $eid }}, '{{ $slot }}', 'start_km', $event.target.value)"
-                                   placeholder="—"
-                                   style="width:100px;background:#27272a;border:1px solid #3f3f46;border-radius:8px;padding:6px 10px;color:#f4f4f5;font-size:13px;text-align:center;outline:none;"
-                                   onfocus="this.style.borderColor='#3b82f6'"
-                                   onblur="this.style.borderColor='#3f3f46'">
+                            <div style="position:relative;display:inline-block;">
+                                <input type="number"
+                                       value="{{ $row['start_km'] }}"
+                                       wire:change="saveMileage({{ $eid }}, '{{ $slot }}', 'start_km', $event.target.value)"
+                                       placeholder="—"
+                                       title="Одометр у {{ $isMi ? 'милях' : 'кілометрах' }}"
+                                       style="width:100px;background:#27272a;border:1px solid {{ $isMi ? '#92400e' : '#3f3f46' }};border-radius:8px;padding:6px 22px 6px 10px;color:#f4f4f5;font-size:13px;text-align:center;outline:none;"
+                                       onfocus="this.style.borderColor='#3b82f6'"
+                                       onblur="this.style.borderColor='{{ $isMi ? '#92400e' : '#3f3f46' }}'">
+                                <span style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:9px;color:{{ $isMi ? '#fbbf24' : '#52525b' }};font-weight:700;pointer-events:none;">{{ $unitLabel }}</span>
+                            </div>
                         </td>
 
                         <td style="padding:8px 12px;text-align:center;">
-                            <input type="number"
-                                   value="{{ $row['end_km'] }}"
-                                   wire:change="saveMileage({{ $eid }}, '{{ $slot }}', 'end_km', $event.target.value)"
-                                   placeholder="—"
-                                   style="width:100px;background:#27272a;border:1px solid #3f3f46;border-radius:8px;padding:6px 10px;color:#f4f4f5;font-size:13px;text-align:center;outline:none;"
-                                   onfocus="this.style.borderColor='#3b82f6'"
-                                   onblur="this.style.borderColor='#3f3f46'">
+                            <div style="position:relative;display:inline-block;">
+                                <input type="number"
+                                       value="{{ $row['end_km'] }}"
+                                       wire:change="saveMileage({{ $eid }}, '{{ $slot }}', 'end_km', $event.target.value)"
+                                       placeholder="—"
+                                       title="Одометр у {{ $isMi ? 'милях' : 'кілометрах' }}"
+                                       style="width:100px;background:#27272a;border:1px solid {{ $isMi ? '#92400e' : '#3f3f46' }};border-radius:8px;padding:6px 22px 6px 10px;color:#f4f4f5;font-size:13px;text-align:center;outline:none;"
+                                       onfocus="this.style.borderColor='#3b82f6'"
+                                       onblur="this.style.borderColor='{{ $isMi ? '#92400e' : '#3f3f46' }}'">
+                                <span style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:9px;color:{{ $isMi ? '#fbbf24' : '#52525b' }};font-weight:700;pointer-events:none;">{{ $unitLabel }}</span>
+                            </div>
                         </td>
 
                         <td style="padding:8px 12px;text-align:center;">
                             <span style="{{ $row['km'] > 0 ? 'color:#a78bfa;font-weight:700;' : 'color:#3f3f46;' }}">
                                 {{ $row['km'] > 0 ? $row['km'] . ' км' : '—' }}
                             </span>
+                            @if($isMi && ($row['raw_diff'] ?? 0) > 0)
+                                <div style="color:#fbbf24;font-size:10px;margin-top:2px;font-style:italic;">
+                                    {{ $row['raw_diff'] }} мі × 1.6
+                                </div>
+                            @endif
                         </td>
 
                         <td style="padding:8px 12px;text-align:center;">

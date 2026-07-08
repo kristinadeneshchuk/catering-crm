@@ -10,10 +10,14 @@ class CourierMileageLog extends Model
     public const SLOT_MORNING = 'morning';
     public const SLOT_EVENING = 'evening';
 
+    // Коефіцієнт переводу миль у кілометри (за домовленістю з менеджером).
+    public const MI_TO_KM = 1.6;
+
     protected $fillable = [
         'employee_id', 'date', 'shift_slot',
         'start_km', 'end_km',
         'fuel_price_per_liter', 'fuel_consumption', 'amort_per_km',
+        'mileage_unit',
     ];
 
     protected $casts = [
@@ -28,7 +32,22 @@ class CourierMileageLog extends Model
         return $this->belongsTo(Employee::class);
     }
 
+    /**
+     * Пробіг у КІЛОМЕТРАХ. Якщо одометр у милях — конвертуємо (× 1.6).
+     * Всі подальші розрахунки (компенсація, амортизація, пальне) — у км.
+     */
     public function getKmAttribute(): int
+    {
+        if ($this->start_km === null || $this->end_km === null) return 0;
+        $diff = max(0, (int) $this->end_km - (int) $this->start_km);
+        if (($this->mileage_unit ?? 'km') === 'mi') {
+            return (int) round($diff * self::MI_TO_KM);
+        }
+        return $diff;
+    }
+
+    /** Сирий пробіг у одиниці одометра (mi або km) — для показу у формі. */
+    public function getRawDiffAttribute(): int
     {
         if ($this->start_km === null || $this->end_km === null) return 0;
         return max(0, (int) $this->end_km - (int) $this->start_km);
