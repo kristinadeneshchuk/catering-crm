@@ -119,36 +119,36 @@ class EmployeeAttendance extends Page
                 }
             }
 
-            // 2) Обчислюємо базову ставку (для курʼєра — сума маршрутів дня).
-            if ($employee->position === 'courier') {
-                $base = (float) DeliveryRoute::where('date', $date)
-                    ->where('employee_id', $employeeId)
-                    ->sum('calculated_cost');
-            } else {
-                $base = (float) $employee->base_rate;
-            }
-            $bonus = $this->dutyBonus();
+            // 2) Ставки:
+            //    - Курʼєр: base_rate — це ціна ОДНОГО виїзду.
+            //      full = 2 виїзди = 2 × base_rate; half = 1 виїзд = base_rate.
+            //    - Кухня/офіс: full = base_rate; half = base_rate/2.
+            $baseRate = (float) $employee->base_rate;
+            $isCourier = $employee->position === 'courier';
+            $fullRate  = $isCourier ? $baseRate * 2 : $baseRate;
+            $halfRate  = $baseRate; // для курʼєра = 1 виїзд, для інших = ½ ставки
+            $bonus     = $this->dutyBonus();
 
             // 3) Порожній стаб (rate=0 без duty/half) поводиться як «немає».
             $isEmpty = $shift && (float) $shift->rate <= 0.001 && ! $shift->is_half && ! $shift->is_duty;
 
-            // 4) Стандартний цикл.
+            // 4) Стандартний цикл: немає → повна → половина → немає.
             if (! $shift) {
                 EmployeeShift::create([
                     'employee_id' => $employeeId,
                     'date'        => $date,
                     'shift_slot'  => EmployeeShift::SLOT_FULL,
-                    'rate'        => $base,
+                    'rate'        => $fullRate,
                     'is_duty'     => false,
                     'is_half'     => false,
                 ]);
-                $employee->increment('balance', $base);
+                $employee->increment('balance', $fullRate);
             } elseif ($isEmpty) {
-                $shift->update(['rate' => $base, 'is_half' => false]);
-                $employee->increment('balance', $base);
+                $shift->update(['rate' => $fullRate, 'is_half' => false]);
+                $employee->increment('balance', $fullRate);
             } elseif (! $shift->is_half) {
                 $employee->decrement('balance', (float) $shift->rate);
-                $newRate = $base / 2 + ($shift->is_duty ? $bonus : 0);
+                $newRate = $halfRate + ($shift->is_duty ? $bonus : 0);
                 $shift->update(['is_half' => true, 'rate' => $newRate]);
                 $employee->increment('balance', $newRate);
             } else {

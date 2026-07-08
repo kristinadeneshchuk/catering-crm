@@ -71,16 +71,23 @@ class Payroll extends Page
 
     /**
      * Розкладає rate зміни на (база, бонус).
-     * Per_shift (включно з кур'єром): база = employee.base_rate (× 0.5 якщо half),
-     * бонус = решта (доплати за точки для кур'єра, бонус чергового для кухаря).
+     * - Курʼєр: base_rate — це ціна одного виїзду. full = 2 виїзди = 2×base_rate,
+     *   half = 1 виїзд = base_rate. Все йде у "базу", бонусу немає.
+     * - Кухня/офіс: база = base_rate × (0.5 якщо half), бонус = решта (доплата за
+     *   точки, бонус чергового тощо).
      */
     protected function splitRate(EmployeeShift $shift, Employee $emp): array
     {
-        $half = $shift->is_half ? 0.5 : 1.0;
         $rate = (float) $shift->rate;
 
-        $base  = round((float) $emp->base_rate * $half, 2);
-        $base  = min($base, $rate);
+        if ($emp->position === 'courier') {
+            // Уся ставка — це база (виїзди × ціна виїзду). Бонус=0.
+            return ['base' => round($rate, 2), 'bonus' => 0.0];
+        }
+
+        $half = $shift->is_half ? 0.5 : 1.0;
+        $base = round((float) $emp->base_rate * $half, 2);
+        $base = min($base, $rate);
         $bonus = max(0, round($rate - $base, 2));
 
         return ['base' => $base, 'bonus' => $bonus];
