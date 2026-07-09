@@ -2,7 +2,7 @@
 
 namespace App\Filament\Resources;
 
-use App\Traits\RestrictCookAccess;
+use App\Traits\AllowCookAccess;
 
 use App\Filament\Resources\DailyMenuResource\Pages;
 use App\Models\DailyMenu;
@@ -24,18 +24,13 @@ use Illuminate\Validation\Rule;
 
 class DailyMenuResource extends Resource
 {
-    use RestrictCookAccess;
+    use AllowCookAccess;
     protected static ?string $model = DailyMenu::class;
     protected static ?string $navigationGroup = 'Довідник';
     protected static ?int $navigationSort = 3;
     protected static ?string $navigationLabel = 'Циклічне меню';
     protected static ?string $pluralModelLabel = 'Циклічне меню';
     protected static ?string $modelLabel = 'День меню';
-
-    public static function canViewAny(): bool
-    {
-        return auth()->user()->role === 'admin' || auth()->user()->role === 'manager';
-    }
 
     public static function form(Form $form): Form
     {

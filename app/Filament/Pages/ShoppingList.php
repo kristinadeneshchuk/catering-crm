@@ -30,7 +30,7 @@ class ShoppingList extends Page implements HasForms
 
     public static function canAccess(): bool
     {
-        return in_array(auth()->user()->role, ['admin', 'manager']);
+        return in_array(auth()->user()->role, ['admin', 'manager', 'cook']);
     }
 
     public function mount(): void
