@@ -190,7 +190,8 @@ class OrderResource extends Resource
                             ->minValue(0)
                             ->maxValue(500)
                             ->placeholder('напр. 130')
-                            ->helperText('Ціль на день, у грамах'),
+                            ->helperText('Ціль на день, у грамах')
+                            ->live(onBlur: true),
 
                         TextInput::make('target_fats_g')
                             ->label('Жири (г)')
@@ -198,7 +199,8 @@ class OrderResource extends Resource
                             ->minValue(0)
                             ->maxValue(300)
                             ->placeholder('напр. 60')
-                            ->helperText('Ціль на день, у грамах'),
+                            ->helperText('Ціль на день, у грамах')
+                            ->live(onBlur: true),
 
                         TextInput::make('target_carbs_g')
                             ->label('Вуглеводи (г)')
@@ -206,7 +208,74 @@ class OrderResource extends Resource
                             ->minValue(0)
                             ->maxValue(700)
                             ->placeholder('напр. 180')
-                            ->helperText('Ціль на день, у грамах'),
+                            ->helperText('Ціль на день, у грамах')
+                            ->live(onBlur: true),
+
+                        // Live-порада: якщо ціль не досяжна на найближчому дні
+                        // доставки — показуємо які страви заважають і як їх
+                        // «підкрутити». Виводимо тільки для збережених замовлень
+                        // (у нового ще нема menu_plan_id / клієнта).
+                        Placeholder::make('macro_advice')
+                            ->label('')
+                            ->columnSpanFull()
+                            ->content(function (Get $get, ?\App\Models\Order $record) {
+                                if (! $record || ! $record->exists) return null;
+
+                                // Дзеркалимо ПОТОЧНИЙ стан форми на клон замовлення,
+                                // щоб порада відображалась ще до збереження.
+                                $tmp = clone $record;
+                                $tmp->target_protein_g = $get('target_protein_g') !== null && $get('target_protein_g') !== ''
+                                    ? (int) $get('target_protein_g') : null;
+                                $tmp->target_fats_g    = $get('target_fats_g')    !== null && $get('target_fats_g')    !== ''
+                                    ? (int) $get('target_fats_g')    : null;
+                                $tmp->target_carbs_g   = $get('target_carbs_g')   !== null && $get('target_carbs_g')   !== ''
+                                    ? (int) $get('target_carbs_g')   : null;
+                                if ($get('calories')) $tmp->calories = (int) $get('calories');
+
+                                if (! $tmp->hasCustomMacros()) return null;
+
+                                $advice = $tmp->analyzeMacroTargets();
+                                if (empty($advice['items'])) {
+                                    return new \Illuminate\Support\HtmlString(
+                                        '<div style="padding:12px 14px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);border-radius:10px;color:#86efac;font-size:13px;">✅ Всі задані цілі досяжні на завтрашньому меню — жодних свапів не потрібно.</div>'
+                                    );
+                                }
+
+                                $blocks = [];
+                                foreach ($advice['items'] as $a) {
+                                    $tooMuch = $a['direction'] === 'too_much';
+                                    $arrow   = $tooMuch ? '↑ забагато' : '↓ замало';
+                                    $color   = $tooMuch ? '#f87171' : '#fbbf24';
+
+                                    $offendersHtml = '';
+                                    foreach ($a['offenders'] as $off) {
+                                        $reason = $tooMuch
+                                            ? "додає {$off['contribution']} г ({$off['per_100g']} г/100 г — багато цієї макро)"
+                                            : "дає лише {$off['contribution']} г (страва бідна на цю макро)";
+                                        $safeName = htmlspecialchars($off['name'], ENT_QUOTES, 'UTF-8');
+                                        $offendersHtml .= "<li style=\"margin:2px 0;color:#cbd5e1;\">• <b>{$safeName}</b> — {$reason}</li>";
+                                    }
+
+                                    $swapHint = $tooMuch
+                                        ? 'Розгляньте свап цих страв на менш насичені цією макро.'
+                                        : 'Розгляньте свап однієї з цих страв на більш насичену цією макро.';
+
+                                    $blocks[] = "<div style=\"margin:8px 0;padding:10px 12px;background:rgba(148,163,184,0.05);border-left:3px solid {$color};border-radius:6px;\">"
+                                        . "<div style=\"font-weight:700;color:{$color};font-size:13px;\">⚠️ {$a['label']}: ціль {$a['target']} г, факт {$a['actual']} г ({$arrow})</div>"
+                                        . "<ul style=\"list-style:none;padding:6px 0 0 0;margin:0;font-size:12px;\">{$offendersHtml}</ul>"
+                                        . "<div style=\"margin-top:4px;font-size:12px;color:#94a3b8;\">{$swapHint}</div>"
+                                        . '</div>';
+                                }
+
+                                $footer = '<div style="margin-top:6px;font-size:11px;color:#71717a;">Розраховано для дати ' . $advice['date']
+                                    . ($advice['day_number'] !== null ? ' (день циклу №' . $advice['day_number'] . ')' : '')
+                                    . '. Інші дні можуть відрізнятись.</div>';
+
+                                return new \Illuminate\Support\HtmlString(
+                                    '<div style="padding:12px 14px;background:rgba(234,179,8,0.06);border:1px solid rgba(234,179,8,0.25);border-radius:10px;">'
+                                    . implode('', $blocks) . $footer . '</div>'
+                                );
+                            }),
                     ]),
 
                 // === СЕКЦІЯ 2: Дати та Логістика ===

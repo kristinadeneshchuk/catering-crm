@@ -76,6 +76,123 @@ class Order extends Model
             || $this->target_carbs_g   !== null;
     }
 
+    /**
+     * Аналізує, наскільки день доставки задовольняє задані макро-цілі,
+     * і якщо якась ціль недосяжна (відхилення >15%) — повертає список
+     * страв, які найбільше «шкодять» цій цілі. Використовується банером
+     * на картці замовлення в OrderResource.
+     *
+     * @param  string|null  $date  Дата доставки для перевірки (default — завтра).
+     * @return array{
+     *   items: array<int, array{
+     *     macro: string,
+     *     label: string,
+     *     target: int,
+     *     actual: int,
+     *     direction: string,
+     *     offenders: array<int, array{name: string, contribution: float, per_100g: float}>
+     *   }>,
+     *   date: string,
+     *   day_number: int|null
+     * }
+     */
+    public function analyzeMacroTargets(?string $date = null): array
+    {
+        $out = ['items' => [], 'date' => '', 'day_number' => null];
+        if (! $this->hasCustomMacros()) return $out;
+        if ($this->menu_type !== 'cyclic') return $out;
+
+        $date = $date ?: \Carbon\Carbon::now()->addDay()->format('Y-m-d');
+        $out['date'] = $date;
+
+        $planModel = \App\Models\MenuPlan::find($this->menu_plan_id);
+        if (! $planModel) return $out;
+
+        $dayNumber = $planModel->globalDayFor($date);
+        $out['day_number'] = $dayNumber;
+
+        $menu = \App\Models\DailyMenu::where('menu_plan_id', $this->menu_plan_id)
+            ->where('day_number', $dayNumber)
+            ->with(['menuItems.dish', 'menuItems.mealType'])
+            ->first();
+        if (! $menu) return $out;
+
+        // Клієнт із його прийомами їжі — інакше calculateOrderPlan поверне порожньо.
+        $this->loadMissing('client.mealTypes');
+        if (! $this->client) return $out;
+
+        // Виклик trait через анонімний клас, щоб не тягти trait у модель
+        // (модель має бути «тонкою», без бізнес-логіки перерахунку).
+        $calc = new class {
+            use \App\Traits\CalculatesOrderPlan {
+                calculateOrderPlan as public;
+            }
+        };
+        $plan = $calc->calculateOrderPlan($this, $menu, $date);
+        if (empty($plan['items'])) return $out;
+
+        $targets = [
+            'prot' => ['value' => $this->target_protein_g, 'label' => 'Білки'],
+            'fat'  => ['value' => $this->target_fats_g,    'label' => 'Жири'],
+            'carb' => ['value' => $this->target_carbs_g,   'label' => 'Вуглеводи'],
+        ];
+
+        $dishIds = array_column($plan['items'], 'dish_id');
+        $dishes  = \App\Models\Dish::whereIn('id', $dishIds)->get()->keyBy('id');
+
+        foreach ($targets as $key => $info) {
+            if ($info['value'] === null) continue;
+
+            $actual = (int) round($plan['totals'][$key] ?? 0);
+            $target = (int) $info['value'];
+            if ($target <= 0) continue;
+
+            $devPct = abs($actual - $target) / $target * 100;
+            if ($devPct < 15.0) continue; // ціль вважаємо досягнутою
+
+            $direction = $actual > $target ? 'too_much' : 'too_little';
+
+            // Внески страв у цю макро-групу (grams of macro from each dish в порції).
+            $contributions = [];
+            foreach ($plan['items'] as $it) {
+                $dish = $dishes->get($it['dish_id']);
+                if (! $dish) continue;
+                $baseW = (float) ($dish->base_weight_g ?? 0);
+                if ($baseW <= 0) continue;
+
+                $macroTotalField = 'total_' . $key; // total_prot / total_fat / total_carb
+                $perG    = ((float) ($dish->{$macroTotalField} ?? 0)) / $baseW;
+                $contrib = $perG * (int) $it['weight'];
+
+                $contributions[] = [
+                    'name'         => $dish->name,
+                    'contribution' => round($contrib, 1),
+                    'per_100g'     => round($perG * 100.0, 1),
+                ];
+            }
+
+            // Сортуємо: якщо забагато — найбільші вклади вгору (їх треба зменшити/свапнути);
+            // якщо замало — найменші вгору (вони не додають цієї макро, кандидати на свап
+            // на страву, багату на цю макро).
+            usort($contributions, function ($a, $b) use ($direction) {
+                return $direction === 'too_much'
+                    ? $b['contribution'] <=> $a['contribution']
+                    : $a['contribution'] <=> $b['contribution'];
+            });
+
+            $out['items'][] = [
+                'macro'     => $key,
+                'label'     => $info['label'],
+                'target'    => $target,
+                'actual'    => $actual,
+                'direction' => $direction,
+                'offenders' => array_slice($contributions, 0, 2),
+            ];
+        }
+
+        return $out;
+    }
+
     protected static function booted()
     {
         static::creating(function ($order) {
