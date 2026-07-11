@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\Account;
 use App\Models\CourierMileageLog;
 use App\Models\Employee;
 use App\Models\EmployeeBonus;
@@ -11,11 +12,25 @@ use App\Models\OrderDay;
 use App\Models\Position;
 use App\Models\RateHistory;
 use App\Models\Setting;
+use App\Models\Transaction;
 use Carbon\Carbon;
+use Filament\Actions\Action;
+use Filament\Actions\Concerns\InteractsWithActions;
+use Filament\Actions\Contracts\HasActions;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\DB;
 
-class Payroll extends Page
+class Payroll extends Page implements HasActions, HasForms
 {
+    use InteractsWithActions;
+    use InteractsWithForms;
+
     public static function canAccess(): bool
     {
         return auth()->user()->role === 'admin';
@@ -167,7 +182,7 @@ class Payroll extends Page
 
         $rows = [];
         $groupTotals = [];
-        $totals = ['salary' => 0, 'bonus' => 0, 'penalty' => 0, 'compensation' => 0, 'sum' => 0];
+        $totals = ['salary' => 0, 'bonus' => 0, 'penalty' => 0, 'compensation' => 0, 'sum' => 0, 'balance' => 0];
 
         foreach ($employees as $emp) {
             $pos = $positions[$emp->position] ?? null;
@@ -231,6 +246,7 @@ class Payroll extends Page
                 'penalty'        => round($penaltyAmount, 2),
                 'compensation'   => round($compensation, 2),
                 'sum'            => round($sum, 2),
+                'balance'        => round((float) $emp->balance, 2),
             ];
             $rows[] = $row;
 
@@ -239,6 +255,7 @@ class Payroll extends Page
             $totals['penalty']      += $row['penalty'];
             $totals['compensation'] += $row['compensation'];
             $totals['sum']          += $row['sum'];
+            $totals['balance']      += max(0, $row['balance']);
 
             $groupTotals[$group] = $groupTotals[$group] ?? ['salary' => 0, 'bonus' => 0, 'penalty' => 0, 'compensation' => 0, 'sum' => 0];
             $groupTotals[$group]['salary']       += $row['salary'];
@@ -340,4 +357,92 @@ class Payroll extends Page
         return $perPortion;
     }
 
+    /**
+     * Модальна виплата боргу з рядка таблиці.
+     * Викликається через wire:click="mountAction('pay', { record: <employeeId> })".
+     * Логіка списання боргу + запис Transaction — та сама, що і в кнопці
+     * "Історія / Виплата" в EmployeeResource, щоб не було двох різних воронок.
+     */
+    public function payAction(): Action
+    {
+        return Action::make('pay')
+            ->label('Виплатити')
+            ->icon('heroicon-o-banknotes')
+            ->color('success')
+            ->size('sm')
+            ->modalHeading(fn (array $arguments) => Employee::find($arguments['record'])?->name ?? 'Виплата')
+            ->modalDescription('Виплата поточного боргу співробітника напряму зі сторінки Зарплати.')
+            ->modalSubmitActionLabel('Виплатити')
+            ->form(function (array $arguments): array {
+                $employee = Employee::find($arguments['record']);
+                if (! $employee || $employee->balance <= 0) {
+                    return [];
+                }
+
+                return [
+                    Select::make('account_id')
+                        ->label('Рахунок списання')
+                        ->options(fn () => Account::pluck('name', 'id'))
+                        ->required()
+                        ->searchable()
+                        ->default(fn () => Account::where('is_default', true)->value('id') ?? Account::orderBy('id')->value('id'))
+                        ->placeholder('Виберіть касу або картку'),
+
+                    DatePicker::make('date')
+                        ->label('Дата виплати')
+                        ->required()
+                        ->native(false)
+                        ->displayFormat('d.m.Y')
+                        ->default(now())
+                        ->maxDate(now())
+                        ->helperText('Можна поставити минулу дату — щоб закрити борг попередніх місяців.'),
+
+                    TextInput::make('amount')
+                        ->label('Сума до виплати')
+                        ->numeric()
+                        ->required()
+                        ->default(fn () => $employee->balance)
+                        ->suffix('₴')
+                        ->hint('Борг: ' . number_format($employee->balance, 0) . ' ₴'),
+
+                    TextInput::make('comment')
+                        ->label('Коментар (необовʼязково)')
+                        ->placeholder('напр. зарплата за червень'),
+                ];
+            })
+            ->action(function (array $arguments, array $data): void {
+                $employee = Employee::find($arguments['record']);
+                if (! $employee || $employee->balance <= 0) {
+                    Notification::make()->title('Немає боргу для виплати')->warning()->send();
+                    return;
+                }
+
+                DB::transaction(function () use ($employee, $data) {
+                    $amount  = (float) $data['amount'];
+                    $account = Account::findOrFail($data['account_id']);
+                    $comment = $data['comment'] ?? null;
+                    $date    = ! empty($data['date']) ? Carbon::parse($data['date']) : now();
+
+                    $employee->decrement('balance', $amount);
+
+                    Transaction::create([
+                        'employee_id' => $employee->id,
+                        'order_id'    => null,
+                        'account_id'  => $account->id,
+                        'amount'      => $amount,
+                        'type'        => 'expense',
+                        'category'    => 'Виплата ЗП',
+                        'date'        => $date,
+                        'comment'     => $comment ?: "Виплата ЗП: {$employee->name}",
+                        'user_id'     => auth()->id(),
+                    ]);
+                });
+
+                Notification::make()
+                    ->title('Виплату проведено')
+                    ->body('Борг зменшено, транзакцію збережено.')
+                    ->success()
+                    ->send();
+            });
+    }
 }
