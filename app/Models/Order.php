@@ -25,7 +25,8 @@ class Order extends Model
             ->logOnly([
                 'client_id', 'parent_order_id', 'tariff_id', 'project', 'is_paid',
                 'start_date', 'end_date', 'duration', 'status',
-                'calories', 'price_per_day', 'total_price',
+                'calories', 'target_protein_g', 'target_fats_g', 'target_carbs_g',
+                'price_per_day', 'total_price',
                 'comment', 'schedule_type', 'menu_type', 'menu_plan_id', 'delivery_time',
                 'discount_type', 'discount_value', 'discount_reason',
                 'discount_amount', 'final_price',
@@ -38,7 +39,8 @@ class Order extends Model
     protected $fillable = [
         'client_id', 'parent_order_id', 'tariff_id', 'project', 'is_paid',
         'start_date', 'end_date', 'duration', 'status',
-        'calories', 'scale_factor', 'price_per_day', 'total_price',
+        'calories', 'target_protein_g', 'target_fats_g', 'target_carbs_g',
+        'scale_factor', 'price_per_day', 'total_price',
         'comment', 'menu_token', 'schedule_type', 'menu_type', 'menu_plan_id', 'delivery_time',
         'discount_type', 'discount_value', 'discount_reason',
         'discount_amount', 'final_price',
@@ -49,15 +51,30 @@ class Order extends Model
         'is_paid'          => 'boolean',
         'reward_unlocked'  => 'boolean',
         'reward_given'     => 'boolean',
-        'duration'        => 'integer',
-        'start_date'      => 'date',
-        'end_date'        => 'date',
-        'scale_factor'    => 'float',
-        'total_price'     => 'decimal:2',
-        'discount_value'  => 'decimal:2',
-        'discount_amount' => 'decimal:2',
-        'final_price'     => 'decimal:2',
+        'duration'         => 'integer',
+        'start_date'       => 'date',
+        'end_date'         => 'date',
+        'scale_factor'     => 'float',
+        'target_protein_g' => 'integer',
+        'target_fats_g'    => 'integer',
+        'target_carbs_g'   => 'integer',
+        'total_price'      => 'decimal:2',
+        'discount_value'   => 'decimal:2',
+        'discount_amount'  => 'decimal:2',
+        'final_price'      => 'decimal:2',
     ];
+
+    /**
+     * Клієнт задав хоча б одну макро-ціль (окрім ккал) → замовлення
+     * потрапляє в «індивідуальний профіль КБЖУ»: грамажі перерахуються
+     * під усі 4 цілі, а не тільки під калораж.
+     */
+    public function hasCustomMacros(): bool
+    {
+        return $this->target_protein_g !== null
+            || $this->target_fats_g    !== null
+            || $this->target_carbs_g   !== null;
+    }
 
     protected static function booted()
     {

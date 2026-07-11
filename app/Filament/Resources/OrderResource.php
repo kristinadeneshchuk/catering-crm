@@ -171,6 +171,44 @@ class OrderResource extends Resource
                             ->default('new'),
                     ]),
 
+                // === СЕКЦІЯ 1.5: Індивідуальні цілі КБЖУ (опційно) ===
+                // Заповнюється тільки коли клієнт сам просить свою норму
+                // (дитячий, спорт, низько-вуглеводний тощо). Якщо всі три поля
+                // порожні — раціон масштабується як завжди, тільки під ккал.
+                // Якщо заповнено хоча б одне — CRM перекалібровує грамажі страв
+                // під усі 4 цілі одночасно (kcal + Б + Ж + В) через
+                // constrained least-squares в CalculatesOrderPlan.
+                Section::make('Індивідуальні цілі КБЖУ')
+                    ->description('Заповнюйте ТІЛЬКИ якщо клієнт назвав свої цільові грамажі білків / жирів / вуглеводів. Порожні поля → стандартне масштабування під калорії.')
+                    ->columns(3)
+                    ->collapsed(fn (Get $get) => empty($get('target_protein_g')) && empty($get('target_fats_g')) && empty($get('target_carbs_g')))
+                    ->collapsible()
+                    ->schema([
+                        TextInput::make('target_protein_g')
+                            ->label('Білки (г)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(500)
+                            ->placeholder('напр. 130')
+                            ->helperText('Ціль на день, у грамах'),
+
+                        TextInput::make('target_fats_g')
+                            ->label('Жири (г)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(300)
+                            ->placeholder('напр. 60')
+                            ->helperText('Ціль на день, у грамах'),
+
+                        TextInput::make('target_carbs_g')
+                            ->label('Вуглеводи (г)')
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(700)
+                            ->placeholder('напр. 180')
+                            ->helperText('Ціль на день, у грамах'),
+                    ]),
+
                 // === СЕКЦІЯ 2: Дати та Логістика ===
                 Section::make('Період та Логістика')
                     ->columns(3)
