@@ -204,7 +204,7 @@ class AntLogisticsService
         $deliveryDate = Carbon::parse($date)->format('Y-m-d');
         $dateFmt      = Carbon::parse($date)->format('d.m.Y'); // формат Ant: dd.MM.yyyy
 
-        $extIdent    = 'crm_' . $deliveryDate . ($shift !== 'all' ? '_' . $shift : '');
+        $extIdent = $this->buildExtIdent($deliveryDate, $shift);
 
         // Збираємо клієнтів, яких довелось пропустити — для нотифікації менеджеру.
         $skipped = [];
@@ -216,8 +216,15 @@ class AntLogisticsService
         $dayCollections = $this->collectOrderDaysForDelivery($deliveryDate, $shift);
         $orderDays      = $dayCollections['days'];
 
+        // Якщо в CRM на цю дату не залишилось жодного дня доставки — зачищаємо стару
+        // заявку в ANT цілком через DELETE /Request/delete. Інакше залишиться "хвіст"
+        // від попередніх push-ів, і кур'єр поїде за скасованим клієнтом.
         if ($orderDays->isEmpty()) {
-            Log::info('[AntLogistics] No orders to push', ['date' => $deliveryDate, 'shift' => $shift]);
+            Log::info('[AntLogistics] No orders to push, wiping ANT request', [
+                'date'  => $deliveryDate,
+                'shift' => $shift,
+            ]);
+            $this->tryDeleteRequest($dateFmt, $extIdent, 'no_local_orders');
             return ['pushed' => 0, 'failed' => 0, 'total' => 0, 'skipped' => []];
         }
 
@@ -231,19 +238,9 @@ class AntLogisticsService
             return ($order?->client_id ?? 0) . '_' . $deliveryTime;
         });
 
-        // --- 3. Створюємо заявку на дату (Request header) ---
-        $reqResponse = $this->http()->post(
-            "{$this->baseUrl}/Request/edit?Session_Ident={$this->sessionIdent}",
-            ['rows' => [['Date_Data' => $dateFmt, 'Ext_Ident' => $extIdent]]]
-        );
-
-        if ($reqResponse->failed()) {
-            throw new \RuntimeException('[AntLogistics] Request/edit failed: ' . $reqResponse->status() . ' ' . $reqResponse->body());
-        }
-
-        Log::info('[AntLogistics] Request created', ['date' => $dateFmt, 'ext_ident' => $extIdent]);
-
-        // --- 4. Додаємо точки доставки до заявки ---
+        // --- 3. Будуємо перелік точок доставки ---
+        // Header заявки створюємо ПІСЛЯ побудови, щоб не залишити порожній Request у ANT,
+        // якщо всі клієнти виявились відсіяними.
         $rationProductId = $this->ensureRationProduct();
 
         $compRows = [];
@@ -338,6 +335,36 @@ class AntLogisticsService
             $compRows[] = $row;
         }
 
+        // --- 4. Якщо жоден клієнт не пройшов валідацію (наприклад, у всіх кілька адрес
+        // без default) — теж зачищаємо стару заявку в ANT. Notification зі списком
+        // skipped менеджер побачить окремо і зможе виправити дані клієнтів.
+        if (empty($compRows)) {
+            Log::info('[AntLogistics] No valid comp rows after processing, wiping ANT request', [
+                'date'          => $deliveryDate,
+                'shift'         => $shift,
+                'skipped_count' => count($skipped),
+            ]);
+            $this->tryDeleteRequest($dateFmt, $extIdent, 'all_skipped');
+            return [
+                'pushed'  => 0,
+                'failed'  => 0,
+                'total'   => 0,
+                'skipped' => $skipped,
+            ];
+        }
+
+        // --- 5. Створюємо/оновлюємо заголовок заявки на дату (Request header) ---
+        $reqResponse = $this->http()->post(
+            "{$this->baseUrl}/Request/edit?Session_Ident={$this->sessionIdent}",
+            ['rows' => [['Date_Data' => $dateFmt, 'Ext_Ident' => $extIdent]]]
+        );
+
+        if ($reqResponse->failed()) {
+            throw new \RuntimeException('[AntLogistics] Request/edit failed: ' . $reqResponse->status() . ' ' . $reqResponse->body());
+        }
+
+        Log::info('[AntLogistics] Request created', ['date' => $dateFmt, 'ext_ident' => $extIdent]);
+
         // Дебаг: логуємо що відправляємо
         Log::info('[AntLogistics] DEBUG compRows sample', [
             'ration_product_id' => $rationProductId,
@@ -345,24 +372,42 @@ class AntLogisticsService
             'first_row'         => $compRows[0] ?? null,
         ]);
 
-        // Відправляємо по 100. Рахуємо лише ті, які Ant справді прийняв,
-        // щоб нотифікація не брехала. Якщо chunk фейлиться через один
-        // некоректний Comp_Id — пробуємо по одному в межах цього chunk'a.
-        $pushed = 0;
-        $failed = 0;
+        // --- 6. Push точок ---
+        // Відправляємо по 100. Один із викликів (перший, який ANT прийме) несе
+        // Remove=true — тоді ANT робить ДЗЕРКАЛЬНУ синхронізацію: усе, чого немає
+        // в поточному payload'і, видаляється з заявки. Скасовані/замінені клієнти
+        // зникають без окремих delete-викликів.
+        //
+        // $removeApplied стає true лише коли Remove=true фактично прийнявся 200 OK.
+        // Поки не прийнявся — далі несемо Remove=true (включно з per-row ретраєм і
+        // наступними чанками). Так синк-семантика не втрачається, навіть якщо
+        // перший рядок/чанк відхилили.
+        $pushed        = 0;
+        $failed        = 0;
+        $removeApplied = false;
 
         foreach (array_chunk($compRows, 100) as $chunk) {
+            $chunkRemoveQs = $removeApplied ? '' : '&Remove=true';
+
             $compsResp = $this->http()->post(
                 "{$this->baseUrl}/Request/Comps/edit"
                 . "?Session_Ident={$this->sessionIdent}"
                 . "&Date_Data={$dateFmt}"
-                . "&Ext_Ident={$extIdent}",
+                . "&Ext_Ident={$extIdent}"
+                . $chunkRemoveQs,
                 ['rows' => $chunk]
             );
 
             if (!$compsResp->failed()) {
                 $pushed += count($chunk);
-                Log::info('[AntLogistics] Request comps added', ['count' => count($chunk), 'response' => $compsResp->json()]);
+                if ($chunkRemoveQs !== '') {
+                    $removeApplied = true;
+                }
+                Log::info('[AntLogistics] Request comps added', [
+                    'count'    => count($chunk),
+                    'remove'   => $chunkRemoveQs !== '',
+                    'response' => $compsResp->json(),
+                ]);
                 continue;
             }
 
@@ -371,15 +416,19 @@ class AntLogisticsService
             Log::warning('[AntLogistics] Request/Comps/edit chunk failed, retrying per-row', [
                 'status'     => $compsResp->status(),
                 'chunk_size' => count($chunk),
+                'remove'     => $chunkRemoveQs !== '',
                 'body'       => substr($compsResp->body(), 0, 500),
             ]);
 
             foreach ($chunk as $singleRow) {
+                $singleRemoveQs = $removeApplied ? '' : '&Remove=true';
+
                 $oneResp = $this->http()->post(
                     "{$this->baseUrl}/Request/Comps/edit"
                     . "?Session_Ident={$this->sessionIdent}"
                     . "&Date_Data={$dateFmt}"
-                    . "&Ext_Ident={$extIdent}",
+                    . "&Ext_Ident={$extIdent}"
+                    . $singleRemoveQs,
                     ['rows' => [$singleRow]]
                 );
 
@@ -388,12 +437,28 @@ class AntLogisticsService
                     Log::error('[AntLogistics] Request/Comps/edit single row failed', [
                         'comp_id' => $singleRow['Comp_Id'] ?? '?',
                         'status'  => $oneResp->status(),
+                        'remove'  => $singleRemoveQs !== '',
                         'body'    => substr($oneResp->body(), 0, 300),
                     ]);
                 } else {
                     $pushed++;
+                    if ($singleRemoveQs !== '') {
+                        $removeApplied = true;
+                    }
                 }
             }
+        }
+
+        // Якщо жоден Remove=true-виклик не прийнявся (усі рядки й чанки впали) —
+        // в ANT міг залишитись хвіст від минулого push. Явно робимо DELETE як
+        // страховку, щоб точно не поїхали "привиди". Це рідкісна аварійна гілка.
+        if (!$removeApplied && $failed > 0) {
+            Log::warning('[AntLogistics] All comps failed and Remove=true never applied — wiping request as safety', [
+                'date'   => $deliveryDate,
+                'shift'  => $shift,
+                'failed' => $failed,
+            ]);
+            $this->tryDeleteRequest($dateFmt, $extIdent, 'all_comps_failed_safety_wipe');
         }
 
         Log::info('[AntLogistics] pushDailyOrders done', [
@@ -571,6 +636,59 @@ class AntLogisticsService
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * Ідентифікатор нашої заявки в ANT. Один рядок на (дата+зміна) — тому дзеркальний
+     * sync через Remove=true чистить лише "свою" заявку і не зачіпає інші.
+     */
+    private function buildExtIdent(string $deliveryDate, string $shift): string
+    {
+        return 'crm_' . $deliveryDate . ($shift !== 'all' ? '_' . $shift : '');
+    }
+
+    /**
+     * DELETE /Request/delete — прибрати заявку в ANT для (Date_Data, Ext_Ident).
+     * Використовується коли в CRM на дату не залишилось жодного клієнта:
+     * інакше в ANT висить хвіст від попереднього push і кур'єр везе привида.
+     * Не кидає виключень: 404/уже-відсутня заявка — це нормальний стан.
+     */
+    private function tryDeleteRequest(string $dateFmt, string $extIdent, string $reason): void
+    {
+        $response = $this->http()->delete(
+            "{$this->baseUrl}/Request/delete"
+            . "?Session_Ident={$this->sessionIdent}"
+            . "&Date_Data={$dateFmt}"
+            . "&Ext_Ident={$extIdent}"
+        );
+
+        if ($response->failed()) {
+            Log::warning('[AntLogistics] Request/delete non-2xx (заявки могло не бути — це ок)', [
+                'ext_ident' => $extIdent,
+                'reason'    => $reason,
+                'status'    => $response->status(),
+                'body'      => substr($response->body(), 0, 300),
+            ]);
+            return;
+        }
+
+        Log::info('[AntLogistics] Request deleted from ANT', [
+            'ext_ident' => $extIdent,
+            'reason'    => $reason,
+        ]);
+    }
+
+    /**
+     * Публічна обгортка над tryDeleteRequest — на випадок, якщо в майбутньому
+     * знадобиться окрема кнопка "Зняти заявку" в UI (без повного перепушу).
+     */
+    public function deleteRequest(string $date, string $shift = 'all'): void
+    {
+        $this->ensureAuthenticated();
+        $deliveryDate = Carbon::parse($date)->format('Y-m-d');
+        $dateFmt      = Carbon::parse($date)->format('d.m.Y');
+        $extIdent     = $this->buildExtIdent($deliveryDate, $shift);
+        $this->tryDeleteRequest($dateFmt, $extIdent, 'manual_wipe');
+    }
 
     /**
      * Завантажує всі сторінки з GET-ендпоінту Ant (ліміт 500/сторінка).
