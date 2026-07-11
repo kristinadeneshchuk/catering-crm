@@ -2,13 +2,19 @@
 
 namespace App\Services;
 
-use App\Models\MealPlan;
+use App\Models\Dish;
 use App\Models\Packaging;
-use App\Support\DailyWeightMultiplier;
+use App\Traits\CalculatesOrderPlan;
 use Illuminate\Support\Collection;
 
 class PackagingService
 {
+    // Джерело грамажів — той самий трейт, що і в ShoppingList, ProductionReport,
+    // PrintController. Гарантує, що якщо замовлення має індивідуальні цілі КБЖУ,
+    // упаковка підбирається під РЕАЛЬНО перерахований грамаж, а не під стандарт.
+    use CalculatesOrderPlan;
+
+
     /**
      * Вартість пакування для одного раціону (для аналітики).
      */
@@ -68,160 +74,121 @@ class PackagingService
 
     /**
      * Основний метод — будує список упаковки для одного замовлення.
+     *
+     * Грамажі беремо через calculateOrderPlan (той самий трейт, що і в
+     * закупках / кухні / друку) — тому:
+     *   - для звичайних замовлень поведінка 1-в-1 як раніше (kcal-only scale);
+     *   - для замовлень з індивідуальними цілями КБЖУ грамажі вже після
+     *     4-цільового LS, і контейнер підбирається під РЕАЛЬНУ порцію.
      */
     private function buildPackagingItems($order, $menu, Collection $allPackaging, ?string $date = null): array
     {
-        $targetKcal = (float)($order->calories ?? 0);
-        if ($targetKcal <= 0) return [];
+        if ((float)($order->calories ?? 0) <= 0) return [];
 
-        $weightMultiplier = DailyWeightMultiplier::for($date);
+        $plan = $this->calculateOrderPlan($order, $menu, $date);
+        if (empty($plan['items'])) return [];
 
-        $clientMealTypeIds = $order->client?->mealTypes?->pluck('id')->toArray() ?? [];
+        $orderProject         = $order->project ?? null;
+        $clientDishExclusions = $order->client?->dishExclusions ?? collect();
+        $replacements         = $order->replacements ?? collect();
+        $result               = [];
 
-        $availableItems = $menu->menuItems
-            ->filter(fn ($item) => $item->dish && in_array($item->meal_type_id, $clientMealTypeIds, true))
-            ->sortBy(fn ($item) => $item->mealType?->sort_order ?? 99)
-            ->values();
+        foreach ($plan['items'] as $planItem) {
+            $originalDish = Dish::with('dishIngredients.childDish')->find($planItem['dish_id']);
+            if (!$originalDish) continue;
 
-        if ($availableItems->isEmpty()) return [];
+            // Обробка повного виключення / заміни страви для цього клієнта.
+            // Логіка збережена 1-в-1 як раніше, тільки перенесена сюди.
+            $actualDish = $originalDish;
+            if ($clientDishExclusions->contains('id', $originalDish->id)) {
+                $fullRep = $replacements
+                    ->whereNull('original_product_id')
+                    ->where('dish_id', $originalDish->id)
+                    ->first();
 
-        $allowedSortOrders = MealPlan::getAllowedSortOrders((int)$targetKcal);
-        $selectedItems = $availableItems->filter(
-            fn ($item) => in_array($item->mealType?->sort_order, $allowedSortOrders)
-        )->values();
-
-        if ($selectedItems->isEmpty()) return [];
-
-        $byMeal = $selectedItems->groupBy('meal_type_id');
-
-        // Нормалізація відсотків
-        $rawPct = [];
-        foreach ($byMeal as $mealTypeId => $items) {
-            $fi = $items->first();
-            $rawPct[$mealTypeId] = $fi->custom_energy_percent !== null
-                ? (float) $fi->custom_energy_percent
-                : (float) ($fi->mealType?->energy_percent ?? 0);
-        }
-        $totalPct   = array_sum($rawPct);
-        $normFactor = ($totalPct > 0.5 && abs($totalPct - 100) > 0.5) ? (100.0 / $totalPct) : 1.0;
-
-        $result       = [];
-        $orderProject = $order->project ?? null;
-
-        foreach ($byMeal as $mealTypeId => $items) {
-            $p        = ($rawPct[$mealTypeId] ?? 0) * $normFactor;
-            $mealKcal = ($p > 0)
-                ? $targetKcal * ($p / 100.0)
-                : $targetKcal * (1.0 / max(1, $byMeal->count()));
-
-            $kcalPerDish = $mealKcal / max(1, $items->count());
-
-            foreach ($items as $mi) {
-                $dish = $mi->dish;
-                if (!$dish) continue;
-
-                // ⚠️ Перевірка повної заміни/виключення страви для цього клієнта
-                $clientDishExclusions = $order->client?->dishExclusions ?? collect();
-                $isExcluded = $clientDishExclusions->contains('id', $dish->id);
-
-                $actualDish = $dish;
-                if ($isExcluded) {
-                    $fullRep = ($order->replacements ?? collect())
-                        ->whereNull('original_product_id')
-                        ->where('dish_id', $dish->id)
-                        ->first();
-
-                    if ($fullRep && $fullRep->replacementDish) {
-                        // Є замінна страва — використовуємо її для вибору упаковки
-                        $actualDish = $fullRep->replacementDish;
-                        $actualDish->loadMissing('dishIngredients.childDish');
-                    } else {
-                        // Страва повністю виключена без заміни — контейнер не потрібен
-                        continue;
-                    }
+                if ($fullRep && $fullRep->replacementDish) {
+                    $actualDish = $fullRep->replacementDish;
+                    $actualDish->loadMissing('dishIngredients.childDish');
+                } else {
+                    // Виключено без заміни — контейнер не потрібен.
+                    continue;
                 }
+            }
 
-                if (!$actualDish->packaging_type) continue;
+            if (!$actualDish->packaging_type) continue;
 
-                // Фактична вага порції (на основі реальної страви)
-                $baseW      = (float)($actualDish->base_weight_g ?? 0);
-                $totalKcal  = (float)($actualDish->total_kcal ?? 0);
-                $kcalPer100 = ($baseW > 0 && $totalKcal > 0) ? ($totalKcal / $baseW) * 100.0 : 0;
-                $actualWeight = ($kcalPer100 > 0) ? ($kcalPerDish / $kcalPer100) * 100.0 : $baseW;
-                $actualWeight *= $weightMultiplier;
+            $actualWeight = (float) $planItem['weight'];
 
-                // Підбираємо контейнер для actualDish
-                $container = $this->findContainer($allPackaging, $actualDish->packaging_type, $actualWeight, $orderProject);
-                if (!$container) continue;
+            $container = $this->findContainer($allPackaging, $actualDish->packaging_type, $actualWeight, $orderProject);
+            if (!$container) continue;
+
+            $result[] = [
+                'packaging_id'   => $container->id,
+                'name'           => $container->name,
+                'packaging_type' => $container->packaging_type,
+                'dish_name'      => $actualDish->name,
+                'actual_weight'  => (int) round($actualWeight),
+                'qty'            => 1,
+                'unit_price'     => (float) $container->price,
+                'total_price'    => (float) $container->price,
+                'auto_pair'      => false,
+            ];
+
+            // Автоматично додаємо пару (кришку / ковпачок).
+            if ($container->pair_id) {
+                $pair = $allPackaging->get($container->pair_id);
+                if ($pair) {
+                    $result[] = [
+                        'packaging_id'   => $pair->id,
+                        'name'           => $pair->name,
+                        'packaging_type' => $pair->packaging_type,
+                        'dish_name'      => $actualDish->name,
+                        'actual_weight'  => null,
+                        'qty'            => 1,
+                        'unit_price'     => (float) $pair->price,
+                        'total_price'    => (float) $pair->price,
+                        'auto_pair'      => true,
+                    ];
+                }
+            }
+
+            // Упаковка НФ-інгредієнтів страви (реальної страви після заміни).
+            // НФ мають фіксовану дозу, не масштабуються під ціль — це шматок
+            // сталого рецепту, а не еластична порція.
+            foreach ($actualDish->dishIngredients as $ingr) {
+                $nf = $ingr->childDish;
+                if (!$nf || !$nf->packaging_type) continue;
+
+                $nfWeight    = (float)($ingr->net_weight_g ?? 0);
+                $nfContainer = $this->findContainer($allPackaging, $nf->packaging_type, $nfWeight, $orderProject);
+                if (!$nfContainer) continue;
 
                 $result[] = [
-                    'packaging_id'   => $container->id,
-                    'name'           => $container->name,
-                    'packaging_type' => $container->packaging_type,
-                    'dish_name'      => $actualDish->name,
-                    'actual_weight'  => round($actualWeight),
+                    'packaging_id'   => $nfContainer->id,
+                    'name'           => $nfContainer->name,
+                    'packaging_type' => $nfContainer->packaging_type,
+                    'dish_name'      => $nf->name,
+                    'actual_weight'  => $nfWeight > 0 ? (int) round($nfWeight) : null,
                     'qty'            => 1,
-                    'unit_price'     => (float) $container->price,
-                    'total_price'    => (float) $container->price,
+                    'unit_price'     => (float) $nfContainer->price,
+                    'total_price'    => (float) $nfContainer->price,
                     'auto_pair'      => false,
                 ];
 
-                // Автоматично додаємо пару (кришку / ковпачок)
-                if ($container->pair_id) {
-                    $pair = $allPackaging->get($container->pair_id);
-                    if ($pair) {
+                if ($nfContainer->pair_id) {
+                    $nfPair = $allPackaging->get($nfContainer->pair_id);
+                    if ($nfPair) {
                         $result[] = [
-                            'packaging_id'   => $pair->id,
-                            'name'           => $pair->name,
-                            'packaging_type' => $pair->packaging_type,
-                            'dish_name'      => $actualDish->name,
+                            'packaging_id'   => $nfPair->id,
+                            'name'           => $nfPair->name,
+                            'packaging_type' => $nfPair->packaging_type,
+                            'dish_name'      => $nf->name,
                             'actual_weight'  => null,
                             'qty'            => 1,
-                            'unit_price'     => (float) $pair->price,
-                            'total_price'    => (float) $pair->price,
+                            'unit_price'     => (float) $nfPair->price,
+                            'total_price'    => (float) $nfPair->price,
                             'auto_pair'      => true,
                         ];
-                    }
-                }
-
-                // Упаковка НФ-інгредієнтів страви (реальної страви після заміни)
-                $actualDish->loadMissing('dishIngredients.childDish');
-                foreach ($actualDish->dishIngredients as $ingr) {
-                    $nf = $ingr->childDish;
-                    if (!$nf || !$nf->packaging_type) continue;
-
-                    $nfWeight    = (float)($ingr->net_weight_g ?? 0);
-                    $nfContainer = $this->findContainer($allPackaging, $nf->packaging_type, $nfWeight, $orderProject);
-                    if (!$nfContainer) continue;
-
-                    $result[] = [
-                        'packaging_id'   => $nfContainer->id,
-                        'name'           => $nfContainer->name,
-                        'packaging_type' => $nfContainer->packaging_type,
-                        'dish_name'      => $nf->name,
-                        'actual_weight'  => $nfWeight > 0 ? round($nfWeight) : null,
-                        'qty'            => 1,
-                        'unit_price'     => (float) $nfContainer->price,
-                        'total_price'    => (float) $nfContainer->price,
-                        'auto_pair'      => false,
-                    ];
-
-                    // Пара для НФ-контейнера (наприклад, кришка для соусника)
-                    if ($nfContainer->pair_id) {
-                        $nfPair = $allPackaging->get($nfContainer->pair_id);
-                        if ($nfPair) {
-                            $result[] = [
-                                'packaging_id'   => $nfPair->id,
-                                'name'           => $nfPair->name,
-                                'packaging_type' => $nfPair->packaging_type,
-                                'dish_name'      => $nf->name,
-                                'actual_weight'  => null,
-                                'qty'            => 1,
-                                'unit_price'     => (float) $nfPair->price,
-                                'total_price'    => (float) $nfPair->price,
-                                'auto_pair'      => true,
-                            ];
-                        }
                     }
                 }
             }
