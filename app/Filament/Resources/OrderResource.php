@@ -235,10 +235,18 @@ class OrderResource extends Resource
                                 if (! $tmp->hasCustomMacros()) return null;
 
                                 $advice = $tmp->analyzeMacroTargets();
-                                if (empty($advice['items'])) {
+                                if (empty($advice['items']) && ! ($advice['fallback_triggered'] ?? false)) {
                                     return new \Illuminate\Support\HtmlString(
                                         '<div style="padding:12px 14px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);border-radius:10px;color:#86efac;font-size:13px;">✅ Всі задані цілі досяжні на завтрашньому меню — жодних свапів не потрібно.</div>'
                                     );
+                                }
+
+                                // Явна підказка, коли запобіжник відкотив порції до стандарту:
+                                // менеджер має чітко бачити, що ці конкретні цілі система не
+                                // намагалась досягати (щоб не думав, що просто «трохи не дотягло»).
+                                $fallbackNotice = '';
+                                if ($advice['fallback_triggered'] ?? false) {
+                                    $fallbackNotice = '<div style="margin-bottom:10px;padding:10px 12px;background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.35);border-radius:8px;color:#fca5a5;font-size:13px;font-weight:700;">⛔️ Задана ціль недосяжна на цей день. Порції залишено стандартними — щоб клієнт не отримав деформований контейнер. Треба свапнути одну зі страв нижче.</div>';
                                 }
 
                                 $blocks = [];
@@ -273,7 +281,7 @@ class OrderResource extends Resource
 
                                 return new \Illuminate\Support\HtmlString(
                                     '<div style="padding:12px 14px;background:rgba(234,179,8,0.06);border:1px solid rgba(234,179,8,0.25);border-radius:10px;">'
-                                    . implode('', $blocks) . $footer . '</div>'
+                                    . $fallbackNotice . implode('', $blocks) . $footer . '</div>'
                                 );
                             }),
                     ]),

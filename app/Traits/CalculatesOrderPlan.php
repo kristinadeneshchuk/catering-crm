@@ -110,15 +110,20 @@ trait CalculatesOrderPlan
         // Якщо у замовленні задані персональні макро-цілі (окрім ккал) —
         // додатково калібруємо грамажі під усі 4 цілі одразу.
         // Якщо цілей немає — виходимо з поточним результатом (стара логіка).
+        $fallbackTriggered = false;
         if ($order->hasCustomMacros()) {
-            [$itemsOut, $totals] = $this->rebalanceForCustomMacros(
+            [$itemsOut, $totals, $fallbackTriggered] = $this->rebalanceForCustomMacros(
                 $itemsOut,
                 $order,
                 $weightMultiplier,
             );
         }
 
-        return ['items' => $itemsOut, 'totals' => $totals];
+        return [
+            'items'              => $itemsOut,
+            'totals'             => $totals,
+            'fallback_triggered' => $fallbackTriggered,
+        ];
     }
 
     /**
@@ -279,6 +284,7 @@ trait CalculatesOrderPlan
         // ккал без білка. У такому разі відкочуємось до стандартних порцій
         // (baseW) — банер поради у формі однаково скаже менеджеру, що ціль
         // недосяжна і треба свапати страви.
+        $fallbackTriggered = false;
         $trialTotals = ['kcal' => 0.0, 'prot' => 0.0, 'fat' => 0.0, 'carb' => 0.0];
         foreach ($indices as $i) {
             $d = $densities[$i];
@@ -294,6 +300,7 @@ trait CalculatesOrderPlan
             if ($devRatio > 1.0) {
                 // Ціль недосяжна — відкат на стандартні грамажі.
                 foreach ($indices as $i) { $g[$i] = $baseW[$i]; }
+                $fallbackTriggered = true;
                 break;
             }
         }
@@ -313,7 +320,7 @@ trait CalculatesOrderPlan
         }
         unset($it);
 
-        return [$itemsOut, $totals];
+        return [$itemsOut, $totals, $fallbackTriggered];
     }
 
     /**

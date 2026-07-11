@@ -98,7 +98,7 @@ class Order extends Model
      */
     public function analyzeMacroTargets(?string $date = null): array
     {
-        $out = ['items' => [], 'date' => '', 'day_number' => null];
+        $out = ['items' => [], 'date' => '', 'day_number' => null, 'fallback_triggered' => false];
         if (! $this->hasCustomMacros()) return $out;
         if ($this->menu_type !== 'cyclic') return $out;
 
@@ -130,6 +130,8 @@ class Order extends Model
         };
         $plan = $calc->calculateOrderPlan($this, $menu, $date);
         if (empty($plan['items'])) return $out;
+
+        $out['fallback_triggered'] = (bool) ($plan['fallback_triggered'] ?? false);
 
         $targets = [
             'prot' => ['value' => $this->target_protein_g, 'label' => 'Білки'],
