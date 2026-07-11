@@ -3,14 +3,19 @@
 namespace App\Services;
 
 use App\Models\DailyMenu;
+use App\Models\MenuPlan;
 use App\Models\Order;
 use App\Models\Setting;
+use App\Traits\CalculatesOrderPlan;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class KitchenPlanService
 {
+    use CalculatesOrderPlan;
+
+
     /**
      * Зібрати всі дані та згенерувати план через OpenAI.
      *
@@ -199,45 +204,64 @@ PROMPT;
 
         $sortedItems = $menu->menuItems->sortBy(fn ($item) => $item->mealType?->sort_order ?? 99);
 
+        // Заздалегідь рахуємо план кожного замовлення через calculateOrderPlan.
+        // Це той самий трейт, який використовує ShoppingList / PackagingService /
+        // ProductionReport / PrintController — тому кухня побачить РЕАЛЬНІ грамажі
+        // (з урахуванням індивідуальних цілей КБЖУ клієнтів, якщо задані), а не
+        // «base × count», яке раніше грубо ігнорувало навіть калораж замовлення.
+        $perOrderPlan = []; // orderId => ['dish_id' => weight, ...]
+        foreach ($activeOrders as $order) {
+            $plan = $this->calculateOrderPlan($order, $menu, $targetDate);
+            $map = [];
+            foreach ($plan['items'] as $it) {
+                $map[$it['dish_id']] = ($map[$it['dish_id']] ?? 0) + (int) $it['weight'];
+            }
+            $perOrderPlan[$order->id] = $map;
+        }
+
         foreach ($sortedItems as $item) {
             if (!$item->dish) continue;
 
             $mealType = $item->mealType->name ?? 'Інше';
             $dish     = $item->dish;
 
-            // Рахуємо скільки клієнтів їдять цю страву (без виключень страви)
-            $count = $activeOrders->filter(function ($order) use ($dish) {
-                // Клієнт відмовився від страви і немає заміни
+            // Клієнти, які реально їдять цю страву в цей день (з урахуванням
+            // виключень і замін), + справжній сумарний нетто.
+            $count       = 0;
+            $totalNettoG = 0;
+            foreach ($activeOrders as $order) {
                 $hasDishExclusion = $order->client->dishExclusions()
                     ->where('dish_id', $dish->id)->exists();
-
                 if ($hasDishExclusion) {
-                    // Але може бути заміна страви
                     $hasReplacement = $order->replacements
                         ->where('dish_id', $dish->id)
                         ->whereNotNull('replacement_dish_id')
                         ->isNotEmpty();
-                    return $hasReplacement;
+                    if (! $hasReplacement) continue;
                 }
-
-                return true;
-            })->count();
+                $w = $perOrderPlan[$order->id][$dish->id] ?? null;
+                if ($w === null) continue; // страва не потрапила в план цього клієнта
+                $count++;
+                $totalNettoG += $w;
+            }
 
             if ($count === 0) continue;
 
-            $baseWeight = (float) ($dish->base_weight_g ?? 0);
-            $totalNetto = round($baseWeight * $count);
+            $line = "[{$mealType}] {$dish->name} — {$count} порц., ~{$totalNettoG} г нетто";
 
-            $line = "[{$mealType}] {$dish->name} — {$count} порц., ~{$totalNetto} г нетто";
-
-            // Повний склад з кількостями (як у виробничому листі)
+            // Повний склад з кількостями. Тепер сумарна вага інгредієнта =
+            // per-portion netto × загальна вага страви / базова вага страви,
+            // сумована по замовленнях. Так закупки/списання не розїжджаються
+            // з тим, що бачить кухня.
+            $baseW = max(1.0, (float)($dish->base_weight_g ?? 0));
+            $scale = $totalNettoG / ($baseW * max(1, $count));
             $ingredientLines = $dish->dishIngredients
                 ->filter(fn ($i) => ($i->net_weight_g ?? 0) > 0)
                 ->sortByDesc('net_weight_g')
-                ->map(function ($i) use ($count) {
-                    $name      = $i->ingredient->name ?? null;
-                    $perPortion = (float) ($i->net_weight_g ?? 0);
-                    $total     = round($perPortion * $count);
+                ->map(function ($i) use ($count, $scale) {
+                    $name       = $i->ingredient->name ?? null;
+                    $perPortion = round((float) $i->net_weight_g * $scale, 1);
+                    $total      = round($perPortion * $count);
                     return $name ? "    • {$name}: {$perPortion} г/порц. → {$total} г всього" : null;
                 })
                 ->filter()
