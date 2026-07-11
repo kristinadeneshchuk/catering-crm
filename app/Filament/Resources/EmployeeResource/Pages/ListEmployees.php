@@ -33,15 +33,15 @@ class ListEmployees extends ListRecords
                 ->badge($baseQuery()->count()),
 
             'courier' => Tab::make("Кур'єри")
-                ->modifyQueryUsing(fn (Builder $q) => $q->where('position', 'courier'))
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('position', 'courier'))
                 ->badge($baseQuery()->where('position', 'courier')->count()),
 
             'cook' => Tab::make('Кухарі')
-                ->modifyQueryUsing(fn (Builder $q) => $q->where('position', 'cook'))
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('position', 'cook'))
                 ->badge($baseQuery()->where('position', 'cook')->count()),
 
             'manager' => Tab::make('Менеджери')
-                ->modifyQueryUsing(fn (Builder $q) => $q->where('position', 'manager'))
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('position', 'manager'))
                 ->badge($baseQuery()->where('position', 'manager')->count()),
         ];
     }
