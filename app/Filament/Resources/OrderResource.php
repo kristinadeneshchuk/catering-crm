@@ -181,8 +181,13 @@ class OrderResource extends Resource
                 Section::make('Індивідуальні цілі КБЖУ')
                     ->description('Заповнюйте ТІЛЬКИ якщо клієнт назвав свої цільові грамажі білків / жирів / вуглеводів. Порожні поля → стандартне масштабування під калорії.')
                     ->columns(3)
-                    ->collapsed(fn (Get $get) => empty($get('target_protein_g')) && empty($get('target_fats_g')) && empty($get('target_carbs_g')))
+                    // Читаємо СТАН БД, а не форми — інакше при live-оновленні
+                    // (onBlur на полях макро) секція перегортається сама.
+                    ->collapsed(fn (?\App\Models\Order $record): bool =>
+                        $record === null || ! $record->hasCustomMacros()
+                    )
                     ->collapsible()
+                    ->persistCollapsed()
                     ->schema([
                         TextInput::make('target_protein_g')
                             ->label('Білки (г)')
