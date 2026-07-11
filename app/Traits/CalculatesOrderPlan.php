@@ -272,6 +272,32 @@ trait CalculatesOrderPlan
             if ($g[$i] === null) $g[$i] = $baseW[$i];
         }
 
+        // ЗАПОБІЖНИК АБСУРДУ: перевіряємо, чи LS-розв'язок ХОЧ БЛИЗЬКО потрапив
+        // у задані цілі. Якщо якась одна ціль лишилась з відхиленням > 100%
+        // (класика: клієнт ввів «Білок = 1 г» при 2400 ккал), значить система
+        // деформує порції марно — Шарлотка розтягнеться до 630 г, щоб «спалити»
+        // ккал без білка. У такому разі відкочуємось до стандартних порцій
+        // (baseW) — банер поради у формі однаково скаже менеджеру, що ціль
+        // недосяжна і треба свапати страви.
+        $trialTotals = ['kcal' => 0.0, 'prot' => 0.0, 'fat' => 0.0, 'carb' => 0.0];
+        foreach ($indices as $i) {
+            $d = $densities[$i];
+            $trialTotals['kcal'] += $g[$i] * $d['kcal'];
+            $trialTotals['prot'] += $g[$i] * $d['prot'];
+            $trialTotals['fat']  += $g[$i] * $d['fat'];
+            $trialTotals['carb'] += $g[$i] * $d['carb'];
+        }
+        foreach ($rows as $r) {
+            if ($r['target'] <= 0) continue;
+            $achieved = $trialTotals[$r['key']];
+            $devRatio = abs($achieved - $r['target']) / $r['target'];
+            if ($devRatio > 1.0) {
+                // Ціль недосяжна — відкат на стандартні грамажі.
+                foreach ($indices as $i) { $g[$i] = $baseW[$i]; }
+                break;
+            }
+        }
+
         // Перерахунок items + totals із урахуванням weight-мультиплікатора дня
         // (той самий, що застосовується в основній гілці — для сезонних поправок).
         $totals = ['kcal' => 0.0, 'prot' => 0.0, 'fat' => 0.0, 'carb' => 0.0];
