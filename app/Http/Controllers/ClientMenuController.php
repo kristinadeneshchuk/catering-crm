@@ -3,16 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\DailyMenu;
+use App\Models\Dish;
 use App\Models\DishRating;
 use App\Models\KitchenNotification;
 use App\Models\Order;
 use App\Models\OrderDayDish;
 use App\Models\Setting;
+use App\Traits\CalculatesOrderPlan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class ClientMenuController extends Controller
 {
+    use CalculatesOrderPlan;
+
+
     // =====================================================================
     // Головна сторінка: денне меню клієнта
     // =====================================================================
@@ -453,93 +458,58 @@ class ClientMenuController extends Controller
 
     private function buildDayPlan(Order $order, DailyMenu $menu, ?string $date = null): array
     {
-        $targetKcal = (float) ($order->calories ?? 0);
-        if ($targetKcal <= 0) {
-            return ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
-        }
-        $weightMultiplier = \App\Support\DailyWeightMultiplier::for($date);
-
-        $clientMealTypeIds = $order->client->mealTypes->pluck('id')->toArray();
-
-        $availableItems = $menu->menuItems
-            ->filter(fn($item) => $item->dish && in_array($item->meal_type_id, $clientMealTypeIds, true))
-            ->sortBy(fn($item) => $item->mealType?->sort_order ?? 99)
-            ->values();
-
-        if ($availableItems->isEmpty()) {
+        // Використовуємо той самий trait, що і решта системи (пакування, закупки,
+        // виробничий план) — гарантує, що QR-код з наклейки показує клієнту
+        // ТІ САМІ грамажі і КБЖУ, що реально в контейнері. У т.ч. коли задані
+        // індивідуальні цілі КБЖУ — QR теж покаже перерахований план.
+        $plan = $this->calculateOrderPlan($order, $menu, $date);
+        if (empty($plan['items'])) {
             return ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
         }
 
-        $allowedSortOrders = \App\Models\MealPlan::getAllowedSortOrders((int) $targetKcal);
-        $selectedItems = $availableItems->filter(
-            fn ($item) => in_array($item->mealType?->sort_order, $allowedSortOrders)
-        )->values();
-        $byMeal = $selectedItems->groupBy('meal_type_id');
+        // Розширюємо мінімальний вивід trait'у до формату, що чекає view:
+        // потрібні per-dish kcal / prot / fat / carb + meal_sort.
+        $dishIds  = array_column($plan['items'], 'dish_id');
+        $dishes   = Dish::whereIn('id', $dishIds)->get()->keyBy('id');
+        $mealMap  = $menu->menuItems->keyBy('meal_type_id');
 
-        $rawPct = [];
-        foreach ($byMeal as $mealTypeId => $items) {
-            $fi = $items->first();
-            $rawPct[$mealTypeId] = $fi->custom_energy_percent !== null
-                ? (float) $fi->custom_energy_percent
-                : (float) ($fi->mealType?->energy_percent ?? 0);
-        }
-        $totalPct = array_sum($rawPct);
-        $normFactor = ($totalPct > 0.5 && abs($totalPct - 100) > 0.5) ? (100.0 / $totalPct) : 1.0;
-
-        $totals = ['kcal' => 0.0, 'prot' => 0.0, 'fat' => 0.0, 'carb' => 0.0];
         $resultItems = [];
+        foreach ($plan['items'] as $it) {
+            $dish = $dishes->get($it['dish_id']);
+            if (! $dish) continue;
 
-        foreach ($byMeal as $mealTypeId => $items) {
-            $firstItem = $items->first();
-            $mealType  = $firstItem->mealType;
+            $baseW    = (float) ($dish->base_weight_g ?? 0);
+            $weight   = (int) $it['weight'];
 
-            $p = ($rawPct[$mealTypeId] ?? 0) * $normFactor;
+            $kcalPer100 = ($baseW > 0 && (float) $dish->total_kcal > 0)
+                ? ((float) $dish->total_kcal / $baseW) * 100.0
+                : 0.0;
+            $dishKcal = $weight * $kcalPer100 / 100.0;
 
-            $mealKcal = ($p > 0)
-                ? $targetKcal * ($p / 100.0)
-                : $targetKcal * (1.0 / max(1, $byMeal->count()));
+            $protPerG = $baseW > 0 ? (float) ($dish->total_prot ?? 0) / $baseW : 0.0;
+            $fatPerG  = $baseW > 0 ? (float) ($dish->total_fat  ?? 0) / $baseW : 0.0;
+            $carbPerG = $baseW > 0 ? (float) ($dish->total_carb ?? 0) / $baseW : 0.0;
 
-            $kcalPerDish = $mealKcal / max(1, $items->count());
+            $mealSort = $mealMap->get($it['meal_type_id'])?->mealType?->sort_order ?? 99;
 
-            foreach ($items as $item) {
-                $dish = $item->dish;
-                if (! $dish) continue;
-
-                $baseW     = (float) ($dish->base_weight_g ?? 0);
-                $totalKcal = (float) ($dish->total_kcal ?? 0);
-                $kcalPer100 = ($baseW > 0 && $totalKcal > 0) ? ($totalKcal / $baseW) * 100.0 : 0;
-
-                $weight = $kcalPer100 > 0 ? (int) round(($kcalPerDish / $kcalPer100) * 100.0 * $weightMultiplier) : 0;
-
-                $protPerG = $baseW > 0 ? (float) ($dish->total_prot ?? 0) / $baseW : 0.0;
-                $fatPerG  = $baseW > 0 ? (float) ($dish->total_fat  ?? 0) / $baseW : 0.0;
-                $carbPerG = $baseW > 0 ? (float) ($dish->total_carb ?? 0) / $baseW : 0.0;
-
-                $dishKcal = $weight * $kcalPer100 / 100.0;
-
-                $totals['kcal'] += $dishKcal;
-                $totals['prot'] += $weight * $protPerG;
-                $totals['fat']  += $weight * $fatPerG;
-                $totals['carb'] += $weight * $carbPerG;
-
-                $resultItems[] = [
-                    'meal'         => $mealType?->name ?? '-',
-                    'meal_type_id' => (int) $mealTypeId,
-                    'meal_sort'    => $mealType?->sort_order ?? 99,
-                    'dish_id'      => (int) $dish->id,
-                    'dish_name'    => $dish->name,
-                    'weight'       => $weight,
-                    'kcal'         => $dishKcal,
-                    'prot'         => $weight * $protPerG,
-                    'fat'          => $weight * $fatPerG,
-                    'carb'         => $weight * $carbPerG,
-                ];
-            }
+            $resultItems[] = [
+                'meal'         => $it['meal'],
+                'meal_type_id' => (int) $it['meal_type_id'],
+                'meal_sort'    => $mealSort,
+                'dish_id'      => (int) $it['dish_id'],
+                'dish_name'    => $it['dish'],
+                'weight'       => $weight,
+                'kcal'         => $dishKcal,
+                'prot'         => $weight * $protPerG,
+                'fat'          => $weight * $fatPerG,
+                'carb'         => $weight * $carbPerG,
+            ];
         }
 
-        usort($resultItems, fn($a, $b) => $a['meal_sort'] <=> $b['meal_sort']);
+        usort($resultItems, fn ($a, $b) => $a['meal_sort'] <=> $b['meal_sort']);
 
-        return ['items' => $resultItems, 'totals' => $totals];
+        // Totals беремо з trait — вони вже враховують макро-калібровку.
+        return ['items' => $resultItems, 'totals' => $plan['totals']];
     }
 
     private function getIngredientsWithReplacements($dish, float $k, Order $order, int $rootDishId, float $subRatio = 1.0): array
