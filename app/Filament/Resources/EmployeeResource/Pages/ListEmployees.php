@@ -3,8 +3,11 @@
 namespace App\Filament\Resources\EmployeeResource\Pages;
 
 use App\Filament\Resources\EmployeeResource;
+use App\Models\Employee;
 use Filament\Actions;
+use Filament\Resources\Components\Tab;
 use Filament\Resources\Pages\ListRecords;
+use Illuminate\Database\Eloquent\Builder;
 
 class ListEmployees extends ListRecords
 {
@@ -14,6 +17,32 @@ class ListEmployees extends ListRecords
     {
         return [
             Actions\CreateAction::make(),
+        ];
+    }
+
+    /**
+     * Швидкі таби зверху за посадою — щоб не лізти щоразу в фільтр.
+     * Бейджі показують кількість не-архівованих на кожній посаді.
+     */
+    public function getTabs(): array
+    {
+        $baseQuery = fn () => Employee::query()->whereNull('archived_at');
+
+        return [
+            'all' => Tab::make('Всі')
+                ->badge($baseQuery()->count()),
+
+            'courier' => Tab::make("Кур'єри")
+                ->modifyQueryUsing(fn (Builder $q) => $q->where('position', 'courier'))
+                ->badge($baseQuery()->where('position', 'courier')->count()),
+
+            'cook' => Tab::make('Кухарі')
+                ->modifyQueryUsing(fn (Builder $q) => $q->where('position', 'cook'))
+                ->badge($baseQuery()->where('position', 'cook')->count()),
+
+            'manager' => Tab::make('Менеджери')
+                ->modifyQueryUsing(fn (Builder $q) => $q->where('position', 'manager'))
+                ->badge($baseQuery()->where('position', 'manager')->count()),
         ];
     }
 }
