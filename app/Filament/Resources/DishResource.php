@@ -144,6 +144,11 @@ class DishResource extends Resource
                                     ->extraInputAttributes(['autocomplete' => 'off'])
                                     ->columnSpan(1),
                             ])
+                            // Гарантія: у рядку не можуть одночасно жити ingredient_id і child_dish_id.
+                            // Без цього при type=pf невидиме поле ingredient_id від старої версії
+                            // страви лишалось у стейті і зберігалось у БД (див. 11 «битих» рядків).
+                            ->mutateRelationshipDataBeforeCreateUsing(fn (array $data): array => self::normalizeIngredientRow($data))
+                            ->mutateRelationshipDataBeforeSaveUsing(fn (array $data): array => self::normalizeIngredientRow($data))
                             ->columns(4)
                             ->reorderable()
                             ->collapsible()
@@ -297,6 +302,28 @@ class DishResource extends Resource
             ]);
     }
 
+    /**
+     * Приводить рядок dish_ingredients до інваріанту:
+     * type=pf     → тільки child_dish_id, ingredient_id=NULL
+     * type=product → тільки ingredient_id, child_dish_id=NULL
+     *
+     * Ловить два сценарії:
+     *  1) Старі «брудні» рядки, де від попередньої версії страви лишилось
+     *     невидиме поле — при першому ж пересохранінні страви вичищаються.
+     *  2) Можливі майбутні розсинхрони, якщо хтось обійде afterStateUpdated
+     *     (наприклад, через дубль страви або API).
+     */
+    private static function normalizeIngredientRow(array $data): array
+    {
+        $type = $data['type'] ?? 'product';
+        if ($type === 'pf') {
+            $data['ingredient_id'] = null;
+        } else {
+            $data['child_dish_id'] = null;
+        }
+        return $data;
+    }
+
     public static function table(Table $table): Table
     {
         return $table
@@ -384,12 +411,12 @@ class DishResource extends Resource
                             $replica->name = $record->name . ' (копія)';
                             $replica->save();
                             foreach ($record->dishIngredients as $item) {
-                                $replica->dishIngredients()->create([
+                                $replica->dishIngredients()->create(self::normalizeIngredientRow([
                                     'ingredient_id'  => $item->ingredient_id,
                                     'child_dish_id'  => $item->child_dish_id,
                                     'net_weight_g'   => $item->net_weight_g,
                                     'type'           => $item->type,
-                                ]);
+                                ]));
                             }
                         })
                         ->successNotificationTitle('Страву продубльовано'),

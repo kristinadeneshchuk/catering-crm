@@ -688,10 +688,7 @@ public function form(Form $form): Form
                     $baseW = (float)($dish->base_weight_g ?? 0);
                     $dishScale = ($baseW > 0) ? ((float)$plannedWeight / $baseW) : 0.0;
 
-                    $isCustom =
-                        $order->replacements->where('dish_id', $dish->id)->isNotEmpty()
-                        || $order->client->dishExclusions->contains('id', $dish->id)
-                        || $this->checkRecursiveConflict($dish, $this->effectiveExclusions($order));
+                    $isCustom = $this->isCustomForDish($order, $dish);
 
                     if (!empty(trim($order->client->production_comment ?? ''))) {
                         $commentClients[] = [
@@ -1199,21 +1196,6 @@ public function form(Form $form): Form
             }
         }
         return null;
-    }
-
-    private function checkRecursiveConflict($dish, $exclusions): bool
-    {
-        if (!$dish || !$dish->dishIngredients) return false;
-
-        foreach ($dish->dishIngredients as $di) {
-            if ($di->ingredient_id && $exclusions->contains('id', $di->ingredient_id)) {
-                return true;
-            }
-            if ($di->child_dish_id && $di->childDish) {
-                if ($this->checkRecursiveConflict($di->childDish, $exclusions)) return true;
-            }
-        }
-        return false;
     }
 
     // =========================================================

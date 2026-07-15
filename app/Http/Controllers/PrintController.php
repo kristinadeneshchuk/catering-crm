@@ -508,6 +508,11 @@ class PrintController extends Controller
             $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType?->sort_order ?? 99);
             $orders = $planOrders; // alias для існуючого нижче коду
 
+            // Ті самі накопичувачі, що у Filament-версії (PackagingList::calculate).
+            // Дублюємо логіку тут, поки не витягнули розрахунок у сервіс.
+            $replacementDishData = [];
+            $customClientData    = [];
+
         foreach ($sortedMenuItems as $mItem) {
             $dish = $mItem->dish;
             if (!$dish) continue;
@@ -535,37 +540,83 @@ class PrintController extends Controller
                 $realW = (float)($plannedDish['weight'] ?? 0);
                 $dishScale = ($baseW > 0) ? ($realW / $baseW) : 0.0;
 
-                $clientMeta = [
-                    'id'           => $order->client->id,
-                    'name'         => $order->client->name,
-                    'project'      => $order->projectData?->name ?? ucfirst($order->project ?? ''),
-                    'project_slug' => $order->project ?? 'none',
-                    'calories'     => (int)($order->calories ?? 0),
-                ];
+                // === КАСТОМНИЙ КЛІЄНТ — виводимо окремою карткою, не в стандартну колонку.
+                // Той самий порядок гілок, що у Filament PackagingList: dishReplacement пріоритетний.
+                if ($this->isCustomForDish($order, $dish)) {
+                    $dishReplacement = $order->replacements
+                        ->where('dish_id', $dish->id)
+                        ->whereNull('original_product_id')
+                        ->where('force_approved', false)
+                        ->first();
 
-                // 1. Виключення/заміна цілої страви
-                if ($order->client->dishExclusions->contains('id', $dish->id)) {
-                    $dishRep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
-                    if ($dishRep && $dishRep->replacementDish) {
-                        $tableData['individual_notes'][] = array_merge($clientMeta, ['text' => "Страву замінено на «{$dishRep->replacementDish->name}»"]);
-                    } else {
-                        $tableData['individual_notes'][] = array_merge($clientMeta, ['text' => "Страву повністю ВИКЛЮЧЕНО"]);
+                    if ($dishReplacement && $dishReplacement->replacementDish) {
+                        $repDish   = $dishReplacement->replacementDish;
+                        $repDishId = $repDish->id;
+                        $repBaseW  = (float)($repDish->base_weight_g ?? 0);
+                        $repScale  = $repBaseW > 0 ? ($realW / $repBaseW) : 0.0;
+
+                        $colKey   = (string)(int)($order->calories ?? 0);
+                        $projSlug = $order->project ?? 'none';
+                        $projName = $order->projectData?->name ?? ucfirst($projSlug);
+
+                        if (!isset($replacementDishData[$repDishId])) {
+                            $replacementDishData[$repDishId] = [
+                                'meal'             => $mItem->mealType?->name ?? '-',
+                                'dish_name'        => '→ Заміна: ' . $repDish->name,
+                                'dish_obj'         => $repDish,
+                                'columns'          => [],
+                                'rows'             => [],
+                                'individual_notes' => [],
+                            ];
+                        }
+                        if (!isset($replacementDishData[$repDishId]['columns'][$colKey])) {
+                            $replacementDishData[$repDishId]['columns'][$colKey] = [
+                                'count' => 0, 'sum_scale' => 0.0, 'projects' => [],
+                            ];
+                        }
+                        $replacementDishData[$repDishId]['columns'][$colKey]['count']++;
+                        $replacementDishData[$repDishId]['columns'][$colKey]['sum_scale'] += $repScale;
+                        if (!isset($replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug])) {
+                            $replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug] = ['name' => $projName, 'count' => 0];
+                        }
+                        $replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug]['count']++;
+                        continue;
                     }
-                    // Якщо страва виключена — інгредієнти не перевіряємо
-                    goto next_order_packaging;
+
+                    $dishForcedApproval = $order->replacements
+                        ->where('dish_id', $dish->id)
+                        ->whereNull('original_product_id')
+                        ->where('force_approved', true)
+                        ->first();
+
+                    $hasDishExclusion = !$dishForcedApproval
+                        && $order->client->dishExclusions->contains('id', $dish->id);
+
+                    if ($hasDishExclusion) {
+                        continue;
+                    }
+
+                    $oid = $order->id;
+                    if (!isset($customClientData[$oid])) {
+                        $customClientData[$oid] = [
+                            'is_individual'    => true,
+                            'is_custom_client' => true,
+                            'client_label'     => '#' . $order->client->id . ' ' . $order->client->name,
+                            'calories'         => (int)($order->calories ?? 0),
+                            'project'          => $order->projectData?->name ?? ucfirst($order->project ?? ''),
+                            'meals'            => [],
+                        ];
+                    }
+                    $customClientData[$oid]['meals'][] = [
+                        'meal'      => $mItem->mealType?->name ?? '-',
+                        'dish_name' => $dish->name,
+                        'rows'      => $this->buildCustomClientRows($order, $dish, $dishScale),
+                        'notes'     => $this->collectCustomPrintNotes($order, $dish),
+                    ];
+                    continue;
                 }
 
-                // 3. Заміни інгредієнтів + конфлікти (з урахуванням force_approved)
-                {
-                    $noteParts = [];
-                    $this->collectIngredientNoteParts($dish, $order, $dish->id, $noteParts);
-                    if (!empty($noteParts)) {
-                        $tableData['individual_notes'][] = array_merge($clientMeta, ['text' => implode(', ', $noteParts)]);
-                    }
-                }
-
-                next_order_packaging:
-
+                // Стандартний клієнт — акумулюємо у колонку страви.
                 $colKey   = (string)(int)($order->calories ?? 0);
                 $projSlug = $order->project ?? 'none';
                 $projName = $order->projectData?->name ?? ucfirst($projSlug);
@@ -592,15 +643,13 @@ class PrintController extends Controller
             ksort($tableData['columns']);
 
             foreach ($dish->dishIngredients as $di) {
-                $originalName = $di->ingredient
-                    ? $di->ingredient->name
-                    : ($di->childDish ? "[НФ] " . $di->childDish->name : '???');
+                $originalName = $this->ingredientRowLabel($di);
 
                 $cells = [];
                 foreach ($tableData['columns'] as $key => $col) {
                     $count = (int)($col['count'] ?? 1);
                     $sumScale = (float)($col['sum_scale'] ?? 0.0);
-                    
+
                     $onePortionScale = $count > 0 ? ($sumScale / $count) : 0;
 
                     $cells[$key] = [
@@ -615,6 +664,38 @@ class PrintController extends Controller
             }
 
             $report[] = $tableData;
+        }
+
+        // === ЗАМІННІ СТРАВИ (повна заміна страви) — окремі таблиці по цільовій страві ===
+        foreach ($replacementDishData as $repDishId => $repData) {
+            $repDish = $repData['dish_obj'];
+            $repDish->loadMissing(
+                'dishIngredients.ingredient',
+                'dishIngredients.childDish.dishIngredients.ingredient'
+            );
+
+            ksort($repData['columns']);
+
+            foreach ($repDish->dishIngredients as $di) {
+                $originalName = $this->ingredientRowLabel($di);
+
+                $cells = [];
+                foreach ($repData['columns'] as $key => $col) {
+                    $count           = (int)($col['count'] ?? 1);
+                    $sumScale        = (float)($col['sum_scale'] ?? 0.0);
+                    $onePortionScale = $count > 0 ? ($sumScale / $count) : 0;
+                    $cells[$key]     = ['val' => round(((float)($di->net_weight_g ?? 0)) * $onePortionScale)];
+                }
+                $repData['rows'][] = ['original_name' => $originalName, 'cells' => $cells];
+            }
+
+            unset($repData['dish_obj']);
+            $report[] = $repData;
+        }
+
+        // === КАСТОМНІ КЛІЄНТИ (свапи інгредієнта / force-approved / невирішені конфлікти) ===
+        foreach ($customClientData as $card) {
+            $report[] = $card;
         }
 
         // === ІНДИВІДУАЛЬНІ КЛІЄНТИ — одна картка на клієнта ===
@@ -648,9 +729,7 @@ class PrintController extends Controller
 
                 $rows = [];
                 foreach ($dish->dishIngredients as $di) {
-                    $name = $di->ingredient
-                        ? $di->ingredient->name
-                        : ($di->childDish ? '[НФ] ' . $di->childDish->name : '???');
+                    $name = $this->ingredientRowLabel($di);
                     $val  = round((float)($di->net_weight_g ?? 0) * $scale);
                     if ($val > 0) $rows[] = ['name' => $name, 'weight' => $val];
                 }
@@ -1536,6 +1615,17 @@ class PrintController extends Controller
         }
 
         return $changes;
+    }
+
+    /**
+     * Ноутки для картки одного кастомного клієнта на одну страву:
+     * список текстових рядків «X → Y» / «Без: X» для друку під грамажами.
+     */
+    private function collectCustomPrintNotes($order, $dish): array
+    {
+        $parts = [];
+        $this->collectIngredientNoteParts($dish, $order, $dish->id, $parts);
+        return array_map(fn (string $p) => ['text' => $p], $parts);
     }
 
     private function collectIngredientNoteParts($dish, $order, $rootDishId, array &$parts): void

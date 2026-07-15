@@ -67,8 +67,10 @@
                 {{-- ОБХІД ПО ПЛАНАХ МЕНЮ --}}
                 @foreach($report as $planId => $planBlock)
                 @php
-                    $cyclicTables     = array_filter($planBlock['tables'], fn($t) => empty($t['is_individual']));
-                    $individualTables = array_filter($planBlock['tables'], fn($t) => !empty($t['is_individual']));
+                    $cyclicTables       = array_filter($planBlock['tables'], fn($t) => empty($t['is_individual']));
+                    $customClientTables = array_filter($planBlock['tables'], fn($t) => !empty($t['is_custom_client']));
+                    // «Чисті» індивідуали — menu_type=individual, без прапорця is_custom_client.
+                    $individualTables   = array_filter($planBlock['tables'], fn($t) => !empty($t['is_individual']) && empty($t['is_custom_client']));
                 @endphp
 
                 <div style="margin-top:18px; margin-bottom:12px; padding:10px 14px; background:#f5f3ff; border:2px solid #c4b5fd; border-radius:10px;">
@@ -134,6 +136,64 @@
                         @endif
                     </div>
                 @endforeach
+
+                {{-- КАСТОМНІ КЛІЄНТИ — стандартні замовлення з інгредієнтними замінами / force-approved конфліктами --}}
+                @if(!empty($customClientTables))
+                    <div style="margin-top:24px; border-top:3px solid #ea580c; padding-top:16px;">
+                        <div style="background:#ea580c; color:white; display:inline-block; padding:6px 18px; border-radius:8px; font-size:13px; font-weight:900; text-transform:uppercase; margin-bottom:14px;">
+                            ⚠ Кастомні заміни (клієнт зі стандартного меню)
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:16px;">
+                            @foreach($customClientTables as $table)
+                                <div style="border:2px solid #ea580c; border-radius:10px; overflow:hidden; background:white;">
+                                    <div style="background:#ea580c; color:white; padding:8px 16px; display:flex; align-items:center; gap:12px;">
+                                        <span style="font-weight:900; font-size:15px;">{{ $table['client_label'] }}</span>
+                                        <span style="background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:4px; font-size:12px;">{{ $table['project'] }}</span>
+                                        <span style="background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:4px; font-size:12px; font-weight:700;">{{ $table['calories'] }} ккал</span>
+                                    </div>
+                                    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:0;">
+                                        @foreach($table['meals'] as $meal)
+                                            @php
+                                                $mealLower = mb_strtolower(trim($meal['meal']));
+                                                $mealColor = '#94a3b8';
+                                                if (str_contains($mealLower, 'сніданок'))      $mealColor = '#14b8a6';
+                                                elseif (str_contains($mealLower, 'перекус 1')) $mealColor = '#84cc16';
+                                                elseif (str_contains($mealLower, 'обід'))      $mealColor = '#fb923c';
+                                                elseif (str_contains($mealLower, 'перекус 2')) $mealColor = '#f472b6';
+                                                elseif (str_contains($mealLower, 'вечеря'))    $mealColor = '#38bdf8';
+                                            @endphp
+                                            <div style="border:1px solid #e5e7eb;">
+                                                <div style="background:{{ $mealColor }}; color:white; padding:5px 10px; font-weight:900; font-size:11px; text-transform:uppercase;">
+                                                    {{ $meal['meal'] }}
+                                                </div>
+                                                <div style="background:#fef3c7; padding:5px 10px; border-bottom:1px solid #fde68a;">
+                                                    <div style="font-weight:900; font-size:13px; color:#78350f;">{{ $meal['dish_name'] }}</div>
+                                                </div>
+                                                <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                                                    <tbody>
+                                                        @foreach($meal['rows'] as $row)
+                                                            <tr>
+                                                                <td style="padding:4px 10px; border-bottom:1px solid #f3f4f6; color:#111827;">{{ $row['name'] }}</td>
+                                                                <td style="padding:4px 8px; border-bottom:1px solid #f3f4f6; background:#e5e7eb; font-weight:800; text-align:center; color:#111827; width:60px;">{{ $row['weight'] }} г</td>
+                                                            </tr>
+                                                        @endforeach
+                                                    </tbody>
+                                                </table>
+                                                @if(!empty($meal['notes']))
+                                                    <div style="padding:6px 10px; background:#fff7ed; font-size:11px; color:#7c2d12;">
+                                                        @foreach($meal['notes'] as $note)
+                                                            <div>• {{ $note['text'] }}</div>
+                                                        @endforeach
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
 
                 {{-- ІНДИВІДУАЛЬНІ КЛІЄНТИ — одна картка на клієнта з усіма раціонами --}}
                 @if(!empty($individualTables))

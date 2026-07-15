@@ -446,4 +446,90 @@ trait CalculatesOrderPlan
         if ($baseW <= 0 || $totalKcal <= 0) return 0.0;
         return ($totalKcal / $baseW) * 100.0;
     }
+
+    /**
+     * Єдина логіка «клієнт по цій страві — стандарт чи кастом» для виробничого
+     * та фасувального листів. Без неї два звіти по-різному відповідали на це
+     * питання, через що кухня готувала на N-M порцій, а фасувальник рахував
+     * на N — і на останніх M порціях не вистачало.
+     *
+     * Кастом = клієнт не з'їсть цю страву як усі:
+     *   - у нього є будь-яка заміна для цієї страви (заміна страви цілком,
+     *     заміна інгредієнта, force-approved конфлікт);
+     *   - або клієнт вилучив цю страву цілком;
+     *   - або серед інгредієнтів страви (включно з вкладеними НФ) є
+     *     інгредієнт, який клієнт вилучив (незалежно від того, чи
+     *     оформлена заміна).
+     */
+    private function isCustomForDish($order, $dish): bool
+    {
+        if ($order->replacements->where('dish_id', $dish->id)->isNotEmpty()) return true;
+        if ($order->client->dishExclusions->contains('id', $dish->id)) return true;
+        return $this->dishHasClientExclusion($dish, $order->effectiveExcludedIngredients());
+    }
+
+    private function dishHasClientExclusion($dish, $exclusions, array $visited = []): bool
+    {
+        if (!$dish || !$dish->dishIngredients) return false;
+        if (in_array($dish->id, $visited, true)) return false;
+        $visited[] = $dish->id;
+
+        foreach ($dish->dishIngredients as $di) {
+            if ($di->ingredient_id && $exclusions->contains('id', $di->ingredient_id)) return true;
+            if ($di->child_dish_id && $di->childDish) {
+                if ($this->dishHasClientExclusion($di->childDish, $exclusions, $visited)) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Єдина логіка вибору назви для рядка dish_ingredients. Рішення завжди
+     * приймається по type, а не по тому, яке з полів (ingredient_id/child_dish_id)
+     * виявилося непорожнім — інакше фасувальний рендерив стару legacy-назву
+     * продукту, а виробничий — НФ, до якого перевели тех-картку.
+     */
+    protected function ingredientRowLabel(\App\Models\DishIngredient $di): string
+    {
+        if ($di->type === 'pf') {
+            return $di->childDish ? '[НФ] ' . $di->childDish->name : '???';
+        }
+        return $di->ingredient?->name ?? '???';
+    }
+
+    /**
+     * Рядки інгредієнтів для картки одного кастомного клієнта: та сама страва,
+     * але з підставленими інгредієнтними замінами і вирахуваним персональним
+     * грамажем. ПФ не розкриваємо — усередині ПФ заміни ідуть у notes картки.
+     */
+    protected function buildCustomClientRows(\App\Models\Order $order, $dish, float $scale): array
+    {
+        $rows = [];
+        foreach ($dish->dishIngredients as $di) {
+            $name   = $this->ingredientRowLabel($di);
+            $weight = round((float)($di->net_weight_g ?? 0) * $scale);
+
+            if ($di->type !== 'pf' && $di->ingredient_id) {
+                $rep = $order->replacements
+                    ->where('dish_id', $dish->id)
+                    ->where('original_product_id', $di->ingredient_id)
+                    ->first();
+
+                if ($rep && $rep->force_approved) {
+                    // конфлікт погашено — клієнт їсть оригінал
+                } elseif ($rep && $rep->replacementProduct) {
+                    $originalName = $di->ingredient?->name ?? '?';
+                    $name = '↔ ' . $rep->replacementProduct->name . ' (замість «' . $originalName . '»)';
+                } elseif ($order->effectiveExcludedIngredients()->contains('id', $di->ingredient_id)) {
+                    $name  .= ' (ВИКЛЮЧЕНО)';
+                    $weight = 0;
+                }
+            }
+
+            if ($weight > 0 || str_contains($name, 'ВИКЛЮЧЕНО')) {
+                $rows[] = ['name' => $name, 'weight' => $weight];
+            }
+        }
+        return $rows;
+    }
 }

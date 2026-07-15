@@ -249,8 +249,17 @@ class PackagingList extends Page implements HasForms
 
         $sortedMenuItems = $menu->menuItems->sortBy(fn ($i) => $i->mealType?->sort_order ?? 99);
 
-        // Накопичувач для замінних страв (повна заміна страви) — у межах плану
+        // Накопичувачі — у межах плану:
+        // $replacementDishData: клієнти з повною замiною страви (dishExclusion + replacementDish),
+        //                      агрегуються в окрему таблицю по страві-заміннику.
+        // $customClientData:   клієнти, у яких є будь-яка заміна інгредієнта, force-approved
+        //                      конфлікт або невирішений конфлікт (клієнт вилучив інгредієнт,
+        //                      а заміни не оформили). Кожен такий клієнт отримує власну картку
+        //                      з переліком того, що йому треба покласти в пакет — інакше кухня
+        //                      виготовляє на N-M порцій, а фасувальник рахує на N, і на
+        //                      останніх M клієнтах не вистачає їжі.
         $replacementDishData = [];
+        $customClientData    = [];
 
         foreach ($sortedMenuItems as $mItem) {
             $dish = $mItem->dish;
@@ -261,7 +270,7 @@ class PackagingList extends Page implements HasForms
                 'dish_name' => $dish->name,
                 'columns' => [],
                 'rows' => [],
-                'individual_notes' => [], 
+                'individual_notes' => [],
             ];
 
             foreach ($orders as $order) {
@@ -278,23 +287,28 @@ class PackagingList extends Page implements HasForms
 
                 if ($plannedWeight === null) continue;
 
-                // ЗБИРАЄМО НОТАТКИ (Заміни страв/інгредієнтів)
-                $notes = $this->collectOrderNotes($order, $dish);
-                if (!empty($notes)) {
-                    $tableData['individual_notes'] = array_merge($tableData['individual_notes'], $notes);
-                }
+                $baseW     = (float)($dish->base_weight_g ?? 0);
+                $dishScale = $baseW > 0 ? ((float)$plannedWeight / $baseW) : 0.0;
 
-                // ⚠️ Перевірка: клієнт має повне виключення цієї страви
-                // → не враховуємо його в інгредієнтах оригінальної страви
-                if ($order->client->dishExclusions->contains('id', $dish->id)) {
-                    $rep = $order->replacements
+                // === КАСТОМНИЙ КЛІЄНТ (той самий предикат, що у виробничому листі) ===
+                // Клієнт не бере участі в стандартній колонці. Далі — три взаємовиключні шляхи:
+                //   (a) страва повністю замінена іншою → аккумулюємо у replacementDishData;
+                //   (b) страва повністю виключена без заміни → клієнт пропускає її взагалі;
+                //   (c) інгредієнтний свап / force-approved / невирішений конфлікт → окрема картка.
+                if ($this->isCustomForDish($order, $dish)) {
+                    // Порядок гілок узгоджений з ProductionReport::buildCustomCard:
+                    // dishReplacement має пріоритет над dishExclusion.
+
+                    // (a) є оформлена заміна страви — незалежно від dishExclusion,
+                    // клієнт отримує саме страву-замінник (у виробничому це та ж лінія коду).
+                    $dishReplacement = $order->replacements
                         ->where('dish_id', $dish->id)
                         ->whereNull('original_product_id')
+                        ->where('force_approved', false)
                         ->first();
 
-                    if ($rep && $rep->replacementDish) {
-                        // Є замінна страва — накопичуємо окремо
-                        $repDish   = $rep->replacementDish;
+                    if ($dishReplacement && $dishReplacement->replacementDish) {
+                        $repDish   = $dishReplacement->replacementDish;
                         $repDishId = $repDish->id;
                         $repBaseW  = (float)($repDish->base_weight_g ?? 0);
                         $repScale  = $repBaseW > 0 ? ((float)$plannedWeight / $repBaseW) : 0.0;
@@ -324,13 +338,48 @@ class PackagingList extends Page implements HasForms
                             $replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug] = ['name' => $projName, 'count' => 0];
                         }
                         $replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug]['count']++;
+                        continue;
                     }
-                    // У будь-якому разі — пропускаємо оригінальну страву
+
+                    // force-approved на рівні страви = «конфлікт зафіксовано, але клієнт їсть як усі»,
+                    // тому dishExclusion при цьому не блокує подачу — клієнту потрібна картка з
+                    // оригінальним складом (те саме робить виробничий: dish_excluded=false у картці).
+                    $dishForcedApproval = $order->replacements
+                        ->where('dish_id', $dish->id)
+                        ->whereNull('original_product_id')
+                        ->where('force_approved', true)
+                        ->first();
+
+                    $hasDishExclusion = !$dishForcedApproval
+                        && $order->client->dishExclusions->contains('id', $dish->id);
+
+                    if ($hasDishExclusion) {
+                        // (b) страва виключена без заміни — клієнт її не отримує
+                        // (у виробничому такі картки помічені dish_excluded і НЕ списуються зі складу,
+                        // див. ProductionReport::processStockDebiting line 820).
+                        continue;
+                    }
+
+                    // (c) інгредієнтний свап / force-approved / невирішений конфлікт
+                    $oid = $order->id;
+                    if (!isset($customClientData[$oid])) {
+                        $customClientData[$oid] = [
+                            'is_individual'    => true,   // рендер тим самим блоком, що індивідуали
+                            'is_custom_client' => true,   // блейд може розрізнити оформленням
+                            'client_label'     => '#' . $order->client->id . ' ' . $order->client->name,
+                            'calories'         => (int)($order->calories ?? 0),
+                            'project'          => $order->projectData?->name ?? ucfirst($order->project ?? ''),
+                            'meals'            => [],
+                        ];
+                    }
+                    $customClientData[$oid]['meals'][] = [
+                        'meal'      => $mItem->mealType->name ?? 'Інше',
+                        'dish_name' => $dish->name,
+                        'rows'      => $this->buildCustomClientRows($order, $dish, $dishScale),
+                        'notes'     => $this->collectOrderNotes($order, $dish),
+                    ];
                     continue;
                 }
-
-                $baseW = (float)($dish->base_weight_g ?? 0);
-                $dishScale = $baseW > 0 ? ((float)$plannedWeight / $baseW) : 0.0;
 
                 $colKey   = (string)(int)($order->calories ?? 0);
                 $projSlug = $order->project ?? 'none';
@@ -363,9 +412,7 @@ class PackagingList extends Page implements HasForms
             ksort($tableData['columns']);
 
             foreach ($dish->dishIngredients as $di) {
-                $name = $di->ingredient
-                    ? $di->ingredient->name
-                    : ($di->childDish ? "[НФ] " . $di->childDish->name : '???');
+                $name = $this->ingredientRowLabel($di);
 
                 $netWeight = (float)($di->net_weight_g ?? 0);
                 $cells = [];
@@ -398,9 +445,7 @@ class PackagingList extends Page implements HasForms
             ksort($repData['columns']);
 
             foreach ($repDish->dishIngredients as $di) {
-                $name = $di->ingredient
-                    ? $di->ingredient->name
-                    : ($di->childDish ? '[НФ] ' . $di->childDish->name : '???');
+                $name = $this->ingredientRowLabel($di);
 
                 $netWeight = (float)($di->net_weight_g ?? 0);
                 $cells = [];
@@ -415,6 +460,12 @@ class PackagingList extends Page implements HasForms
 
             unset($repData['dish_obj']);
             $planTables[] = $repData;
+        }
+
+        // === КАСТОМНІ КЛІЄНТИ (свапи інгредієнта / force-approved / невирішені конфлікти) ===
+        // Кожен клієнт — окрема картка з усіма своїми стравами дня, аналогічно індивідуальним.
+        foreach ($customClientData as $card) {
+            $planTables[] = $card;
         }
 
         // === ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану ===
@@ -448,9 +499,7 @@ class PackagingList extends Page implements HasForms
 
                 $rows = [];
                 foreach ($dish->dishIngredients as $di) {
-                    $name = $di->ingredient
-                        ? $di->ingredient->name
-                        : ($di->childDish ? '[НФ] ' . $di->childDish->name : '???');
+                    $name = $this->ingredientRowLabel($di);
                     $val  = round((float)($di->net_weight_g ?? 0) * $scale);
                     if ($val > 0) $rows[] = ['name' => $name, 'weight' => $val];
                 }
@@ -499,15 +548,20 @@ class PackagingList extends Page implements HasForms
             'calories'     => (int)($order->calories ?? 0),
         ];
 
-        // 1. Виключення цілої страви
+        // 1. Виключення цілої страви — з урахуванням force-approved.
         if ($order->client->dishExclusions->contains('id', $dish->id)) {
-            $rep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
-            if ($rep && $rep->replacementDish) {
-                $notes[] = array_merge($clientMeta, ['text' => "Страву повністю замінено на «{$rep->replacementDish->name}»"]);
+            $dishRep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
+            if ($dishRep && $dishRep->replacementDish) {
+                $notes[] = array_merge($clientMeta, ['text' => "Страву повністю замінено на «{$dishRep->replacementDish->name}»"]);
+                return $notes;
+            }
+            if ($dishRep && $dishRep->force_approved) {
+                // Конфлікт зафіксовано, але клієнт їсть як усі — інгредієнтні заміни ще можливі,
+                // тому НЕ повертаємось, а продовжуємо перевіряти інгредієнти нижче.
             } else {
                 $notes[] = array_merge($clientMeta, ['text' => "Страву повністю ВИКЛЮЧЕНО"]);
+                return $notes;
             }
-            return $notes;
         }
 
         // 3. Виключення інгредієнтів (рекурсивно)
