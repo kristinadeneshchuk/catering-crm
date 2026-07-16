@@ -44,20 +44,25 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
             ->whereBetween('date', [$foodFrom, $foodTo])
             ->whereHas('order', fn ($q) => $q->whereIn('status', ['active', 'new']));
 
-        $query->whereHas('order', function ($q) use ($shift) {
-            if ($shift === 'morning') {
-                $q->where(fn ($qq) => $qq
-                    ->where('schedule_type', 'like', '%morning%')
-                    ->orWhere('schedule_type', 'like', '%ранок%'));
-            } else {
-                $q->where(fn ($qq) => $qq
-                    ->where('schedule_type', 'like', '%evening%')
-                    ->orWhere('schedule_type', 'like', '%вечір%'));
+        // Фільтр shift + точна відповідність даті — обидва у PHP, бо shift залежить
+        // від override delivery_time на orderDay, який не завжди відповідає schedule_type.
+        // Той самий алгоритм ефективного часу — у PrintController::miniManifest і в
+        // AntLogisticsService::collectOrderDaysForDelivery, щоб наклейки, мураха і Excel
+        // рахували ранок/вечір однаково.
+        $days = $query->get()->filter(function (OrderDay $day) use ($deliveryDate, $shift) {
+            if (!$day->resolveDeliveryDate()->isSameDay($deliveryDate)) {
+                return false;
             }
-        });
 
-        $days = $query->get()->filter(function (OrderDay $day) use ($deliveryDate) {
-            return $day->resolveDeliveryDate()->isSameDay($deliveryDate);
+            $overrideTime = $day->delivery_time;
+            if ($overrideTime) {
+                $hour = (int) explode(':', $overrideTime)[0];
+                $isEvening = $hour >= 12;
+            } else {
+                $isEvening = ScheduleService::isEvening($day->order?->schedule_type);
+            }
+
+            return $shift === 'evening' ? $isEvening : !$isEvening;
         });
 
         if ($days->isEmpty()) {

@@ -595,26 +595,43 @@ class AntLogisticsService
             ->whereBetween('date', [$foodFrom, $foodTo])
             ->whereHas('order', fn ($q) => $q->whereIn('status', ['active', 'new']));
 
-        if ($shift !== 'all') {
-            $query->whereHas('order', function ($q) use ($shift) {
-                if ($shift === 'morning') {
-                    $q->where(fn ($qq) => $qq
-                        ->where('schedule_type', 'like', '%morning%')
-                        ->orWhere('schedule_type', 'like', '%ранок%'));
-                } else {
-                    $q->where(fn ($qq) => $qq
-                        ->where('schedule_type', 'like', '%evening%')
-                        ->orWhere('schedule_type', 'like', '%вечір%'));
-                }
-            });
-        }
+        // Фільтр shift і точна відповідність даті — обидва у PHP, бо (1) shift залежить
+        // від override delivery_time на конкретному orderDay, який не завжди відповідає
+        // schedule_type замовлення, (2) resolveDeliveryDate враховує закриті слоти кур'єрів.
+        //
+        // Раніше shift фільтрувався у SQL по schedule_type — але це ігнорувало кейс, коли
+        // менеджер на конкретний день переносив час (наприклад, ранкове замовлення на 17:00
+        // залишалось у shift=morning і потрапляло не в той маршрут мурашки).
+        $days = $query->get()->filter(function (\App\Models\OrderDay $day) use ($delivery, $shift) {
+            if (!$day->resolveDeliveryDate()->isSameDay($delivery)) {
+                return false;
+            }
 
-        // Фільтруємо точно за resolveDeliveryDate
-        $days = $query->get()->filter(function (\App\Models\OrderDay $day) use ($delivery) {
-            return $day->resolveDeliveryDate()->isSameDay($delivery);
+            if ($shift === 'all') {
+                return true;
+            }
+
+            $isEvening = $this->orderDayIsEvening($day);
+            return $shift === 'evening' ? $isEvening : !$isEvening;
         })->values();
 
         return ['days' => $days];
+    }
+
+    /**
+     * Ефективний час доставки для конкретного дня: override з order_days має пріоритет
+     * над schedule_type замовлення. Той самий алгоритм — у PrintController::miniManifest,
+     * щоб наклейки і мураха завжди рахували ранок/вечір однаково.
+     */
+    private function orderDayIsEvening(\App\Models\OrderDay $day): bool
+    {
+        $overrideTime = $day->delivery_time;
+        if ($overrideTime) {
+            $hour = (int) explode(':', $overrideTime)[0];
+            return $hour >= 12;
+        }
+
+        return \App\Services\ScheduleService::isEvening($day->order?->schedule_type);
     }
 
     /**
