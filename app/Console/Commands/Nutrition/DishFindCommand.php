@@ -19,6 +19,7 @@ class DishFindCommand extends Command
         {--protein-max= : Maximum protein, g}
         {--fat-max= : Maximum fat, g}
         {--carb-max= : Maximum carbs, g}
+        {--cost-max= : Maximum cost per portion, UAH}
         {--meal= : Meal type id or name (filters dishes that appear in DailyMenuDish under this meal_type)}
         {--exclude-ingr= : Comma-separated ingredient IDs to exclude}
         {--no-allergens= : Comma-separated allergen names to exclude}
@@ -36,6 +37,7 @@ class DishFindCommand extends Command
         $protMax    = $this->option('protein-max') !== null ? (float) $this->option('protein-max') : null;
         $fatMax     = $this->option('fat-max')     !== null ? (float) $this->option('fat-max')     : null;
         $carbMax    = $this->option('carb-max')    !== null ? (float) $this->option('carb-max')    : null;
+        $costMax    = $this->option('cost-max')    !== null ? (float) $this->option('cost-max')    : null;
         $excludeIng = $this->parseCsvInts($this->option('exclude-ingr'));
         $noAllergens= $this->parseCsv($this->option('no-allergens'));
         $nameLike   = $this->option('name-like');
@@ -83,6 +85,7 @@ class DishFindCommand extends Command
             if ($protMax  !== null && $p > $protMax)  continue;
             if ($fatMax   !== null && $f > $fatMax)   continue;
             if ($carbMax  !== null && $c > $carbMax)  continue;
+            if ($costMax  !== null && (float) $totals['cost'] > $costMax) continue;
 
             $usedIngrIds = [];
             $allergens   = [];
@@ -137,7 +140,7 @@ class DishFindCommand extends Command
             'criteria' => [
                 'kcal' => $kcal, 'kcal_tol_percent' => $kcalTol,
                 'protein_min' => $protMin, 'protein_max' => $protMax,
-                'fat_max' => $fatMax, 'carb_max' => $carbMax,
+                'fat_max' => $fatMax, 'carb_max' => $carbMax, 'cost_max' => $costMax,
                 'meal' => $this->option('meal'),
                 'exclude_ingr' => $excludeIng,
                 'no_allergens' => $noAllergens,
