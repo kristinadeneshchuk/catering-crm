@@ -63,9 +63,25 @@ class DeliveryRoute extends Model
 
         $routeDate = \Carbon\Carbon::parse($this->date)->startOfDay();
 
-        return (float) OrderDay::query()
+        $query = OrderDay::query()
             ->where('ant_route_num', $this->ant_route_num)
-            ->where('extra_delivery_fee', '>', 0)
+            ->where('extra_delivery_fee', '>', 0);
+
+        // Номер маршруту НЕ унікальний у межах дня: коли є ранковий і вечірній
+        // прогони, обидва нумеруються з 1. Без цього звуження доплата за дальню
+        // доставку задвоювалась — падала одразу на двох курʼєрів з однаковим
+        // номером маршруту. Матчимо ще й по водію: OrderDay.ant_driver і
+        // DeliveryRoute.driver_name беруться з одного поля ANT `Driver`.
+        // NULL-водія лишаємо як легасі-fallback (старі рядки без ant_driver).
+        $driver = trim((string) $this->driver_name);
+        if ($driver !== '') {
+            $query->where(function ($q) use ($driver) {
+                $q->whereNull('ant_driver')
+                  ->orWhereRaw('LOWER(TRIM(ant_driver)) = ?', [mb_strtolower($driver)]);
+            });
+        }
+
+        return (float) $query
             ->with('order')
             ->get()
             ->filter(fn ($d) => $d->resolveDeliveryDate()->startOfDay()->equalTo($routeDate))
