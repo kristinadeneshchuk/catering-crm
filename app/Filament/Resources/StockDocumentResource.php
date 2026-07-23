@@ -6,6 +6,7 @@ use App\Traits\AllowCookAccess;
 
 use App\Filament\Resources\StockDocumentResource\Pages;
 use App\Models\StockDocument;
+use App\Models\StockDocumentItem;
 use App\Models\Ingredient;
 use App\Models\Packaging;
 use App\Models\Warehouse;
@@ -117,6 +118,30 @@ class StockDocumentResource extends Resource
                             ->relationship('items')
                             ->label('')
                             ->addActionLabel('Додати ще позицію')
+                            // При редагуванні відновлюємо рядок у «накладному» вигляді:
+                            // одиниця + кількість як їх вводили, ціна за цю одиницю.
+                            ->mutateRelationshipDataBeforeFillUsing(function (array $data): array {
+                                $baseUnit = 'кг';
+                                if (!empty($data['itemable_type']) && !empty($data['itemable_id'])
+                                    && class_exists($data['itemable_type'])) {
+                                    $baseUnit = StockDocumentItem::canonUnit(
+                                        $data['itemable_type']::find($data['itemable_id'])?->unit
+                                    ) ?: 'кг';
+                                }
+
+                                $inputUnit = StockDocumentItem::canonUnit($data['input_unit'] ?? '') ?: $baseUnit;
+                                $inputQty  = ($data['input_qty'] ?? null) !== null
+                                    ? (float) $data['input_qty']
+                                    : (float) ($data['qty'] ?? 0);
+                                $total     = (float) ($data['total_price'] ?? 0);
+
+                                $data['base_unit']  = $baseUnit;
+                                $data['input_unit'] = $inputUnit;
+                                $data['input_qty']  = $inputQty;
+                                $data['unit_price'] = $inputQty > 0 ? round($total / $inputQty, 4) : (float) ($data['price'] ?? 0);
+
+                                return $data;
+                            })
                             ->live()
                             ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set) {
                                 $items = $get('items') ?? [];
@@ -133,6 +158,12 @@ class StockDocumentResource extends Resource
                                 // 🔥 ПРИХОВАНІ ПОЛЯ, КУДИ МИ БУДЕМО ЗАПИСУВАТИ ТИП І ID
                                 Hidden::make('itemable_type'),
                                 Hidden::make('itemable_id'),
+
+                                // Базова одиниця товару (г/кг/мл/л/шт) — для конвертації
+                                // введеної одиниці та фільтрації сумісних опцій. У БД не пишемо.
+                                Hidden::make('base_unit')
+                                    ->default('кг')
+                                    ->dehydrated(false),
 
                                 // 🔥 РОЗУМНИЙ ВИПАДАЮЧИЙ СПИСОК
                                 Select::make('item_composite')
@@ -180,7 +211,8 @@ class StockDocumentResource extends Resource
                                         if (!$state) {
                                             $set('itemable_type', null);
                                             $set('itemable_id', null);
-                                            $set('price', null);
+                                            $set('base_unit', 'кг');
+                                            $set('unit_price', null);
                                             $set('total_price', 0);
                                             return;
                                         }
@@ -195,50 +227,64 @@ class StockDocumentResource extends Resource
                                         $item = $modelClass::find($modelId);
                                         if (!$item) return;
 
+                                        // За замовчуванням одиниця вводу = власна одиниця товару
+                                        $baseUnit = StockDocumentItem::canonUnit($item->unit) ?: 'кг';
+                                        $set('base_unit', $baseUnit);
+                                        $set('input_unit', $baseUnit);
                                         $set('price_manual', false);
 
-                                        $defaultPrice = 0.0;
-
-                                        if ($item instanceof Ingredient) {
-                                            $defaultPrice = (float) ($item->average_price ?? 0);
-                                        } elseif ($item instanceof Packaging) {
-                                            $defaultPrice = (float) ($item->price ?? 0);
-                                        }
-
-                                        $defaultPrice = round($defaultPrice, 2);
-
-                                        // Якщо "Надходження", ціну не ставимо. Інакше - ставимо.
                                         if ($get('../../type') === 'receipt') {
-                                            $set('price', null);
+                                            // Надходження: ціну вводять з накладної вручну
+                                            $set('unit_price', null);
                                             $set('total_price', 0);
                                         } else {
-                                            $set('price', $defaultPrice);
-                                            $qty = (float) ($get('qty') ?? 0);
+                                            // Списання: підставляємо відому середню ціну (за базову одиницю).
+                                            $defaultPrice = $item instanceof Ingredient
+                                                ? (float) ($item->average_price ?? 0)
+                                                : (float) ($item->price ?? 0);
+                                            $defaultPrice = round($defaultPrice, 4);
+                                            $set('unit_price', $defaultPrice);
+                                            $qty = (float) ($get('input_qty') ?? 0);
                                             $set('total_price', round($qty * $defaultPrice, 2));
                                         }
                                     }),
 
-                                TextInput::make('qty')
+                                // Одиниця, у якій вводимо позицію (як на накладній).
+                                // Опції обмежені сумісними з базовою одиницею товару.
+                                Select::make('input_unit')
+                                    ->label('Од.')
+                                    ->options(fn (Forms\Get $get) => collect(
+                                            StockDocumentItem::compatibleUnits($get('base_unit'))
+                                        )->mapWithKeys(fn ($u) => [$u => $u])->all())
+                                    ->default('кг')
+                                    ->required()
+                                    ->live()
+                                    ->dehydrated(true)
+                                    ->columnSpan(1),
+
+                                TextInput::make('input_qty')
                                     ->label('Кількість')
                                     ->numeric()
                                     ->default(1)
                                     ->required()
                                     ->live(onBlur: true)
+                                    ->dehydrated(true)
                                     ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
-                                        $price = (float) ($get('price') ?? 0);
+                                        $price = (float) ($get('unit_price') ?? 0);
                                         $set('total_price', round((float) $state * $price, 2));
-                                    }),
+                                    })
+                                    ->columnSpan(1),
 
-                                TextInput::make('price')
-                                    ->label('Ціна за 1 од.')
+                                TextInput::make('unit_price')
+                                    ->label(fn (Forms\Get $get) => 'Ціна за 1 ' . (StockDocumentItem::canonUnit($get('input_unit')) ?: 'од.'))
                                     ->numeric()
                                     ->prefix('₴')
                                     ->required()
-                                    ->live(debounce: 500)
-                                    ->dehydrated(true)
+                                    ->live(onBlur: true)
+                                    ->dehydrated(false) // віртуальне: у БД пишемо нормалізовану price
                                     ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
                                         $set('price_manual', true);
-                                        $qty = (float) ($get('qty') ?? 0);
+                                        $qty = (float) ($get('input_qty') ?? 0);
                                         $set('total_price', round($qty * (float) $state, 2));
                                     })
                                     ->helperText(function (Forms\Get $get) {
@@ -256,19 +302,21 @@ class StockDocumentResource extends Resource
                                         $item = $modelClass::find($modelId);
                                         if (!$item) return null;
 
-                                        $lastPrice = 0.0;
-                                        if ($item instanceof Ingredient) {
-                                            $lastPrice = (float) ($item->average_price ?? 0);
-                                        } elseif ($item instanceof Packaging) {
-                                            $lastPrice = (float) ($item->price ?? 0);
-                                        }
+                                        // Середня ціна зберігається за БАЗОВУ одиницю —
+                                        // приводимо до обраної одиниці вводу для чесного порівняння.
+                                        $lastBase = $item instanceof Ingredient
+                                            ? (float) ($item->average_price ?? 0)
+                                            : (float) ($item->price ?? 0);
+                                        $factor   = StockDocumentItem::unitFactor($get('input_unit'), $item->unit);
+                                        $lastPrice = $lastBase * $factor;
+                                        $unitLabel = StockDocumentItem::canonUnit($get('input_unit')) ?: 'од.';
 
                                         if ($lastPrice <= 0) {
                                             return new HtmlString('<span class="text-[11px] text-gray-500">Перша закупівля (немає історії цін)</span>');
                                         }
 
-                                        $currentPrice = (float) $get('price');
-                                        $message = "<span class='text-[11px] text-gray-500'>Попередня ціна: <b>" . number_format($lastPrice, 2) . " ₴</b></span>";
+                                        $currentPrice = (float) $get('unit_price');
+                                        $message = "<span class='text-[11px] text-gray-500'>Попередня ціна: <b>" . number_format($lastPrice, 2) . " ₴/{$unitLabel}</b></span>";
 
                                         if ($currentPrice > 0) {
                                             $diff = $currentPrice - $lastPrice;
@@ -284,15 +332,25 @@ class StockDocumentResource extends Resource
                                         }
 
                                         return new HtmlString("<div style='line-height: 1.2; margin-top: 4px;'>{$message}</div>");
-                                    }),
+                                    })
+                                    ->columnSpan(1),
 
                                 TextInput::make('total_price')
                                     ->label('Сума')
                                     ->numeric()
-                                    ->readOnly()
-                                    ->prefix('₴'),
+                                    ->prefix('₴')
+                                    ->live(onBlur: true)
+                                    ->dehydrated(true)
+                                    ->helperText('Можна ввести суму — ціна за одиницю дорахується')
+                                    ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
+                                        $qty = (float) ($get('input_qty') ?? 0);
+                                        if ($qty > 0) {
+                                            $set('unit_price', round((float) $state / $qty, 4));
+                                        }
+                                    })
+                                    ->columnSpan(1),
                             ])
-                            ->columns(5),
+                            ->columns(6),
 
                         Forms\Components\Hidden::make('items_summary')
                             ->dehydrated(false),
