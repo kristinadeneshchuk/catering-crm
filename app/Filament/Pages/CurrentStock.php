@@ -56,9 +56,9 @@ class CurrentStock extends Page implements HasTable
             'deficit' => Ingredient::where('stock', '<', 0)->count(),
             'zero'    => Ingredient::where('stock', '=', 0)->count(),
             'value'   => Ingredient::get()->sum(function ($i) {
-                $unit = mb_strtolower(trim((string)($i->unit ?? 'кг')));
-                $mult = in_array($unit, ['г', 'g', 'мл', 'ml']) ? 0.001 : 1.0;
-                return max(0, (float)$i->stock * $mult * (float)$i->average_price);
+                // stock і average_price обидва в базовій одиниці інгредієнта —
+                // вартість = залишок × ціна за одиницю, без конвертації.
+                return max(0, (float)$i->stock * (float)$i->average_price);
             }),
         ];
     }
@@ -120,8 +120,8 @@ class CurrentStock extends Page implements HasTable
                     if ($this->activeTab === 'packaging') {
                         $val = (float)$record->stock * (float)$record->price;
                     } else {
-                        $mult = in_array($record->unit, ['г', 'мл']) ? 0.001 : 1;
-                        $val  = (float)$record->stock * $mult * (float)$record->average_price;
+                        // stock і average_price у базовій одиниці — без ×0.001.
+                        $val = (float)$record->stock * (float)$record->average_price;
                     }
                     return $val;
                 })
