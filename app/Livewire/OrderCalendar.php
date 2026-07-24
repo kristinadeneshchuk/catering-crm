@@ -54,6 +54,12 @@ class OrderCalendar extends Component
     // Доплата за дальню доставку (фіксована з settings.far_delivery_fee)
     public bool $modalIsFarDelivery = false;
 
+    // Фейкове КБЖУ дня (тільки для меню по QR, на виробництво не впливає)
+    public ?string $modalFakeKcal = null;
+    public ?string $modalFakeProt = null;
+    public ?string $modalFakeFat = null;
+    public ?string $modalFakeCarb = null;
+
     public function mount(?Order $order = null)
     {
         $this->order = $order;
@@ -169,6 +175,10 @@ class OrderCalendar extends Component
             ? Carbon::parse($day->delivery_date_override)->format('Y-m-d')
             : null;
         $this->modalIsFarDelivery = (float) $day->extra_delivery_fee > 0;
+        $this->modalFakeKcal = $day->fake_kcal !== null ? (string) $day->fake_kcal : null;
+        $this->modalFakeProt = $day->fake_prot !== null ? (string) $day->fake_prot : null;
+        $this->modalFakeFat  = $day->fake_fat  !== null ? (string) $day->fake_fat  : null;
+        $this->modalFakeCarb = $day->fake_carb !== null ? (string) $day->fake_carb : null;
         $this->addressSearch  = '';
         $this->addressResults = [];
         // Завантажуємо адреси клієнта
@@ -269,6 +279,10 @@ class OrderCalendar extends Component
                 ? (float) $this->modalDiscountValue
                 : null,
             'extra_delivery_fee' => $farFee,
+            'fake_kcal'        => $this->modalFakeKcal !== null && $this->modalFakeKcal !== '' ? (int) $this->modalFakeKcal : null,
+            'fake_prot'        => $this->modalFakeProt !== null && $this->modalFakeProt !== '' ? (float) $this->modalFakeProt : null,
+            'fake_fat'         => $this->modalFakeFat  !== null && $this->modalFakeFat  !== '' ? (float) $this->modalFakeFat  : null,
+            'fake_carb'        => $this->modalFakeCarb !== null && $this->modalFakeCarb !== '' ? (float) $this->modalFakeCarb : null,
         ]);
 
         $this->closeAddressModal();
