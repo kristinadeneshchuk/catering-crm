@@ -299,6 +299,24 @@ class PackagingList extends Page implements HasForms
                     // Порядок гілок узгоджений з ProductionReport::buildCustomCard:
                     // dishReplacement має пріоритет над dishExclusion.
 
+                    // Рахуємо цей раціон у ЗАГАЛЬНИЙ підсумок колонки як «нестандартний»
+                    // (заміна інгредієнта / повне виключення / повна заміна страви на іншу).
+                    // Грамажі рядків НЕ чіпаємо — вони рахуються тільки по стандартних
+                    // порціях (sum_scale). Тут лише лічильники для шапки й розбивки по брендах,
+                    // щоб кухня бачила реальну кількість раціонів калоражу, а червона цифра
+                    // в дужках показувала, скільки з них — з індивідуальною зміною.
+                    $cKey  = (string)(int)($order->calories ?? 0);
+                    $cSlug = $order->project ?? 'none';
+                    $cName = $order->projectData?->name ?? ucfirst($cSlug);
+                    if (!isset($tableData['columns'][$cKey])) {
+                        $tableData['columns'][$cKey] = ['count' => 0, 'sum_scale' => 0.0, 'projects' => [], 'custom_count' => 0];
+                    }
+                    $tableData['columns'][$cKey]['custom_count'] = ($tableData['columns'][$cKey]['custom_count'] ?? 0) + 1;
+                    if (!isset($tableData['columns'][$cKey]['projects'][$cSlug])) {
+                        $tableData['columns'][$cKey]['projects'][$cSlug] = ['name' => $cName, 'count' => 0, 'custom_count' => 0];
+                    }
+                    $tableData['columns'][$cKey]['projects'][$cSlug]['custom_count'] = ($tableData['columns'][$cKey]['projects'][$cSlug]['custom_count'] ?? 0) + 1;
+
                     // (a) є оформлена заміна страви — незалежно від dishExclusion,
                     // клієнт отримує саме страву-замінник (у виробничому це та ж лінія коду).
                     $dishReplacement = $order->replacements
@@ -387,9 +405,10 @@ class PackagingList extends Page implements HasForms
 
                 if (!isset($tableData['columns'][$colKey])) {
                     $tableData['columns'][$colKey] = [
-                        'count'     => 0,
-                        'sum_scale' => 0.0,
-                        'projects'  => [],
+                        'count'        => 0,
+                        'sum_scale'    => 0.0,
+                        'projects'     => [],
+                        'custom_count' => 0,
                     ];
                 }
 
@@ -397,7 +416,7 @@ class PackagingList extends Page implements HasForms
                 $tableData['columns'][$colKey]['sum_scale'] += $dishScale;
 
                 if (!isset($tableData['columns'][$colKey]['projects'][$projSlug])) {
-                    $tableData['columns'][$colKey]['projects'][$projSlug] = ['name' => $projName, 'count' => 0];
+                    $tableData['columns'][$colKey]['projects'][$projSlug] = ['name' => $projName, 'count' => 0, 'custom_count' => 0];
                 }
                 $tableData['columns'][$colKey]['projects'][$projSlug]['count']++;
             }

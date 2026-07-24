@@ -166,7 +166,7 @@
                 <tr>
                     @foreach($table['columns'] as $colKey => $colData)
                         <th class="kcal-{{ trim($colKey) }}">
-                            {{ $colKey }} <span style="font-size:11px;font-weight:400;opacity:.85;">({{ $colData['count'] }})</span>
+                            {{ $colKey }} <span style="font-size:11px;font-weight:400;opacity:.85;">({{ ($colData['count'] ?? 0) + ($colData['custom_count'] ?? 0) }})</span>
                         </th>
                     @endforeach
                 </tr>
@@ -174,15 +174,15 @@
                     <td class="portions-title">КІЛЬКІСТЬ ПОРЦІЙ</td>
                     @foreach($table['columns'] as $colData)
                         <td class="portions-cell">
-                            {{ $colData['count'] }}
+                            {{ ($colData['count'] ?? 0) + ($colData['custom_count'] ?? 0) }}
                             @if(!empty($colData['projects']))
                                 <div style="font-size:10px;font-weight:600;margin-top:2px;color:#111827 !important;">
-                                    @foreach($colData['projects'] as $p){{ $p['name'] }}: {{ $p['count'] }}<br>@endforeach
+                                    @foreach($colData['projects'] as $p){{ $p['name'] }}: {{ $p['count'] }}@if(!empty($p['custom_count']))<span style="color:#dc2626;font-weight:800;"> ({{ $p['custom_count'] }})</span>@endif<br>@endforeach
                                 </div>
                             @endif
                         </td>
                     @endforeach
-                    <td style="font-size:16px;font-weight:bold;">{{ array_sum(array_column($table['columns'],'count')) }}</td>
+                    <td style="font-size:16px;font-weight:bold;">{{ collect($table['columns'])->sum(fn($c) => ($c['count'] ?? 0) + ($c['custom_count'] ?? 0)) }}</td>
                 </tr>
             </thead>
             <tbody>
@@ -192,7 +192,7 @@
                         @php $rowTotal = 0; @endphp
                         @foreach($table['columns'] as $colKey => $colData)
                             @php $cell=$row['cells'][$colKey]??0; $val=is_array($cell)?($cell['val']??0):$cell; $rowTotal+=$val*($colData['count']??1); @endphp
-                            <td style="font-weight:bold;font-size:13px;">{{ $val }} г</td>
+                            <td style="font-weight:bold;font-size:13px;">@if(($colData['count'] ?? 0) > 0){{ $val }} г@else—@endif</td>
                         @endforeach
                         <td style="font-size:14px;font-weight:bold;">{{ round($rowTotal) }} г</td>
                     </tr>

@@ -543,6 +543,23 @@ class PrintController extends Controller
                 // === КАСТОМНИЙ КЛІЄНТ — виводимо окремою карткою, не в стандартну колонку.
                 // Той самий порядок гілок, що у Filament PackagingList: dishReplacement пріоритетний.
                 if ($this->isCustomForDish($order, $dish)) {
+                    // Рахуємо цей раціон у ЗАГАЛЬНИЙ підсумок колонки як «нестандартний»
+                    // (заміна інгредієнта / повне виключення / повна заміна страви на іншу).
+                    // Грамажі рядків НЕ чіпаємо — вони по стандартних порціях (sum_scale).
+                    // Тут лише лічильники для шапки й розбивки по брендах: червона цифра в дужках
+                    // = скільки раціонів калоражу/бренду мають індивідуальну зміну.
+                    $cKey  = (string)(int)($order->calories ?? 0);
+                    $cSlug = $order->project ?? 'none';
+                    $cName = $order->projectData?->name ?? ucfirst($cSlug);
+                    if (!isset($tableData['columns'][$cKey])) {
+                        $tableData['columns'][$cKey] = ['count' => 0, 'sum_scale' => 0.0, 'projects' => [], 'custom_count' => 0];
+                    }
+                    $tableData['columns'][$cKey]['custom_count'] = ($tableData['columns'][$cKey]['custom_count'] ?? 0) + 1;
+                    if (!isset($tableData['columns'][$cKey]['projects'][$cSlug])) {
+                        $tableData['columns'][$cKey]['projects'][$cSlug] = ['name' => $cName, 'count' => 0, 'custom_count' => 0];
+                    }
+                    $tableData['columns'][$cKey]['projects'][$cSlug]['custom_count'] = ($tableData['columns'][$cKey]['projects'][$cSlug]['custom_count'] ?? 0) + 1;
+
                     $dishReplacement = $order->replacements
                         ->where('dish_id', $dish->id)
                         ->whereNull('original_product_id')
@@ -623,9 +640,10 @@ class PrintController extends Controller
 
                 if (!isset($tableData['columns'][$colKey])) {
                     $tableData['columns'][$colKey] = [
-                        'count'     => 0,
-                        'sum_scale' => 0.0,
-                        'projects'  => [],
+                        'count'        => 0,
+                        'sum_scale'    => 0.0,
+                        'projects'     => [],
+                        'custom_count' => 0,
                     ];
                 }
 
@@ -633,7 +651,7 @@ class PrintController extends Controller
                 $tableData['columns'][$colKey]['sum_scale'] += $dishScale;
 
                 if (!isset($tableData['columns'][$colKey]['projects'][$projSlug])) {
-                    $tableData['columns'][$colKey]['projects'][$projSlug] = ['name' => $projName, 'count' => 0];
+                    $tableData['columns'][$colKey]['projects'][$projSlug] = ['name' => $projName, 'count' => 0, 'custom_count' => 0];
                 }
                 $tableData['columns'][$colKey]['projects'][$projSlug]['count']++;
             }

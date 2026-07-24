@@ -93,7 +93,7 @@
                                 <tr class="header-kcal">
                                     @foreach($table['columns'] as $label => $info)
                                         <th style="font-size:15px;font-weight:900;">
-                                            {{ $label }} <span style="font-size:11px;font-weight:500;opacity:.8;">({{ $info['count'] }})</span>
+                                            {{ $label }} <span style="font-size:11px;font-weight:500;opacity:.8;">({{ ($info['count'] ?? 0) + ($info['custom_count'] ?? 0) }})</span>
                                         </th>
                                     @endforeach
                                 </tr>
@@ -101,15 +101,15 @@
                                     <td class="row-label">КІЛЬКІСТЬ ПОРЦІЙ</td>
                                     @foreach($table['columns'] as $info)
                                         <td>
-                                            {{ $info['count'] }}
+                                            {{ ($info['count'] ?? 0) + ($info['custom_count'] ?? 0) }}
                                             @if(!empty($info['projects']))
                                                 <div style="font-size:10px;font-weight:700;color:#111827;margin-top:2px;">
-                                                    @foreach($info['projects'] as $p){{ $p['name'] }}: {{ $p['count'] }}<br>@endforeach
+                                                    @foreach($info['projects'] as $p){{ $p['name'] }}: {{ $p['count'] }}@if(!empty($p['custom_count']))<span style="color:#dc2626;font-weight:800;"> ({{ $p['custom_count'] }})</span>@endif<br>@endforeach
                                                 </div>
                                             @endif
                                         </td>
                                     @endforeach
-                                    <td style="font-size:16px;font-weight:900;">{{ array_sum(array_column($table['columns'],'count')) }}</td>
+                                    <td style="font-size:16px;font-weight:900;">{{ collect($table['columns'])->sum(fn($c) => ($c['count'] ?? 0) + ($c['custom_count'] ?? 0)) }}</td>
                                 </tr>
                             </thead>
                             <tbody>
@@ -119,7 +119,7 @@
                                         @php $rowTotal = 0; @endphp
                                         @foreach($table['columns'] as $colKey => $info)
                                             @php $cell=$row['cells'][$colKey]??0; $val=is_array($cell)?($cell['val']??0):$cell; $rowTotal+=$val*($info['count']??1); @endphp
-                                            <td><span style="font-weight:800;">{{ $val }} г</span></td>
+                                            <td><span style="font-weight:800;">@if(($info['count'] ?? 0) > 0){{ $val }} г@else—@endif</span></td>
                                         @endforeach
                                         <td style="font-size:14px;font-weight:900;">{{ round($rowTotal) }} г</td>
                                     </tr>
