@@ -34,6 +34,12 @@ class OrderDeliveryCalendar extends Component
     public ?string $discount_type = null;
     public ?string $discount_value = null;
 
+    // Фейкове КБЖУ дня (тільки для меню по QR, на виробництво не впливає)
+    public ?string $fake_kcal = null;
+    public ?string $fake_prot = null;
+    public ?string $fake_fat = null;
+    public ?string $fake_carb = null;
+
     // Вибір адреси клієнта
     public ?int $selectedAddressId = null;
 
@@ -91,6 +97,11 @@ class OrderDeliveryCalendar extends Component
         $this->delivery_time    = $day->delivery_time; // null = використовує час замовлення
         $this->discount_type    = $day->discount_type;
         $this->discount_value   = $day->discount_value !== null ? (string) $day->discount_value : null;
+
+        $this->fake_kcal = $day->fake_kcal !== null ? (string) $day->fake_kcal : null;
+        $this->fake_prot = $day->fake_prot !== null ? (string) $day->fake_prot : null;
+        $this->fake_fat  = $day->fake_fat  !== null ? (string) $day->fake_fat  : null;
+        $this->fake_carb = $day->fake_carb !== null ? (string) $day->fake_carb : null;
     }
 
     public function selectClientAddress(int $addressId): void
@@ -124,6 +135,10 @@ class OrderDeliveryCalendar extends Component
             'discount_value'   => ($this->discount_type && $this->discount_value !== null && $this->discount_value !== '')
                 ? (float) $this->discount_value
                 : null,
+            'fake_kcal'        => $this->fake_kcal !== null && $this->fake_kcal !== '' ? (int) $this->fake_kcal : null,
+            'fake_prot'        => $this->fake_prot !== null && $this->fake_prot !== '' ? (float) $this->fake_prot : null,
+            'fake_fat'         => $this->fake_fat  !== null && $this->fake_fat  !== '' ? (float) $this->fake_fat  : null,
+            'fake_carb'        => $this->fake_carb !== null && $this->fake_carb !== '' ? (float) $this->fake_carb : null,
         ]);
 
         Notification::make()

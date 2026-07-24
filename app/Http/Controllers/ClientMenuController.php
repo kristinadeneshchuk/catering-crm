@@ -83,6 +83,23 @@ class ClientMenuController extends Controller
             }
         }
 
+        // ── Фейкове КБЖУ дня ──────────────────────────────────────────────
+        // Якщо менеджер вписав фейкові цифри на цей день (у календарі замовлення),
+        // підміняємо ТІЛЬКИ підсумок «Разом за день» для показу клієнту по QR.
+        // На per-dish КБЖУ, виробництво, пакування й закупки це не впливає.
+        if ($activeOrder) {
+            $fakeDay = \App\Models\OrderDay::where('order_id', $activeOrder->id)
+                ->where('date', $date->format('Y-m-d'))
+                ->first();
+
+            if ($fakeDay) {
+                if ($fakeDay->fake_kcal !== null) $totals['kcal'] = (float) $fakeDay->fake_kcal;
+                if ($fakeDay->fake_prot !== null) $totals['prot'] = (float) $fakeDay->fake_prot;
+                if ($fakeDay->fake_fat  !== null) $totals['fat']  = (float) $fakeDay->fake_fat;
+                if ($fakeDay->fake_carb !== null) $totals['carb'] = (float) $fakeDay->fake_carb;
+            }
+        }
+
         $prevDate = $date->copy()->subDay();
         $nextDate = $date->copy()->addDay();
 

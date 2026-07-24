@@ -210,6 +210,38 @@
                     </div>
                 </div>
 
+                {{-- Фейкове КБЖУ (тільки для меню по QR) --}}
+                <div class="mb-5 border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        Фейкове КБЖУ на цей день
+                    </label>
+                    <p class="text-xs text-gray-500 mb-2">
+                        Показується клієнту в меню по QR замість реального. На виробництво, пакування й закупки не впливає. Порожньо = показуємо реальне.
+                    </p>
+                    <div class="grid grid-cols-4 gap-2">
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">Ккал</label>
+                            <input type="number" min="0" step="1" wire:model="fake_kcal" placeholder="—"
+                                class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500" />
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">Білки</label>
+                            <input type="number" min="0" step="0.1" wire:model="fake_prot" placeholder="—"
+                                class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500" />
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">Жири</label>
+                            <input type="number" min="0" step="0.1" wire:model="fake_fat" placeholder="—"
+                                class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500" />
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">Вугл.</label>
+                            <input type="number" min="0" step="0.1" wire:model="fake_carb" placeholder="—"
+                                class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500" />
+                        </div>
+                    </div>
+                </div>
+
                 {{-- Кнопки --}}
                 <div class="flex gap-3">
                     <button type="button" wire:click="saveDay"

@@ -21,6 +21,7 @@ class OrderDay extends Model
                 'delivery_comment', 'delivery_time', 'delivery_date_override',
                 'discount_type', 'discount_value', 'discount_amount',
                 'extra_delivery_fee',
+                'fake_kcal', 'fake_prot', 'fake_fat', 'fake_carb',
                 'ant_route_num', 'ant_route_pos', 'ant_driver', 'ant_delivery_group',
             ])
             ->logOnlyDirty()
@@ -34,6 +35,7 @@ class OrderDay extends Model
         'delivery_comment', 'delivery_time', 'delivery_date_override',
         'discount_type', 'discount_value', 'discount_amount',
         'extra_delivery_fee',
+        'fake_kcal', 'fake_prot', 'fake_fat', 'fake_carb',
         'ant_route_num', 'ant_route_pos', 'ant_driver', 'ant_delivery_group',
     ];
 
@@ -44,6 +46,10 @@ class OrderDay extends Model
         'discount_value'         => 'decimal:2',
         'discount_amount'        => 'decimal:2',
         'extra_delivery_fee'     => 'decimal:2',
+        'fake_kcal'              => 'integer',
+        'fake_prot'              => 'decimal:1',
+        'fake_fat'               => 'decimal:1',
+        'fake_carb'              => 'decimal:1',
     ];
 
     protected static function booted(): void
