@@ -45,6 +45,31 @@ class StockDocumentResource extends Resource
     protected static ?string $pluralModelLabel = 'Документи складу';
     protected static ?string $modelLabel = 'Документ складу';
 
+    /**
+     * Перерахунок упаковочного рядка у величини, з якими працює приход:
+     *   input_qty  — загальна вага/об'єм у БАЗОВІЙ одиниці товару (кг/л/шт),
+     *   total_price— сума (к-сть × ціна за упаковку),
+     *   unit_price — ціна за базову одиницю (для показу),
+     *   input_unit — базова одиниця (далі модель нормалізує qty = input_qty × 1).
+     */
+    protected static function recalcPackRow(Forms\Get $get, Forms\Set $set): void
+    {
+        $base  = $get('base_unit') ?: 'кг';
+        $pkgW  = (float) ($get('package_weight') ?? 0);
+        $pkgU  = $get('package_unit') ?: $base;
+        $count = (float) ($get('pack_count') ?? 0);
+        $price = (float) ($get('pack_price') ?? 0);
+
+        $factor  = StockDocumentItem::unitFactor($pkgU, $base); // напр. г→кг = 0.001
+        $baseQty = round($count * $pkgW * $factor, 3);
+        $total   = round($count * $price, 2);
+
+        $set('input_unit', $base);
+        $set('input_qty', $baseQty);
+        $set('total_price', $total);
+        $set('unit_price', $baseQty > 0 ? round($total / $baseQty, 4) : 0);
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -140,6 +165,18 @@ class StockDocumentResource extends Resource
                                 $data['input_qty']  = $inputQty;
                                 $data['unit_price'] = $inputQty > 0 ? round($total / $inputQty, 4) : (float) ($data['price'] ?? 0);
 
+                                // 📦 Відновлюємо «упаковочний» вигляд: вага упаковки — з
+                                // картки товару, к-сть/ціна упаковки — зі снапшоту рядка.
+                                $ing = (!empty($data['itemable_type']) && !empty($data['itemable_id'])
+                                    && $data['itemable_type'] === Ingredient::class)
+                                    ? Ingredient::find($data['itemable_id'])
+                                    : null;
+
+                                $isPackaged = $ing && $ing->is_packaged && ($data['pack_count'] ?? null) !== null;
+                                $data['is_packaged']    = $isPackaged;
+                                $data['package_weight'] = $isPackaged ? (float) $ing->package_weight : null;
+                                $data['package_unit']   = $isPackaged ? ($ing->package_unit ?: $baseUnit) : null;
+
                                 return $data;
                             })
                             ->live()
@@ -163,6 +200,14 @@ class StockDocumentResource extends Resource
                                 // введеної одиниці та фільтрації сумісних опцій. У БД не пишемо.
                                 Hidden::make('base_unit')
                                     ->default('кг')
+                                    ->dehydrated(false),
+
+                                // 📦 Упаковочний режим рядка (форма-онлі, у БД не пишемо —
+                                // вагу упаковки беремо з картки, снапшот тримаємо в pack_*).
+                                Hidden::make('is_packaged')
+                                    ->default(false)
+                                    ->dehydrated(false),
+                                Hidden::make('package_unit')
                                     ->dehydrated(false),
 
                                 // 🔥 РОЗУМНИЙ ВИПАДАЮЧИЙ СПИСОК
@@ -214,6 +259,11 @@ class StockDocumentResource extends Resource
                                             $set('base_unit', 'кг');
                                             $set('unit_price', null);
                                             $set('total_price', 0);
+                                            $set('is_packaged', false);
+                                            $set('package_weight', null);
+                                            $set('package_unit', null);
+                                            $set('pack_count', null);
+                                            $set('pack_price', null);
                                             return;
                                         }
 
@@ -233,6 +283,28 @@ class StockDocumentResource extends Resource
                                         $set('input_unit', $baseUnit);
                                         $set('price_manual', false);
 
+                                        // 📦 Упаковочний товар (тільки надходження): закупник
+                                        // вводить к-сть упаковок і ціну за упаковку.
+                                        $isPackaged = $item instanceof Ingredient
+                                            && $item->is_packaged
+                                            && $get('../../type') === 'receipt';
+                                        $set('is_packaged', $isPackaged);
+                                        $set('package_weight', $isPackaged ? (float) $item->package_weight : null);
+                                        $set('package_unit', $isPackaged ? ($item->package_unit ?: $baseUnit) : null);
+
+                                        if ($isPackaged) {
+                                            $set('pack_count', 1);
+                                            $set('pack_price', null);
+                                            $set('input_unit', $baseUnit);
+                                            $set('input_qty', round((float) $item->packageBaseWeight(), 3));
+                                            $set('unit_price', null);
+                                            $set('total_price', 0);
+                                            return;
+                                        }
+
+                                        $set('pack_count', null);
+                                        $set('pack_price', null);
+
                                         if ($get('../../type') === 'receipt') {
                                             // Надходження: ціну вводять з накладної вручну
                                             $set('unit_price', null);
@@ -249,8 +321,40 @@ class StockDocumentResource extends Resource
                                         }
                                     }),
 
+                                // 📦 Поля упаковочного режиму (тільки коли товар «продається упаковками»)
+                                TextInput::make('package_weight')
+                                    ->label('📦 Вага упаковки')
+                                    ->numeric()
+                                    ->readOnly()
+                                    ->dehydrated(false)
+                                    ->suffix(fn (Forms\Get $get) => $get('package_unit') ?: '')
+                                    ->visible(fn (Forms\Get $get) => (bool) $get('is_packaged'))
+                                    ->columnSpan(1),
+
+                                TextInput::make('pack_count')
+                                    ->label('К-сть упаковок')
+                                    ->numeric()
+                                    ->default(1)
+                                    ->live(onBlur: true)
+                                    // Знімок пишемо лише для упаковочних рядків
+                                    ->dehydrated(fn (Forms\Get $get) => (bool) $get('is_packaged'))
+                                    ->visible(fn (Forms\Get $get) => (bool) $get('is_packaged'))
+                                    ->afterStateUpdated(fn (Forms\Get $get, Forms\Set $set) => static::recalcPackRow($get, $set))
+                                    ->columnSpan(1),
+
+                                TextInput::make('pack_price')
+                                    ->label('Ціна за упаковку')
+                                    ->numeric()
+                                    ->prefix('₴')
+                                    ->live(onBlur: true)
+                                    ->dehydrated(fn (Forms\Get $get) => (bool) $get('is_packaged'))
+                                    ->visible(fn (Forms\Get $get) => (bool) $get('is_packaged'))
+                                    ->afterStateUpdated(fn (Forms\Get $get, Forms\Set $set) => static::recalcPackRow($get, $set))
+                                    ->columnSpan(1),
+
                                 // Одиниця, у якій вводимо позицію (як на накладній).
                                 // Опції обмежені сумісними з базовою одиницею товару.
+                                // У упаковочному режимі приховано (одиниця = базова).
                                 Select::make('input_unit')
                                     ->label('Од.')
                                     ->options(fn (Forms\Get $get) => collect(
@@ -260,15 +364,19 @@ class StockDocumentResource extends Resource
                                     ->required()
                                     ->live()
                                     ->dehydrated(true)
+                                    ->visible(fn (Forms\Get $get) => !$get('is_packaged'))
                                     ->columnSpan(1),
 
                                 TextInput::make('input_qty')
-                                    ->label('Кількість')
+                                    ->label(fn (Forms\Get $get) => $get('is_packaged') ? 'Загальна вага' : 'Кількість')
                                     ->numeric()
                                     ->default(1)
                                     ->required()
                                     ->live(onBlur: true)
                                     ->dehydrated(true)
+                                    // У упаковочному режимі рахується з к-сті упаковок
+                                    ->readOnly(fn (Forms\Get $get) => (bool) $get('is_packaged'))
+                                    ->suffix(fn (Forms\Get $get) => $get('is_packaged') ? ($get('base_unit') ?: '') : null)
                                     ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
                                         $price = (float) ($get('unit_price') ?? 0);
                                         $set('total_price', round((float) $state * $price, 2));
@@ -280,6 +388,8 @@ class StockDocumentResource extends Resource
                                     ->numeric()
                                     ->prefix('₴')
                                     ->required()
+                                    // У упаковочному режимі — рахується (сума / загальна вага)
+                                    ->readOnly(fn (Forms\Get $get) => (bool) $get('is_packaged'))
                                     ->live(onBlur: true)
                                     ->dehydrated(false) // віртуальне: у БД пишемо нормалізовану price
                                     ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
@@ -341,7 +451,11 @@ class StockDocumentResource extends Resource
                                     ->prefix('₴')
                                     ->live(onBlur: true)
                                     ->dehydrated(true)
-                                    ->helperText('Можна ввести суму — ціна за одиницю дорахується')
+                                    // У упаковочному режимі сума = к-сть × ціна за упаковку
+                                    ->readOnly(fn (Forms\Get $get) => (bool) $get('is_packaged'))
+                                    ->helperText(fn (Forms\Get $get) => $get('is_packaged')
+                                        ? null
+                                        : 'Можна ввести суму — ціна за одиницю дорахується')
                                     ->afterStateUpdated(function ($state, Forms\Set $set, Forms\Get $get) {
                                         $qty = (float) ($get('input_qty') ?? 0);
                                         if ($qty > 0) {

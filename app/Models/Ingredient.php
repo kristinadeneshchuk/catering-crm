@@ -19,6 +19,7 @@ class Ingredient extends Model
         'name', 'unit', 'price_per_kg', 'yield_percent',
         'calories_100g', 'proteins_100g', 'fats_100g', 'carbs_100g',
         'stock', 'group', 'photo',
+        'is_packaged', 'package_weight', 'package_unit',
     ];
 
     protected $casts = [
@@ -29,7 +30,25 @@ class Ingredient extends Model
         'proteins_100g' => 'float',
         'fats_100g' => 'float',
         'carbs_100g' => 'float',
+        'is_packaged' => 'boolean',
+        'package_weight' => 'decimal:3',
     ];
+
+    /**
+     * Скільки БАЗОВИХ одиниць (kg/l/pcs) важить одна упаковка.
+     * Напр. упаковка сметани 400 г при базовій «кг» → 0.4.
+     * Переводимо через ту саму таблицю конвертації, що й приход.
+     */
+    public function packageBaseWeight(): float
+    {
+        if (!$this->is_packaged || !$this->package_weight) {
+            return 0.0;
+        }
+
+        $factor = StockDocumentItem::unitFactor($this->package_unit ?: $this->unit, $this->unit);
+
+        return (float) $this->package_weight * $factor;
+    }
 
     // Per-process кеш середніх цін (заповнюється preloadAveragePrices або
     // ліниво в getAveragePriceAttribute). Знімає N+1 в аналітиці, друці

@@ -7,6 +7,7 @@ use App\Traits\AllowCookAccess;
 use App\Filament\Resources\IngredientResource\Pages;
 use App\Models\Allergen;
 use App\Models\Ingredient;
+use App\Models\StockDocumentItem;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -102,7 +103,7 @@ class IngredientResource extends Resource
                             ->schema([
                                 TextInput::make('stock')
                                     ->label('Залишок на складі')
-                                    ->formatStateUsing(fn ($state) => empty($state) ? '' : (float) $state) 
+                                    ->formatStateUsing(fn ($state) => empty($state) ? '' : (float) $state)
                                     ->rule('regex:/^\d+(?:[.,]\d+)?$/')
                                     ->extraInputAttributes(['inputmode' => 'decimal'])
                                     ->required()
@@ -115,12 +116,52 @@ class IngredientResource extends Resource
                                     }),
 
                                 Select::make('unit')
-                                    ->label('Од. виміру')
+                                    ->label('Базова од. (склад)')
                                     ->options([
                                         'г' => 'Грами (г)', 'кг' => 'Кілограми (кг)', 'шт' => 'Штуки (шт)',
                                         'мл' => 'Мілілітри (мл)', 'л' => 'Літри (л)',
                                     ])
                                     ->required()
+                                    ->live()
+                                    // Тримаємо одиницю упаковки в тій же групі, що й базова
+                                    ->afterStateUpdated(function ($state, Forms\Set $set) {
+                                        $units = StockDocumentItem::compatibleUnits($state);
+                                        $set('package_unit', $units[1] ?? $units[0] ?? 'г');
+                                    })
+                                    ->columnSpan(1),
+
+                                // 📦 Упаковочний режим: закупник вводить упаковки,
+                                // склад отримує базову одиницю.
+                                Forms\Components\Toggle::make('is_packaged')
+                                    ->label('Продається упаковками')
+                                    ->helperText('Напр. сметана в упаковці 400 г — на приході вводимо к-сть упаковок і ціну за упаковку')
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, Forms\Get $get, Forms\Set $set) {
+                                        if ($state && blank($get('package_unit'))) {
+                                            $units = StockDocumentItem::compatibleUnits($get('unit') ?: 'кг');
+                                            $set('package_unit', $units[1] ?? $units[0] ?? 'г');
+                                        }
+                                    })
+                                    ->columnSpan(3),
+
+                                TextInput::make('package_weight')
+                                    ->label('📦 Вміст однієї упаковки')
+                                    ->numeric()
+                                    ->required(fn (Forms\Get $get) => (bool) $get('is_packaged'))
+                                    ->visible(fn (Forms\Get $get) => (bool) $get('is_packaged'))
+                                    ->suffix(fn (Forms\Get $get) => $get('package_unit') ?: '')
+                                    ->helperText('Скільки важить/містить одна упаковка')
+                                    ->columnSpan(2),
+
+                                Forms\Components\Select::make('package_unit')
+                                    ->label('Од. упаковки')
+                                    ->options(fn (Forms\Get $get) => collect(
+                                            StockDocumentItem::compatibleUnits($get('unit'))
+                                        )->mapWithKeys(fn ($u) => [$u => $u])->all())
+                                    ->default(fn (Forms\Get $get) => StockDocumentItem::compatibleUnits($get('unit') ?: 'кг')[1]
+                                        ?? StockDocumentItem::compatibleUnits($get('unit') ?: 'кг')[0] ?? 'г')
+                                    ->required(fn (Forms\Get $get) => (bool) $get('is_packaged'))
+                                    ->visible(fn (Forms\Get $get) => (bool) $get('is_packaged'))
                                     ->columnSpan(1),
                             ])
                     ])
