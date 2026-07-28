@@ -60,6 +60,48 @@
                 {{-- Роздільник --}}
                 <div style="width:1px;height:28px;background:#3f3f46;margin:0 2px;"></div>
 
+                {{-- Сповіщення клієнтам про кур'єра (SMS) --}}
+                @if($smsReady)
+                    <button wire:click="mountAction('send_client_sms')"
+                        title="Клієнти отримають SMS з ім'ям кур'єра, його телефоном і номером авто"
+                        style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;
+                            @if($smsSentCount > 0) background:#27272a;color:#a1a1aa;border:1px solid #3f3f46;
+                            @else background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;box-shadow:0 0 16px #05966940; @endif">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"/></svg>
+                        @if($smsSentCount > 0)
+                            Сповіщення вже відправлені ({{ $smsSentCount }})
+                        @else
+                            Сповістити клієнтів
+                        @endif
+                    </button>
+                @else
+                    <button disabled
+                        title="{{ $smsBlockReason }}"
+                        style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:not-allowed;background:#1c1c1f;color:#52525b;border:1px solid #27272a;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm3.75 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"/></svg>
+                        Сповістити клієнтів
+                    </button>
+                @endif
+
+                {{-- Журнал SMS --}}
+                <button wire:click="mountAction('sms_log')"
+                    title="Журнал відправок SMS за обрану дату"
+                    style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;font-size:13px;font-weight:600;border:1px solid #3f3f46;cursor:pointer;transition:all .15s;background:#27272a;color:#a1a1aa;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5A3.375 3.375 0 0010.125 2.25H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+                    Журнал
+                </button>
+
+                {{-- Налаштування SMS --}}
+                <button wire:click="mountAction('sms_settings')"
+                    title="Токен TurboSMS, альфа-ім'я відправника, текст SMS"
+                    style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;font-size:13px;font-weight:600;border:1px solid #3f3f46;cursor:pointer;transition:all .15s;background:#27272a;color:#a1a1aa;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+                    SMS
+                </button>
+
+                {{-- Роздільник --}}
+                <div style="width:1px;height:28px;background:#3f3f46;margin:0 2px;"></div>
+
                 {{-- Вихідні кур'єрів --}}
                 <button wire:click="mountAction('closed_slots')"
                     style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .15s;background:#3b2800;color:#fbbf24;border:1px solid #92400e;">

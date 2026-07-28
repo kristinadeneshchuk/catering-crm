@@ -6,15 +6,21 @@ use App\Models\CourierMileageLog;
 use App\Models\DeliveryRoute;
 use App\Models\Employee;
 use App\Models\Setting;
+use App\Models\SmsLog;
 use App\Traits\RestrictCookAccess;
 use App\Services\AntLogisticsService;
+use App\Services\CourierSmsNotifier;
 use App\Services\ScheduleService;
+use App\Services\TurboSmsService;
 use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Grid;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -22,6 +28,7 @@ use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\HtmlString;
 
 class LogisticsPage extends Page implements HasForms
 {
@@ -49,6 +56,12 @@ class LogisticsPage extends Page implements HasForms
     public float $totalMileageAmort = 0;
     public float $totalMileageComp  = 0;
     public float $amortPerKm = 1;
+
+    // SMS-сповіщення клієнтам про кур'єра
+    public bool    $smsReady       = false;
+    public ?string $smsBlockReason = null;
+    public int     $smsSentCount   = 0;
+    public bool    $smsCanSubmit   = false;
 
     public function mount(): void
     {
@@ -102,6 +115,41 @@ class LogisticsPage extends Page implements HasForms
         $this->totalStops  = (int) $routeCollection->sum('count_comps');
         $this->totalCost   = round((float) $routeCollection->sum('calculated_cost'), 2);
         $this->totalAntCost = round((float) $routeCollection->sum('ant_cost_route'), 2);
+
+        $this->loadSmsState();
+    }
+
+    /**
+     * Стан кнопки «Відправити сповіщення клієнтам».
+     * Тут тільки дешеві запити (маршрути + лічильник логів) — повний розбір
+     * замовлень робиться вже при відкритті модалки.
+     */
+    public function loadSmsState(): void
+    {
+        $date  = $this->data['date']  ?? now()->format('Y-m-d');
+        $shift = $this->data['shift'] ?? 'all';
+
+        // Якщо міграції ще не накатані (sms_logs / employees.phone) — не валимо
+        // всю сторінку Логістики, а просто лишаємо кнопку неактивною.
+        try {
+            $readiness = app(CourierSmsNotifier::class)->readiness($date, $shift);
+
+            $this->smsReady       = $readiness['ready'];
+            $this->smsBlockReason = $readiness['reason'];
+
+            // Рахуємо тільки ті відправки, що перетинаються з обраною зміною:
+            // інакше після ранкової розсилки кнопка казала б «вже відправлені»
+            // і на вечірній зміні, де ще нікому не слали.
+            $this->smsSentCount = SmsLog::sent()
+                ->whereDate('date', $date)
+                ->when($shift !== 'all', fn ($q) => $q->whereIn('shift', ['all', $shift]))
+                ->distinct()
+                ->count('phone');
+        } catch (\Throwable $e) {
+            $this->smsReady       = false;
+            $this->smsBlockReason = 'SMS-модуль недоступний: ' . $e->getMessage();
+            $this->smsSentCount   = 0;
+        }
     }
 
     /**
@@ -346,6 +394,144 @@ class LogisticsPage extends Page implements HasForms
         $this->loadMileage();
     }
 
+    /**
+     * Вміст модалки перед відправкою: скільки піде, кому повторно, що не так.
+     */
+    protected function buildSmsPreviewForm(): array
+    {
+        $date  = $this->data['date']  ?? now()->format('Y-m-d');
+        $shift = $this->data['shift'] ?? 'all';
+
+        $preview = app(CourierSmsNotifier::class)->preview($date, $shift);
+
+        $willSend = $preview['new'] + $preview['resend'];
+
+        // Якщо слати нікому, але є кому повторити — сабміт лишаємо активним,
+        // бо адміністратор може поставити галочку «надіслати повторно всім».
+        $this->smsCanSubmit = $willSend > 0 || $preview['unchanged'] > 0;
+
+        $summary = '<div style="line-height:1.9;font-size:14px;">'
+            . '<div><strong style="color:#22c55e;">Буде відправлено: ' . $willSend . '</strong>'
+            . ' <span style="color:#71717a;">(нових: ' . $preview['new'] . ', повторно через зміну курʼєра: ' . $preview['resend'] . ')</span></div>';
+
+        if ($preview['unchanged'] > 0) {
+            $summary .= '<div style="color:#a1a1aa;">Пропустимо (вже надіслано, нічого не змінилось): ' . $preview['unchanged'] . '</div>';
+        }
+
+        if (! empty($preview['problems'])) {
+            $summary .= '<div style="color:#f59e0b;">Проблемні замовлення (SMS не піде): ' . count($preview['problems']) . '</div>';
+        }
+
+        $summary .= '</div>';
+
+        $schema = [
+            Placeholder::make('summary')->hiddenLabel()->content(new HtmlString($summary)),
+        ];
+
+        // Приклад тексту — щоб адміністратор побачив, що саме отримає клієнт.
+        $sample = $preview['recipients'][0]['text'] ?? null;
+        if ($sample !== null) {
+            $schema[] = Placeholder::make('sample')
+                ->label('Приклад SMS')
+                ->content(new HtmlString(
+                    '<pre style="white-space:pre-wrap;background:#18181b;border:1px solid #3f3f46;border-radius:8px;padding:10px;'
+                    . 'color:#e4e4e7;font-size:13px;margin:0;">' . e($sample) . '</pre>'
+                ));
+        }
+
+        if (! empty($preview['problems'])) {
+            $rows = '';
+            foreach (array_slice($preview['problems'], 0, 50) as $p) {
+                $order = $p['order_id'] ? ' <span style="color:#71717a;">#' . e($p['order_id']) . '</span>' : '';
+                $rows .= '<li style="margin-bottom:3px;"><strong>' . e($p['client']) . '</strong>' . $order
+                       . ' — <span style="color:#f59e0b;">' . e($p['reason']) . '</span></li>';
+            }
+
+            $more = count($preview['problems']) > 50
+                ? '<div style="color:#71717a;margin-top:6px;">…і ще ' . (count($preview['problems']) - 50) . '</div>'
+                : '';
+
+            $schema[] = Placeholder::make('problems')
+                ->label('Замовлення з неповними даними')
+                ->content(new HtmlString(
+                    '<ul style="margin:0;padding-left:18px;font-size:13px;max-height:260px;overflow:auto;">' . $rows . '</ul>'
+                    . $more
+                    . '<div style="color:#71717a;margin-top:8px;font-size:12px;">По цих замовленнях SMS не відправляється. '
+                    . 'Решта отримає сповіщення штатно.</div>'
+                ));
+        }
+
+        if ($preview['unchanged'] > 0) {
+            $schema[] = Checkbox::make('resend_all')
+                ->label('Надіслати повторно всім, включно з тими, кому вже слали')
+                ->helperText('За замовчуванням клієнти, у яких курʼєр і авто не змінились, повторну SMS не отримують.')
+                ->default(false);
+        }
+
+        if ($willSend === 0 && $preview['unchanged'] === 0) {
+            $schema[] = Placeholder::make('empty')
+                ->hiddenLabel()
+                ->content(new HtmlString('<div style="color:#ef4444;">Немає жодного замовлення з повними даними — відправляти нічого.</div>'));
+        }
+
+        return $schema;
+    }
+
+    /**
+     * Журнал відправок за обрану дату.
+     */
+    protected function buildSmsLogTable(): HtmlString
+    {
+        $date = $this->data['date'] ?? now()->format('Y-m-d');
+
+        $logs = SmsLog::whereDate('date', $date)->latest('id')->limit(200)->get();
+
+        if ($logs->isEmpty()) {
+            return new HtmlString('<div style="color:#71717a;">За ' . e(Carbon::parse($date)->format('d.m.Y')) . ' відправок не було.</div>');
+        }
+
+        $rows = '';
+        foreach ($logs as $log) {
+            $ok = $log->status === SmsLog::STATUS_SENT;
+
+            // Відповідь шлюзу: код + статус, а під ним — сира відповідь у тайтлі.
+            $apiInfo = $log->response_code !== null
+                ? '<div style="color:#71717a;font-size:11px;">код ' . e($log->response_code)
+                    . ($log->response_status ? ' · ' . e($log->response_status) : '') . '</div>'
+                : '';
+
+            $statusCell = ($ok
+                ? '<span style="color:#22c55e;">✔ Надіслано</span>'
+                : '<span style="color:#ef4444;">✖ ' . e($log->error ?: 'Помилка') . '</span>')
+                . $apiInfo;
+
+            $rows .= '<tr style="border-bottom:1px solid #27272a;vertical-align:top;">'
+                . '<td style="padding:6px 8px;color:#a1a1aa;white-space:nowrap;">' . e($log->created_at?->format('d.m H:i')) . '</td>'
+                . '<td style="padding:6px 8px;">' . e($log->client_name ?: '—')
+                . ($log->order_id ? ' <span style="color:#71717a;">#' . e($log->order_id) . '</span>' : '') . '</td>'
+                . '<td style="padding:6px 8px;color:#a1a1aa;white-space:nowrap;">+' . e($log->phone) . '</td>'
+                . '<td style="padding:6px 8px;">' . e($log->courier_name ?: '—') . '</td>'
+                . '<td style="padding:6px 8px;color:#a1a1aa;white-space:nowrap;">' . e($log->car_number ?: '—') . '</td>'
+                . '<td style="padding:6px 8px;font-size:12px;color:#a1a1aa;white-space:pre-wrap;max-width:220px;"'
+                . ' title="' . e($log->response_body ?: '') . '">' . e($log->text) . '</td>'
+                . '<td style="padding:6px 8px;font-size:12px;">' . $statusCell . '</td>'
+                . '</tr>';
+        }
+
+        return new HtmlString(
+            '<div style="max-height:460px;overflow:auto;">'
+            . '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+            . '<thead><tr style="color:#71717a;text-align:left;border-bottom:1px solid #3f3f46;">'
+            . '<th style="padding:6px 8px;">Час</th><th style="padding:6px 8px;">Клієнт</th>'
+            . '<th style="padding:6px 8px;">Телефон</th><th style="padding:6px 8px;">Курʼєр</th>'
+            . '<th style="padding:6px 8px;">Авто</th><th style="padding:6px 8px;">Текст SMS</th>'
+            . '<th style="padding:6px 8px;">Статус</th>'
+            . '</tr></thead><tbody>' . $rows . '</tbody></table>'
+            . '<div style="color:#52525b;font-size:11px;margin-top:8px;">Наведіть курсор на текст SMS, щоб побачити сиру відповідь TurboSMS.</div>'
+            . '</div>'
+        );
+    }
+
     protected function getHeaderActions(): array
     {
         return [
@@ -456,6 +642,163 @@ class LogisticsPage extends Page implements HasForms
                         Notification::make()->title('Помилка: ' . $e->getMessage())->danger()->send();
                     }
                 }),
+
+            Action::make('send_client_sms')
+                ->label(fn () => $this->smsSentCount > 0
+                    ? "Сповіщення вже відправлені ({$this->smsSentCount})"
+                    : 'Відправити сповіщення клієнтам')
+                ->icon('heroicon-o-chat-bubble-left-right')
+                ->color(fn () => $this->smsSentCount > 0 ? 'gray' : 'success')
+                ->disabled(fn () => ! $this->smsReady)
+                ->modalHeading('Сповіщення клієнтам про курʼєра')
+                ->modalSubmitActionLabel('Відправити SMS')
+                ->modalWidth('2xl')
+                ->form(fn () => $this->buildSmsPreviewForm())
+                ->modalSubmitAction(fn ($action) => $action->disabled(! $this->smsCanSubmit))
+                ->action(function (array $data) {
+                    $date  = $this->data['date']  ?? now()->format('Y-m-d');
+                    $shift = $this->data['shift'] ?? 'all';
+
+                    $notifier = app(CourierSmsNotifier::class);
+
+                    // Повторна перевірка на випадок, якщо маршрути змінились,
+                    // поки модалка була відкрита.
+                    $readiness = $notifier->readiness($date, $shift);
+                    if (! $readiness['ready']) {
+                        Notification::make()->title('Відправка неможлива')->body($readiness['reason'])->danger()->send();
+                        return;
+                    }
+
+                    try {
+                        $result = $notifier->send($date, $shift, (bool) ($data['resend_all'] ?? false));
+                    } catch (\Throwable $e) {
+                        Notification::make()->title('Помилка відправки')->body($e->getMessage())->danger()->send();
+                        return;
+                    }
+
+                    $lines = [
+                        "Сповіщення відправлено: {$result['sent']} клієнтам",
+                        "Помилки відправки: {$result['failed']}",
+                    ];
+
+                    if ($result['skipped'] > 0) {
+                        $lines[] = "Пропущено (вже надіслано, без змін): {$result['skipped']}";
+                    }
+
+                    if (! empty($result['errors'])) {
+                        $lines[] = '';
+                        $lines[] = '❌ Помилки:';
+                        foreach (array_slice($result['errors'], 0, 10) as $err) {
+                            $lines[] = "• {$err}";
+                        }
+                    }
+
+                    if (! empty($result['problems'])) {
+                        $lines[] = '';
+                        $lines[] = '⚠️ Не відправлено (неповні дані): ' . count($result['problems']);
+                        foreach (array_slice($result['problems'], 0, 10) as $p) {
+                            $lines[] = "• {$p['client']} — {$p['reason']}";
+                        }
+                    }
+
+                    $this->loadSmsState();
+
+                    $hasIssues  = $result['failed'] > 0 || ! empty($result['problems']);
+                    $nothingWent = $result['sent'] === 0 && $result['failed'] === 0;
+
+                    if ($nothingWent) {
+                        $level = 'warning';
+                        $title = 'Нічого не відправлено';
+                    } elseif ($result['sent'] === 0 && $hasIssues) {
+                        $level = 'danger';
+                        $title = 'Відправити не вдалося';
+                    } elseif ($hasIssues) {
+                        $level = 'warning';
+                        $title = 'Відправлено із зауваженнями';
+                    } else {
+                        $level = 'success';
+                        $title = 'Сповіщення відправлено';
+                    }
+
+                    Notification::make()
+                        ->title($title)
+                        ->body(implode("\n", $lines))
+                        ->{$level}()
+                        ->persistent()
+                        ->send();
+                }),
+
+            Action::make('sms_settings')
+                ->label('Налаштування SMS')
+                ->icon('heroicon-o-cog-6-tooth')
+                ->color('gray')
+                ->modalHeading('TurboSMS — налаштування')
+                ->form([
+                    Placeholder::make('balance')
+                        ->label('Баланс TurboSMS')
+                        ->content(function () {
+                            $service = app(TurboSmsService::class);
+
+                            if (! $service->isConfigured()) {
+                                return 'Спочатку вкажіть токен і альфа-імʼя.';
+                            }
+
+                            $balance = $service->balance();
+
+                            return $balance === null
+                                ? 'Не вдалося отримати баланс — перевірте токен.'
+                                : number_format($balance, 2, ',', ' ') . ' ₴';
+                        }),
+
+                    TextInput::make(TurboSmsService::KEY_TOKEN)
+                        ->label('API-токен')
+                        ->password()
+                        ->revealable()
+                        ->autocomplete(false)
+                        ->helperText('Кабінет TurboSMS → Розробникам → API-токен')
+                        ->default(fn () => Setting::where('key', TurboSmsService::KEY_TOKEN)->value('value')),
+
+                    TextInput::make(TurboSmsService::KEY_SENDER)
+                        ->label('Альфа-імʼя відправника')
+                        ->maxLength(25)
+                        ->helperText('Має бути зареєстроване та підтверджене в кабінеті TurboSMS')
+                        ->default(fn () => Setting::where('key', TurboSmsService::KEY_SENDER)->value('value')),
+
+                    Textarea::make(TurboSmsService::KEY_TEMPLATE)
+                        ->label('Текст SMS')
+                        ->rows(4)
+                        ->helperText(new HtmlString(
+                            'Плейсхолдери: <code>{courier}</code> — імʼя курʼєра, <code>{phone}</code> — його телефон, '
+                            . '<code>{car}</code> — номер авто, <code>{client}</code> — імʼя клієнта.<br>'
+                            . 'Кирилицею в одну SMS вміщується 70 символів — довший текст тарифікується як кілька.'
+                        ))
+                        ->default(fn () => Setting::where('key', TurboSmsService::KEY_TEMPLATE)->value('value')
+                            ?: TurboSmsService::DEFAULT_TEMPLATE),
+                ])
+                ->action(function (array $data) {
+                    foreach ([TurboSmsService::KEY_TOKEN, TurboSmsService::KEY_SENDER, TurboSmsService::KEY_TEMPLATE] as $key) {
+                        if (array_key_exists($key, $data)) {
+                            Setting::updateOrCreate(['key' => $key], ['value' => $data[$key]]);
+                        }
+                    }
+
+                    $this->loadSmsState();
+                    Notification::make()->title('Налаштування SMS збережено')->success()->send();
+                }),
+
+            Action::make('sms_log')
+                ->label('Журнал SMS')
+                ->icon('heroicon-o-document-text')
+                ->color('gray')
+                ->modalHeading('Журнал відправок SMS')
+                ->modalWidth('4xl')
+                ->modalSubmitAction(false)
+                ->modalCancelActionLabel('Закрити')
+                ->form([
+                    Placeholder::make('log')
+                        ->hiddenLabel()
+                        ->content(fn () => $this->buildSmsLogTable()),
+                ]),
 
             Action::make('closed_slots')
                 ->label('Вихідні курʼєрів')

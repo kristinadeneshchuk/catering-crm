@@ -55,6 +55,13 @@ class EmployeeResource extends Resource
                             ->helperText('Заповни для кур\'єрів — система автоматично зв\'яже маршрути з цим співробітником')
                             ->nullable(),
 
+                        TextInput::make('phone')
+                            ->label('Телефон')
+                            ->tel()
+                            ->placeholder('+380671234567')
+                            ->helperText('Обов\'язково для кур\'єрів — цей номер клієнт отримає в SMS про доставку')
+                            ->nullable(),
+
                         Select::make('position')
                             ->label('Посада')
                             ->options(fn () => \App\Models\Position::where('is_active', true)->orderBy('sort_order')->pluck('name', 'key'))

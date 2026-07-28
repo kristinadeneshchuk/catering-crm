@@ -580,7 +580,7 @@ class AntLogisticsService
     /**
      * @return array{days: \Illuminate\Support\Collection}
      */
-    private function collectOrderDaysForDelivery(string $deliveryDate, string $shift): array
+    public function collectOrderDaysForDelivery(string $deliveryDate, string $shift): array
     {
         $delivery = Carbon::parse($deliveryDate)->startOfDay();
 
@@ -623,7 +623,7 @@ class AntLogisticsService
      * над schedule_type замовлення. Той самий алгоритм — у PrintController::miniManifest,
      * щоб наклейки і мураха завжди рахували ранок/вечір однаково.
      */
-    private function orderDayIsEvening(\App\Models\OrderDay $day): bool
+    public function orderDayIsEvening(\App\Models\OrderDay $day): bool
     {
         $overrideTime = $day->delivery_time;
         if ($overrideTime) {
