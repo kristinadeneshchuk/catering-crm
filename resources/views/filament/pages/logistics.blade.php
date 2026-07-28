@@ -91,14 +91,6 @@
                     Журнал
                 </button>
 
-                {{-- Налаштування SMS --}}
-                <button wire:click="mountAction('sms_settings')"
-                    title="Токен TurboSMS, альфа-ім'я відправника, текст SMS"
-                    style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;font-size:13px;font-weight:600;border:1px solid #3f3f46;cursor:pointer;transition:all .15s;background:#27272a;color:#a1a1aa;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
-                    SMS
-                </button>
-
                 {{-- Роздільник --}}
                 <div style="width:1px;height:28px;background:#3f3f46;margin:0 2px;"></div>
 

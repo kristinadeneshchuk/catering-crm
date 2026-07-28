@@ -93,8 +93,8 @@ class LogisticsPageSmsTest extends TestCase
             ->keyBy(fn ($a) => $a->getName());
 
         $this->assertTrue($actions->has('send_client_sms'));
-        $this->assertTrue($actions->has('sms_settings'));
         $this->assertTrue($actions->has('sms_log'));
+        $this->assertFalse($actions->has('sms_settings'), 'налаштування SMS переїхали в Налаштування бізнесу');
 
         $send = $actions->get('send_client_sms');
         $this->assertSame('Відправити сповіщення клієнтам', $send->getLabel());
@@ -180,24 +180,5 @@ class LogisticsPageSmsTest extends TestCase
         $evening = $this->page('evening');
         $evening->loadSmsState();
         $this->assertSame(0, $evening->smsSentCount, 'ранкова розсилка не має рахуватись вечірньою');
-    }
-
-    public function test_settings_action_saves_token_sender_and_template(): void
-    {
-        $page = $this->page();
-
-        $action = collect($this->invokeHidden($page, 'getHeaderActions'))
-            ->keyBy(fn ($a) => $a->getName())
-            ->get('sms_settings');
-
-        $action->call(['data' => [
-            TurboSmsService::KEY_TOKEN    => 'new-token',
-            TurboSmsService::KEY_SENDER   => 'NEWNAME',
-            TurboSmsService::KEY_TEMPLATE => 'Курʼєр {courier}',
-        ]]);
-
-        $this->assertSame('new-token', Setting::where('key', TurboSmsService::KEY_TOKEN)->value('value'));
-        $this->assertSame('NEWNAME', Setting::where('key', TurboSmsService::KEY_SENDER)->value('value'));
-        $this->assertSame('Курʼєр {courier}', app(TurboSmsService::class)->template());
     }
 }

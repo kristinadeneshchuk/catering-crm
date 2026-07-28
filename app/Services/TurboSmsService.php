@@ -104,11 +104,11 @@ class TurboSmsService
     public function configurationError(): ?string
     {
         if ($this->token() === null) {
-            return 'Не вказано токен TurboSMS. Заповніть його в «Налаштування SMS».';
+            return 'Не вказано токен TurboSMS. Заповніть його в «Налаштування бізнесу» → «Налаштування SMS».';
         }
 
         if ($this->sender() === null) {
-            return 'Не вказано альфа-імʼя відправника TurboSMS. Заповніть його в «Налаштування SMS».';
+            return 'Не вказано альфа-імʼя відправника TurboSMS. Заповніть його в «Налаштування бізнесу» → «Налаштування SMS».';
         }
 
         return null;
