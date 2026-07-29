@@ -53,13 +53,17 @@ class ListSettings extends ListRecords
                         ->password()
                         ->revealable()
                         ->autocomplete(false)
-                        ->helperText('Кабінет TurboSMS → Розробникам → API-токен')
+                        ->helperText(new HtmlString(
+                            'Кабінет TurboSMS → налаштування API (<a href="https://turbosms.ua/route.html" target="_blank" '
+                            . 'rel="noopener" style="text-decoration:underline;">turbosms.ua/route.html</a>) → блок '
+                            . '«Способы подключения» → позначте <strong>HTTP API</strong>, і зʼявиться ключ.'
+                        ))
                         ->default(fn () => Setting::where('key', TurboSmsService::KEY_TOKEN)->value('value')),
 
                     TextInput::make(TurboSmsService::KEY_SENDER)
                         ->label('Альфа-імʼя відправника')
                         ->maxLength(25)
-                        ->helperText('Має бути зареєстроване та підтверджене в кабінеті TurboSMS')
+                        ->helperText('Точно як у кабінеті TurboSMS → «Отправители SMS». Поки імʼя не пройшло модерацію, відправка падатиме з помилкою «альфа-імʼя неактивне».')
                         ->default(fn () => Setting::where('key', TurboSmsService::KEY_SENDER)->value('value')),
 
                     Textarea::make(TurboSmsService::KEY_TEMPLATE)

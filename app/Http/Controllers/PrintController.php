@@ -339,6 +339,12 @@ class PrintController extends Controller
         $stickers = [];
 
         foreach ($orders as $order) {
+            // Індивідуальні меню складаються окремо і в цикл-меню не входять.
+            // Без цього вони все одно потрапляли в стикери: effectiveMenuPlan()
+            // підставляє MenuPlan::default(), і кухня отримувала наклейки із
+            // замінами до страв, яких у цього клієнта взагалі немає.
+            if ($order->menu_type === 'individual') continue;
+
             $menu = $menusByPlan[$order->effectiveMenuPlan()?->id]['menu'] ?? null;
             if (!$menu) continue;
 

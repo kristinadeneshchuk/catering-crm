@@ -172,6 +172,63 @@ class CourierSmsNotifierTest extends TestCase
         );
     }
 
+    /**
+     * Реальні імена з прода: у картці вони довгі й зі службовою позначкою,
+     * бо використовуються для зарплат і матчингу з ANT.
+     */
+    public function test_courier_name_is_shortened_for_sms(): void
+    {
+        $cases = [
+            "Личко Володимир Валерійович(кур'єр)" => 'Личко Володимир',
+            "Бортнік Богдан Богданович (кур'єр)"  => 'Бортнік Богдан',
+            "Фільчакова Христина (кур'єр)"        => 'Фільчакова Христина',
+            "Сергій кур'єр"                       => 'Сергій',
+            'Мірзабек (курʼєр)'                   => 'Мірзабек',
+            'Приходько Роман '                    => 'Приходько Роман',
+            'Іванов І.І.'                         => 'Іванов І.І.',
+        ];
+
+        foreach ($cases as $stored => $expected) {
+            DB::table('employees')->truncate();
+            DB::table('delivery_routes')->truncate();
+            DB::table('order_days')->truncate();
+            DB::table('orders')->truncate();
+            DB::table('clients')->truncate();
+            DB::table('sms_logs')->truncate();
+
+            $this->makeRoute(['employee_id' => $this->makeCourier($stored, '0671112233')]);
+            DB::table('delivery_routes')->update(['driver_name' => $stored]);
+            $this->makeOrderDay([], [], ['ant_driver' => $stored]);
+            $this->fakeTurboOk();
+
+            $result = $this->notifier()->send($this->deliveryDate);
+
+            $this->assertSame(1, $result['sent'], "не відправилось для «{$stored}»");
+            $this->assertSame($expected, SmsLog::first()->courier_name, "невірне скорочення для «{$stored}»");
+        }
+    }
+
+    public function test_sms_with_a_long_real_name_fits_into_one_segment(): void
+    {
+        $this->makeRoute([
+            'employee_id'         => $this->makeCourier("Личко Володимир Валерійович(кур'єр)", '0671112233'),
+            'registration_number' => 'AA0000AA',
+        ]);
+        $this->makeOrderDay();
+        $this->fakeTurboOk();
+
+        $this->notifier()->send($this->deliveryDate);
+
+        $text = SmsLog::first()->text;
+
+        $this->assertStringNotContainsString('кур\'єр)', $text, 'службова позначка не має потрапляти клієнту');
+        $this->assertLessThanOrEqual(
+            70,
+            mb_strlen($text),
+            "SMS має вміщатись в один сегмент, а вийшло " . mb_strlen($text) . ": {$text}",
+        );
+    }
+
     // -------------------------------------------------------------------------
     // ТЗ п.9 — валідація, проблемні замовлення
     // -------------------------------------------------------------------------

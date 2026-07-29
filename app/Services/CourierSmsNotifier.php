@@ -154,7 +154,8 @@ class CourierSmsNotifier
                 continue;
             }
 
-            $fingerprint = $this->fingerprint($courier->name, $courierPhone, $car);
+            $courierName = $this->courierDisplayName($courier->name);
+            $fingerprint = $this->fingerprint($courierName, $courierPhone, $car);
 
             // Ключ «номер + курʼєр», а не самий номер. Подвійний раціон (кілька
             // днів на одному маршруті) дає однаковий fingerprint і згортається в
@@ -174,11 +175,11 @@ class CourierSmsNotifier
                 'order_id'      => $orderId,
                 'order_day_id'  => $day->id,
                 'route_num'     => $routeNum,
-                'courier_name'  => $courier->name,
+                'courier_name'  => $courierName,
                 'courier_phone' => $courierPhone,
                 'car_number'    => $car,
                 'fingerprint'   => $fingerprint,
-                'text'          => $this->renderText($template, $courier->name, $courierPhone, $car, $client->name),
+                'text'          => $this->renderText($template, $courierName, $courierPhone, $car, $client->name),
             ];
         }
 
@@ -439,6 +440,30 @@ class CourierSmsNotifier
         }
 
         return null;
+    }
+
+    /**
+     * Імʼя курʼєра для SMS: без службової позначки «(курʼєр)» і не довше двох слів.
+     *
+     * У картці співробітника імена ведуться для зарплат і матчингу з ANT — там
+     * лежить «Личко Володимир Валерійович(кур'єр)». Дослівно в SMS це дає 85
+     * символів при ліміті 70 кирилицею, тобто кожне повідомлення тарифікується
+     * як два, а клієнт ще й бачить внутрішню позначку.
+     */
+    private function courierDisplayName(string $name): string
+    {
+        // (кур'єр), (курʼєр) тощо
+        $clean = preg_replace('/\([^)]*\)/u', ' ', $name);
+        // те саме слово без дужок
+        $clean = preg_replace('/\bкур[\x{02BC}\x{2019}\x{0027}\x{044C}]?[\x{0454}\x{0435}]р\w*/iu', ' ', (string) $clean);
+        $clean = trim(preg_replace('/\s+/u', ' ', (string) $clean));
+
+        // Якщо після чистки нічого не лишилось — краще довге імʼя, ніж порожнє.
+        if ($clean === '') {
+            return trim($name);
+        }
+
+        return implode(' ', array_slice(preg_split('/\s+/u', $clean), 0, 2));
     }
 
     /**
