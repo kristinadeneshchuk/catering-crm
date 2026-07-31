@@ -1,0 +1,24 @@
+﻿n,brand,category,in_scope,model,price_uah,price_uah_alt,price_usd,engine,weight_kg,availability,confidence,source,url,note
+1,Barret,Віброплити,yes,RS-55T,17940,,400,бензин,55-60,в наявності,висока,budmir.com.ua,https://budmir.com.ua/ua/benzinova-vibroplita-barret-rs-55t,легка плита
+2,Barret,Віброплити,yes,RS-75,22900,,510,бензин,~75,в наявності,висока,budmir.com.ua,https://budmir.com.ua/ua/kategorii-kataloga/vibroplity/benzinova-vibroplita-barret-rs-75,
+3,Barret,Віброплити,yes,RS-75T,24000,24609,535,бензин,~75,в наявності,середня,budmir.com.ua,https://budmir.com.ua/tovar/benzinovaya-vibroplita-barret-rs-75t,дві різні ціни в сніпетах різних дат
+4,Barret,Віброплити,yes,RS-88T,25509,25330,568,бензин,~88,в наявності,середня,budmir.com.ua,https://budmir.com.ua/kategorii-kataloga/vibroplity/benzinovaja-vibroplita-barret-rs-88t,дві різні ціни в сніпетах різних дат
+5,Barret,Віброплити,yes,RS-90T (з баком),26820,,598,бензин,~90,в наявності,висока,budmir.com.ua,https://budmir.com.ua/ua/kategorii-kataloga/vibroplity/benzinovaya-vibroplita-barret-rs-90t-z-bakom,бак для води; асфальт
+6,Barret,Віброплити,yes,RS-95,28800,,642,бензин,~95,в наявності,висока,budmir.com.ua,https://budmir.com.ua/ua/kategorii-kataloga/vibroplity/benzinova-vibroplita-barret-rs-95,
+7,Barret,Віброплити,yes,RS-85H,47251,,1053,Honda,~85,в наявності,висока,budmir.com.ua,https://budmir.com.ua/ua/tovar/benzinovaya-vibroplita-barret-rs-85h,двигун Honda
+8,Barret,Віброплити,yes,ST-12B,35443,,790,бензин,,в наявності,висока,budmir.com.ua,https://budmir.com.ua/ua/tovar/benzinovaya-vibroplita-barret-st-12b,реверсивна
+9,Barret,Віброплити,yes,ST-13B,44938,,1001,бензин,,в наявності,висока,budmir.com.ua,https://budmir.com.ua/ua/tovar/vibroplita-barret-st-13b,реверсивна
+10,Barret,Віброплити,yes,ST-14B,54854,,1222,бензин,,в наявності,середня,budmir.com.ua,https://budmir.com.ua/ua/kategorii-kataloga/vibroplity/benzinova-vibroplita-barret-st-14b,"реверсивна; у сніпеті вага 42 кг — явно помилкова, клас 130-160 кг"
+11,Barret,Віброплити,yes,ST-14,61033,,1360,Honda,,в наявності,висока,budmir.com.ua,https://budmir.com.ua/ua/tovar/benzinovaya-vibroplita-barret-st-14,реверсивна; двигун Honda
+12,Barret,Вібротрамбовки,yes,NG83RH,62202,39875,1386,Honda GX160,62-83,в наявності,низька,budmir.com.ua / prom.ua,https://budmir.com.ua/ua/tovar/vibrotrambovka-barret-ng83rh,"ціна на Budmir 62202 vs prom.ua 39875 (розбіжність 1,56x); ТТХ у сніпетах суперечливі; оренда 850 грн/добу"
+13,Barret,Вібротрамбовки,yes,NG83RB,,,,бензин,,невідомо,низька,kulibin.com.ua,https://kulibin.com.ua/ua/catalog/vibrotrambovki/barret-ng-83rb/,"є в іншого дилера; наявність і ціна на Budmir не підтверджені"
+14,Barret,Вібротрамбовки,yes,NG75E,32707,,729,електро,,немає в наявності,середня,budmir.com.ua,https://budmir.com.ua/ua/kategorii-kataloga/vibrotrambovki,електрична
+15,Barret,Вібротрамбовки,yes,NG82E,,,,електро,,невідомо,низька,epicentrk.ua,https://epicentrk.ua/ua/shop/mplc-vibrotrambovka-yelektrichna-barret-ng82e-1ec6d417-c651-659e-8dab-b71fe4f81bae.html,"електрична; знайдена в Епіцентрі, наявність на Budmir не підтверджена"
+16,Barret,Вібратори для бетону,no,Storm Pro (BR-Storm-Pro),8945,,199,,,в наявності,висока,budmir.com.ua,https://budmir.com.ua/ua/kategorii-kataloga/vibratory-dlya-betona/glibinnij-vibrator-barret-storm-pro-br-storm-pro,глибинний вібратор; вали 1-5 м
+17,Barret,Віброрейки,no,S-Power Turbo,,,,бензин,,невідомо,низька,storgom.ua / svit-instrumentu,https://budmir.com.ua/ua/kategorii-kataloga/vibroreyki,"ціна на Budmir не знайдена; подвійна система підвіски"
+18,Barret,Швонарізувачі,no,AK35B,30202,29999,673,бензин,,в наявності,середня,budmir.com.ua,https://budmir.com.ua/ua/tovar/shvonarezchik-barret-ak35b,"інші магазини: 29999-31059 грн"
+19,Barret,Бетонозмішувачі,no,G-140,,,,електро,,невідомо,низька,svit-instrumentu.com.ua,https://svit-instrumentu.com.ua/ua/p1915030100-betonomeshalka-barret-140.html,ціна на Budmir не знайдена
+20,Barret,Бетонозмішувачі,no,G-220,13355,,298,електро,,в наявності,висока,budmir.com.ua,https://budmir.com.ua/ua/tovar/betonomeshalka-barret-g-220,
+21,Barret,Мотопомпи,no,BRD-100DW,40779,,909,дизель 7.8 к.с.,,в наявності,висока,budmir.com.ua,https://budmir.com.ua/ua/kategorii-kataloga/motopompy-dlya-gryaznoy-vody/motopompa-dizelna-zabrudnenoji-vodi-barret-brd-100dw,для брудної води
+22,Barret,Мотопомпи,no,BRG-50CL,10636,,237,бензин 6 к.с. 193 см3,,в наявності,висока,budmir.com.ua,https://budmir.com.ua/ua/kategorii-kataloga/motopompy-dlya-himicheskih-veshchestvkislot-i-morskoy-vody/motopompa-dlja-himichnih-rechovin-barret-brg-50cl,для хімічних речовин
+23,Barret,Мотопомпи,no,BRD-50CL,,,,дизель,,невідомо,низька,budmir.com.ua,https://budmir.com.ua/ua/kategorii-kataloga/motopompy/motopompy-barret/,"дизельна для хімічних речовин; ціна не знайдена"
