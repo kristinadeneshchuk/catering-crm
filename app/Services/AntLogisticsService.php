@@ -875,10 +875,10 @@ class AntLogisticsService
 
         $saved = 0;
 
-        // Завантажуємо всіх кур'єрів з ant_driver_name одним запитом
-        $employeesByAntName = \App\Models\Employee::whereNotNull('ant_driver_name')
-            ->get()
-            ->keyBy(fn ($e) => mb_strtolower(trim($e->ant_driver_name)));
+        // Пул для матчингу водія ANT → курʼєр CRM (див. matchDriverToEmployee)
+        $courierPool = \App\Models\Employee::whereNotNull('ant_driver_name')
+            ->orWhere(fn ($q) => $q->where('position', 'courier')->whereNull('archived_at'))
+            ->get();
 
         foreach ($routes as $route) {
             $routeId  = $route['Route_Id'] ?? null;
@@ -897,13 +897,8 @@ class AntLogisticsService
             }
 
             // Автоматичний матч водія → Employee
-            $courier    = null;
-            $employeeId = null;
-            if ($driver) {
-                $key = mb_strtolower(trim($driver));
-                $courier    = $employeesByAntName->get($key);
-                $employeeId = $courier?->id;
-            }
+            $courier    = $driver ? self::matchDriverToEmployee($driver, $courierPool) : null;
+            $employeeId = $courier?->id;
 
             $countComps = (int) ($route['Count_Comps'] ?? 0);
             $antCost    = (float) ($route['Cost_Route'] ?? 0);
@@ -957,5 +952,69 @@ class AntLogisticsService
         }
 
         return ['08:00', '20:00'];
+    }
+
+    /**
+     * Нормалізація імені для матчингу «водій з ANT ↔ курʼєр CRM»: нижній
+     * регістр, без дужок і слова «кур'єр» у будь-якому написанні апострофа.
+     */
+    public static function normalizeDriverKey(?string $name): string
+    {
+        $s = mb_strtolower(trim((string) $name));
+        $s = preg_replace('/\([^)]*\)/u', ' ', $s);
+        // кур'єр / курʼєр / кур’єр / курєр / курьер + похідні
+        $s = preg_replace('/\bкур[\x{02BC}\x{2019}\x{0027}\x{044C}]?[\x{0454}\x{0435}]р\w*/iu', ' ', (string) $s);
+
+        return trim(preg_replace('/\s+/u', ' ', (string) $s));
+    }
+
+    /**
+     * Матч водія з ANT на співробітника. Точне збігання ant_driver_name було
+     * надто крихким: досить перейменувати поле в картці («Сергій» замість
+     * «Сергій кур'єр») — і всі маршрути відвʼязуються при наступному «Точки ↓».
+     *
+     * Порядок спроб:
+     *   1) точний збіг з ant_driver_name (стара поведінка);
+     *   2) збіг після нормалізації (без слова «кур'єр», дужок, регістру);
+     *   3) слова водія з ANT ⊆ слів ПІБ курʼєра (тільки position=courier,
+     *      не в архіві) або ⊆ слів ant_driver_name.
+     * Якщо кандидатів кілька — не вгадуємо (null): краще порожній курʼєр,
+     * ніж SMS клієнту з чужим телефоном.
+     */
+    public static function matchDriverToEmployee(string $driver, \Illuminate\Support\Collection $pool): ?\App\Models\Employee
+    {
+        $exactKey = mb_strtolower(trim($driver));
+        $exact = $pool->filter(
+            fn ($e) => $e->ant_driver_name !== null && mb_strtolower(trim($e->ant_driver_name)) === $exactKey
+        );
+        if ($exact->count() === 1) {
+            return $exact->first();
+        }
+
+        $normKey = self::normalizeDriverKey($driver);
+        if ($normKey === '') {
+            return null;
+        }
+
+        $normalized = $pool->filter(
+            fn ($e) => self::normalizeDriverKey($e->ant_driver_name) === $normKey
+        );
+        if ($normalized->count() === 1) {
+            return $normalized->first();
+        }
+
+        // Слова водія ⊆ слів імені/ant-імені курʼєра («Бортнік Богдан» ⊆ «Бортнік Богдан Богданович»).
+        $driverWords = preg_split('/\s+/u', $normKey);
+        $subset = $pool->filter(function ($e) use ($driverWords) {
+            if ($e->position !== 'courier' || $e->archived_at !== null) {
+                return false;
+            }
+            $nameWords = preg_split('/\s+/u', self::normalizeDriverKey($e->name));
+            $antWords  = preg_split('/\s+/u', self::normalizeDriverKey($e->ant_driver_name));
+
+            return empty(array_diff($driverWords, $nameWords)) || empty(array_diff($driverWords, $antWords));
+        });
+
+        return $subset->count() === 1 ? $subset->first() : null;
     }
 }

@@ -58,6 +58,7 @@ class LogisticsPage extends Page implements HasForms
     // SMS-сповіщення клієнтам про кур'єра
     public bool    $smsReady       = false;
     public ?string $smsBlockReason = null;
+    public ?string $smsWarning     = null;
     public int     $smsSentCount   = 0;
     public bool    $smsCanSubmit   = false;
 
@@ -134,6 +135,7 @@ class LogisticsPage extends Page implements HasForms
 
             $this->smsReady       = $readiness['ready'];
             $this->smsBlockReason = $readiness['reason'];
+            $this->smsWarning     = $readiness['warning'] ?? null;
 
             // Рахуємо тільки ті відправки, що перетинаються з обраною зміною:
             // інакше після ранкової розсилки кнопка казала б «вже відправлені»
@@ -146,6 +148,7 @@ class LogisticsPage extends Page implements HasForms
         } catch (\Throwable $e) {
             $this->smsReady       = false;
             $this->smsBlockReason = 'SMS-модуль недоступний: ' . $e->getMessage();
+            $this->smsWarning     = null;
             $this->smsSentCount   = 0;
         }
     }
@@ -420,11 +423,38 @@ class LogisticsPage extends Page implements HasForms
             $summary .= '<div style="color:#f59e0b;">Проблемні замовлення (SMS не піде): ' . count($preview['problems']) . '</div>';
         }
 
+        if ($this->smsWarning) {
+            $summary .= '<div style="color:#f59e0b;">⚠️ ' . e($this->smsWarning) . '</div>';
+        }
+
         $summary .= '</div>';
 
         $schema = [
             Placeholder::make('summary')->hiddenLabel()->content(new HtmlString($summary)),
         ];
+
+        // Вибір отримувачів: за замовчуванням усі, але можна лишити 1-2 —
+        // для тестової відправки, поки перевіряємо інтеграцію.
+        if (! empty($preview['recipients'])) {
+            $options = [];
+            foreach ($preview['recipients'] as $r) {
+                $label = $r['client_name'] . ' (+' . $r['phone'] . ') — ' . $r['courier_name'] . ', ' . $r['car_number'];
+                if ($r['already_sent'] && ! $r['changed']) {
+                    $label .= ' · вже надіслано';
+                } elseif ($r['changed']) {
+                    $label .= ' · курʼєр змінився';
+                }
+                $options[$r['key']] = $label;
+            }
+
+            $schema[] = CheckboxList::make('recipients_selected')
+                ->label('Кому відправити')
+                ->options($options)
+                ->default(array_keys($options))
+                ->bulkToggleable()
+                ->columns(1)
+                ->helperText('Зніміть зайві галочки, щоб відправити тільки вибраним (наприклад, 1-2 клієнтам для тесту). «Вже надіслано» підуть повторно лише з галочкою «Надіслати повторно всім».');
+        }
 
         // Приклад тексту — щоб адміністратор побачив, що саме отримає клієнт.
         $sample = $preview['recipients'][0]['text'] ?? null;
@@ -667,8 +697,13 @@ class LogisticsPage extends Page implements HasForms
                         return;
                     }
 
+                    // null = «усім»; масив ключів — тільки вибраним у модалці.
+                    $onlyKeys = array_key_exists('recipients_selected', $data)
+                        ? array_values((array) $data['recipients_selected'])
+                        : null;
+
                     try {
-                        $result = $notifier->send($date, $shift, (bool) ($data['resend_all'] ?? false));
+                        $result = $notifier->send($date, $shift, (bool) ($data['resend_all'] ?? false), $onlyKeys);
                     } catch (\Throwable $e) {
                         Notification::make()->title('Помилка відправки')->body($e->getMessage())->danger()->send();
                         return;
@@ -681,6 +716,10 @@ class LogisticsPage extends Page implements HasForms
 
                     if ($result['skipped'] > 0) {
                         $lines[] = "Пропущено (вже надіслано, без змін): {$result['skipped']}";
+                    }
+
+                    if (($result['excluded'] ?? 0) > 0) {
+                        $lines[] = "Не вибрано вручну: {$result['excluded']}";
                     }
 
                     if (! empty($result['errors'])) {

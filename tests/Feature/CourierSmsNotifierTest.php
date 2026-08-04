@@ -76,7 +76,7 @@ class CourierSmsNotifierTest extends TestCase
         $this->assertStringContainsString('Маршрути ще не побудовані', $r['reason']);
     }
 
-    public function test_button_is_blocked_when_a_route_has_no_courier(): void
+    public function test_button_is_blocked_when_no_route_has_a_courier(): void
     {
         $this->makeRoute(['employee_id' => null]);
 
@@ -84,7 +84,21 @@ class CourierSmsNotifierTest extends TestCase
 
         $this->assertFalse($r['ready']);
         $this->assertSame(1, $r['routes_without_courier']);
-        $this->assertStringContainsString('Не призначено курʼєра', $r['reason']);
+        $this->assertStringContainsString('не призначено курʼєра', $r['reason']);
+    }
+
+    public function test_button_is_ready_with_warning_when_only_part_of_routes_have_courier(): void
+    {
+        // Часткова готовність не блокує відправку по готових маршрутах (ТЗ п.9):
+        // один маршрут із курʼєром, один без — кнопка активна, але з попередженням.
+        $this->makeRoute(['employee_id' => $this->makeCourier('Іванов І.І.')]);
+        $this->makeRoute(['ant_route_num' => 2, 'ant_route_id' => 9002, 'employee_id' => null]);
+
+        $r = $this->notifier()->readiness($this->deliveryDate);
+
+        $this->assertTrue($r['ready'], $r['reason'] ?? '');
+        $this->assertSame(1, $r['routes_without_courier']);
+        $this->assertStringContainsString('Без курʼєра: 1', $r['warning']);
     }
 
     public function test_button_is_blocked_when_turbosms_not_configured(): void

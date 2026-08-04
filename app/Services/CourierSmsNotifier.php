@@ -34,7 +34,12 @@ class CourierSmsNotifier
     // -------------------------------------------------------------------------
 
     /**
-     * @return array{ready: bool, reason: ?string, routes: int, routes_without_courier: int}
+     * Кнопка активна, щойно є хоч один маршрут із курʼєром: замовлення з
+     * неповними даними не блокують решту — вони показуються списком у модалці
+     * (ТЗ п.9, рекомендований варіант). Повне блокування лишається тільки коли
+     * маршрутів немає взагалі, немає жодного курʼєра або SMS не налаштовано.
+     *
+     * @return array{ready: bool, reason: ?string, warning: ?string, routes: int, routes_without_courier: int}
      */
     public function readiness(string $date, string $shift = 'all'): array
     {
@@ -45,18 +50,24 @@ class CourierSmsNotifier
         $result = [
             'routes'                 => $routes->count(),
             'routes_without_courier' => $withoutCourier,
+            'warning'                => null,
         ];
 
         if ($routes->isEmpty()) {
             return $result + ['ready' => false, 'reason' => 'Маршрути ще не побудовані. Натисніть «Точки ↓», щоб завантажити їх з ANT.'];
         }
 
-        if ($withoutCourier > 0) {
-            return $result + ['ready' => false, 'reason' => "Не призначено курʼєра на {$withoutCourier} маршрут(ів). Звірте імʼя в ANT з полем «Імʼя в ANT Logistics» у картці курʼєра."];
+        if ($withoutCourier === $routes->count()) {
+            return $result + ['ready' => false, 'reason' => 'На жодному маршруті не призначено курʼєра. Звірте імʼя в ANT з полем «Імʼя в ANT Logistics» у картці курʼєра.'];
         }
 
         if ($error = $this->sms->configurationError()) {
             return $result + ['ready' => false, 'reason' => $error];
+        }
+
+        if ($withoutCourier > 0) {
+            $result['warning'] = "Без курʼєра: {$withoutCourier} маршрут(ів) — клієнти цих маршрутів SMS не отримають, "
+                . 'вони будуть у списку «проблемних» перед відправкою.';
         }
 
         return $result + ['ready' => true, 'reason' => null];
@@ -169,6 +180,7 @@ class CourierSmsNotifier
             }
 
             $recipients[$key] = [
+                'key'           => $key,
                 'phone'         => $phone,
                 'client_id'     => $client->id,
                 'client_name'   => $client->name,
@@ -216,9 +228,12 @@ class CourierSmsNotifier
     /**
      * @param  bool  $resendAll  true — слати всім, включно з тими, кому вже слали
      *                           ту саму інформацію (ручне підтвердження адміністратора).
+     * @param  ?array<int, string>  $onlyKeys  ключі отримувачів (recipient['key']), яким слати;
+     *                                         null — усім. Використовується для тестової
+     *                                         відправки 1-2 клієнтам з модалки.
      * @return array{sent: int, failed: int, skipped: int, problems: array, errors: array<int, string>}
      */
-    public function send(string $date, string $shift = 'all', bool $resendAll = false): array
+    public function send(string $date, string $shift = 'all', bool $resendAll = false, ?array $onlyKeys = null): array
     {
         $deliveryDate = Carbon::parse($date)->format('Y-m-d');
 
@@ -232,7 +247,7 @@ class CourierSmsNotifier
 
             if (! $lock->get()) {
                 return [
-                    'sent' => 0, 'failed' => 0, 'skipped' => 0, 'problems' => [],
+                    'sent' => 0, 'failed' => 0, 'skipped' => 0, 'excluded' => 0, 'problems' => [],
                     'errors' => ['Відправка вже виконується — зачекайте, поки завершиться попередня.'],
                 ];
             }
@@ -243,7 +258,7 @@ class CourierSmsNotifier
         }
 
         try {
-            return $this->performSend($deliveryDate, $shift, $resendAll);
+            return $this->performSend($deliveryDate, $shift, $resendAll, $onlyKeys);
         } finally {
             $lock?->release();
         }
@@ -252,17 +267,23 @@ class CourierSmsNotifier
     /**
      * @return array{sent: int, failed: int, skipped: int, problems: array, errors: array<int, string>}
      */
-    private function performSend(string $deliveryDate, string $shift, bool $resendAll): array
+    private function performSend(string $deliveryDate, string $shift, bool $resendAll, ?array $onlyKeys = null): array
     {
         $preview = $this->preview($deliveryDate, $shift);
 
         // За замовчуванням не турбуємо клієнтів, у яких нічого не змінилось.
-        $queue = array_filter(
+        $eligible = array_filter(
             $preview['recipients'],
             fn (array $r) => $resendAll || ! $r['already_sent'] || $r['changed'],
         );
 
-        $skipped = count($preview['recipients']) - count($queue);
+        // Ручний вибір отримувачів (тестова відправка 1-2 клієнтам).
+        $queue = $onlyKeys === null
+            ? $eligible
+            : array_filter($eligible, fn (array $r) => in_array($r['key'], $onlyKeys, true));
+
+        $skipped  = count($preview['recipients']) - count($eligible);
+        $excluded = count($eligible) - count($queue);
 
         $sent   = 0;
         $failed = 0;
@@ -332,6 +353,7 @@ class CourierSmsNotifier
             'sent'     => $sent,
             'failed'   => $failed,
             'skipped'  => $skipped,
+            'excluded' => $excluded,
             'problems' => $preview['problems'],
             'errors'   => array_values(array_unique($errors)),
         ];

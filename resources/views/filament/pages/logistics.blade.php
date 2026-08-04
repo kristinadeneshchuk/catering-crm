@@ -63,7 +63,7 @@
                 {{-- Сповіщення клієнтам про кур'єра (SMS) --}}
                 @if($smsReady)
                     <button wire:click="mountAction('send_client_sms')"
-                        title="Клієнти отримають SMS з ім'ям кур'єра, його телефоном і номером авто"
+                        title="{{ $smsWarning ?: "Клієнти отримають SMS з ім'ям кур'єра, його телефоном і номером авто" }}"
                         style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;
                             @if($smsSentCount > 0) background:#27272a;color:#a1a1aa;border:1px solid #3f3f46;
                             @else background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;box-shadow:0 0 16px #05966940; @endif">
