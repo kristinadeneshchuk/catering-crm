@@ -92,7 +92,20 @@ class AdminPanelProvider extends PanelProvider
                 Authenticate::class,
             ])
             ->renderHook('panels::head.end', fn () => new \Illuminate\Support\HtmlString(
-                '<link rel="stylesheet" href="/css/leaflet/leaflet.css">'
+                '<link rel="stylesheet" href="/css/leaflet/leaflet.css">
+<style>
+/* Мобільна адаптація форм.
+   columns(3) у Filament вмикається лише з lg-брейкпоінту, а columnSpan(2) —
+   на ВСІХ розмірах. На телефоні сітка стає 1-колонковою, і span-2 поле
+   створює фантомну другу (implicit) колонку: перша схлопується в 0px,
+   поля стискаються в нуль, підписи налазять один на одного.
+   Тому нижче lg кожне поле займає повний рядок. */
+@media (max-width: 1023.98px) {
+    .col-\[--col-span-default\] {
+        grid-column: 1 / -1 !important;
+    }
+}
+</style>'
             ))
             ->renderHook('panels::body.end', fn () => new \Illuminate\Support\HtmlString(
                 '<script src="/js/leaflet/leaflet.js"></script>
