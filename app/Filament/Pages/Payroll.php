@@ -423,8 +423,8 @@ class Payroll extends Page implements HasActions, HasForms
                     $comment = $data['comment'] ?? null;
                     $date    = ! empty($data['date']) ? Carbon::parse($data['date']) : now();
 
-                    $employee->decrement('balance', $amount);
-
+                    // Баланс списує хук Transaction::created — тут не чіпаємо,
+                    // інакше подвійне списання.
                     Transaction::create([
                         'employee_id' => $employee->id,
                         'order_id'    => null,

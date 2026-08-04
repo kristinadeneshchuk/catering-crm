@@ -59,15 +59,43 @@ class Transaction extends Model
             }
         };
 
-        static::created($syncClient);
-        static::updated($syncClient);
+        static::created(function ($transaction) use ($syncClient) {
+            $syncClient($transaction);
+
+            // Виплата ЗП: списуємо з "Боргу компанії" тут (єдина точка), а не в
+            // кнопках "Виплатити" — щоб транзакція, створена будь-де (кнопка,
+            // Журнал транзакцій, код), однаково рухала баланс співробітника.
+            if ($transaction->employee_id && $transaction->type === 'expense') {
+                $transaction->employee()->decrement('balance', abs((float) $transaction->amount));
+            }
+        });
+
+        static::updated(function ($transaction) use ($syncClient) {
+            $syncClient($transaction);
+
+            // Правка виплати ЗП (сума / співробітник / тип) — відкатуємо стару
+            // й застосовуємо нову, інакше баланс дрейфує (так і з'явився борг,
+            // якого ніхто не нараховував).
+            if ($transaction->wasChanged(['amount', 'employee_id', 'type'])) {
+                $oldEmp  = $transaction->getOriginal('employee_id');
+                $oldAmt  = abs((float) $transaction->getOriginal('amount'));
+                $oldType = $transaction->getOriginal('type');
+
+                if ($oldEmp && $oldType === 'expense') {
+                    Employee::find($oldEmp)?->increment('balance', $oldAmt);
+                }
+                if ($transaction->employee_id && $transaction->type === 'expense') {
+                    $transaction->employee()->decrement('balance', abs((float) $transaction->amount));
+                }
+            }
+        });
 
         static::deleted(function ($transaction) use ($syncClient) {
             $syncClient($transaction);
 
             // Якщо це була виплата зарплати (співробітник) — повертаємо суму у "Борг компанії"
             if ($transaction->employee_id && $transaction->type === 'expense') {
-                $transaction->employee()->increment('balance', $transaction->amount);
+                $transaction->employee()->increment('balance', abs((float) $transaction->amount));
             }
         });
     }

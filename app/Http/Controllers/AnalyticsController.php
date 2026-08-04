@@ -911,11 +911,10 @@ class AnalyticsController extends Controller
             $account  = \App\Models\Account::findOrFail($request->account_id);
             $amount   = (float) $request->amount;
 
-            // 1. Зменшуємо борг компанії перед співробітником (його баланс)
-            $employee->decrement('balance', $amount);
-
-            // 2. Створюємо транзакцію — PaymentObserver автоматично спише гроші з рахунку
+            // Створюємо транзакцію — PaymentObserver спише гроші з рахунку,
+            // а хук Transaction::created зменшить борг співробітника (employee_id!).
             \App\Models\Transaction::create([
+                'employee_id' => $employee->id,
                 'account_id' => $account->id,
                 'amount'     => $amount,
                 'type'       => 'expense',

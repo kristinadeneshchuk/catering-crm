@@ -92,7 +92,10 @@ class EmployeeResource extends Resource
                             ->prefix('₴')
                             ->default(0)
                             ->disabled()
-                            ->dehydrated(),
+                            // Записуємо тільки при створенні (стартовий 0). На редагуванні
+                            // НЕ зберігаємо: форма тримає значення на момент відкриття, і
+                            // save() затирав би свіжі рухи балансу (табель, штрафи) — дрейф.
+                            ->dehydrated(fn (string $operation) => $operation === 'create'),
 
                         TextInput::make('fuel_consumption')
                             ->label('Витрата пального (л / 100 км)')
@@ -298,8 +301,8 @@ class EmployeeResource extends Resource
                             $comment = $data['comment'] ?? null;
                             $date    = ! empty($data['date']) ? \Illuminate\Support\Carbon::parse($data['date']) : now();
 
-                            $record->decrement('balance', $amount);
-
+                            // Баланс списує хук Transaction::created — тут не чіпаємо,
+                            // інакше подвійне списання.
                             Transaction::create([
                                 'employee_id' => $record->id,
                                 'order_id'    => null,
