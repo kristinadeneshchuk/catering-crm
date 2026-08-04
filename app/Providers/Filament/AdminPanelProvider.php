@@ -104,6 +104,17 @@ class AdminPanelProvider extends PanelProvider
     .col-\[--col-span-default\] {
         grid-column: 1 / -1 !important;
     }
+
+    /* Кастомні сторінки (Пакування, Список покупок, Звіт виробництва тощо)
+       мають руками зверстані <table>: широка таблиця рвала екран телефона.
+       Робимо їм горизонтальний скрол. Штатні таблиці Filament (.fi-ta-table)
+       не чіпаємо — вони вже скролять самі. */
+    .fi-page table:not(.fi-ta-table) {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
 }
 </style>'
             ))
