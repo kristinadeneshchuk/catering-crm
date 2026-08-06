@@ -87,6 +87,38 @@ class CourierSmsNotifierTest extends TestCase
         $this->assertStringContainsString('не призначено курʼєра', $r['reason']);
     }
 
+    public function test_shift_filter_sees_routes_pulled_as_all(): void
+    {
+        // Кейс з прода 05.08: маршрути завантажені фільтром «Всі» (shift='all'),
+        // менеджер перемикає на «Ранкова»/«Вечірня» — і сторінка казала
+        // «маршрути не побудовані», кнопка гасла. Розводимо за часом старту.
+        $courier = $this->makeCourier('Іванов І.І.');
+        $this->makeRoute(['employee_id' => $courier, 'shift' => 'all', 'route_time_b' => '05.08.2026 06:03']);
+        $this->makeRoute(['employee_id' => $courier, 'shift' => 'all', 'ant_route_num' => 2, 'route_time_b' => '05.08.2026 17:20']);
+
+        $morning = $this->notifier()->readiness($this->deliveryDate, 'morning');
+        $evening = $this->notifier()->readiness($this->deliveryDate, 'evening');
+
+        $this->assertSame(1, $morning['routes'], 'ранковий маршрут має знайтись');
+        $this->assertTrue($morning['ready'], $morning['reason'] ?? '');
+
+        $this->assertSame(1, $evening['routes'], 'вечірній маршрут має знайтись');
+        $this->assertTrue($evening['ready'], $evening['reason'] ?? '');
+    }
+
+    public function test_explicit_shift_column_still_wins_over_time(): void
+    {
+        // Якщо маршрут завантажили саме як вечірній — час не має його перебивати.
+        $this->makeRoute([
+            'employee_id'  => $this->makeCourier('Іванов І.І.'),
+            'shift'        => 'evening',
+            'route_time_b' => '05.08.2026 09:00',
+        ]);
+
+        $this->assertSame(1, $this->notifier()->readiness($this->deliveryDate, 'evening')['routes']);
+        $this->assertSame(0, $this->notifier()->readiness($this->deliveryDate, 'morning')['routes']);
+    }
+
     public function test_button_is_ready_with_warning_when_only_part_of_routes_have_courier(): void
     {
         // Часткова готовність не блокує відправку по готових маршрутах (ТЗ п.9):

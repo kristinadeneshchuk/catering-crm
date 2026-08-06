@@ -102,12 +102,18 @@ class LogisticsPage extends Page implements HasForms
         $date  = $this->data['date'] ?? now()->format('Y-m-d');
         $shift = $this->data['shift'] ?? 'all';
 
-        $query = DeliveryRoute::whereDate('date', $date);
-        if ($shift !== 'all') {
-            $query->where('shift', $shift);
+        // Підхоплюємо курʼєрів, заведених/перейменованих уже після «Точки ↓»,
+        // щоб не змушувати менеджера перетягувати маршрути заново.
+        try {
+            app(AntLogisticsService::class)->rematchRouteCouriers($date, $shift);
+        } catch (\Throwable $e) {
+            report($e);
         }
 
-        $routeCollection = $query->with('employee')->orderBy('ant_route_num')->get();
+        $routeCollection = DeliveryRoute::filterByShift(
+            DeliveryRoute::whereDate('date', $date)->with('employee')->orderBy('ant_route_num')->get(),
+            $shift,
+        );
 
         $this->routes      = $routeCollection->toArray();
         $this->totalRoutes = $routeCollection->count();

@@ -369,13 +369,11 @@ class CourierSmsNotifier
      */
     private function routesFor(string $date, string $shift): \Illuminate\Support\Collection
     {
-        $query = DeliveryRoute::whereDate('date', Carbon::parse($date)->format('Y-m-d'));
+        $routes = DeliveryRoute::whereDate('date', Carbon::parse($date)->format('Y-m-d'))
+            ->with('employee')
+            ->get();
 
-        if ($shift !== 'all') {
-            $query->where('shift', $shift);
-        }
-
-        return $query->with('employee')->get();
+        return DeliveryRoute::filterByShift($routes, $shift);
     }
 
     /**
@@ -439,29 +437,10 @@ class CourierSmsNotifier
         return $matched->count() === 1 ? $matched->first() : null;
     }
 
-    /**
-     * Зміна маршруту: спершу з колонки shift, інакше — з часу початку.
-     * Поріг 14:00 — той самий, що і в AntLogisticsService::pullRouteDetails().
-     * null — визначити не вдалося.
-     */
+    /** Зміна маршруту — єдина логіка живе в моделі (DeliveryRoute::isEvening). */
     private function routeIsEvening(DeliveryRoute $route): ?bool
     {
-        $shift = (string) $route->shift;
-
-        if ($shift === 'morning') {
-            return false;
-        }
-
-        if ($shift === 'evening') {
-            return true;
-        }
-
-        // route_time_b приходить з ANT у форматі 'd.m.Y H:i'
-        if (preg_match('/\s(\d{1,2}):/', (string) $route->route_time_b, $m)) {
-            return (int) $m[1] >= 14;
-        }
-
-        return null;
+        return $route->isEvening();
     }
 
     /**

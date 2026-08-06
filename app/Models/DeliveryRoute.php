@@ -28,6 +28,59 @@ class DeliveryRoute extends Model
         'calculated_cost' => 'decimal:2',
     ];
 
+    /** Поріг ранок/вечір — той самий, що в AntLogisticsService::pullRouteDetails(). */
+    public const EVENING_HOUR = 14;
+
+    /**
+     * Чи вечірній це маршрут: спершу колонка shift, інакше — година старту.
+     * null — визначити не вдалося (немає ні shift, ні розпізнаваного часу).
+     */
+    public function isEvening(): ?bool
+    {
+        if ($this->shift === 'morning') return false;
+        if ($this->shift === 'evening') return true;
+
+        // route_time_b приходить з ANT у форматі 'd.m.Y H:i'
+        if (preg_match('/\s(\d{1,2}):/', (string) $this->route_time_b, $m)) {
+            return (int) $m[1] >= self::EVENING_HOUR;
+        }
+
+        return null;
+    }
+
+    /**
+     * Фільтр по зміні для СПОЖИВАЧІВ (сторінка Логістики, SMS-розсилка).
+     *
+     * Колонка shift зберігає не зміну маршруту, а значення фільтра на момент
+     * завантаження з ANT: тягнеш «Всі» — усі рядки лягають із shift='all'.
+     * Тому прямий where('shift', 'morning') давав нуль рядків, сторінка
+     * показувала «маршрутів немає», а кнопка SMS гасла з «Маршрути ще не
+     * побудовані» — хоча маршрути були.
+     *
+     * Розводимо зміни за реальним часом старту. Фільтруємо в PHP, а не в SQL:
+     * route_time_b — рядок 'd.m.Y H:i', його розбір у SQL різний для MySQL і
+     * sqlite (тести), а маршрутів на день одиниці.
+     *
+     * @param  \Illuminate\Support\Collection<int, static>  $routes
+     * @return \Illuminate\Support\Collection<int, static>
+     */
+    public static function filterByShift(\Illuminate\Support\Collection $routes, ?string $shift): \Illuminate\Support\Collection
+    {
+        if (! in_array($shift, ['morning', 'evening'], true)) {
+            return $routes;
+        }
+
+        $wantEvening = $shift === 'evening';
+
+        // Маршрут із нерозпізнаваним часом (isEvening() === null) лишаємо в
+        // обох змінах: краще показати зайвий, ніж загубити його зовсім.
+        return $routes->filter(function (self $r) use ($wantEvening) {
+            $isEvening = $r->isEvening();
+
+            return $isEvening === null || $isEvening === $wantEvening;
+        })->values();
+    }
+
     /**
      * Розраховує вартість маршруту по ОСОБИСТІЙ ставці кур'єра.
      * База: employee.base_rate до base_stops точок.

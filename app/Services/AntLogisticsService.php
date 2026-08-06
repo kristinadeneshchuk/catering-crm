@@ -955,6 +955,56 @@ class AntLogisticsService
     }
 
     /**
+     * Переприв'язати курʼєрів до вже завантажених маршрутів.
+     *
+     * Матчинг водіїв відбувається у момент «Точки ↓». Якщо після цього
+     * менеджер завів курʼєра або виправив «Імʼя в ANT», маршрут лишався без
+     * курʼєра до наступної тяги з ANT — саме звідси «я внесла всіх, а воно не
+     * оновлює». Тепер це підхоплюється при відкритті сторінки Логістики.
+     *
+     * @return int скільки маршрутів отримали курʼєра
+     */
+    public function rematchRouteCouriers(string $date, string $shift = 'all'): int
+    {
+        $routes = \App\Models\DeliveryRoute::filterByShift(
+            \App\Models\DeliveryRoute::whereDate('date', $date)
+                ->whereNull('employee_id')
+                ->whereNotNull('driver_name')
+                ->get(),
+            $shift,
+        );
+
+        if ($routes->isEmpty()) {
+            return 0;
+        }
+
+        $pool = \App\Models\Employee::whereNotNull('ant_driver_name')
+            ->orWhere(fn ($q) => $q->where('position', 'courier')->whereNull('archived_at'))
+            ->get();
+
+        $fixed = 0;
+        foreach ($routes as $route) {
+            $employee = self::matchDriverToEmployee($route->driver_name, $pool);
+            if (! $employee) {
+                continue;
+            }
+
+            $route->update([
+                'employee_id'     => $employee->id,
+                'calculated_cost' => \App\Models\DeliveryRoute::calculateCourierCost((int) $route->count_comps, $employee),
+            ]);
+            $route->update(['calculated_cost' => $route->recalcCost()]);
+            $fixed++;
+        }
+
+        if ($fixed > 0) {
+            Log::info('[AntLogistics] Rematched couriers', ['date' => $date, 'shift' => $shift, 'fixed' => $fixed]);
+        }
+
+        return $fixed;
+    }
+
+    /**
      * Нормалізація імені для матчингу «водій з ANT ↔ курʼєр CRM»: нижній
      * регістр, без дужок і слова «кур'єр» у будь-якому написанні апострофа.
      */
