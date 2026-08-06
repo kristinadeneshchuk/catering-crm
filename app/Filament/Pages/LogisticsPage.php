@@ -587,14 +587,17 @@ class LogisticsPage extends Page implements HasForms
                 ->label('Відправити замовлення')
                 ->form([
                     Grid::make(2)->schema([
+                        // Дефолти — з фільтра сторінки: «Точки ↓» працює саме по
+                        // ньому, а тут раніше стояло «завтра / Всі». Дві кнопки
+                        // легко тягнули різні дні — маршрути є, точок нема.
                         \Filament\Forms\Components\DatePicker::make('date')
                             ->label('Дата доставки')
-                            ->default(now()->addDay()->format('Y-m-d'))
+                            ->default(fn () => $this->data['date'] ?? now()->format('Y-m-d'))
                             ->required(),
                         Select::make('shift')
                             ->label('Зміна')
                             ->options(['all' => 'Всі', 'morning' => 'Ранок', 'evening' => 'Вечір'])
-                            ->default('all')
+                            ->default(fn () => $this->data['shift'] ?? 'all')
                             ->required(),
                     ]),
                 ])
@@ -642,14 +645,17 @@ class LogisticsPage extends Page implements HasForms
                 ->label('Завантажити маршрути')
                 ->form([
                     Grid::make(2)->schema([
+                        // Дефолти — з фільтра сторінки: «Точки ↓» працює саме по
+                        // ньому, а тут раніше стояло «завтра / Всі». Дві кнопки
+                        // легко тягнули різні дні — маршрути є, точок нема.
                         \Filament\Forms\Components\DatePicker::make('date')
                             ->label('Дата доставки')
-                            ->default(now()->addDay()->format('Y-m-d'))
+                            ->default(fn () => $this->data['date'] ?? now()->format('Y-m-d'))
                             ->required(),
                         Select::make('shift')
                             ->label('Зміна')
                             ->options(['all' => 'Всі', 'morning' => 'Ранок', 'evening' => 'Вечір'])
-                            ->default('all')
+                            ->default(fn () => $this->data['shift'] ?? 'all')
                             ->required(),
                     ]),
                 ])
