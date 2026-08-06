@@ -42,9 +42,9 @@
                 'border'  => $expiringSoon > 0 ? 'rgba(251,146,60,0.3)' : 'rgba(55,65,81,0.4)',
             ],
             [
-                'label'   => 'Несплачено',
+                'label'   => 'Борги клієнтів',
                 'value'   => $unpaidCount,
-                'unit'    => 'замовл.',
+                'unit'    => 'клієнт.',
                 'desc'    => number_format($unpaidSum, 0, '.', ' ') . ' ₴ до отримання',
                 'icon'    => 'heroicon-o-credit-card',
                 'accent'  => $unpaidCount > 0 ? '#f87171' : '#22c55e',

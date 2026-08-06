@@ -52,13 +52,16 @@ class StatsOverview extends Widget
             ->whereDate('end_date', '<=', $now->copy()->addDays(3)->format('Y-m-d'))
             ->count();
 
-        // Несплачені
-        $unpaidOrders = Order::where('is_paid', false)
-            ->whereIn('status', ['active', 'new'])
-            ->where(fn($q) => $q->where('final_price', '>', 0)->orWhere('total_price', '>', 0));
+        // Несплачено — реальний борг, а не повна ціна замовлення.
+        //
+        // Раніше рахувалось по is_paid і сумувало final_price цілком: клієнту
+        // не вистачило 4 ₴ — у плитку йшло 6 671 ₴. Плитка розходилась із
+        // «Боржниками» і касою, які обидві рахують по балансу клієнта.
+        // Джерело правди одне — Client.balance (його веде Client::syncBalance).
+        $debtors = \App\Models\Client::where('balance', '<', 0)->pluck('balance');
 
-        $unpaidCount = $unpaidOrders->count();
-        $unpaidSum   = $unpaidOrders->sum(\DB::raw('COALESCE(NULLIF(final_price,0), total_price)'));
+        $unpaidCount = $debtors->count();
+        $unpaidSum   = round(-(float) $debtors->sum(), 2);
 
         return compact(
             'menuDay', 'cycleDays',
