@@ -1,0 +1,256 @@
+@import 'tailwindcss';
+
+@source '../**/*.blade.php';
+@source '../**/*.js';
+
+/*
+ | Дизайн-система «Смерека» — токени з handoff.
+ | Правило: у розмітці не має бути жодного хардкоду hex — тільки ці токени.
+ */
+@theme {
+    /* Бренд */
+    --color-brand: #0e5b46;
+    --color-brand-hover: #0a4736;
+    --color-brand-tint: #e3f0eb;
+    --color-brand-bright: #5bc98f;
+
+    /* Семантика наявності */
+    --color-success: #1e7a46;
+    --color-success-text: #175e37;
+    --color-success-bg: #e5f2ea;
+    --color-success-border: #b7dac5;
+
+    --color-warning: #a85e00;
+    --color-warning-text: #8a4d00;
+    --color-warning-bg: #fdf1e2;
+    --color-warning-border: #ebd3ae;
+
+    --color-danger: #c0362b;
+    --color-danger-text: #a03127;
+    --color-danger-bg: #fbeae8;
+    --color-danger-border: #efc4bf;
+
+    --color-info: #2b5e8c;
+    --color-star: #e8a33d;
+
+    /* Поверхні */
+    --color-surface-0: #ffffff;
+    --color-surface-1: #f4f6f5;
+    --color-surface-2: #e9edeb;
+    --color-surface-dark: #14181a;
+
+    --color-border-1: #d9dedc;
+    --color-border-2: #aeb9b4;
+
+    /* Текст */
+    --color-text-1: #14181a;
+    --color-text-2: #3e464b;
+    --color-text-3: #6b757c;
+    --color-text-on-dark: #aeb8b4;
+
+    /* Шрифти */
+    --font-display: 'Oswald', system-ui, sans-serif;
+    --font-sans: 'Golos Text', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    /* Радіуси — рівно три значення + pill нижньої навігації */
+    --radius-chip: 2px;
+    --radius-control: 6px;
+    --radius-card: 12px;
+    --radius-pill: 32px;
+
+    /* Єдина дозволена тінь — плаваючі шари */
+    --shadow-float: 0 4px 16px rgba(20, 24, 26, 0.12);
+
+    /* Брейкпойнти з handoff */
+    --breakpoint-xs: 30rem; /* 480 */
+    --breakpoint-sm: 48rem; /* 768 */
+    --breakpoint-nav: 50rem; /* 800 — перемикання хедера і bottom nav */
+    --breakpoint-md: 56.25rem; /* 900 — складання двоколонкових блоків */
+    --breakpoint-lg: 64rem; /* 1024 */
+    --breakpoint-xl: 80rem; /* 1280 — контейнер */
+    --breakpoint-2xl: 100rem; /* 1600 */
+}
+
+@layer base {
+    /* iOS Safari ігнорує overflow-x на самому body — тому і html, і body. */
+    html,
+    body {
+        overflow-x: hidden;
+    }
+
+    body {
+        background: var(--color-surface-1);
+        color: var(--color-text-1);
+        font-family: var(--font-sans);
+        font-size: 16px;
+        line-height: 24px;
+    }
+
+    /* Ніяких жорстких min-width у grid-колонках. */
+    * {
+        min-width: 0;
+    }
+
+    a {
+        color: var(--color-brand);
+        text-decoration: none;
+    }
+
+    a:hover {
+        color: var(--color-brand-hover);
+        text-decoration: underline;
+    }
+
+    /* Обов'язковий focus-visible з handoff. */
+    :focus-visible {
+        outline: 2px solid var(--color-brand);
+        outline-offset: 2px;
+    }
+
+    /* Числа — головний контент, скрізь табулярні. */
+    .font-mono,
+    table {
+        font-variant-numeric: tabular-nums;
+    }
+}
+
+@layer components {
+    .container-bur {
+        max-width: 1280px;
+        margin-inline: auto;
+        padding-inline: 24px;
+    }
+
+    /* Типографічна шкала handoff */
+    .t-display {
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: 48px;
+        line-height: 52px;
+        letter-spacing: 0.01em;
+        text-transform: uppercase;
+    }
+    .t-h1 {
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: 38px;
+        line-height: 44px;
+    }
+    .t-h2 {
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: 24px;
+        line-height: 30px;
+    }
+    .t-h3 {
+        font-weight: 600;
+        font-size: 19px;
+        line-height: 26px;
+    }
+    .t-caption {
+        font-weight: 600;
+        font-size: 12px;
+        line-height: 16px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .t-price {
+        font-family: var(--font-mono);
+        font-weight: 700;
+        font-size: 28px;
+        line-height: 32px;
+        font-variant-numeric: tabular-nums;
+    }
+    .t-num {
+        font-family: var(--font-mono);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+    }
+
+    @media (max-width: 900px) {
+        .t-h1 {
+            font-size: 28px;
+            line-height: 34px;
+        }
+        .t-display {
+            font-size: 32px;
+            line-height: 38px;
+        }
+    }
+
+    /* Скелетон завантаження */
+    .skeleton {
+        background: linear-gradient(
+            90deg,
+            var(--color-surface-2) 25%,
+            var(--color-surface-1) 50%,
+            var(--color-surface-2) 75%
+        );
+        background-size: 200% 100%;
+        animation: shimmer 1.4s linear infinite;
+    }
+
+    @keyframes shimmer {
+        0% {
+            background-position: 100% 0;
+        }
+        100% {
+            background-position: -100% 0;
+        }
+    }
+
+    /* Повзунок днів — signature-контрол, стилізується тільки тут */
+    .days-range {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 28px;
+        background: transparent;
+        cursor: pointer;
+    }
+    .days-range::-webkit-slider-runnable-track {
+        height: 6px;
+        border-radius: 3px;
+        background: var(--track, var(--color-border-1));
+    }
+    .days-range::-moz-range-track {
+        height: 6px;
+        border-radius: 3px;
+        background: var(--color-border-1);
+    }
+    .days-range::-moz-range-progress {
+        height: 6px;
+        border-radius: 3px;
+        background: var(--color-brand);
+    }
+    .days-range::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 28px;
+        height: 28px;
+        margin-top: -11px;
+        border-radius: 50%;
+        background: var(--color-brand);
+        border: 3px solid #fff;
+        box-shadow: var(--shadow-float);
+    }
+    .days-range::-moz-range-thumb {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: var(--color-brand);
+        border: 3px solid #fff;
+    }
+}
+
+/* Половина трафіку — телефон на об'єкті. Анімації прибираються за запитом. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+}
