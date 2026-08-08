@@ -1,0 +1,25 @@
+[Unit]
+Description=CRM queue worker
+After=network.target mysql.service
+
+# Перед установкою заміни APP_USER та APP_DIR на реальні значення сервера
+# (systemd не підставляє змінні в User= / WorkingDirectory=).
+#
+#   sudo cp deploy/systemd/crm-queue.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now crm-queue
+
+[Service]
+Type=simple
+User=APP_USER
+WorkingDirectory=/home/APP_USER/APP_DIR
+ExecStart=/usr/bin/php /home/APP_USER/APP_DIR/artisan queue:work --sleep=3 --tries=3 --backoff=10 --max-time=3600
+Restart=always
+RestartSec=5
+# queue:restart просить воркер вийти після поточної джоби — systemd підніме новий з новим кодом.
+SuccessExitStatus=0 1
+StandardOutput=append:/var/log/crm-queue.log
+StandardError=append:/var/log/crm-queue.log
+
+[Install]
+WantedBy=multi-user.target

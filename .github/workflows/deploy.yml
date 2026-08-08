@@ -3,6 +3,12 @@ name: Deploy
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+
+# Дві розкатки одночасно на один сервер = зламаний vendor/. Черга замість гонки.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   deploy-afood:
@@ -15,10 +21,10 @@ jobs:
           username: afood
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
+            set -e
             cd /home/afood/a-food.com.ua/okn
             git pull origin main
-            php artisan config:clear
-            php artisan view:clear
+            bash deploy/deploy.sh
 
   deploy-shinshin:
     runs-on: ubuntu-latest
@@ -30,14 +36,16 @@ jobs:
           username: shinshin
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
+            set -e
             cd /home/shinshin/u-fit.com.ua/crm
             git pull origin main
-            php artisan config:clear
-            php artisan view:clear
+            bash deploy/deploy.sh
 
   deploy-horenko:
     runs-on: ubuntu-latest
     steps:
+      # Сервер має власний /usr/local/bin/crm-deploy — див. deploy/README.md,
+      # він теж має закінчуватися викликом deploy/deploy.sh.
       - name: Deploy to horenko-production (new server)
         uses: appleboy/ssh-action@master
         with:

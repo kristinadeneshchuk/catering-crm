@@ -1,0 +1,14 @@
+[Unit]
+Description=CRM scheduler tick (php artisan schedule:run)
+
+# Заміни APP_USER та APP_DIR на реальні значення сервера.
+# Альтернатива systemd-таймеру — рядок у crontab користувача:
+#   * * * * * cd /home/APP_USER/APP_DIR && php artisan schedule:run >> /dev/null 2>&1
+
+[Service]
+Type=oneshot
+User=APP_USER
+WorkingDirectory=/home/APP_USER/APP_DIR
+ExecStart=/usr/bin/php /home/APP_USER/APP_DIR/artisan schedule:run
+StandardOutput=append:/var/log/crm-scheduler.log
+StandardError=append:/var/log/crm-scheduler.log
