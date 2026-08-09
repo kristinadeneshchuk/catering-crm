@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\Branch;
 use App\Models\Lead;
 use App\Models\Product;
+use App\Services\Availability;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -50,10 +51,10 @@ class BookingTest extends TestCase
         $booking = Booking::latest('id')->firstOrFail();
         $response->assertRedirect(route('booking.show', $booking));
 
-        // 5 днів → тариф «3–6 днів» = 290 ₴, а не базові 350.
-        $this->assertSame(5 * 290, $booking->rent_total);
+        // 5 днів → тариф «3–6 днів» = 210 ₴, а не базові 250.
+        $this->assertSame(5 * 210, $booking->rent_total);
         $this->assertSame(1500, $booking->deposit_total);
-        $this->assertSame(5 * 290 + 1500, $booking->payable);
+        $this->assertSame(5 * 210 + 1500, $booking->payable);
     }
 
     public function test_client_supplied_prices_are_ignored(): void
@@ -63,7 +64,7 @@ class BookingTest extends TestCase
             'items' => [['price_per_day' => 1, 'total' => 1]],
         ]));
 
-        $this->assertSame(5 * 290, Booking::latest('id')->firstOrFail()->rent_total);
+        $this->assertSame(5 * 210, Booking::latest('id')->firstOrFail()->rent_total);
     }
 
     public function test_booked_dates_disappear_from_availability(): void
@@ -82,6 +83,30 @@ class BookingTest extends TestCase
                 'date' => Carbon::today()->addDays($day)->toDateString(),
             ]);
         }
+    }
+
+    public function test_several_customers_can_rent_the_same_model_in_parallel(): void
+    {
+        $product = Product::with('tiers')->where('slug', 'bosch-gbh-2-26-dre')->firstOrFail();
+        $branch = Branch::where('slug', 'poznyaky')->firstOrFail();
+        $from = Carbon::today()->toDateString();
+        $to = Carbon::today()->addDays(4)->toDateString();
+
+        $availability = app(Availability::class);
+        $free = $availability->freeUnits($product, $branch, $from, $to);
+
+        $this->assertGreaterThan(1, $free, 'ходова позиція має стояти в кількох екземплярах');
+
+        // Забираємо всі вільні екземпляри — кожна бронь має пройти без зауважень.
+        for ($i = 0; $i < $free; $i++) {
+            $this->post('/booking', $this->payload())->assertSessionHas('taken', []);
+        }
+
+        $this->assertSame(0, $availability->freeUnits($product, $branch, $from, $to));
+
+        // Наступний клієнт на ті самі дати вже впирається у склад.
+        $this->post('/booking', $this->payload())
+            ->assertSessionHas('taken', fn (array $taken) => in_array($product->name, $taken, true));
     }
 
     public function test_company_booking_requires_edrpou_and_email(): void

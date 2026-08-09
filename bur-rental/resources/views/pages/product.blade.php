@@ -20,7 +20,7 @@
         ])->values();
 
         $busyData = $branches->mapWithKeys(fn ($b) => [
-            $b->id => ($busy[$b->id] ?? collect())->all(),
+            $b->id => $busy[$b->id] ?? [],
         ]);
     @endphp
 

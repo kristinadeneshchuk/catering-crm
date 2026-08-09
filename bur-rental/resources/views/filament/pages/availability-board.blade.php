@@ -32,7 +32,10 @@
                 <span class="inline-block size-3 rounded-sm bg-green-100 ring-1 ring-green-300"></span> вільно
             </span>
             <span class="flex items-center gap-1.5">
-                <span class="inline-block size-3 rounded-sm bg-red-200 ring-1 ring-red-400"></span> в оренді
+                <span class="inline-block size-3 rounded-sm bg-orange-100 ring-1 ring-orange-300"></span> частково зайнято
+            </span>
+            <span class="flex items-center gap-1.5">
+                <span class="inline-block size-3 rounded-sm bg-red-200 ring-1 ring-red-400"></span> розібрали повністю
             </span>
             <span class="flex items-center gap-1.5">
                 <span class="inline-block size-3 rounded-sm bg-amber-200 ring-1 ring-amber-400"></span> сервіс
@@ -41,8 +44,9 @@
     </div>
 
     <p class="text-sm text-gray-500 dark:text-gray-400">
-        Клік по вільному дню ставить блокування на сервіс, клік по сервісному — знімає.
-        Дні під орендою звільняються тільки прийманням техніки в бронюванні.
+        Число в клітинці — скільки екземплярів ще можна видати цього дня.
+        Клік ставить блокування на сервіс, клік по сервісному — знімає.
+        Орендовані екземпляри звільняє тільки приймання техніки в бронюванні.
     </p>
 
     <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
@@ -77,20 +81,23 @@
                         </th>
 
                         @foreach ($this->days as $day)
-                            @php $state = $this->cellState($product, $day->toDateString()); @endphp
+                            @php $cell = $this->cell($product, $day->toDateString()); @endphp
                             <td class="p-0.5 text-center">
                                 <button type="button"
                                         wire:click="toggle({{ $product->id }}, '{{ $day->toDateString() }}')"
                                         wire:loading.attr="disabled"
-                                        title="{{ $product->name }} · {{ $day->format('d.m.Y') }}"
+                                        title="{{ $product->name }} · {{ $day->format('d.m.Y') }} · вільно {{ $cell['free'] }} з {{ $cell['stock'] }}"
                                         @class([
-                                            'block h-8 w-full rounded-sm ring-1 transition',
-                                            'bg-green-50 ring-green-200 hover:bg-green-100' => $state === 'free',
-                                            'bg-red-200 ring-red-400 cursor-not-allowed' => $state === 'rented',
-                                            'bg-amber-200 ring-amber-400 hover:bg-amber-300' => $state === 'service',
+                                            'block h-8 w-full rounded-sm text-[11px] font-semibold tabular-nums ring-1 transition',
+                                            'bg-green-50 text-green-700 ring-green-200 hover:bg-green-100' => $cell['state'] === 'free',
+                                            'bg-orange-100 text-orange-700 ring-orange-300 hover:bg-orange-200' => $cell['state'] === 'partial',
+                                            'bg-red-200 text-red-800 ring-red-400 cursor-not-allowed' => $cell['state'] === 'rented',
+                                            'bg-amber-200 text-amber-800 ring-amber-400 hover:bg-amber-300' => $cell['state'] === 'service',
                                         ])>
+                                    {{-- Число — скільки екземплярів ще можна видати цього дня. --}}
+                                    {{ $cell['stock'] > 1 ? $cell['free'] : '' }}
                                     <span class="sr-only">
-                                        {{ ['free' => 'вільно', 'rented' => 'в оренді', 'service' => 'сервіс'][$state] }}
+                                        вільно {{ $cell['free'] }} з {{ $cell['stock'] }}
                                     </span>
                                 </button>
                             </td>

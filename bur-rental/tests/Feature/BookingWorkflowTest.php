@@ -25,7 +25,7 @@ class BookingWorkflowTest extends TestCase
         $this->workflow = app(BookingWorkflow::class);
     }
 
-    /** Бронь на 5 днів по перфоратору: 5 × 290 ₴ за тарифом «3–6 днів». */
+    /** Бронь на 5 днів по перфоратору: 5 × 210 ₴ за тарифом «3–6 днів». */
     private function fiveDayBooking(): Booking
     {
         $this->post('/booking', [
@@ -50,13 +50,13 @@ class BookingWorkflowTest extends TestCase
     public function test_early_return_reprices_by_the_actual_term(): void
     {
         $booking = $this->fiveDayBooking();
-        $this->assertSame(5 * 290, $booking->rent_total);
+        $this->assertSame(5 * 210, $booking->rent_total);
 
         // Здали на третій день: тариф «3–6 днів» лишається, але днів уже три.
         $closed = $this->workflow->close($booking, Carbon::today()->addDays(2)->toDateString());
 
         $this->assertSame('closed', $closed->status);
-        $this->assertSame(3 * 290, $closed->rent_total);
+        $this->assertSame(3 * 210, $closed->rent_total);
     }
 
     public function test_early_return_frees_the_unused_days(): void
@@ -66,14 +66,14 @@ class BookingWorkflowTest extends TestCase
 
         $this->workflow->close($booking, Carbon::today()->addDays(2)->toDateString());
 
-        // Четвертий і п'ятий день мають повернутися в календар.
-        $stillBusy = UnavailableDate::where('product_id', $productId)
-            ->where('branch_id', $booking->branch_id)
+        // Четвертий і п'ятий день цієї броні мають повернутися в календар.
+        // Фільтр по booking_id принциповий: на ті самі дати можуть стояти
+        // чужі броні, і їх дострокова здача чіпати не повинна.
+        $stillBusy = UnavailableDate::where('booking_id', $booking->id)
             ->whereIn('date', [
                 Carbon::today()->addDays(3)->toDateString(),
                 Carbon::today()->addDays(4)->toDateString(),
             ])
-            ->where('reason', 'rented')
             ->count();
 
         $this->assertSame(0, $stillBusy);
@@ -83,10 +83,10 @@ class BookingWorkflowTest extends TestCase
     {
         $booking = $this->fiveDayBooking();
 
-        // Привезли на два дні пізніше: 5 днів за сходинкою + 2 доби по 350 ₴.
+        // Привезли на два дні пізніше: 5 днів за сходинкою + 2 доби по 250 ₴.
         $closed = $this->workflow->close($booking, Carbon::today()->addDays(6)->toDateString());
 
-        $this->assertSame(5 * 290 + 2 * 350, $closed->rent_total);
+        $this->assertSame(5 * 210 + 2 * 250, $closed->rent_total);
         $this->assertSame(7, $closed->items->first()->fresh()->days);
     }
 
@@ -113,16 +113,7 @@ class BookingWorkflowTest extends TestCase
 
         $this->assertSame('cancelled', $booking->fresh()->status);
 
-        $busy = UnavailableDate::where('product_id', $productId)
-            ->where('branch_id', $booking->branch_id)
-            ->whereBetween('date', [
-                Carbon::today()->toDateString(),
-                Carbon::today()->addDays(4)->toDateString(),
-            ])
-            ->where('reason', 'rented')
-            ->count();
-
-        $this->assertSame(0, $busy);
+        $this->assertSame(0, UnavailableDate::where('booking_id', $booking->id)->count());
     }
 
     public function test_service_blocks_survive_a_cancellation(): void
@@ -130,11 +121,14 @@ class BookingWorkflowTest extends TestCase
         $booking = $this->fiveDayBooking();
         $productId = $booking->items->first()->product_id;
 
-        // Ручне блокування на сервіс усередині строку броні.
-        UnavailableDate::where('product_id', $productId)
-            ->where('branch_id', $booking->branch_id)
-            ->whereDate('date', Carbon::today()->addDays(1))
-            ->update(['reason' => 'service']);
+        // Ручне блокування на сервіс усередині строку броні — окремим рядком,
+        // не пов'язаним з бронню.
+        UnavailableDate::create([
+            'product_id' => $productId,
+            'branch_id' => $booking->branch_id,
+            'date' => Carbon::today()->addDay()->toDateString(),
+            'reason' => 'service',
+        ]);
 
         $this->workflow->cancel($booking);
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Availability;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -113,19 +114,31 @@ class Product extends Model
 
     /* ——— наявність ——— */
 
-    /** Зайняті дати, згруповані по філії: [branch_id => ['2026-08-13', …]]. */
-    public function busyByBranch(): Collection
+    /**
+     * Дати, у які модель уже не взяти, згруповані по філії.
+     * День потрапляє сюди, лише коли зайняті всі екземпляри філії.
+     *
+     * @return Collection<int, list<string>>
+     */
+    public function busyByBranch(?string $from = null, ?string $to = null): Collection
     {
-        return $this->unavailableDates
-            ->groupBy('branch_id')
-            ->map(fn ($rows) => $rows->pluck('date')->map(fn ($d) => $d->toDateString())->values());
+        $availability = app(Availability::class);
+        $from ??= now()->toDateString();
+        $to ??= now()->addMonths(3)->toDateString();
+
+        return $this->branches->mapWithKeys(fn (Branch $branch) => [
+            $branch->id => $availability->fullDates($this, $branch, $from, $to),
+        ]);
     }
 
-    public function isFreeAt(Branch $branch, string $from, string $to): bool
+    public function isFreeAt(Branch $branch, string $from, string $to, int $qty = 1): bool
     {
-        return $this->unavailableDates
-            ->where('branch_id', $branch->id)
-            ->every(fn (UnavailableDate $d) => $d->date->toDateString() < $from || $d->date->toDateString() > $to);
+        return app(Availability::class)->isFree($this, $branch, $from, $to, $qty);
+    }
+
+    public function freeUnitsAt(Branch $branch, string $from, string $to): int
+    {
+        return app(Availability::class)->freeUnits($this, $branch, $from, $to);
     }
 
     /* ——— пошук і фільтри ——— */
@@ -150,18 +163,31 @@ class Product extends Model
             : $query;
     }
 
-    /** Тільки вільні на діапазон — тумблер, заради якого сюди й приходять. */
+    /**
+     * Тільки вільні на діапазон — тумблер, заради якого сюди й приходять.
+     *
+     * Позиція випадає з видачі лише тоді, коли в якийсь день діапазону зайнято
+     * не менше екземплярів, ніж є на складі: два з трьох перфораторів в оренді —
+     * це ще «вільно».
+     */
     public function scopeFreeBetween(Builder $query, ?string $from, ?string $to, ?Branch $branch = null): Builder
     {
         if (! $from || ! $to) {
             return $query;
         }
 
-        return $query->whereDoesntHave('unavailableDates', function (Builder $q) use ($from, $to, $branch) {
-            $q->whereBetween('date', [$from, $to]);
-            if ($branch) {
-                $q->where('branch_id', $branch->id);
-            }
+        return $query->whereNotExists(function ($sub) use ($from, $to, $branch) {
+            $sub->from('unavailable_dates as ud')
+                ->join('inventory as inv', function ($join) {
+                    $join->on('inv.product_id', '=', 'ud.product_id')
+                        ->on('inv.branch_id', '=', 'ud.branch_id');
+                })
+                ->whereColumn('ud.product_id', 'products.id')
+                ->whereBetween('ud.date', [$from, $to])
+                ->when($branch, fn ($q) => $q->where('ud.branch_id', $branch->id))
+                ->groupBy('ud.product_id', 'ud.branch_id', 'ud.date')
+                ->havingRaw('SUM(ud.qty) >= MIN(inv.qty)')
+                ->selectRaw('1');
         });
     }
 }

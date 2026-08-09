@@ -30,8 +30,15 @@ class AvailabilitySeeder extends Seeder
                     continue;
                 }
 
+                // У Києві ходові позиції тримають у кількох екземплярах —
+                // на цьому й перевіряється, що наявність рахується поштучно.
                 $branch->products()->attach($product->id, [
-                    'qty' => $branch->city->slug === 'kyiv' ? ($heavy ? 1 : 2) : 1,
+                    'qty' => match (true) {
+                        $branch->city->slug !== 'kyiv' => 1,
+                        $heavy => 1,
+                        $product->popularity >= 80 => 3,
+                        default => 2,
+                    },
                 ]);
             }
         }

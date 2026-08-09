@@ -12,8 +12,10 @@ class CatalogController extends Controller
 {
     public function index(): View
     {
+        // Без withCount: він створює атрибут products_count і затирає колонку,
+        // через що категорія з товарами лише в підкатегоріях показувала «0 позицій».
         return view('pages.catalog', [
-            'categories' => Category::roots()->withCount('products')->get(),
+            'categories' => Category::roots()->with('children')->get(),
         ]);
     }
 
@@ -28,9 +30,13 @@ class CatalogController extends Controller
         $from = $request->date('from')?->toDateString();
         $to = $request->date('to')?->toDateString();
 
+        // Категорія показує і власні товари, і товари підкатегорій — інакше
+        // «Перфоратори» виглядали б порожніми, бо все лежить у SDS-plus.
+        $categoryIds = [$category->id, ...$category->children->pluck('id')];
+
         $query = Product::query()
             ->with(['brand', 'tiers', 'branches'])
-            ->whereIn('category_id', [$category->id, ...$category->children->pluck('id')])
+            ->whereIn('category_id', $categoryIds)
             ->inBranch($branch)
             ->when($request->filled('brand'), fn ($q) => $q->whereHas(
                 'brand',
@@ -49,10 +55,9 @@ class CatalogController extends Controller
         return view('pages.category', [
             'category' => $category,
             'products' => $sorted->paginate(24)->withQueryString(),
-            'brands' => Brand::whereHas(
-                'products',
-                fn ($q) => $q->where('category_id', $category->id)
-            )->withCount(['products' => fn ($q) => $q->where('category_id', $category->id)])->get(),
+            'brands' => Brand::whereHas('products', fn ($q) => $q->whereIn('category_id', $categoryIds))
+                ->withCount(['products' => fn ($q) => $q->whereIn('category_id', $categoryIds)])
+                ->get(),
             'branches' => $city->branches,
             'activeBranch' => $branch,
             'from' => $from,

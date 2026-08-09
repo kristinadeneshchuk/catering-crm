@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Models\Product;
+use App\Models\UnavailableDate;
 use App\Services\RentalPricing;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -37,25 +38,45 @@ class RentalPricingTest extends TestCase
     {
         $product = $this->product();
 
-        $this->assertSame(350, $this->pricing->pricePerDay($product, 1));
-        $this->assertSame(350, $this->pricing->pricePerDay($product, 2));
-        $this->assertSame(290, $this->pricing->pricePerDay($product, 3));
-        $this->assertSame(290, $this->pricing->pricePerDay($product, 6));
-        $this->assertSame(240, $this->pricing->pricePerDay($product, 7));
-        $this->assertSame(240, $this->pricing->pricePerDay($product, 30));
+        // Сходинка перфоратора: 250 / 210 / 170 ₴ за день.
+        $this->assertSame(250, $this->pricing->pricePerDay($product, 1));
+        $this->assertSame(250, $this->pricing->pricePerDay($product, 2));
+        $this->assertSame(210, $this->pricing->pricePerDay($product, 3));
+        $this->assertSame(210, $this->pricing->pricePerDay($product, 6));
+        $this->assertSame(170, $this->pricing->pricePerDay($product, 7));
+        $this->assertSame(170, $this->pricing->pricePerDay($product, 30));
     }
 
     public function test_savings_are_measured_against_the_base_tier(): void
     {
-        $this->assertSame(7 * (350 - 240), $this->pricing->savings($this->product(), 7));
+        $this->assertSame(7 * (250 - 170), $this->pricing->savings($this->product(), 7));
     }
 
-    public function test_availability_respects_busy_dates(): void
+    public function test_a_single_rental_does_not_block_a_model_kept_in_several_units(): void
+    {
+        $product = $this->product()->load('unavailableDates');
+        $branch = $product->branches->firstWhere('pivot.qty', '>', 1);
+        $busy = $product->unavailableDates->where('branch_id', $branch->id)->first()->date->toDateString();
+
+        // Один зайнятий екземпляр із трьох — позиція лишається доступною.
+        $this->assertTrue($product->isFreeAt($branch, $busy, $busy));
+    }
+
+    public function test_a_model_is_busy_once_every_unit_is_taken(): void
     {
         $product = $this->product()->load('unavailableDates');
         $branch = $product->branches->first();
-        $busy = $product->unavailableDates->where('branch_id', $branch->id)->first()->date->toDateString();
+        $stock = (int) $branch->pivot->qty;
+        $date = now()->addDays(60)->toDateString();   // свідомо вільний день
 
-        $this->assertFalse($product->isFreeAt($branch, $busy, $busy));
+        UnavailableDate::create([
+            'product_id' => $product->id,
+            'branch_id' => $branch->id,
+            'date' => $date,
+            'reason' => 'rented',
+            'qty' => $stock,
+        ]);
+
+        $this->assertFalse($product->fresh()->isFreeAt($branch, $date, $date));
     }
 }

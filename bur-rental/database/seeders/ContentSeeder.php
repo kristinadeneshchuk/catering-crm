@@ -64,18 +64,21 @@ class ContentSeeder extends Seeder
             ]);
         }
 
-        $category = Category::where('slug', 'perforatory')->first();
-        $categoryFaq = [
-            ['Який перфоратор узяти під штроби?', 'Для квартири вистачить SDS-plus до 3 Дж. Але штробити перфоратором довго й криво — якщо штроб багато, беріть штроборіз із пилососом.'],
-            ['Чим відбійник відрізняється від SDS-max?', 'SDS-max ще вміє свердлити, відбійник — тільки б\'є, зате сильніше і довше без перегріву. Для демонтажу беріть відбійник.'],
-            ['Скільки коштує оренда на місяць?', 'Місяць рахується за тарифом «від 7 днів» — це мінус ~31% від базової ціни за день. Для юросіб на місячних строках даємо окремі умови.'],
-        ];
+        // FAQ категорій: по 2–4 питання на кожну, з тих, що реально ставлять
+        // по телефону перед орендою.
+        foreach (require database_path('seeders/data/category-faqs.php') as $slug => $items) {
+            $category = Category::where('slug', $slug)->first();
 
-        foreach ($categoryFaq as $i => [$q, $a]) {
-            Faq::create([
-                'faqable_type' => Category::class, 'faqable_id' => $category->id,
-                'question' => $q, 'answer' => $a, 'position' => $i,
-            ]);
+            if (! $category) {
+                continue;
+            }
+
+            foreach ($items as $i => [$q, $a]) {
+                Faq::create([
+                    'faqable_type' => Category::class, 'faqable_id' => $category->id,
+                    'question' => $q, 'answer' => $a, 'position' => $i,
+                ]);
+            }
         }
 
         $cityFaq = [

@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Booking;
 use App\Models\BookingItem;
-use App\Models\UnavailableDate;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -18,7 +17,10 @@ use Illuminate\Support\Facades\DB;
  */
 class BookingWorkflow
 {
-    public function __construct(private readonly RentalPricing $pricing) {}
+    public function __construct(
+        private readonly RentalPricing $pricing,
+        private readonly Availability $availability,
+    ) {}
 
     public function confirm(Booking $booking): Booking
     {
@@ -79,8 +81,8 @@ class BookingWorkflow
         DB::transaction(function () use ($booking) {
             $booking->update(['status' => 'cancelled']);
 
-            // Скасована бронь не має тримати календар.
-            $this->releaseDates($booking, $booking->date_from, $booking->date_to);
+            // Скасована бронь не має тримати календар — знімаємо всі її дні.
+            $this->availability->release($booking);
         });
 
         return $booking->refresh();
@@ -107,25 +109,19 @@ class BookingWorkflow
 
     private function releaseDates(Booking $booking, Carbon $from, Carbon $to): void
     {
-        $productIds = $booking->items()->whereNotNull('product_id')->pluck('product_id');
-
-        UnavailableDate::whereIn('product_id', $productIds)
-            ->where('branch_id', $booking->branch_id)
-            ->whereBetween('date', [$from->toDateString(), $to->toDateString()])
-            ->where('reason', 'rented')
-            ->delete();
+        $this->availability->release($booking, $from->toDateString(), $to->toDateString());
     }
 
     private function blockDates(Booking $booking, Carbon $from, Carbon $to): void
     {
-        foreach ($booking->items()->whereNotNull('product_id')->get() as $item) {
-            for ($day = $from->copy(); $day->lte($to); $day->addDay()) {
-                UnavailableDate::firstOrCreate([
-                    'product_id' => $item->product_id,
-                    'branch_id' => $booking->branch_id,
-                    'date' => $day->toDateString(),
-                ], ['reason' => 'rented']);
-            }
+        foreach ($booking->items()->whereNotNull('product_id')->with('product')->get() as $item) {
+            $this->availability->hold(
+                $booking,
+                $item->product,
+                $item->qty,
+                $from->toDateString(),
+                $to->toDateString(),
+            );
         }
     }
 }

@@ -8,17 +8,19 @@ use App\Models\Branch;
 use App\Models\DeliveryZone;
 use App\Models\Extra;
 use App\Models\Product;
-use App\Models\UnavailableDate;
+use App\Services\Availability;
 use App\Services\RentalPricing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class BookingController extends Controller
 {
-    public function __construct(private readonly RentalPricing $pricing) {}
+    public function __construct(
+        private readonly RentalPricing $pricing,
+        private readonly Availability $availability,
+    ) {}
 
     public function create(Request $request): View
     {
@@ -61,10 +63,9 @@ class BookingController extends Controller
         // Друга перевірка наявності: між додаванням у кошик і натисканням
         // «Забронювати» міг пройти день, і позицію встигли забрати.
         $branch = Branch::findOrFail($data['branch_id']);
-        $taken = $items->reject(
-            fn (array $i) => $i['product']->loadMissing('unavailableDates')
-                ->isFreeAt($branch, $i['from'], $i['to'])
-        );
+        $taken = $items->reject(fn (array $i) => $this->availability->isFree(
+            $i['product'], $branch, $i['from'], $i['to'], $i['qty']
+        ));
 
         $zone = $data['fulfilment'] === 'delivery'
             ? DeliveryZone::find($data['delivery_zone_id'])
@@ -108,8 +109,10 @@ class BookingController extends Controller
                     'deposit' => $item['product']->deposit * $item['qty'],
                 ]);
 
-                // Позиція зникає з календаря одразу — інакше її забронюють двічі.
-                $this->blockDates($booking, $item);
+                // Екземпляри резервуються одразу — інакше їх забронюють двічі.
+                $this->availability->hold(
+                    $booking, $item['product'], $item['qty'], $item['from'], $item['to']
+                );
             }
 
             foreach ($extras as $extra) {
@@ -136,22 +139,6 @@ class BookingController extends Controller
         return view('pages.booking-confirmed', [
             'booking' => $booking->load(['items.product', 'items.extra', 'branch.city', 'deliveryZone']),
         ]);
-    }
-
-    private function blockDates(Booking $booking, array $item): void
-    {
-        $cursor = Carbon::parse($item['from']);
-        $end = Carbon::parse($item['to']);
-
-        while ($cursor->lte($end)) {
-            UnavailableDate::firstOrCreate([
-                'product_id' => $item['product']->id,
-                'branch_id' => $booking->branch_id,
-                'date' => $cursor->toDateString(),
-            ], ['reason' => 'rented']);
-
-            $cursor->addDay();
-        }
     }
 
     private function nextNumber(): string

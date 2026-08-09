@@ -12,6 +12,7 @@ use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use UnitEnum;
 
 /**
@@ -88,7 +89,7 @@ class AvailabilityBoard extends Page
         }
 
         return Product::query()
-            ->with(['brand', 'unavailableDates' => fn ($q) => $q
+            ->with(['brand', 'branches', 'unavailableDates' => fn ($q) => $q
                 ->where('branch_id', $this->branchId)
                 ->whereBetween('date', [$this->days->first(), $this->days->last()])])
             ->whereHas('branches', fn ($q) => $q->whereKey($this->branchId))
@@ -97,35 +98,67 @@ class AvailabilityBoard extends Page
             ->get();
     }
 
-    /** Стан клітинки: free | rented | service. */
-    public function cellState(Product $product, string $date): string
+    /**
+     * Стан клітинки з урахуванням кількості екземплярів.
+     *
+     * free — вільні всі · partial — частина в роботі, взяти ще можна ·
+     * rented — розібрали повністю · service — стоїть на обслуговуванні.
+     *
+     * @return array{state: string, free: int, stock: int}
+     */
+    public function cell(Product $product, string $date): array
     {
-        $row = $product->unavailableDates->firstWhere(
+        $rows = $product->unavailableDates->filter(
             fn (UnavailableDate $d) => $d->date->toDateString() === $date
         );
 
-        return $row?->reason ?? 'free';
+        $stock = (int) ($product->branches->firstWhere('id', $this->branchId)?->pivot->qty ?? 0);
+        $taken = (int) $rows->sum('qty');
+        $free = max(0, $stock - $taken);
+
+        $state = match (true) {
+            $taken === 0 => 'free',
+            $rows->every(fn (UnavailableDate $d) => $d->reason === 'service') && $free > 0 => 'service',
+            $free > 0 => 'partial',
+            $rows->contains(fn (UnavailableDate $d) => $d->reason === 'rented') => 'rented',
+            default => 'service',
+        };
+
+        return ['state' => $state, 'free' => $free, 'stock' => $stock];
     }
 
     public function toggle(int $productId, string $date): void
     {
-        $existing = UnavailableDate::where('product_id', $productId)
+        // Знімаємо тільки власне блокування на сервіс; орендовані екземпляри
+        // звільняє приймання техніки, а не клік по дошці.
+        $service = UnavailableDate::where('product_id', $productId)
             ->where('branch_id', $this->branchId)
             ->whereDate('date', $date)
+            ->where('reason', 'service')
             ->first();
 
-        if ($existing?->reason === 'rented') {
-            Notification::make()
-                ->title('День зайнятий орендою')
-                ->body('Звільнити його можна тільки прийманням техніки в бронюванні.')
-                ->warning()
-                ->send();
+        if ($service) {
+            $service->delete();
 
             return;
         }
 
-        if ($existing) {
-            $existing->delete();
+        $stock = (int) DB::table('inventory')
+            ->where('product_id', $productId)
+            ->where('branch_id', $this->branchId)
+            ->value('qty');
+
+        $taken = (int) UnavailableDate::where('product_id', $productId)
+            ->where('branch_id', $this->branchId)
+            ->whereDate('date', $date)
+            ->sum('qty');
+
+        if ($taken >= $stock) {
+            Notification::make()
+                ->title('Вільних екземплярів немає')
+                ->body('Усі одиниці цього дня вже зайняті орендою — звільнити їх можна тільки прийманням техніки.')
+                ->warning()
+                ->send();
 
             return;
         }

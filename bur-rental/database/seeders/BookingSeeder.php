@@ -6,7 +6,7 @@ use App\Models\Booking;
 use App\Models\Branch;
 use App\Models\Lead;
 use App\Models\Product;
-use App\Models\UnavailableDate;
+use App\Services\Availability;
 use App\Services\RentalPricing;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
@@ -17,7 +17,7 @@ use Illuminate\Support\Carbon;
  */
 class BookingSeeder extends Seeder
 {
-    public function run(RentalPricing $pricing): void
+    public function run(RentalPricing $pricing, Availability $availability): void
     {
         $today = Carbon::today();
         $poznyaky = Branch::where('slug', 'poznyaky')->firstOrFail();
@@ -82,13 +82,7 @@ class BookingSeeder extends Seeder
                 continue;
             }
 
-            for ($day = $from->copy(); $day->lte($to); $day->addDay()) {
-                UnavailableDate::firstOrCreate([
-                    'product_id' => $product->id,
-                    'branch_id' => $branch->id,
-                    'date' => $day->toDateString(),
-                ], ['reason' => 'rented']);
-            }
+            $availability->hold($booking, $product, 1, $from->toDateString(), $to->toDateString());
         }
 
         $leads = [
