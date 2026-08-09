@@ -14,6 +14,16 @@ class Product extends Model
 {
     protected $guarded = [];
 
+    /**
+     * Вітрина бачить лише опубліковане. Імпортовані чернетки живуть у базі,
+     * але на сайт не потрапляють, доки менеджер їх не перевірить; адмінка
+     * знімає цей scope явно.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope('published', fn (Builder $query) => $query->where('published', true));
+    }
+
     protected function casts(): array
     {
         return [
@@ -23,6 +33,7 @@ class Product extends Model
             'not_included' => 'array',
             'weight_kg' => 'float',
             'rating' => 'float',
+            'published' => 'bool',
         ];
     }
 

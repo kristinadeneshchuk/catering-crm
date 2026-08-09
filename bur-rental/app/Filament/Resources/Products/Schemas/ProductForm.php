@@ -8,6 +8,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Schema;
@@ -65,6 +66,15 @@ class ProductForm
                             ->numeric()
                             ->step(0.1)
                             ->helperText('Від 200 кг самовивіз недоступний — тільки доставка.'),
+
+                        Toggle::make('published')
+                            ->label('Опубліковано')
+                            ->helperText('Вимкнено — позиція є в адмінці, але не на сайті. Імпорт приходить вимкненим.'),
+
+                        TextInput::make('source_url')
+                            ->label('Джерело імпорту')
+                            ->disabled()
+                            ->visible(fn ($record) => filled($record?->source_url)),
                     ]),
 
                     Section::make('Тексти')->schema([

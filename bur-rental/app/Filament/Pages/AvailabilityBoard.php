@@ -88,7 +88,7 @@ class AvailabilityBoard extends Page
             return collect();
         }
 
-        return Product::query()
+        return Product::query()->withoutGlobalScope('published')
             ->with(['brand', 'branches', 'unavailableDates' => fn ($q) => $q
                 ->where('branch_id', $this->branchId)
                 ->whereBetween('date', [$this->days->first(), $this->days->last()])])

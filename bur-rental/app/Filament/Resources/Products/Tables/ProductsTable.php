@@ -3,12 +3,18 @@
 namespace App\Filament\Resources\Products\Tables;
 
 use App\Models\Product;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 
 class ProductsTable
 {
@@ -16,6 +22,15 @@ class ProductsTable
     {
         return $table
             ->columns([
+                IconColumn::make('published')
+                    ->label('')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-pencil-square')
+                    ->trueColor('success')
+                    ->falseColor('warning')
+                    ->tooltip(fn ($record) => $record->published ? 'Опубліковано' : 'Чернетка з імпорту — на сайті не видно'),
+
                 TextColumn::make('name')
                     ->label('Модель')
                     ->description(fn (Product $r) => $r->brand?->name.' · '.$r->sku)
@@ -68,10 +83,30 @@ class ProductsTable
                 SelectFilter::make('branch')
                     ->label('Є у філії')
                     ->relationship('branches', 'name'),
+
+                Filter::make('drafts')
+                    ->label('Чернетки з імпорту')
+                    ->query(fn (Builder $q) => $q->where('published', false)),
             ])
-            ->recordActions([EditAction::make()])
+            ->recordActions([
+                Action::make('publish')
+                    ->label('Опублікувати')
+                    ->icon('heroicon-o-eye')
+                    ->visible(fn (Product $r) => ! $r->published)
+                    ->requiresConfirmation()
+                    ->modalDescription('Перевірте ціну, категорію і заставу — після публікації позиція одразу на вітрині.')
+                    ->action(fn (Product $r) => $r->update(['published' => true])),
+                EditAction::make(),
+            ])
             ->toolbarActions([
-                BulkActionGroup::make([DeleteBulkAction::make()]),
+                BulkActionGroup::make([
+                    BulkAction::make('publish-many')
+                        ->label('Опублікувати вибрані')
+                        ->icon('heroicon-o-eye')
+                        ->requiresConfirmation()
+                        ->action(fn (Collection $records) => $records->each->update(['published' => true])),
+                    DeleteBulkAction::make(),
+                ]),
             ]);
     }
 }
