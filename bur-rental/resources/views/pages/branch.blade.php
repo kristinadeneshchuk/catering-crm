@@ -78,7 +78,7 @@
                             'Безготівка для юросіб на місці',
                         ] as $service)
                             <li class="flex items-start gap-2 rounded-[8px] border border-border-1 bg-surface-0 p-3.5 text-sm">
-                                <x-icon name="check" class="mt-0.5 size-4 shrink-0 text-success" />{{ $service }}
+                                <x-ui-icon name="check" class="mt-0.5 size-4 shrink-0 text-success" />{{ $service }}
                             </li>
                         @endforeach
                     </ul>

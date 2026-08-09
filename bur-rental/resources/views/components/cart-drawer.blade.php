@@ -10,7 +10,7 @@
         <div class="flex items-center justify-between border-b border-border-1 px-5 py-4">
             <h2 class="t-h2">Кошик</h2>
             <button type="button" @click="$store.booking.drawerOpen = false" class="cursor-pointer p-2" aria-label="Закрити">
-                <x-icon name="close" class="size-5" />
+                <x-ui-icon name="close" class="size-5" />
             </button>
         </div>
 

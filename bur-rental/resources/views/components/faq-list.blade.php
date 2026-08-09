@@ -13,7 +13,7 @@
                             {{ $faq->question }}
                             <span class="text-text-3 transition-transform duration-150"
                                   :class="open === {{ $loop->index }} && 'rotate-45'">
-                                <x-icon name="plus" class="size-4" />
+                                <x-ui-icon name="plus" class="size-4" />
                             </span>
                         </button>
                     </h3>

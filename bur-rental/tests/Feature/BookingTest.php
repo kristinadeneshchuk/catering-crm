@@ -6,7 +6,6 @@ use App\Models\Booking;
 use App\Models\Branch;
 use App\Models\Lead;
 use App\Models\Product;
-use App\Models\UnavailableDate;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -72,18 +71,17 @@ class BookingTest extends TestCase
         $product = Product::where('slug', 'bosch-gbh-2-26-dre')->firstOrFail();
         $branch = Branch::where('slug', 'poznyaky')->firstOrFail();
 
-        $before = UnavailableDate::where('product_id', $product->id)
-            ->where('branch_id', $branch->id)->count();
-
         $this->post('/booking', $this->payload());
 
-        $after = UnavailableDate::where('product_id', $product->id)
-            ->where('branch_id', $branch->id)->count();
-
-        // П'ять діб оренди мають зайняти щонайменше стільки ж нових дат
-        // (частина могла збігтися з уже зайнятими).
-        $this->assertGreaterThan($before, $after);
-        $this->assertLessThanOrEqual($before + 5, $after);
+        // Кожна доба строку має стати зайнятою — рахувати приріст рядків не можна,
+        // частина дат могла бути зайнята ще до броні.
+        for ($day = 0; $day < 5; $day++) {
+            $this->assertDatabaseHas('unavailable_dates', [
+                'product_id' => $product->id,
+                'branch_id' => $branch->id,
+                'date' => Carbon::today()->addDays($day)->toDateString(),
+            ]);
+        }
     }
 
     public function test_company_booking_requires_edrpou_and_email(): void
@@ -109,6 +107,6 @@ class BookingTest extends TestCase
             'context' => 'instrument/bosch-gbh-2-26-dre',
         ])->assertRedirect();
 
-        $this->assertSame('Світлана', Lead::firstOrFail()->name);
+        $this->assertSame('Світлана', Lead::where('phone', '+380 67 245 80 80')->firstOrFail()->name);
     }
 }

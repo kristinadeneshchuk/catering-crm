@@ -18,9 +18,9 @@
         <div class="relative">
             <button type="button" @click="cities = !cities" :aria-expanded="cities"
                     class="flex h-9 cursor-pointer items-center gap-1.5 rounded-[6px] px-2.5 text-sm font-medium text-text-1 hover:bg-surface-1">
-                <x-icon name="pin" class="size-3.5 text-brand" />
+                <x-ui-icon name="pin" class="size-3.5 text-brand" />
                 {{ $city->name }}
-                <x-icon name="chevron-down" class="size-3 text-text-3" />
+                <x-ui-icon name="chevron-down" class="size-3 text-text-3" />
             </button>
 
             <div x-show="cities" x-cloak @click.outside="cities = false" x-transition.opacity
@@ -37,7 +37,7 @@
 
         <button type="button" @click="menu = !menu" :aria-expanded="menu"
                 class="flex h-11 shrink-0 cursor-pointer items-center gap-2 rounded-[8px] bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover max-nav:hidden">
-            <x-icon name="menu" class="size-4" />
+            <x-ui-icon name="menu" class="size-4" />
             Каталог
         </button>
 
@@ -49,7 +49,7 @@
                    class="h-full flex-1 bg-transparent text-[15px] text-text-1 outline-none placeholder:text-text-3">
             <button type="submit" aria-label="Знайти"
                     class="inline-flex h-9 w-13 shrink-0 cursor-pointer items-center justify-center rounded-[6px] bg-brand text-white hover:bg-brand-hover">
-                <x-icon name="search" class="size-[17px]" />
+                <x-ui-icon name="search" class="size-[17px]" />
             </button>
         </form>
 
@@ -65,7 +65,7 @@
             <button type="button" @click="$store.booking.drawerOpen = true"
                     class="flex cursor-pointer items-center gap-1.5 text-sm font-medium text-text-1">
                 <span class="relative">
-                    <x-icon name="cart" class="size-5" />
+                    <x-ui-icon name="cart" class="size-5" />
                     <span x-show="$store.booking.count" x-cloak x-text="$store.booking.count"
                           class="absolute -right-2 -top-1.5 rounded-[8px] bg-brand px-1.5 py-px font-mono text-[10px] font-bold text-white"></span>
                 </span>

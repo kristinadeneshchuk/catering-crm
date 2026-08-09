@@ -44,7 +44,7 @@
                     :class="$store.booking.inCompare({{ $product->id }}) ? 'border-brand text-brand' : 'border-border-1 text-text-3'"
                     class="inline-flex size-11 cursor-pointer items-center justify-center rounded-[6px] border"
                     title="Порівняти">
-                <x-icon name="compare" class="size-[18px]" />
+                <x-ui-icon name="compare" class="size-[18px]" />
             </button>
         </div>
     </div>

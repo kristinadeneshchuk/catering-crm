@@ -23,7 +23,7 @@
                     <ul class="mt-3 space-y-1 text-[13px] text-text-2">
                         @foreach ($kit->items->take(3) as $item)
                             <li class="flex items-start gap-2">
-                                <x-icon name="check" class="mt-0.5 size-3.5 shrink-0 text-success" />
+                                <x-ui-icon name="check" class="mt-0.5 size-3.5 shrink-0 text-success" />
                                 {{ $item->product->name }}
                             </li>
                         @endforeach

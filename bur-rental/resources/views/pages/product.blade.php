@@ -131,11 +131,11 @@
 
                     <div class="mt-3 flex items-center justify-between">
                         <button type="button" @click="shiftMonth(-1)" class="cursor-pointer p-1.5" aria-label="Попередній місяць">
-                            <x-icon name="chevron-left" class="size-4" />
+                            <x-ui-icon name="chevron-left" class="size-4" />
                         </button>
                         <span class="text-sm font-semibold" x-text="monthTitle"></span>
                         <button type="button" @click="shiftMonth(1)" class="cursor-pointer p-1.5" aria-label="Наступний місяць">
-                            <x-icon name="chevron-right" class="size-4" />
+                            <x-ui-icon name="chevron-right" class="size-4" />
                         </button>
                     </div>
 
@@ -322,7 +322,7 @@
                         <ul class="space-y-2 text-sm">
                             @foreach ($product->kit ?? [] as $line)
                                 <li class="flex items-start gap-2">
-                                    <x-icon name="check" class="mt-0.5 size-4 shrink-0 text-success" />{{ $line }}
+                                    <x-ui-icon name="check" class="mt-0.5 size-4 shrink-0 text-success" />{{ $line }}
                                 </li>
                             @endforeach
                         </ul>
@@ -335,11 +335,11 @@
 
                     <div x-show="tab === 'manual'" x-cloak class="space-y-2 text-sm">
                         <a href="{{ $product->manual_url }}" class="flex items-center gap-2">
-                            <x-icon name="file" class="size-4" /> Інструкція PDF · 2,4 МБ
+                            <x-ui-icon name="file" class="size-4" /> Інструкція PDF · 2,4 МБ
                         </a>
                         @if ($product->video_url)
                             <a href="{{ $product->video_url }}" class="flex items-center gap-2">
-                                <x-icon name="play" class="size-4" /> Відео: перші 5 хвилин роботи
+                                <x-ui-icon name="play" class="size-4" /> Відео: перші 5 хвилин роботи
                             </a>
                         @endif
                     </div>

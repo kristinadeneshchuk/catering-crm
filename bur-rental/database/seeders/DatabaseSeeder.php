@@ -13,6 +13,8 @@ class DatabaseSeeder extends Seeder
             CatalogSeeder::class,
             AvailabilitySeeder::class,
             ContentSeeder::class,
+            StaffSeeder::class,
+            BookingSeeder::class,
         ]);
     }
 }

@@ -13,7 +13,7 @@
                     <div class="flex items-start justify-between gap-4">
                         <h2 id="cb-title" class="t-h2">Передзвоніть мені</h2>
                         <button type="button" @click="open = false" class="cursor-pointer p-1" aria-label="Закрити">
-                            <x-icon name="close" class="size-5" />
+                            <x-ui-icon name="close" class="size-5" />
                         </button>
                     </div>
                     <p class="mt-2 text-sm text-text-2">
@@ -38,7 +38,7 @@
             <template x-if="sent">
                 <div class="py-4 text-center">
                     <div class="mx-auto flex size-12 items-center justify-center rounded-full bg-success-bg text-success">
-                        <x-icon name="check" class="size-6" />
+                        <x-ui-icon name="check" class="size-6" />
                     </div>
                     <h2 class="t-h2 mt-3">Заявку прийнято</h2>
                     <p class="mt-2 text-sm text-text-2">{{ session('lead') ?: 'Менеджер набере вас протягом 15 хвилин.' }}</p>

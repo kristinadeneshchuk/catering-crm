@@ -37,7 +37,7 @@
             <aside class="lg:sticky lg:top-[88px] lg:self-start max-lg:contents">
                 <button type="button" @click="open = true"
                         class="flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-[6px] border border-border-1 bg-surface-0 text-sm font-semibold lg:hidden">
-                    <x-icon name="sliders" class="size-4" />
+                    <x-ui-icon name="sliders" class="size-4" />
                     Фільтри
                     <span x-show="appliedChips.length" x-text="appliedChips.length"
                           class="rounded-[2px] bg-brand px-1.5 font-mono text-[11px] text-white"></span>
@@ -57,7 +57,7 @@
                         <div class="mb-4 flex items-center justify-between lg:hidden">
                             <h2 class="t-h2">Фільтри</h2>
                             <button type="button" @click="open = false" class="cursor-pointer p-2" aria-label="Закрити">
-                                <x-icon name="close" class="size-5" />
+                                <x-ui-icon name="close" class="size-5" />
                             </button>
                         </div>
 
@@ -170,7 +170,7 @@
                                class="inline-flex items-center gap-2 rounded-[2px] border border-border-1 bg-surface-0 py-1 pl-3 pr-1.5 text-[13px] text-text-1 no-underline hover:no-underline">
                                 {{ $chip['label'] }}
                                 <span class="inline-flex size-[22px] items-center justify-center rounded-[2px] text-text-3 hover:bg-surface-1" aria-label="Прибрати фільтр">
-                                    <x-icon name="close" class="size-3" />
+                                    <x-ui-icon name="close" class="size-3" />
                                 </span>
                             </a>
                         @endforeach

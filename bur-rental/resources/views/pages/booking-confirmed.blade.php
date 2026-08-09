@@ -6,7 +6,7 @@
     <div class="container-bur max-w-[760px]">
         <div class="mt-8 rounded-[12px] border border-brand bg-brand-tint p-6 text-center">
             <div class="mx-auto flex size-12 items-center justify-center rounded-full bg-brand text-white">
-                <x-icon name="check" class="size-6" />
+                <x-ui-icon name="check" class="size-6" />
             </div>
             <h1 class="t-h1 mt-3">Бронь підтверджено</h1>
             <p class="mt-1 font-mono text-lg font-bold">{{ $booking->number }}</p>
