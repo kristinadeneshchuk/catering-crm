@@ -9,6 +9,7 @@ use App\Models\DeliveryZone;
 use App\Models\Extra;
 use App\Models\Product;
 use App\Services\Availability;
+use App\Services\ManagerAlerts;
 use App\Services\RentalPricing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -128,6 +129,9 @@ class BookingController extends Controller
 
             return $booking;
         });
+
+        // Після коміту транзакції: якщо бронь не записалась, сповіщення не буде.
+        app(ManagerAlerts::class)->bookingCreated($booking->load(['items', 'branch']));
 
         return redirect()
             ->route('booking.show', $booking)

@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    /*
+    | Бот шле менеджеру повідомлення про нові броні й заявки.
+    | Без токена сервіс мовчить — сайт працює і без Telegram.
+    */
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'chat_id' => env('TELEGRAM_MANAGER_CHAT_ID'),
+    ],
+
 ];
