@@ -19,6 +19,8 @@ use Illuminate\Support\Facades\Route;
 | це помилка конкурента, яку ми не повторюємо.
 */
 
+require __DIR__.'/robots.php';
+
 Route::get('/', HomeController::class)->name('home');
 
 Route::get('/catalog', [CatalogController::class, 'index'])->name('catalog.index');

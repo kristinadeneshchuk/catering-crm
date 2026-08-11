@@ -11,16 +11,21 @@ class StaffSeeder extends Seeder
 {
     public function run(): void
     {
-        User::updateOrCreate(['email' => 'admin@bur.local'], [
+        /*
+         | Паролі беруться з оточення. На тестовому й бойовому хості їх
+         | задають у .env — у репозиторії лежить тільки локальна заглушка,
+         | і сид ніколи не «понижує» пароль живого сайту до демонстраційного.
+         */
+        User::updateOrCreate(['email' => env('ADMIN_EMAIL', 'admin@bur.local')], [
             'name' => 'Адміністратор',
-            'password' => Hash::make('password'),
+            'password' => Hash::make(env('ADMIN_PASSWORD', 'password')),
             'role' => 'admin',
         ]);
 
         // Менеджер філії — щоб було на кому перевірити обмеження прав.
-        User::updateOrCreate(['email' => 'manager@bur.local'], [
+        User::updateOrCreate(['email' => env('MANAGER_EMAIL', 'manager@bur.local')], [
             'name' => 'Андрій, Позняки',
-            'password' => Hash::make('password'),
+            'password' => Hash::make(env('MANAGER_PASSWORD', 'password')),
             'role' => 'manager',
             'branch_id' => Branch::where('slug', 'poznyaky')->value('id'),
         ]);

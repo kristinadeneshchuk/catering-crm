@@ -10,6 +10,10 @@
 
     <link rel="canonical" href="{{ url()->current() }}">
 
+    @if (config('app.noindex'))
+        <meta name="robots" content="noindex, nofollow">
+    @endif
+
     {{--
         Шрифти: Oswald (дисплей), Golos Text (текст), JetBrains Mono (числа) —
         усі з повною українською кирилицею. Для продакшену їх варто self-host'ити

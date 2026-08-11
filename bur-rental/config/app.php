@@ -78,6 +78,12 @@ return [
     |
     */
 
+    /*
+    | Тестовий майданчик має бути невидимим для пошуковиків: демо-контент
+    | у видачі — це гірше, ніж відсутність сайту.
+    */
+    'noindex' => env('SITE_NOINDEX', false),
+
     'locale' => env('APP_LOCALE', 'uk'),
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
