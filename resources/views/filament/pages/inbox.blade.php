@@ -174,6 +174,17 @@
             {{-- Стрічка повідомлень --}}
             <div style="flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:0.5rem;">
                 @forelse($messages as $msg)
+                    {{-- Системні помітки (оплата тощо) — клієнту не йдуть, тому окремим виглядом по центру. --}}
+                    @if($msg->sender_type === \App\Models\Message::SENDER_SYSTEM)
+                        <div style="display:flex;justify-content:center;">
+                            <div style="padding:0.3rem 0.7rem;border-radius:999px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);font-size:0.7rem;color:#86efac;">
+                                {{ $msg->text }}
+                                <span style="color:#4b5563;margin-left:0.3rem;">{{ $msg->created_at->format('H:i') }}</span>
+                            </div>
+                        </div>
+                        @continue
+                    @endif
+
                     @php $out = $msg->isOutbound(); @endphp
                     <div style="display:flex;justify-content:{{ $out ? 'flex-end' : 'flex-start' }};">
                         <div style="max-width:70%;padding:0.5rem 0.75rem;border-radius:0.75rem;background:{{ $out ? 'rgba(251,191,36,0.12)' : 'rgba(255,255,255,0.06)' }};border:1px solid {{ $out ? 'rgba(251,191,36,0.25)' : 'rgba(255,255,255,0.08)' }};">
@@ -501,6 +512,18 @@
                                         style="padding:0.25rem 0.5rem;font-size:0.66rem;font-weight:700;border-radius:0.375rem;background:rgba(255,255,255,0.06);color:#9ca3af;border:none;cursor:pointer;">
                                     Підтвердження
                                 </button>
+
+                                {{-- Нагадування лягає на дошку «Продовження (Гарячі)» — там, де менеджер і так їх бачить. --}}
+                                <select onchange="if(this.value){ @this.call('scheduleReminder', {{ $order->id }}, this.value); this.selectedIndex = 0; }"
+                                        style="padding:0.25rem 0.4rem;font-size:0.66rem;font-weight:700;border-radius:0.375rem;background:rgba(167,139,250,0.12);color:#a78bfa;border:none;cursor:pointer;">
+                                    <option value="">Нагадати…</option>
+                                    <option value="1">завтра</option>
+                                    <option value="3">через 3 дні</option>
+                                    <option value="7">через тиждень</option>
+                                    @if($order->end_date)
+                                        <option value="end">за день до кінця</option>
+                                    @endif
+                                </select>
                             </div>
                         </div>
                     @endforeach

@@ -237,6 +237,18 @@ trait BuildsInboxTestSchema
             $t->timestamps();
         });
 
+        Schema::create('order_calls', function (Blueprint $t) {
+            $t->id();
+            $t->unsignedBigInteger('order_id');
+            $t->unsignedBigInteger('client_id')->nullable();
+            $t->string('status')->default('new');
+            $t->text('comment')->nullable();
+            $t->timestamp('next_call_at')->nullable();
+            $t->string('refusal_reason')->nullable();
+            $t->unsignedBigInteger('user_id')->nullable();
+            $t->timestamps();
+        });
+
         Schema::create('menu_plans', function (Blueprint $t) {
             $t->id();
             $t->string('name')->nullable();

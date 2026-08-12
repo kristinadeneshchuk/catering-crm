@@ -424,6 +424,112 @@ class InboxOrderBuilderTest extends TestCase
         $this->assertSame(1, DB::table('clients')->count());
     }
 
+    // --- нагадування і оплата ---------------------------------------------
+
+    public function test_a_reminder_lands_on_the_retention_board(): void
+    {
+        $order = $this->makeOrderFromChat();
+
+        $this->page()->call('scheduleReminder', $order->id, '3');
+
+        $call = DB::table('order_calls')->where('order_id', $order->id)->first();
+
+        $this->assertNotNull($call);
+        $this->assertSame('new', $call->status);
+        $this->assertSame(
+            now()->addDays(3)->toDateString(),
+            \Carbon\Carbon::parse($call->next_call_at)->toDateString(),
+        );
+    }
+
+    public function test_a_reminder_before_the_order_ends_uses_its_end_date(): void
+    {
+        $order = $this->makeOrderFromChat();
+
+        $this->page()->call('scheduleReminder', $order->id, 'end');
+
+        $call = DB::table('order_calls')->where('order_id', $order->id)->first();
+
+        // Замовлення закінчується 2026-08-21 → нагадати за день.
+        $this->assertSame('2026-08-20', \Carbon\Carbon::parse($call->next_call_at)->toDateString());
+    }
+
+    public function test_a_closed_retention_card_is_reopened_by_a_new_reminder(): void
+    {
+        $order = $this->makeOrderFromChat();
+
+        DB::table('order_calls')->insert([
+            'order_id' => $order->id, 'client_id' => $this->clientId, 'status' => 'refused',
+        ]);
+
+        $this->page()->call('scheduleReminder', $order->id, '1');
+
+        // Інакше нагадування осіло б у прихованій колонці й ніхто б його не побачив.
+        $this->assertSame('new', DB::table('order_calls')->where('order_id', $order->id)->value('status'));
+        $this->assertSame(1, DB::table('order_calls')->where('order_id', $order->id)->count());
+    }
+
+    public function test_confirming_payment_records_income_and_marks_the_order_paid(): void
+    {
+        $order = $this->makeOrderFromChat();
+
+        $this->assertFalse((bool) $order->is_paid);
+
+        $this->page()->call('confirmPayment', $order->id);
+
+        $this->assertTrue((bool) $order->refresh()->is_paid);
+        $this->assertDatabaseHas('transactions', [
+            'order_id' => $order->id, 'type' => 'income',
+        ]);
+    }
+
+    public function test_a_payment_leaves_a_note_in_the_conversation(): void
+    {
+        $order = $this->makeOrderFromChat();
+
+        $this->page()->call('confirmPayment', $order->id);
+
+        $note = \App\Models\Message::where('conversation_id', $this->conversationId)
+            ->where('sender_type', \App\Models\Message::SENDER_SYSTEM)
+            ->first();
+
+        $this->assertNotNull($note);
+        $this->assertStringContainsString('Оплату отримано', $note->text);
+        $this->assertStringContainsString((string) $order->id, $note->text);
+    }
+
+    public function test_it_ignores_actions_on_another_clients_order(): void
+    {
+        $strangerId = $this->makeClient(['name' => 'Чужий', 'phone' => '0670000000']);
+
+        $order = Order::create([
+            'client_id' => $strangerId, 'project' => 'afood',
+            'tariff_id' => $this->catalog['tariff_id'], 'calories' => 1600,
+            'duration' => 3, 'start_date' => '2026-08-01', 'end_date' => '2026-08-03',
+            'scale_factor' => 1.0,
+        ]);
+
+        $this->page()->call('scheduleReminder', $order->id, '3');
+        $this->page()->call('confirmPayment', $order->id);
+
+        $this->assertSame(0, DB::table('order_calls')->count());
+        $this->assertFalse((bool) $order->refresh()->is_paid);
+    }
+
+    /** Замовлення цього клієнта, оформлене через картку чату. */
+    protected function makeOrderFromChat(): Order
+    {
+        $this->page()
+            ->call('openBuilder')
+            ->set('builderTariffId', $this->catalog['tariff_id'])
+            ->set('builderCalories', 1600)
+            ->set('builderDays', 5)
+            ->set('builderStart', '2026-08-17')
+            ->call('createOrderFromChat');
+
+        return Order::latest('id')->first();
+    }
+
     /** Відв'язує контакт від клієнта — імітує нового співрозмовника. */
     protected function unmatchContact(): void
     {

@@ -280,11 +280,42 @@ class Inbox extends Page
             'user_id'  => auth()->id(),
         ]);
 
+        // Слід у самій переписці: наступний менеджер має бачити, що оплату
+        // прийняли, не відкриваючи замовлення.
+        $this->noteInConversation("💳 Оплату отримано: ".number_format($amount, 2, '.', ' ')." грн (замовлення #{$order->id})");
+
         \Filament\Notifications\Notification::make()
             ->title('Оплату проведено')
             ->body(number_format($amount, 2, '.', ' ').' грн')
             ->success()
             ->send();
+    }
+
+    /**
+     * Системний запис у діалог. Не outbound: клієнту нічого не йде, це помітка
+     * для менеджерів усередині CRM.
+     */
+    protected function noteInConversation(string $text): void
+    {
+        if (! $this->selectedConversationId) {
+            return;
+        }
+
+        Message::create([
+            'conversation_id' => $this->selectedConversationId,
+            'direction'       => Message::DIRECTION_OUTBOUND,
+            'sender_type'     => Message::SENDER_SYSTEM,
+            'sender_user_id'  => auth()->id(),
+            'type'            => Message::TYPE_SYSTEM,
+            'text'            => $text,
+            'status'          => Message::STATUS_SENT,
+            'sent_at'         => now(),
+        ]);
+
+        Conversation::whereKey($this->selectedConversationId)->update([
+            'last_message_at'      => now(),
+            'last_message_preview' => mb_substr($text, 0, 200),
+        ]);
     }
 
     /** Підтвердження замовлення клієнту — текст у поле вводу, менеджер дожимає сам. */
@@ -310,6 +341,54 @@ class Inbox extends Page
         ];
 
         $this->messageDraft = collect($lines)->filter(fn ($l) => $l !== null)->implode("\n");
+    }
+
+    /**
+     * Нагадування менеджеру. Не заводимо власну сутність: у CRM уже є дошка
+     * «Продовження (Гарячі)» на OrderCall, і нагадування з чату має потрапляти
+     * саме туди — інакше в менеджера буде два різні списки справ.
+     *
+     * @param  string  $when  'end' — за день до кінця замовлення, інакше кількість днів
+     */
+    public function scheduleReminder(int $orderId, string $when = '3'): void
+    {
+        $order = $this->orderOfSelectedClient($orderId);
+
+        if (! $order) {
+            return;
+        }
+
+        $date = $when === 'end' && $order->end_date
+            ? \Carbon\Carbon::parse($order->end_date)->subDay()
+            : now()->addDays(max(1, (int) $when));
+
+        // Дата в минулому — сенсу нема, зсуваємо на завтра.
+        if ($date->isPast()) {
+            $date = now()->addDay();
+        }
+
+        $call = \App\Models\OrderCall::firstOrNew([
+            'order_id'  => $order->id,
+            'client_id' => $order->client_id,
+        ]);
+
+        // Закриті картки (продовжено / відмова) відкриваємо заново — інакше
+        // нагадування осіло б у прихованій колонці й ніхто б його не побачив.
+        $call->fill([
+            'status'       => in_array($call->status, ['success', 'refused'], true) || ! $call->exists
+                ? 'new'
+                : $call->status,
+            'next_call_at' => $date,
+            'comment'      => trim(($call->comment ? $call->comment."\n" : '')
+                .'Нагадування з чату '.now()->format('d.m.Y H:i')),
+            'user_id'      => auth()->id(),
+        ])->save();
+
+        \Filament\Notifications\Notification::make()
+            ->title('Нагадування поставлено')
+            ->body('На '.$date->format('d.m.Y').' — картка у «Продовження (Гарячі)»')
+            ->success()
+            ->send();
     }
 
     /** Захист від дій по чужому замовленню з відкритого чату. */
