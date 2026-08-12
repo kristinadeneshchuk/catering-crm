@@ -23,6 +23,7 @@ class MessengerAccount extends Model
     protected $fillable = [
         'channel',
         'display_name',
+        'project',
         'external_account_id',
         'credentials',
         'status',

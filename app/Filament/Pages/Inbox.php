@@ -35,6 +35,34 @@ class Inbox extends Page
     /** Текст у полі вводу */
     public string $messageDraft = '';
 
+    // === Конструктор замовлення (права колонка) ===
+    //
+    // Ціну ніколи не рахуємо тут — тільки PricingService, той самий, що і в
+    // адмінці замовлень. Інакше менеджер назве клієнту одну суму, а в CRM
+    // з'явиться інша.
+
+    public bool $builderOpen = false;
+
+    /** Slug бренду. Береться з месенджер-акаунта, менеджер може змінити. */
+    public ?string $builderProject = null;
+
+    public ?int $builderTariffId = null;
+
+    public ?int $builderCalories = null;
+
+    public int $builderDays = 5;
+
+    public ?string $builderStart = null;
+
+    /** Разова знижка в гривнях. */
+    public ?float $builderDiscount = null;
+
+    /** 'morning' | 'evening' */
+    public string $builderWindow = 'morning';
+
+    /** Людська причина, чому порахувати не вийшло. */
+    public ?string $builderError = null;
+
     // === Доступ ===
 
     public static function canAccess(): bool
@@ -63,9 +91,172 @@ class Inbox extends Page
     {
         $this->selectedConversationId = $id;
         $this->messageDraft = '';
+        $this->closeBuilder();
 
         // Скидаємо лічильник непрочитаних
         Conversation::whereKey($id)->update(['unread_count' => 0]);
+    }
+
+    // === Конструктор замовлення ===
+
+    public function openBuilder(): void
+    {
+        $conversation = $this->loadSelected();
+        $client       = $conversation?->clientChannel?->client;
+
+        if (! $client) {
+            return;
+        }
+
+        $this->builderOpen     = true;
+        $this->builderError    = null;
+        // Бренд — з акаунта, у який написали. Менеджер його не обирає.
+        $this->builderProject  = $conversation->messengerAccount?->project;
+        $this->builderStart    = now()->addDay()->toDateString();
+        $this->builderCalories = $client->target_kcal ? (int) $client->target_kcal : null;
+        $this->builderTariffId = null;
+        $this->builderDiscount = null;
+        $this->builderDays     = 5;
+    }
+
+    public function closeBuilder(): void
+    {
+        $this->builderOpen  = false;
+        $this->builderError = null;
+    }
+
+    /** Зміна бренду скидає тариф — у кожного бренду свій перелік. */
+    public function updatedBuilderProject(): void
+    {
+        $this->builderTariffId = null;
+    }
+
+    /**
+     * Тарифи бренду, у яких взагалі є ціни. Без цін тариф обрати не можна —
+     * інакше розрахунок впаде вже після вибору.
+     */
+    public function builderTariffs()
+    {
+        if (! $this->builderProject) {
+            return collect();
+        }
+
+        return \App\Models\Tariff::where('project', $this->builderProject)
+            ->where('is_active', true)
+            ->whereHas('prices', fn ($q) => $q->where('price_per_day', '>', 0))
+            ->orderBy('name')
+            ->get(['id', 'name', 'min_days']);
+    }
+
+    /** Калорійності, доступні для обраного тарифу. */
+    public function builderCalorieOptions()
+    {
+        if (! $this->builderTariffId) {
+            return collect();
+        }
+
+        return \App\Models\TariffPrice::query()
+            ->where('tariff_id', $this->builderTariffId)
+            ->where('price_per_day', '>', 0)
+            ->with('calorieRange')
+            ->get()
+            ->filter(fn ($p) => $p->calorieRange !== null)
+            ->sortBy(fn ($p) => $p->calorieRange->min_kcal)
+            ->map(fn ($p) => [
+                'range_id'      => $p->calorie_range_id,
+                'label'         => $p->calorieRange->name,
+                'price_per_day' => (float) $p->price_per_day,
+                // Замовлення зберігає число калорій, а не діапазон, тож
+                // підставляємо верхню межу — саме так це роблять у формі замовлення.
+                'calories'      => (int) $p->calorieRange->max_kcal,
+            ])
+            ->values();
+    }
+
+    /**
+     * Поточний розрахунок або null. Помилку кладемо в builderError, щоб
+     * менеджер бачив причину, а не порожнє місце.
+     */
+    public function builderQuote(): ?array
+    {
+        $this->builderError = null;
+
+        if (! $this->builderProject || ! $this->builderTariffId || ! $this->builderCalories) {
+            return null;
+        }
+
+        $tariff = \App\Models\Tariff::find($this->builderTariffId);
+
+        if (! $tariff) {
+            return null;
+        }
+
+        try {
+            return app(\App\Services\Inbox\PricingService::class)->quote(
+                $tariff,
+                (int) $this->builderCalories,
+                (int) $this->builderDays,
+                ['type' => 'fixed', 'value' => $this->builderDiscount],
+            );
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->builderError = collect($e->errors())->flatten()->first();
+
+            return null;
+        }
+    }
+
+    /**
+     * Створює замовлення тим самим кодом, що і зовнішній API.
+     */
+    public function createOrderFromChat(): void
+    {
+        $conversation = $this->loadSelected();
+        $client       = $conversation?->clientChannel?->client;
+
+        if (! $client || ! $this->builderProject || ! $this->builderTariffId || ! $this->builderCalories) {
+            return;
+        }
+
+        $project = \App\Models\Project::where('slug', $this->builderProject)->first();
+
+        if (! $project) {
+            $this->builderError = 'Бренд не знайдено.';
+
+            return;
+        }
+
+        $creator = app(\App\Services\Inbox\OrderCreator::class);
+
+        try {
+            $tariff = $creator->tariffForProject((int) $this->builderTariffId, $project);
+
+            $result = $creator->create([
+                'client'          => $client,
+                'project'         => $project,
+                'tariff'          => $tariff,
+                'calories'        => (int) $this->builderCalories,
+                'dates'           => $creator->resolveDates($this->builderStart, (int) $this->builderDays),
+                'discount'        => ['type' => 'fixed', 'value' => $this->builderDiscount],
+                'delivery_window' => $this->builderWindow,
+                'discount_reason' => $this->builderDiscount ? 'Знижка з переписки' : null,
+                'source'          => \App\Services\Inbox\WebhookNotifier::SOURCE_INBOX,
+                'comment'         => "Оформлено з чату (діалог #{$conversation->id})",
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->builderError = collect($e->errors())->flatten()->first();
+
+            return;
+        }
+
+        $order = $result['order'];
+
+        $this->closeBuilder();
+
+        \Filament\Notifications\Notification::make()
+            ->title("Замовлення #{$order->id} створено")
+            ->body(number_format((float) $order->final_price, 2, '.', ' ').' грн · '.$order->duration.' дн.')
+            ->success()
+            ->send();
     }
 
     public function setFilter(string $filter): void

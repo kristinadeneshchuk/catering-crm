@@ -46,6 +46,16 @@ class MessengerAccountResource extends Resource
                 ->required()
                 ->maxLength(255),
 
+            // Один акаунт = один бренд. Конструктор замовлення в чаті бере
+            // проєкт звідси, щоб менеджер не обирав його щоразу руками.
+            Forms\Components\Select::make('project')
+                ->label('Бренд')
+                ->options(fn () => \App\Models\Project::where('is_active', true)
+                    ->orderBy('name')->pluck('name', 'slug'))
+                ->helperText('Замовлення з цього чату підуть у цей бренд. У картці бренд можна змінити вручну.')
+                ->searchable()
+                ->preload(),
+
             // ─────────── VIBER ───────────
             Forms\Components\Section::make('Viber')
                 ->visible(fn (Get $get) => $get('channel') === MessengerAccount::CHANNEL_VIBER)

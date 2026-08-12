@@ -281,6 +281,118 @@
                 @endif
             </div>
 
+            {{-- ───────── Конструктор замовлення ───────── --}}
+            @if($client)
+                @php
+                    $quote    = $this->builderOpen ? $this->builderQuote() : null;
+                    $tariffs  = $this->builderOpen ? $this->builderTariffs() : collect();
+                    $calories = $this->builderOpen ? $this->builderCalorieOptions() : collect();
+                @endphp
+
+                <div style="padding:0.85rem 1rem;border-bottom:1px solid rgba(255,255,255,0.06);">
+                    @if(! $this->builderOpen)
+                        <button type="button" wire:click="openBuilder"
+                                style="width:100%;padding:0.5rem;font-size:0.75rem;font-weight:700;border-radius:0.5rem;background:#fbbf24;color:#1f2937;border:none;cursor:pointer;">
+                            + Оформити замовлення
+                        </button>
+                    @else
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
+                            <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;font-weight:700;">Нове замовлення</div>
+                            <button type="button" wire:click="closeBuilder"
+                                    style="background:none;border:none;color:#6b7280;cursor:pointer;font-size:0.9rem;line-height:1;">×</button>
+                        </div>
+
+                        {{-- Бренд береться з акаунта, у який написали. Міняти — як виняток. --}}
+                        <label style="display:block;font-size:0.65rem;color:#6b7280;margin-bottom:0.15rem;">Бренд</label>
+                        <select wire:model.live="builderProject" style="width:100%;margin-bottom:0.5rem;padding:0.35rem;font-size:0.72rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+                            <option value="">— оберіть —</option>
+                            @foreach(\App\Models\Project::where('is_active', true)->orderBy('name')->get() as $p)
+                                <option value="{{ $p->slug }}">{{ $p->name }}</option>
+                            @endforeach
+                        </select>
+
+                        <label style="display:block;font-size:0.65rem;color:#6b7280;margin-bottom:0.15rem;">Тариф</label>
+                        <select wire:model.live="builderTariffId" @disabled(! $this->builderProject)
+                                style="width:100%;margin-bottom:0.5rem;padding:0.35rem;font-size:0.72rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+                            <option value="">— оберіть —</option>
+                            @foreach($tariffs as $t)
+                                <option value="{{ $t->id }}">{{ $t->name }}@if($t->min_days) (від {{ $t->min_days }} дн.)@endif</option>
+                            @endforeach
+                        </select>
+
+                        <label style="display:block;font-size:0.65rem;color:#6b7280;margin-bottom:0.15rem;">Калорійність</label>
+                        <select wire:model.live="builderCalories" @disabled(! $this->builderTariffId)
+                                style="width:100%;margin-bottom:0.5rem;padding:0.35rem;font-size:0.72rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+                            <option value="">— оберіть —</option>
+                            @foreach($calories as $c)
+                                <option value="{{ $c['calories'] }}">{{ $c['label'] }} — {{ number_format($c['price_per_day'], 0, '.', ' ') }} ₴/день</option>
+                            @endforeach
+                        </select>
+
+                        <div style="display:flex;gap:0.4rem;margin-bottom:0.5rem;">
+                            <div style="flex:1;">
+                                <label style="display:block;font-size:0.65rem;color:#6b7280;margin-bottom:0.15rem;">Днів</label>
+                                <input type="number" min="1" wire:model.live.debounce.400ms="builderDays"
+                                       style="width:100%;padding:0.35rem;font-size:0.72rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+                            </div>
+                            <div style="flex:1.4;">
+                                <label style="display:block;font-size:0.65rem;color:#6b7280;margin-bottom:0.15rem;">Старт</label>
+                                <input type="date" wire:model.live="builderStart"
+                                       style="width:100%;padding:0.35rem;font-size:0.72rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+                            </div>
+                        </div>
+
+                        <div style="display:flex;gap:0.4rem;margin-bottom:0.5rem;">
+                            <div style="flex:1;">
+                                <label style="display:block;font-size:0.65rem;color:#6b7280;margin-bottom:0.15rem;">Знижка, ₴</label>
+                                <input type="number" min="0" step="1" wire:model.live.debounce.400ms="builderDiscount"
+                                       style="width:100%;padding:0.35rem;font-size:0.72rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+                            </div>
+                            <div style="flex:1;">
+                                <label style="display:block;font-size:0.65rem;color:#6b7280;margin-bottom:0.15rem;">Доставка</label>
+                                <select wire:model.live="builderWindow"
+                                        style="width:100%;padding:0.35rem;font-size:0.72rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+                                    <option value="morning">Ранок</option>
+                                    <option value="evening">Вечір</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {{-- Суму рахує CRM, не ця сторінка. --}}
+                        @if($quote)
+                            <div style="padding:0.6rem;border-radius:0.5rem;background:rgba(74,222,128,0.07);border:1px solid rgba(74,222,128,0.2);margin-bottom:0.5rem;">
+                                <div style="font-size:0.68rem;color:#9ca3af;">{{ $quote['calorie_range']['name'] }}</div>
+                                <div style="font-size:0.72rem;color:#9ca3af;margin-top:0.25rem;">
+                                    {{ number_format($quote['price_per_day'], 0, '.', ' ') }} ₴ × {{ $quote['days'] }} дн. =
+                                    {{ number_format($quote['subtotal'], 2, '.', ' ') }} ₴
+                                </div>
+                                @if($quote['discount'] > 0)
+                                    <div style="font-size:0.72rem;color:#fbbf24;margin-top:0.15rem;">
+                                        Знижка: −{{ number_format($quote['discount'], 2, '.', ' ') }} ₴
+                                    </div>
+                                @endif
+                                <div style="font-size:0.95rem;font-weight:700;color:#4ade80;margin-top:0.3rem;">
+                                    До сплати: {{ number_format($quote['total'], 2, '.', ' ') }} ₴
+                                </div>
+                            </div>
+
+                            <button type="button" wire:click="createOrderFromChat" wire:loading.attr="disabled"
+                                    style="width:100%;padding:0.5rem;font-size:0.75rem;font-weight:700;border-radius:0.5rem;background:#4ade80;color:#052e16;border:none;cursor:pointer;">
+                                Створити замовлення
+                            </button>
+                        @elseif($this->builderError)
+                            <div style="padding:0.5rem 0.6rem;border-radius:0.375rem;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);font-size:0.7rem;color:#fca5a5;">
+                                {{ $this->builderError }}
+                            </div>
+                        @else
+                            <div style="font-size:0.7rem;color:#6b7280;text-align:center;padding:0.4rem;">
+                                Оберіть тариф і калорійність
+                            </div>
+                        @endif
+                    @endif
+                </div>
+            @endif
+
             @if($lastOrder)
                 <div style="padding:0.85rem 1rem;border-bottom:1px solid rgba(255,255,255,0.06);">
                     <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;font-weight:700;margin-bottom:0.45rem;">Поточне замовлення</div>

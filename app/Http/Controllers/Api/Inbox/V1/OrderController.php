@@ -4,33 +4,23 @@ namespace App\Http\Controllers\Api\Inbox\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
-use App\Models\Order;
-use App\Models\OrderDay;
 use App\Models\Project;
-use App\Models\Tariff;
+use App\Services\Inbox\OrderCreator;
 use App\Services\Inbox\PricingService;
 use App\Services\Inbox\WebhookNotifier;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 /**
- * Створення замовлення з Telegram Inbox.
+ * Створення замовлення з зовнішньої системи листування.
  *
- * Суму рахуємо наново тим самим PricingService, що і /quotes — quote ніде не
- * зберігається, тож єдина гарантія однакової ціни це однакова формула.
+ * Уся робота — в OrderCreator, спільному з карткою замовлення в чатах CRM.
+ * Сума рахується наново тим самим PricingService, що і /quotes: quote ніде не
+ * зберігається, тож єдина гарантія однакової ціни — однакова формула.
  */
 class OrderController extends Controller
 {
-    /** Ранкова / вечірня доставка. У CRM це schedule_type, а не окреме поле. */
-    protected const WINDOWS = [
-        'morning' => 'every_day_morning',
-        'evening' => 'every_day_evening',
-    ];
-
-    public function store(Request $request, PricingService $pricing): JsonResponse
+    public function store(Request $request, OrderCreator $creator, PricingService $pricing): JsonResponse
     {
         $data = $request->validate([
             'project_id'               => ['required', 'integer', 'exists:projects,id'],
@@ -60,47 +50,28 @@ class OrderController extends Controller
 
         $project = Project::findOrFail($data['project_id']);
         $client  = Client::findOrFail($data['client_id']);
-        $tariff  = $this->tariffForProject($data['tariff_id'], $project);
+        $tariff  = $creator->tariffForProject($data['tariff_id'], $project);
 
-        $dates = $this->deliveryDates($data);
-        $discount = $pricing->normalizeDiscount($data['discount'] ?? null);
+        $result = $creator->create([
+            'client'          => $client,
+            'project'         => $project,
+            'tariff'          => $tariff,
+            'calories'        => (int) $data['calories'],
+            'dates'           => $creator->resolveDates(
+                $data['start_date'],
+                (int) $data['days'],
+                $data['delivery_days'] ?? null,
+            ),
+            'discount'        => $pricing->normalizeDiscount($data['discount'] ?? null),
+            'delivery_window' => $data['delivery_window'] ?? null,
+            'delivery_time'   => $data['delivery_time'] ?? null,
+            'discount_reason' => $data['discount_reason'] ?? null,
+            'source'          => WebhookNotifier::SOURCE_INBOX,
+            'comment'         => $this->buildComment($data),
+            'address'         => $data['address'] ?? [],
+        ]);
 
-        // Рахуємо ДО створення: якщо ціни нема, замовлення взагалі не має з'явитись.
-        $quote = $pricing->quote($tariff, (int) $data['calories'], count($dates), $discount);
-
-        $order = DB::transaction(function () use ($data, $client, $project, $tariff, $dates, $discount) {
-            $order = Order::create([
-                'client_id'       => $client->id,
-                'project'         => $project->slug,
-                'tariff_id'       => $tariff->id,
-                'calories'        => (int) $data['calories'],
-                'duration'        => count($dates),
-                'start_date'      => $dates[0],
-                'end_date'        => end($dates),
-                'scale_factor'    => 1.0,
-                'schedule_type'   => self::WINDOWS[$data['delivery_window'] ?? 'morning'],
-                'delivery_time'   => $data['delivery_time'] ?? null,
-                'discount_type'   => $discount['type'],
-                'discount_value'  => $discount['value'],
-                'discount_reason' => $data['discount_reason'] ?? null,
-                'source'          => WebhookNotifier::SOURCE_INBOX,
-                'comment'         => $this->buildComment($data),
-            ]);
-
-            // Дні створюємо так само, як CreateOrder::afterCreate — без них
-            // замовлення не потрапляє ні у виробництво, ні в логістику.
-            $dayAddress = $this->dayAddress($data['address'] ?? []);
-            foreach ($dates as $date) {
-                OrderDay::firstOrCreate(
-                    ['order_id' => $order->id, 'date' => $date],
-                    $dayAddress,
-                );
-            }
-
-            $order->refresh()->recomputeStatus();
-
-            return $order->refresh();
-        });
+        $order = $result['order'];
 
         return response()->json([
             'order' => [
@@ -113,100 +84,20 @@ class OrderController extends Controller
                 'client_balance' => (float) $client->refresh()->balance,
                 'calories'       => (int) $order->calories,
                 'days'           => (int) $order->duration,
-                'start_date'     => $dates[0],
-                'end_date'       => end($dates),
+                'start_date'     => $order->start_date?->toDateString(),
+                'end_date'       => $order->end_date?->toDateString(),
                 'price_per_day'  => (float) $order->price_per_day,
                 'subtotal'       => (float) $order->total_price,
                 'discount'       => (float) $order->discount_amount,
                 'total'          => (float) ($order->final_price ?? $order->total_price),
-                'calorie_range'  => $quote['calorie_range'],
+                'calorie_range'  => $result['quote']['calorie_range'],
             ],
         ], 201);
     }
 
     /**
-     * Дати доставки: або явний список від Inbox («рвані» дні), або підряд від
-     * start_date. Дублікати прибираємо, бо days має дорівнювати реальній
-     * кількості днів — інакше сума розійдеться з кількістю OrderDay.
-     *
-     * @return array<int, string>
-     */
-    protected function deliveryDates(array $data): array
-    {
-        if (! empty($data['delivery_days'])) {
-            $dates = collect($data['delivery_days'])
-                ->map(fn ($d) => Carbon::parse($d)->toDateString())
-                ->unique()
-                ->sort()
-                ->values()
-                ->all();
-
-            if ($dates === []) {
-                throw ValidationException::withMessages([
-                    'delivery_days' => 'Список днів доставки порожній.',
-                ]);
-            }
-
-            return $dates;
-        }
-
-        $start = Carbon::parse($data['start_date']);
-
-        return collect(range(0, (int) $data['days'] - 1))
-            ->map(fn (int $i) => $start->copy()->addDays($i)->toDateString())
-            ->all();
-    }
-
-    protected function tariffForProject(int $tariffId, Project $project): Tariff
-    {
-        $tariff = Tariff::where('id', $tariffId)->where('is_active', true)->first();
-
-        if (! $tariff) {
-            throw ValidationException::withMessages([
-                'tariff_id' => 'Тариф не знайдено або він неактивний.',
-            ]);
-        }
-
-        if ($tariff->project !== $project->slug) {
-            throw ValidationException::withMessages([
-                'tariff_id' => "Тариф «{$tariff->name}» не належить бренду «{$project->name}».",
-            ]);
-        }
-
-        return $tariff;
-    }
-
-    /**
-     * Адреса на день. Якщо Inbox прислав адресу — ставимо її на кожен день
-     * замовлення, щоб курʼєр не залежав від того, яка адреса в клієнта дефолтна.
-     */
-    protected function dayAddress(array $address): array
-    {
-        if (empty($address['address'])) {
-            return [];
-        }
-
-        $lines = [];
-        if (! empty($address['intercom'])) {
-            $lines[] = 'Домофон: '.$address['intercom'];
-        }
-        $handoff = $address['handoff'] ?? $address['delivery_comment'] ?? null;
-        if (! empty($handoff)) {
-            $lines[] = 'Передача: '.$handoff;
-        }
-
-        return array_filter([
-            'address'           => $address['address'],
-            'address_entrance'  => $address['entrance'] ?? null,
-            'address_apartment' => $address['apartment'] ?? null,
-            'address_floor'     => $address['floor'] ?? null,
-            'delivery_comment'  => $lines ? implode("\n", $lines) : null,
-        ], fn ($v) => $v !== null && $v !== '');
-    }
-
-    /**
-     * Слід джерела в коментарі — щоб у CRM було видно, що замовлення прийшло з
-     * Telegram, і можна було знайти діалог.
+     * Слід джерела в коментарі — щоб у CRM було видно, звідки замовлення, і
+     * можна було знайти діалог.
      */
     protected function buildComment(array $data): ?string
     {
