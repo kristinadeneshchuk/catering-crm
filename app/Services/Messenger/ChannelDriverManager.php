@@ -4,6 +4,7 @@ namespace App\Services\Messenger;
 
 use App\Models\MessengerAccount;
 use App\Services\Messenger\Instagram\InstagramChannelDriver;
+use App\Services\Messenger\Telegram\TelegramChannelDriver;
 use App\Services\Messenger\Viber\ViberChannelDriver;
 use InvalidArgumentException;
 
@@ -22,7 +23,7 @@ class ChannelDriverManager
         return match ($channel) {
             MessengerAccount::CHANNEL_VIBER     => app(ViberChannelDriver::class),
             MessengerAccount::CHANNEL_INSTAGRAM => app(InstagramChannelDriver::class),
-            // CHANNEL_TELEGRAM додається у наступній фазі (MadelineProto)
+            MessengerAccount::CHANNEL_TELEGRAM  => app(TelegramChannelDriver::class),
             default => throw new InvalidArgumentException("Драйвер для каналу '{$channel}' ще не реалізований"),
         };
     }

@@ -11,6 +11,7 @@ use App\Http\Controllers\PackagingAssemblyController;
 use App\Http\Controllers\ClientMenuController;
 use App\Http\Controllers\InstagramOAuthController;
 use App\Http\Controllers\Webhooks\InstagramWebhookController;
+use App\Http\Controllers\Webhooks\TelegramWebhookController;
 use App\Http\Controllers\Webhooks\ViberWebhookController;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\LogisticsExport;
@@ -45,6 +46,10 @@ Route::post('/webhooks/viber/{account}', [ViberWebhookController::class, 'handle
 
 Route::get('/webhooks/instagram',  [InstagramWebhookController::class, 'verify'])->name('webhooks.instagram.verify');
 Route::post('/webhooks/instagram', [InstagramWebhookController::class, 'handle'])->name('webhooks.instagram');
+
+// Telegram Business: підпису тіла немає, автентичність — по secret_token у заголовку.
+Route::post('/webhooks/telegram/{account}', [TelegramWebhookController::class, 'handle'])
+    ->name('webhooks.telegram');
 
 // OAuth для Instagram (через Facebook Login).
 // start — потребує авторизованого менеджера. callback — редирект з FB, без auth-middleware.

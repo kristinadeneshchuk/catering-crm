@@ -27,9 +27,19 @@ class InboundMessageHandler
     ) {
     }
 
-    public function handle(MessengerAccount $account, InboundMessageData $inbound): ?Message
-    {
-        return DB::transaction(function () use ($account, $inbound) {
+    /**
+     * @param  string  $direction  Зазвичай inbound. Outbound потрібен для Telegram
+     *                             Business: менеджер відповідає прямо з телефону, і
+     *                             ця відповідь теж прилітає вебхуком — без неї історія
+     *                             в CRM була б однобокою, з самими лише питаннями клієнта.
+     */
+    public function handle(
+        MessengerAccount $account,
+        InboundMessageData $inbound,
+        string $direction = Message::DIRECTION_INBOUND,
+    ): ?Message {
+        return DB::transaction(function () use ($account, $inbound, $direction) {
+            $isInbound = $direction === Message::DIRECTION_INBOUND;
             // Дедуплікація: якщо повідомлення з таким external ID вже є — повертаємо існуюче
             if ($inbound->externalMessageId) {
                 $existing = Message::where('external_message_id', $inbound->externalMessageId)
@@ -71,16 +81,16 @@ class InboundMessageHandler
 
             $message = Message::create([
                 'conversation_id'      => $conversation->id,
-                'direction'            => Message::DIRECTION_INBOUND,
-                'sender_type'          => Message::SENDER_CLIENT,
+                'direction'            => $direction,
+                'sender_type'          => $isInbound ? Message::SENDER_CLIENT : Message::SENDER_USER,
                 'type'                 => $inbound->type,
                 'text'                 => $inbound->text,
                 'external_message_id'  => $inbound->externalMessageId,
                 'reply_to_message_id'  => $replyToId,
-                'status'               => Message::STATUS_DELIVERED,
+                'status'               => $isInbound ? Message::STATUS_DELIVERED : Message::STATUS_SENT,
                 'raw_payload'          => $inbound->rawPayload,
                 'sent_at'              => $inbound->sentAt,
-                'delivered_at'         => now(),
+                'delivered_at'         => $isInbound ? now() : null,
             ]);
 
             foreach ($inbound->attachments as $att) {
@@ -99,7 +109,8 @@ class InboundMessageHandler
             $conversation->update([
                 'last_message_at'      => $message->created_at,
                 'last_message_preview' => $preview,
-                'unread_count'         => DB::raw('unread_count + 1'),
+                // Власну відповідь менеджера непрочитаною не рахуємо.
+                'unread_count'         => $isInbound ? DB::raw('unread_count + 1') : $conversation->unread_count,
             ]);
 
             broadcast(new InboundMessageReceived($conversation->id))->toOthers();

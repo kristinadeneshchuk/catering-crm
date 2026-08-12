@@ -75,13 +75,22 @@ class MessengerAccountResource extends Resource
             Forms\Components\Section::make('Telegram')
                 ->visible(fn (Get $get) => $get('channel') === MessengerAccount::CHANNEL_TELEGRAM)
                 ->schema([
-                    Forms\Components\TextInput::make('external_account_id')
-                        ->label('Номер телефону')
-                        ->placeholder('+380XXXXXXXXX')
-                        ->tel(),
+                    Forms\Components\TextInput::make('credentials.bot_token')
+                        ->label('Токен бота з @BotFather')
+                        ->placeholder('7123456789:AAF...')
+                        ->helperText('Створи бота в @BotFather, встав сюди токен і збережи. Далі — кнопка «Підключити».')
+                        ->password()
+                        ->revealable(),
                     Forms\Components\Placeholder::make('telegram_help')
                         ->label('')
-                        ->content('Telegram-інтеграція через MadelineProto — буде підключена в наступній фазі. Поки можна тільки зберегти акаунт як заглушку.'),
+                        ->content(new \Illuminate\Support\HtmlString(
+                            '<b>Як під\'єднати бізнес-акаунт бренду:</b><br>'
+                            .'1. Збережи акаунт із токеном і натисни «Підключити» — CRM зареєструє webhook.<br>'
+                            .'2. У Telegram того номера, на який пишуть клієнти: <b>Налаштування → Telegram Business → Чат-боти</b>.<br>'
+                            .'3. Додай туди свого бота і дозволь йому відповідати.<br>'
+                            .'4. Акаунт у CRM стане активним сам — щойно Telegram підтвердить підключення.<br><br>'
+                            .'<span style="opacity:.75">Потрібен Telegram Premium на бізнес-акаунті. Клієнти пишуть як завжди — на живий акаунт, не боту.</span>'
+                        )),
                 ])
                 ->columnSpanFull(),
 
@@ -185,22 +194,35 @@ class MessengerAccountResource extends Resource
                     ]),
             ])
             ->actions([
-                // ─── Універсальна «Підключити» (для Viber) ───
+                // ─── Універсальна «Підключити» (Viber і Telegram) ───
                 Tables\Actions\Action::make('connect')
                     ->label('Підключити')
                     ->icon('heroicon-o-bolt')
                     ->color('success')
-                    ->visible(fn (MessengerAccount $record) => $record->channel === MessengerAccount::CHANNEL_VIBER)
+                    ->visible(fn (MessengerAccount $record) => in_array($record->channel, [
+                        MessengerAccount::CHANNEL_VIBER,
+                        MessengerAccount::CHANNEL_TELEGRAM,
+                    ], true))
                     ->requiresConfirmation()
-                    ->modalHeading('Підключити Viber-акаунт')
-                    ->modalDescription('CRM перевірить токен у Viber API і зареєструє webhook на цей сервер.')
+                    ->modalHeading(fn (MessengerAccount $record) => $record->channel === MessengerAccount::CHANNEL_TELEGRAM
+                        ? 'Підключити Telegram-бота'
+                        : 'Підключити Viber-акаунт')
+                    ->modalDescription(fn (MessengerAccount $record) => $record->channel === MessengerAccount::CHANNEL_TELEGRAM
+                        ? 'CRM перевірить токен і зареєструє webhook. Після цього додай бота у Telegram → Налаштування → Telegram Business → Чат-боти.'
+                        : 'CRM перевірить токен у Viber API і зареєструє webhook на цей сервер.')
                     ->action(function (MessengerAccount $record, ChannelDriverManager $drivers) {
                         try {
                             $drivers->for($record)->connect($record);
 
+                            $record->refresh();
+
                             Notification::make()
-                                ->title('Підключено')
-                                ->body('Webhook зареєстровано, акаунт активний.')
+                                ->title('Webhook зареєстровано')
+                                // Telegram активується не тут: акаунт стане активним,
+                                // коли власник додасть бота в Telegram Business.
+                                ->body($record->status === MessengerAccount::STATUS_ACTIVE
+                                    ? 'Акаунт активний.'
+                                    : ($record->last_error ?: 'Залишився крок на боці месенджера.'))
                                 ->success()
                                 ->send();
                         } catch (\Throwable $e) {
