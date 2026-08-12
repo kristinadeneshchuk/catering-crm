@@ -38,7 +38,7 @@ class Order extends Model
 
     protected $fillable = [
         'client_id', 'parent_order_id', 'tariff_id', 'project', 'is_paid',
-        'start_date', 'end_date', 'duration', 'status',
+        'start_date', 'end_date', 'duration', 'status', 'source',
         'calories', 'target_protein_g', 'target_fats_g', 'target_carbs_g',
         'scale_factor', 'price_per_day', 'total_price',
         'comment', 'menu_token', 'schedule_type', 'menu_type', 'menu_plan_id', 'delivery_time',

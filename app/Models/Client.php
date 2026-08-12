@@ -182,22 +182,36 @@ class Client extends Authenticatable
             $due = (float) $order->final_price;
 
             if ($due <= 0) {
-                if (!$order->is_paid) $order->updateQuietly(['is_paid' => true]);
+                if (!$order->is_paid) $this->setOrderPaid($order, true);
                 continue;
             }
 
             if ($totalWallet >= $due) {
                 if (!$order->is_paid) {
-                    $order->updateQuietly(['is_paid' => true]);
+                    $this->setOrderPaid($order, true);
                 }
                 $totalWallet -= $due;
             } else {
                 if ($order->is_paid) {
-                    $order->updateQuietly(['is_paid' => false]);
+                    $this->setOrderPaid($order, false);
                 }
                 $totalWallet -= $due;
             }
         }
+    }
+
+    /**
+     * Єдина точка зміни is_paid — звідси ж повідомляємо зовнішні системи.
+     *
+     * Оновлюємо тихо (як і раніше), щоб не тягнути за собою каскад обсерверів
+     * і не зациклити перерахунок. Саме тому вебхук ставиться в чергу тут, а не
+     * через модельні події: їх updateQuietly не породжує.
+     */
+    private function setOrderPaid(Order $order, bool $paid): void
+    {
+        $order->updateQuietly(['is_paid' => $paid]);
+
+        app(\App\Services\Inbox\WebhookNotifier::class)->paymentStatusChanged($order, $paid);
     }
 
     public function calls()

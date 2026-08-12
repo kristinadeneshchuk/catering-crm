@@ -9,6 +9,7 @@ use App\Models\OrderDay;
 use App\Models\Project;
 use App\Models\Tariff;
 use App\Services\Inbox\PricingService;
+use App\Services\Inbox\WebhookNotifier;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -82,6 +83,7 @@ class OrderController extends Controller
                 'discount_type'   => $discount['type'],
                 'discount_value'  => $discount['value'],
                 'discount_reason' => $data['discount_reason'] ?? null,
+                'source'          => WebhookNotifier::SOURCE_INBOX,
                 'comment'         => $this->buildComment($data),
             ]);
 

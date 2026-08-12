@@ -76,6 +76,11 @@ return [
     // вручну: php -r "echo bin2hex(random_bytes(32));"
     'inbox' => [
         'token' => env('INBOX_API_TOKEN'),
+
+        // Куди CRM стукає у зворотний бік — про оплату замовлення.
+        // Порожньо = вебхуки вимкнені (нічого не ставиться в чергу).
+        'webhook_url'    => env('INBOX_WEBHOOK_URL'),
+        'webhook_secret' => env('INBOX_WEBHOOK_SECRET'),
     ],
 
     // Viber Public Account / Bot API.

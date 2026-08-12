@@ -138,6 +138,7 @@ trait BuildsInboxTestSchema
             $t->decimal('final_price', 10, 2)->default(0);
             $t->boolean('is_paid')->default(false);
             $t->string('status')->nullable();
+            $t->string('source', 32)->nullable();
             $t->string('schedule_type')->nullable();
             $t->string('menu_type')->default('cyclic');
             $t->unsignedBigInteger('menu_plan_id')->nullable();
