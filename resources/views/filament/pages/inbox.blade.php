@@ -479,10 +479,29 @@
                                 {{ number_format((float) ($order->final_price ?? $order->total_price), 2, '.', ' ') }} грн
                             </div>
 
-                            <button type="button" wire:click="repeatOrder({{ $order->id }})"
-                                    style="margin-top:0.35rem;padding:0.25rem 0.55rem;font-size:0.66rem;font-weight:700;border-radius:0.375rem;background:rgba(251,191,36,0.12);color:#fbbf24;border:none;cursor:pointer;">
-                                Повторити
-                            </button>
+                            <div style="display:flex;flex-wrap:wrap;gap:0.25rem;margin-top:0.35rem;">
+                                <button type="button" wire:click="repeatOrder({{ $order->id }})"
+                                        style="padding:0.25rem 0.5rem;font-size:0.66rem;font-weight:700;border-radius:0.375rem;background:rgba(251,191,36,0.12);color:#fbbf24;border:none;cursor:pointer;">
+                                    Повторити
+                                </button>
+
+                                @if(! $order->is_paid)
+                                    <button type="button" wire:click="sendInvoice({{ $order->id }})" wire:loading.attr="disabled"
+                                            style="padding:0.25rem 0.5rem;font-size:0.66rem;font-weight:700;border-radius:0.375rem;background:rgba(56,189,248,0.12);color:#38bdf8;border:none;cursor:pointer;">
+                                        Рахунок
+                                    </button>
+                                    <button type="button" wire:click="confirmPayment({{ $order->id }})"
+                                            wire:confirm="Провести оплату замовлення #{{ $order->id }}?"
+                                            style="padding:0.25rem 0.5rem;font-size:0.66rem;font-weight:700;border-radius:0.375rem;background:rgba(74,222,128,0.12);color:#4ade80;border:none;cursor:pointer;">
+                                        Оплачено
+                                    </button>
+                                @endif
+
+                                <button type="button" wire:click="draftOrderConfirmation({{ $order->id }})"
+                                        style="padding:0.25rem 0.5rem;font-size:0.66rem;font-weight:700;border-radius:0.375rem;background:rgba(255,255,255,0.06);color:#9ca3af;border:none;cursor:pointer;">
+                                    Підтвердження
+                                </button>
+                            </div>
                         </div>
                     @endforeach
                 </div>

@@ -26,6 +26,29 @@ trait BuildsInboxTestSchema
             $t->string('logo')->nullable();
             $t->string('color')->nullable();
             $t->boolean('is_active')->default(true);
+            $t->string('recipient_name')->nullable();
+            $t->string('iban')->nullable();
+            $t->string('tax_id')->nullable();
+            $t->string('bank_name')->nullable();
+            $t->string('mfo')->nullable();
+            $t->string('payment_purpose')->nullable();
+            $t->timestamps();
+        });
+
+        Schema::create('invoices', function (Blueprint $t) {
+            $t->id();
+            $t->string('number')->unique();
+            $t->unsignedInteger('sequence');
+            $t->unsignedBigInteger('order_id');
+            $t->unsignedBigInteger('client_id')->nullable();
+            $t->string('project')->nullable();
+            $t->date('issued_on');
+            $t->decimal('amount', 10, 2);
+            $t->string('purpose', 500)->nullable();
+            $t->text('requisites')->nullable();
+            $t->string('token')->unique();
+            $t->timestamp('sent_at')->nullable();
+            $t->unsignedBigInteger('created_by')->nullable();
             $t->timestamps();
         });
 
@@ -297,9 +320,12 @@ trait BuildsInboxTestSchema
             'slug' => $slug, 'name' => strtoupper($slug), 'is_active' => 1,
         ]);
 
-        $rangeId = DB::table('calorie_ranges')->insertGetId([
-            'name' => 'Normal 1600-1700 ккал', 'min_kcal' => 1499, 'max_kcal' => 1700,
-        ]);
+        // Діапазон спільний для всіх брендів — як у бойовій базі. Створювати
+        // на кожен бренд свій означало б отримати перекриття, якого в CRM нема.
+        $rangeId = DB::table('calorie_ranges')->where('min_kcal', 1499)->value('id')
+            ?: DB::table('calorie_ranges')->insertGetId([
+                'name' => 'Normal 1600-1700 ккал', 'min_kcal' => 1499, 'max_kcal' => 1700,
+            ]);
 
         $tariffId = DB::table('tariffs')->insertGetId([
             'name' => $tariffName, 'project' => $slug, 'is_active' => 1, 'min_days' => $minDays,

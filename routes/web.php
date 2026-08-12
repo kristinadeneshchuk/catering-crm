@@ -10,6 +10,7 @@ use App\Http\Controllers\KitchenPlanController;
 use App\Http\Controllers\PackagingAssemblyController;
 use App\Http\Controllers\ClientMenuController;
 use App\Http\Controllers\InstagramOAuthController;
+use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\Webhooks\InstagramWebhookController;
 use App\Http\Controllers\Webhooks\TelegramWebhookController;
 use App\Http\Controllers\Webhooks\ViberWebhookController;
@@ -46,6 +47,11 @@ Route::post('/webhooks/viber/{account}', [ViberWebhookController::class, 'handle
 
 Route::get('/webhooks/instagram',  [InstagramWebhookController::class, 'verify'])->name('webhooks.instagram.verify');
 Route::post('/webhooks/instagram', [InstagramWebhookController::class, 'handle'])->name('webhooks.instagram');
+
+// Рахунок відкривається без авторизації — посилання пересилають клієнту.
+// Захист — непередбачуваний token, як у меню замовлення і кабінеті клієнта.
+Route::get('/invoices/{token}.pdf', [InvoiceController::class, 'pdf'])->name('invoices.pdf');
+Route::get('/invoices/{token}',     [InvoiceController::class, 'show'])->name('invoices.show');
 
 // Telegram Business: підпису тіла немає, автентичність — по secret_token у заголовку.
 Route::post('/webhooks/telegram/{account}', [TelegramWebhookController::class, 'handle'])

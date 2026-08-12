@@ -70,7 +70,44 @@ class ProjectResource extends Resource
                             ->image()
                             ->directory('projects-logos')
                             ->columnSpanFull(),
-                    ])
+                    ]),
+
+                // У кожного бренду свій ФОП і свій рахунок. У виставлений
+                // рахунок реквізити копіюються знімком, тому зміна тут не
+                // перепише документи, які клієнти вже отримали.
+                Forms\Components\Section::make('Реквізити для рахунків')
+                    ->description('Підставляються у рахунок на оплату. Без отримувача та IBAN рахунок виставити не вийде.')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\TextInput::make('recipient_name')
+                            ->label('Отримувач')
+                            ->placeholder('ФОП Прізвище Ім\'я По батькові')
+                            ->maxLength(255),
+
+                        Forms\Components\TextInput::make('iban')
+                            ->label('IBAN')
+                            ->placeholder('UA00 0000 0000 0000 0000 0000 000')
+                            ->maxLength(64),
+
+                        Forms\Components\TextInput::make('tax_id')
+                            ->label('ЄДРПОУ / ІПН')
+                            ->maxLength(32),
+
+                        Forms\Components\TextInput::make('bank_name')
+                            ->label('Банк')
+                            ->maxLength(255),
+
+                        Forms\Components\TextInput::make('mfo')
+                            ->label('МФО')
+                            ->maxLength(16),
+
+                        Forms\Components\TextInput::make('payment_purpose')
+                            ->label('Шаблон призначення платежу')
+                            ->helperText('Доступні підстановки: :number — номер рахунку, :date — дата, :brand — бренд. Порожньо — стандартний текст.')
+                            ->placeholder('оплата згідно рахунку №:number від :date за доставку здорового харчування')
+                            ->columnSpanFull()
+                            ->maxLength(500),
+                    ]),
             ]);
     }
 

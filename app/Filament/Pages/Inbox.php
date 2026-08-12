@@ -207,6 +207,120 @@ class Inbox extends Page
         $this->builderStart = $next->isPast() ? now()->addDay()->toDateString() : $next->toDateString();
     }
 
+    // === Дії по замовленню: рахунок, реквізити, оплата ===
+
+    /**
+     * Виставити рахунок і надіслати клієнту реквізити з посиланням на PDF.
+     *
+     * Повторне натискання новий номер не створює — InvoiceService віддає
+     * наявний рахунок, щоб у клієнта не було двох різних номерів на одне
+     * замовлення.
+     */
+    public function sendInvoice(int $orderId): void
+    {
+        $order = $this->orderOfSelectedClient($orderId);
+
+        if (! $order) {
+            return;
+        }
+
+        try {
+            $invoice = app(\App\Services\Inbox\InvoiceService::class)->forOrder($order);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Filament\Notifications\Notification::make()
+                ->title('Рахунок не виставлено')
+                ->body(collect($e->errors())->flatten()->first())
+                ->danger()
+                ->persistent()
+                ->send();
+
+            return;
+        }
+
+        $this->messageDraft = $invoice->requisitesText()."\n\nРахунок PDF: ".$invoice->pdfUrl();
+        $this->sendMessage();
+
+        $invoice->update(['sent_at' => now()]);
+
+        \Filament\Notifications\Notification::make()
+            ->title("Рахунок №{$invoice->number} надіслано")
+            ->body(number_format((float) $invoice->amount, 2, '.', ' ').' грн')
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Підтвердити оплату: заводимо надходження на суму замовлення.
+     *
+     * Статус самого замовлення не чіпаємо — is_paid перерахує FIFO-логіка
+     * Client::recalculateOrderPaymentStatus() від транзакції. Ставити прапорець
+     * руками означало б розійтись із балансом клієнта.
+     */
+    public function confirmPayment(int $orderId): void
+    {
+        $order = $this->orderOfSelectedClient($orderId);
+
+        if (! $order || $order->is_paid) {
+            return;
+        }
+
+        $amount = (float) ($order->final_price ?? $order->total_price);
+
+        if ($amount <= 0) {
+            return;
+        }
+
+        \App\Models\Transaction::create([
+            'type'     => 'income',
+            'category' => 'Оплата клієнта',
+            'amount'   => $amount,
+            'date'     => now(),
+            'order_id' => $order->id,
+            'comment'  => "Оплата замовлення #{$order->id} (підтверджено з чату)",
+            'user_id'  => auth()->id(),
+        ]);
+
+        \Filament\Notifications\Notification::make()
+            ->title('Оплату проведено')
+            ->body(number_format($amount, 2, '.', ' ').' грн')
+            ->success()
+            ->send();
+    }
+
+    /** Підтвердження замовлення клієнту — текст у поле вводу, менеджер дожимає сам. */
+    public function draftOrderConfirmation(int $orderId): void
+    {
+        $order = $this->orderOfSelectedClient($orderId);
+
+        if (! $order) {
+            return;
+        }
+
+        $lines = [
+            "Ваше замовлення №{$order->id} підтверджено.",
+            $order->tariff ? "Тариф: {$order->tariff->name}" : null,
+            "Калорійність: {$order->calories} ккал",
+            "Період: ".\Carbon\Carbon::parse($order->start_date)->format('d.m.Y')
+                .' — '.\Carbon\Carbon::parse($order->end_date)->format('d.m.Y')
+                ." ({$order->duration} дн.)",
+            'Доставка: '.($order->schedule_type === 'every_day_evening' ? 'ввечері' : 'вранці'),
+            'Сума: '.number_format((float) ($order->final_price ?? $order->total_price), 2, '.', ' ').' грн',
+            '',
+            'Дякуємо! Гарного дня 🌿',
+        ];
+
+        $this->messageDraft = collect($lines)->filter(fn ($l) => $l !== null)->implode("\n");
+    }
+
+    /** Захист від дій по чужому замовленню з відкритого чату. */
+    protected function orderOfSelectedClient(int $orderId): ?\App\Models\Order
+    {
+        $client = $this->loadSelected()?->clientChannel?->client;
+        $order  = \App\Models\Order::with('tariff')->find($orderId);
+
+        return $client && $order && $order->client_id === $client->id ? $order : null;
+    }
+
     /** @return array<string, string> адреса з полів картки */
     protected function addressPayload(): array
     {

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Inbox\V1\ClientController;
+use App\Http\Controllers\Api\Inbox\V1\InvoiceController;
 use App\Http\Controllers\Api\Inbox\V1\OrderController;
 use App\Http\Controllers\Api\Inbox\V1\ProjectController;
 use App\Http\Controllers\Api\Inbox\V1\QuoteController;
@@ -34,4 +35,5 @@ Route::prefix('inbox/v1')
         Route::get('clients/{client}/orders', [ClientController::class, 'orders']);
 
         Route::post('orders', [OrderController::class, 'store']);
+        Route::post('orders/{order}/invoice', [InvoiceController::class, 'store']);
     });
