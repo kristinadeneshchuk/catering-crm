@@ -63,6 +63,36 @@ class Inbox extends Page
     /** Людська причина, чому порахувати не вийшло. */
     public ?string $builderError = null;
 
+    /** Адреса доставки. Підтягується з клієнта, менеджер може виправити. */
+    public string $builderAddress = '';
+
+    public string $builderEntrance = '';
+
+    public string $builderApartment = '';
+
+    public string $builderFloor = '';
+
+    public string $builderIntercom = '';
+
+    public string $builderHandoff = '';
+
+    // === Матчинг контакту з клієнтом CRM ===
+    //
+    // З переписки людина приходить без жодного ID: є тільки ім'я з месенджера
+    // і телефон, який вона написала текстом. Спершу шукаємо серед наявних —
+    // інакше в базі почнуть плодитись дублі того самого клієнта.
+
+    public bool $matchOpen = false;
+
+    public string $matchPhone = '';
+
+    public string $matchName = '';
+
+    /** Знайдений за телефоном клієнт: ['id' => .., 'name' => .., 'phone' => ..] */
+    public ?array $matchFound = null;
+
+    public bool $matchSearched = false;
+
     // === Доступ ===
 
     public static function canAccess(): bool
@@ -117,6 +147,173 @@ class Inbox extends Page
         $this->builderTariffId = null;
         $this->builderDiscount = null;
         $this->builderDays     = 5;
+
+        $this->fillAddressFrom($client);
+    }
+
+    /**
+     * Адреса за замовчуванням клієнта — щоб менеджер не набирав її щоразу.
+     * Домофон і спосіб передачі лежать у коментарі одним рядком кожен,
+     * тому розбираємо назад по префіксах.
+     */
+    protected function fillAddressFrom(\App\Models\Client $client): void
+    {
+        $address = $client->addresses()->orderByDesc('is_default')->first();
+
+        $this->builderAddress   = $address?->address ?? (string) $client->address;
+        $this->builderEntrance  = $address?->address_entrance ?? (string) $client->address_entrance;
+        $this->builderApartment = $address?->address_apartment ?? (string) $client->address_apartment;
+        $this->builderFloor     = $address?->address_floor ?? (string) $client->address_floor;
+
+        $comment = $address?->delivery_comment ?? (string) $client->delivery_comment;
+        $this->builderIntercom = '';
+        $this->builderHandoff  = '';
+
+        foreach (preg_split('/\r?\n/', (string) $comment) ?: [] as $line) {
+            if (str_starts_with($line, 'Домофон: ')) {
+                $this->builderIntercom = trim(substr($line, strlen('Домофон: ')));
+            } elseif (str_starts_with($line, 'Передача: ')) {
+                $this->builderHandoff = trim(substr($line, strlen('Передача: ')));
+            } elseif ($this->builderHandoff === '' && trim($line) !== '') {
+                $this->builderHandoff = trim($line);
+            }
+        }
+    }
+
+    /**
+     * Повторити замовлення: ті самі тариф, калораж і тривалість, але з новою
+     * датою старту. Найчастіший сценарій у постійних клієнтів — продовження.
+     */
+    public function repeatOrder(int $orderId): void
+    {
+        $conversation = $this->loadSelected();
+        $client       = $conversation?->clientChannel?->client;
+        $order        = \App\Models\Order::find($orderId);
+
+        if (! $client || ! $order || $order->client_id !== $client->id) {
+            return;
+        }
+
+        $this->openBuilder();
+
+        $this->builderProject  = $order->project ?: $this->builderProject;
+        $this->builderTariffId = $order->tariff_id;
+        $this->builderCalories = (int) $order->calories;
+        $this->builderDays     = max(1, (int) $order->duration);
+        $this->builderWindow   = $order->schedule_type === 'every_day_evening' ? 'evening' : 'morning';
+
+        // Продовжуємо з дня після завершення попереднього, якщо воно ще не минуло.
+        $next = $order->end_date ? \Carbon\Carbon::parse($order->end_date)->addDay() : now()->addDay();
+        $this->builderStart = $next->isPast() ? now()->addDay()->toDateString() : $next->toDateString();
+    }
+
+    /** @return array<string, string> адреса з полів картки */
+    protected function addressPayload(): array
+    {
+        return array_filter([
+            'address'   => trim($this->builderAddress),
+            'entrance'  => trim($this->builderEntrance),
+            'apartment' => trim($this->builderApartment),
+            'floor'     => trim($this->builderFloor),
+            'intercom'  => trim($this->builderIntercom),
+            'handoff'   => trim($this->builderHandoff),
+        ], fn ($v) => $v !== '');
+    }
+
+    // === Матчинг контакту ===
+
+    public function openMatch(): void
+    {
+        $conversation = $this->loadSelected();
+
+        $this->matchOpen     = true;
+        $this->matchFound    = null;
+        $this->matchSearched = false;
+        $this->matchPhone    = '';
+        $this->matchName     = (string) ($conversation?->clientChannel?->display_name ?? '');
+    }
+
+    public function closeMatch(): void
+    {
+        $this->matchOpen     = false;
+        $this->matchFound    = null;
+        $this->matchSearched = false;
+    }
+
+    /**
+     * Шукаємо клієнта за телефоном перед тим, як створювати нового.
+     */
+    public function searchClient(): void
+    {
+        $this->matchSearched = true;
+
+        $client = app(\App\Services\Inbox\ClientLinker::class)->findByPhone($this->matchPhone);
+
+        $this->matchFound = $client ? [
+            'id'    => $client->id,
+            'name'  => $client->name,
+            'phone' => $client->phone,
+        ] : null;
+    }
+
+    /** Прив'язати контакт до знайденого клієнта. */
+    public function linkFoundClient(): void
+    {
+        if (! $this->matchFound) {
+            return;
+        }
+
+        $client = \App\Models\Client::find($this->matchFound['id']);
+
+        if ($client) {
+            $this->attachChannelTo($client);
+        }
+    }
+
+    /** Створити нового клієнта і одразу прив'язати контакт. */
+    public function createClientFromChat(): void
+    {
+        $name = trim($this->matchName);
+
+        if ($name === '') {
+            return;
+        }
+
+        $linker = app(\App\Services\Inbox\ClientLinker::class);
+        $conversation = $this->loadSelected();
+
+        $client = $linker->create([
+            'name'              => $name,
+            'phone'             => trim($this->matchPhone) ?: null,
+            'telegram_username' => $conversation?->channel === MessengerAccount::CHANNEL_TELEGRAM
+                ? $conversation?->clientChannel?->username
+                : null,
+        ]);
+
+        $this->attachChannelTo($client);
+    }
+
+    protected function attachChannelTo(\App\Models\Client $client): void
+    {
+        $conversation = $this->loadSelected();
+        $channel      = $conversation?->clientChannel;
+
+        if (! $channel) {
+            return;
+        }
+
+        $channel->update([
+            'client_id' => $client->id,
+            'project'   => $channel->project ?: $conversation->messengerAccount?->project,
+        ]);
+
+        $this->closeMatch();
+
+        \Filament\Notifications\Notification::make()
+            ->title('Контакт прив\'язано')
+            ->body($client->name)
+            ->success()
+            ->send();
     }
 
     public function closeBuilder(): void
@@ -241,7 +438,11 @@ class Inbox extends Page
                 'discount_reason' => $this->builderDiscount ? 'Знижка з переписки' : null,
                 'source'          => \App\Services\Inbox\WebhookNotifier::SOURCE_INBOX,
                 'comment'         => "Оформлено з чату (діалог #{$conversation->id})",
+                'address'         => $this->addressPayload(),
             ]);
+
+            // Адресу з картки зберігаємо і клієнту — наступного разу підставиться сама.
+            app(\App\Services\Inbox\ClientLinker::class)->upsertAddress($client, $this->addressPayload());
         } catch (\Illuminate\Validation\ValidationException $e) {
             $this->builderError = collect($e->errors())->flatten()->first();
 
@@ -405,7 +606,9 @@ class Inbox extends Page
         }
 
         return Conversation::with([
-            'clientChannel.client.orders' => fn ($q) => $q->latest('id')->limit(3),
+            // Історія потрібна не для краси: по ній менеджер бачить улюблений
+            // тариф і калораж, і з неї ж робиться повторне замовлення.
+            'clientChannel.client.orders' => fn ($q) => $q->with('tariff:id,name')->latest('id')->limit(5),
             'messengerAccount',
             'assignedUser',
         ])->find($this->selectedConversationId);

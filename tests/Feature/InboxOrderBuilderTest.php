@@ -270,4 +270,163 @@ class InboxOrderBuilderTest extends TestCase
             ->set('builderProject', 'u_fit')
             ->assertSet('builderTariffId', null);
     }
+
+    // --- адреса ------------------------------------------------------------
+
+    public function test_it_prefills_the_address_from_the_client(): void
+    {
+        DB::table('client_addresses')->insert([
+            'client_id'         => $this->clientId,
+            'address'           => 'вул. Ахматової, 13Б',
+            'address_apartment' => '88',
+            'delivery_comment'  => "Домофон: 258\nПередача: залишити у консьєржа",
+            'is_default'        => true,
+        ]);
+
+        $this->page()
+            ->call('openBuilder')
+            ->assertSet('builderAddress', 'вул. Ахматової, 13Б')
+            ->assertSet('builderApartment', '88')
+            // Домофон і спосіб передачі лежать у коментарі рядками — розбираємо назад.
+            ->assertSet('builderIntercom', '258')
+            ->assertSet('builderHandoff', 'залишити у консьєржа');
+    }
+
+    public function test_the_address_lands_on_every_day_and_is_saved_to_the_client(): void
+    {
+        $this->page()
+            ->call('openBuilder')
+            ->set('builderTariffId', $this->catalog['tariff_id'])
+            ->set('builderCalories', 1600)
+            ->set('builderDays', 2)
+            ->set('builderStart', '2026-08-17')
+            ->set('builderAddress', 'вул. Нова, 5')
+            ->set('builderApartment', '12')
+            ->set('builderIntercom', '777')
+            ->set('builderHandoff', 'подзвонити знизу')
+            ->call('createOrderFromChat');
+
+        $days = OrderDay::where('order_id', Order::first()->id)->get();
+
+        $this->assertCount(2, $days);
+        foreach ($days as $day) {
+            $this->assertSame('вул. Нова, 5', $day->address);
+            $this->assertSame('12', $day->address_apartment);
+            $this->assertStringContainsString('Домофон: 777', $day->delivery_comment);
+        }
+
+        // Наступного разу підставиться сама.
+        $this->assertDatabaseHas('client_addresses', [
+            'client_id' => $this->clientId, 'address' => 'вул. Нова, 5',
+        ]);
+    }
+
+    // --- повтор замовлення -------------------------------------------------
+
+    public function test_repeating_an_order_copies_its_parameters(): void
+    {
+        $component = $this->page()
+            ->call('openBuilder')
+            ->set('builderTariffId', $this->catalog['tariff_id'])
+            ->set('builderCalories', 1600)
+            ->set('builderDays', 7)
+            ->set('builderStart', '2026-08-17')
+            ->set('builderWindow', 'evening')
+            ->call('createOrderFromChat');
+
+        $first = Order::first();
+
+        $component->call('repeatOrder', $first->id)
+            ->assertSet('builderOpen', true)
+            ->assertSet('builderTariffId', $this->catalog['tariff_id'])
+            ->assertSet('builderCalories', 1600)
+            ->assertSet('builderDays', 7)
+            ->assertSet('builderWindow', 'evening')
+            // Продовження починається з дня після завершення попереднього.
+            ->assertSet('builderStart', '2026-08-24');
+    }
+
+    public function test_it_does_not_repeat_an_order_of_another_client(): void
+    {
+        $strangerId = $this->makeClient(['name' => 'Чужий', 'phone' => '0670000000']);
+
+        $order = Order::create([
+            'client_id' => $strangerId, 'project' => 'afood',
+            'tariff_id' => $this->catalog['tariff_id'], 'calories' => 1600,
+            'duration' => 3, 'start_date' => '2026-08-01', 'end_date' => '2026-08-03',
+            'scale_factor' => 1.0,
+        ]);
+
+        $this->page()
+            ->call('repeatOrder', $order->id)
+            ->assertSet('builderOpen', false);
+    }
+
+    // --- матчинг контакту --------------------------------------------------
+
+    public function test_it_finds_an_existing_client_by_phone_before_creating_one(): void
+    {
+        $this->unmatchContact();
+
+        $this->page()
+            ->call('openMatch')
+            ->set('matchPhone', '+38 (095) 553-26-77')
+            ->call('searchClient')
+            ->assertSet('matchFound.id', $this->clientId);
+    }
+
+    public function test_linking_a_found_client_attaches_the_contact(): void
+    {
+        $this->unmatchContact();
+
+        $this->page()
+            ->call('openMatch')
+            ->set('matchPhone', '0955532677')
+            ->call('searchClient')
+            ->call('linkFoundClient')
+            ->assertSet('matchOpen', false);
+
+        $this->assertDatabaseHas('client_channels', [
+            'external_id' => '123', 'client_id' => $this->clientId,
+        ]);
+    }
+
+    public function test_it_creates_a_new_client_when_none_was_found(): void
+    {
+        $this->unmatchContact();
+
+        $this->page()
+            ->call('openMatch')
+            ->set('matchPhone', '0631112233')
+            ->call('searchClient')
+            ->assertSet('matchFound', null)
+            ->set('matchName', 'Новий Клієнт')
+            ->call('createClientFromChat')
+            ->assertSet('matchOpen', false);
+
+        $this->assertDatabaseHas('clients', [
+            'name' => 'Новий Клієнт', 'phone' => '0631112233', 'sales_source' => 'telegram_inbox',
+        ]);
+
+        $created = DB::table('clients')->where('name', 'Новий Клієнт')->value('id');
+        $this->assertDatabaseHas('client_channels', ['external_id' => '123', 'client_id' => $created]);
+    }
+
+    public function test_it_refuses_to_create_a_nameless_client(): void
+    {
+        $this->unmatchContact();
+
+        $this->page()
+            ->call('openMatch')
+            ->set('matchName', '  ')
+            ->call('createClientFromChat');
+
+        $this->assertSame(1, DB::table('clients')->count());
+    }
+
+    /** Відв'язує контакт від клієнта — імітує нового співрозмовника. */
+    protected function unmatchContact(): void
+    {
+        DB::table('client_channels')->where('external_id', '123')->update(['client_id' => null]);
+    }
 }

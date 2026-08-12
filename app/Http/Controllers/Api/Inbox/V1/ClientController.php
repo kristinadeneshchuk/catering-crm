@@ -8,12 +8,18 @@ use App\Models\ClientAddress;
 use App\Models\ClientChannel;
 use App\Models\Order;
 use App\Models\Project;
+use App\Services\Inbox\ClientLinker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 class ClientController extends Controller
 {
+    public function __construct(
+        protected ClientLinker $linker,
+    ) {
+    }
+
     /**
      * Пошук за телефоном або Telegram ID. Порядок як у картці менеджера:
      * спершу канал (він точний), потім телефон.
@@ -184,96 +190,22 @@ class ClientController extends Controller
 
     protected function clientByChannel(string $channel, string $externalId): ?Client
     {
-        return ClientChannel::where('channel', $channel)
-            ->where('external_id', $externalId)
-            ->whereNotNull('client_id')
-            ->first()?->client;
+        return $this->linker->findByChannel($channel, $externalId);
     }
 
-    /**
-     * Телефони в CRM записані як завгодно (+380..., 0..., з дужками і пробілами),
-     * тому порівнюємо тільки цифри і по останніх дев'яти — це національний номер
-     * без коду країни.
-     */
     protected function clientByPhone(string $phone): ?Client
     {
-        $digits = preg_replace('/\D/', '', $phone);
-
-        if (strlen($digits) < 9) {
-            return null;
-        }
-
-        $tail = substr($digits, -9);
-
-        return Client::whereRaw(
-            "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, '+', ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE ?",
-            ['%'.$tail]
-        )->first();
+        return $this->linker->findByPhone($phone);
     }
 
     protected function linkChannel(Client $client, string $channel, string $externalId, array $extra = []): ClientChannel
     {
-        $attributes = array_filter([
-            'client_id' => $client->id,
-            'username'  => $extra['username'] ?? null,
-            'project'   => $extra['project'] ?? null,
-        ], fn ($v) => $v !== null);
-
-        return tap(
-            ClientChannel::firstOrNew(['channel' => $channel, 'external_id' => $externalId]),
-            fn (ClientChannel $c) => $c->fill($attributes)->save()
-        );
+        return $this->linker->linkChannel($client, $channel, $externalId, $extra);
     }
 
-    /**
-     * Адреса клієнта. Домофон і спосіб передачі окремих полів у CRM не мають,
-     * тому складаємо з них структурований коментар — його бачить курʼєр.
-     */
-    protected function upsertAddress(Client $client, array $address): ClientAddress
+    protected function upsertAddress(Client $client, array $address): ?ClientAddress
     {
-        $comment = $this->buildDeliveryComment($address);
-
-        $existing = $client->addresses()
-            ->where('address', $address['address'])
-            ->first();
-
-        $payload = array_filter([
-            'address'           => $address['address'],
-            'address_entrance'  => $address['entrance'] ?? null,
-            'address_apartment' => $address['apartment'] ?? null,
-            'address_floor'     => $address['floor'] ?? null,
-            'delivery_comment'  => $comment,
-        ], fn ($v) => $v !== null && $v !== '');
-
-        if ($existing) {
-            $existing->fill($payload)->save();
-
-            return $existing;
-        }
-
-        return $client->addresses()->create($payload + [
-            'is_default' => $client->addresses()->count() === 0,
-        ]);
-    }
-
-    /**
-     * «Домофон: 258 / Передача: залишити у консьєржа» — рядками, як домовлено
-     * з Inbox: окремих полів під це в CRM нема.
-     */
-    protected function buildDeliveryComment(array $address): ?string
-    {
-        $lines = [];
-
-        if (! empty($address['intercom'])) {
-            $lines[] = 'Домофон: '.$address['intercom'];
-        }
-
-        $handoff = $address['handoff'] ?? $address['delivery_comment'] ?? null;
-        if (! empty($handoff)) {
-            $lines[] = 'Передача: '.$handoff;
-        }
-
-        return $lines ? implode("\n", $lines) : null;
+        return $this->linker->upsertAddress($client, $address);
     }
 
     protected function clientResponse(?Client $client, int $status = 200): JsonResponse

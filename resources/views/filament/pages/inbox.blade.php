@@ -249,7 +249,6 @@
             @php
                 $client    = $selected->clientChannel?->client;
                 $orders    = $client?->orders ?? collect();
-                $lastOrder = $orders->first();
             @endphp
 
             <div style="padding:1rem;border-bottom:1px solid rgba(255,255,255,0.06);">
@@ -275,9 +274,56 @@
                     @if($selected->clientChannel?->username)
                         <div style="font-size:0.72rem;color:#9ca3af;">@{{ $selected->clientChannel->username }}</div>
                     @endif
-                    <div style="margin-top:0.6rem;padding:0.5rem 0.6rem;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:0.375rem;font-size:0.7rem;color:#fca5a5;">
-                        Контакт ще не зматчений з клієнтом CRM
-                    </div>
+                    @if(! $this->matchOpen)
+                        <div style="margin-top:0.6rem;padding:0.5rem 0.6rem;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:0.375rem;font-size:0.7rem;color:#fca5a5;">
+                            Контакт ще не зматчений з клієнтом CRM
+                        </div>
+                        <button type="button" wire:click="openMatch"
+                                style="width:100%;margin-top:0.5rem;padding:0.45rem;font-size:0.72rem;font-weight:700;border-radius:0.5rem;background:#fbbf24;color:#1f2937;border:none;cursor:pointer;">
+                            Знайти або створити клієнта
+                        </button>
+                    @else
+                        {{-- Спершу пошук за телефоном — щоб не плодити дублі. --}}
+                        <div style="margin-top:0.6rem;padding:0.6rem;border-radius:0.5rem;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+                                <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;font-weight:700;">Прив'язати клієнта</div>
+                                <button type="button" wire:click="closeMatch" style="background:none;border:none;color:#6b7280;cursor:pointer;font-size:0.9rem;line-height:1;">×</button>
+                            </div>
+
+                            <label style="display:block;font-size:0.65rem;color:#6b7280;margin-bottom:0.15rem;">Телефон</label>
+                            <div style="display:flex;gap:0.35rem;margin-bottom:0.5rem;">
+                                <input type="tel" wire:model="matchPhone" placeholder="0955532677"
+                                       style="flex:1;padding:0.35rem;font-size:0.72rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+                                <button type="button" wire:click="searchClient"
+                                        style="padding:0.35rem 0.6rem;font-size:0.7rem;font-weight:700;border-radius:0.375rem;background:rgba(255,255,255,0.08);color:#f1f5f9;border:none;cursor:pointer;">
+                                    Шукати
+                                </button>
+                            </div>
+
+                            @if($this->matchFound)
+                                <div style="padding:0.5rem;border-radius:0.375rem;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);margin-bottom:0.5rem;">
+                                    <div style="font-size:0.75rem;color:#f1f5f9;font-weight:600;">{{ $this->matchFound['name'] }}</div>
+                                    <div style="font-size:0.68rem;color:#9ca3af;">{{ $this->matchFound['phone'] }}</div>
+                                    <button type="button" wire:click="linkFoundClient"
+                                            style="width:100%;margin-top:0.4rem;padding:0.4rem;font-size:0.72rem;font-weight:700;border-radius:0.375rem;background:#4ade80;color:#052e16;border:none;cursor:pointer;">
+                                        Це він — прив'язати
+                                    </button>
+                                </div>
+                            @elseif($this->matchSearched)
+                                <div style="font-size:0.68rem;color:#9ca3af;margin-bottom:0.5rem;">
+                                    Такого клієнта в CRM немає. Створити нового:
+                                </div>
+                            @endif
+
+                            <label style="display:block;font-size:0.65rem;color:#6b7280;margin-bottom:0.15rem;">Ім'я</label>
+                            <input type="text" wire:model="matchName"
+                                   style="width:100%;margin-bottom:0.4rem;padding:0.35rem;font-size:0.72rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+                            <button type="button" wire:click="createClientFromChat"
+                                    style="width:100%;padding:0.4rem;font-size:0.72rem;font-weight:700;border-radius:0.375rem;background:rgba(255,255,255,0.08);color:#fbbf24;border:none;cursor:pointer;">
+                                Створити нового клієнта
+                            </button>
+                        </div>
+                    @endif
                 @endif
             </div>
 
@@ -358,6 +404,18 @@
                             </div>
                         </div>
 
+                        <label style="display:block;font-size:0.65rem;color:#6b7280;margin-bottom:0.15rem;">Адреса доставки</label>
+                        <input type="text" wire:model="builderAddress" placeholder="вул. Ахматової, 13Б"
+                               style="width:100%;margin-bottom:0.35rem;padding:0.35rem;font-size:0.72rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+                        <div style="display:flex;gap:0.3rem;margin-bottom:0.35rem;">
+                            <input type="text" wire:model="builderEntrance"  placeholder="Під'їзд" style="flex:1;min-width:0;padding:0.3rem;font-size:0.68rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+                            <input type="text" wire:model="builderApartment" placeholder="Кв."      style="flex:1;min-width:0;padding:0.3rem;font-size:0.68rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+                            <input type="text" wire:model="builderFloor"     placeholder="Поверх"   style="flex:1;min-width:0;padding:0.3rem;font-size:0.68rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+                            <input type="text" wire:model="builderIntercom"  placeholder="Домофон"  style="flex:1;min-width:0;padding:0.3rem;font-size:0.68rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+                        </div>
+                        <input type="text" wire:model="builderHandoff" placeholder="Як передати (напр. залишити у консьєржа)"
+                               style="width:100%;margin-bottom:0.5rem;padding:0.35rem;font-size:0.7rem;border-radius:0.375rem;background:rgba(255,255,255,0.05);color:#f1f5f9;border:1px solid rgba(255,255,255,0.1);">
+
                         {{-- Суму рахує CRM, не ця сторінка. --}}
                         @if($quote)
                             <div style="padding:0.6rem;border-radius:0.5rem;background:rgba(74,222,128,0.07);border:1px solid rgba(74,222,128,0.2);margin-bottom:0.5rem;">
@@ -393,25 +451,40 @@
                 </div>
             @endif
 
-            @if($lastOrder)
+            {{-- Історія: улюблений тариф, останній калораж і кнопка повтору. --}}
+            @if($orders->isNotEmpty())
                 <div style="padding:0.85rem 1rem;border-bottom:1px solid rgba(255,255,255,0.06);">
-                    <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;font-weight:700;margin-bottom:0.45rem;">Поточне замовлення</div>
-                    <div style="font-size:0.82rem;color:#f1f5f9;font-weight:600;">#{{ $lastOrder->id }}</div>
-                    @if($lastOrder->start_date && $lastOrder->end_date)
-                        <div style="font-size:0.72rem;color:#9ca3af;margin-top:0.2rem;">
-                            {{ \Carbon\Carbon::parse($lastOrder->start_date)->format('d.m') }}
-                            —
-                            {{ \Carbon\Carbon::parse($lastOrder->end_date)->format('d.m.Y') }}
+                    <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;font-weight:700;margin-bottom:0.5rem;">
+                        Замовлення ({{ $orders->count() }})
+                    </div>
+
+                    @foreach($orders as $order)
+                        <div style="padding:0.5rem 0;{{ ! $loop->last ? 'border-bottom:1px solid rgba(255,255,255,0.05);' : '' }}">
+                            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:0.4rem;">
+                                <span style="font-size:0.78rem;color:#f1f5f9;font-weight:600;">#{{ $order->id }}</span>
+                                <span style="font-size:0.68rem;color:{{ $order->is_paid ? '#4ade80' : '#f87171' }};">
+                                    {{ $order->is_paid ? 'Оплачено' : 'Не оплачено' }}
+                                </span>
+                            </div>
+
+                            <div style="font-size:0.7rem;color:#9ca3af;margin-top:0.15rem;">
+                                @if($order->start_date && $order->end_date)
+                                    {{ \Carbon\Carbon::parse($order->start_date)->format('d.m') }} — {{ \Carbon\Carbon::parse($order->end_date)->format('d.m.Y') }} ·
+                                @endif
+                                {{ (int) $order->calories }} ккал · {{ (int) $order->duration }} дн.
+                            </div>
+
+                            <div style="font-size:0.7rem;color:#9ca3af;margin-top:0.1rem;">
+                                @if($order->tariff){{ $order->tariff->name }} · @endif
+                                {{ number_format((float) ($order->final_price ?? $order->total_price), 2, '.', ' ') }} грн
+                            </div>
+
+                            <button type="button" wire:click="repeatOrder({{ $order->id }})"
+                                    style="margin-top:0.35rem;padding:0.25rem 0.55rem;font-size:0.66rem;font-weight:700;border-radius:0.375rem;background:rgba(251,191,36,0.12);color:#fbbf24;border:none;cursor:pointer;">
+                                Повторити
+                            </button>
                         </div>
-                    @endif
-                    @if(isset($lastOrder->final_price))
-                        <div style="font-size:0.72rem;color:#9ca3af;margin-top:0.2rem;">
-                            {{ number_format((float)$lastOrder->final_price, 2, '.', ' ') }} грн ·
-                            <span style="color:{{ $lastOrder->is_paid ? '#4ade80' : '#f87171' }};">
-                                {{ $lastOrder->is_paid ? 'Оплачено' : 'Не оплачено' }}
-                            </span>
-                        </div>
-                    @endif
+                    @endforeach
                 </div>
             @endif
 
