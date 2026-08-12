@@ -14,6 +14,7 @@ class ClientChannel extends Model
     protected $fillable = [
         'client_id',
         'channel',
+        'project',
         'external_id',
         'username',
         'display_name',

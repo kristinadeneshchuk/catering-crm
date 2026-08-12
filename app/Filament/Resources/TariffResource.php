@@ -50,6 +50,15 @@ class TariffResource extends Resource
                             ->placeholder('Наприклад: Від 7 днів')
                             ->required(),
 
+                        // Строк досі жив тільки в назві («Від 21 дня»), тож зовнішні
+                        // системи змушені були її парсити. Тепер це окреме поле.
+                        Forms\Components\TextInput::make('min_days')
+                            ->label('Мінімум днів')
+                            ->helperText('Менше цієї кількості замовлення за тарифом не оформити. Порожньо — без обмеження.')
+                            ->numeric()
+                            ->minValue(1)
+                            ->placeholder('без обмеження'),
+
                         Forms\Components\Select::make('default_menu_plan_id')
                             ->label('План меню за замовчуванням')
                             ->helperText('Підставляється у нове замовлення з цим тарифом. Менеджер може змінити вручну.')

@@ -71,6 +71,13 @@ return [
         ],
     ],
 
+    // Telegram Inbox — зовнішня система листування, яка оформлює замовлення
+    // через /api/inbox/v1/*. Токен спільний для обох сторін, генерується
+    // вручну: php -r "echo bin2hex(random_bytes(32));"
+    'inbox' => [
+        'token' => env('INBOX_API_TOKEN'),
+    ],
+
     // Viber Public Account / Bot API.
     // Кожен акаунт має свій auth_token, тому тут конфігу мало — тільки для дефолтного фолбеку.
     'viber' => [
