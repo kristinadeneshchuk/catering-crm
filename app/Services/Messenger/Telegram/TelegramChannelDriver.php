@@ -106,6 +106,8 @@ class TelegramChannelDriver implements ChannelDriverInterface
 
     public function connect(MessengerAccount $account): void
     {
+        $this->assertCrmOwnsTelegram();
+
         $token = $this->token($account);
 
         $me = Http::acceptJson()->timeout(15)->get(self::API_BASE.$token.'/getMe');
@@ -291,6 +293,27 @@ class TelegramChannelDriver implements ChannelDriverInterface
         }
 
         return [Message::TYPE_TEXT, $msg['text'] ?? $caption, []];
+    }
+
+    /**
+     * Чи має право CRM забирати Telegram-бота собі.
+     *
+     * У бота рівно один webhook. Якщо Telegram обробляє зовнішній Inbox, а тут
+     * натиснути «Підключити» — Telegram мовчки перестане слати оновлення в
+     * Inbox, і замовлення почнуть губитись. Помітити це можна лише за скаргами
+     * клієнтів, тому дешевше не дати натиснути.
+     */
+    protected function assertCrmOwnsTelegram(): void
+    {
+        if (config('services.inbox.telegram_owner') === 'crm') {
+            return;
+        }
+
+        throw new RuntimeException(
+            'Telegram обробляє зовнішня система листування (Inbox), а CRM віддає їй дані через API. '
+            .'Підключення бота тут перехопило б у неї вхідні повідомлення. '
+            .'Якщо це свідоме рішення — постав INBOX_TELEGRAM_OWNER=crm у .env.'
+        );
     }
 
     protected function hasConnection(MessengerAccount $account): bool

@@ -29,6 +29,10 @@ class TelegramBusinessTest extends TestCase
     {
         parent::setUp();
 
+        // Ці тести описують роботу Telegram усередині CRM, тому вмикаємо
+        // відповідний режим. За замовчуванням канал за зовнішнім Inbox.
+        config()->set('services.inbox.telegram_owner', 'crm');
+
         $this->buildSchema();
 
         $this->account = MessengerAccount::create([
@@ -275,6 +279,46 @@ class TelegramBusinessTest extends TestCase
         $this->hook($this->clientMessage(), 'wrong')->assertStatus(403);
 
         $this->assertSame(0, Message::count());
+    }
+
+    // --- хто тримає канал --------------------------------------------------
+
+    public function test_crm_refuses_to_hijack_a_bot_owned_by_the_external_inbox(): void
+    {
+        config()->set('services.inbox.telegram_owner', 'inbox');
+        Http::fake();
+
+        $this->expectExceptionMessageMatches('/Inbox/');
+
+        app(TelegramChannelDriver::class)->connect($this->account);
+    }
+
+    public function test_it_does_not_call_telegram_at_all_when_the_channel_is_not_ours(): void
+    {
+        config()->set('services.inbox.telegram_owner', 'inbox');
+        Http::fake();
+
+        try {
+            app(TelegramChannelDriver::class)->connect($this->account);
+        } catch (\RuntimeException) {
+            // очікувано
+        }
+
+        // Жодного запиту: перевірка стоїть до getMe і до setWebhook.
+        Http::assertNothingSent();
+    }
+
+    public function test_incoming_updates_are_ignored_while_the_channel_belongs_to_the_inbox(): void
+    {
+        config()->set('services.inbox.telegram_owner', 'inbox');
+
+        $this->hook($this->clientMessage())
+            ->assertOk()
+            ->assertJson(['ok' => true, 'ignored' => true]);
+
+        // Інакше та сама розмова опинилась би і тут, і в Inbox.
+        $this->assertSame(0, Message::count());
+        $this->assertSame(0, Conversation::count());
     }
 
     // --- відправка --------------------------------------------------------

@@ -32,6 +32,17 @@ class TelegramWebhookController extends Controller
             return response()->json(['ok' => false, 'reason' => 'wrong channel']);
         }
 
+        // Telegram за зовнішнім Inbox — навіть якщо десь лишився старий webhook
+        // на CRM, нічого не пишемо: інакше та сама розмова опинилась би в двох
+        // системах, і менеджер відповідав би двічі.
+        if (config('services.inbox.telegram_owner') !== 'crm') {
+            Log::info('Telegram webhook проігноровано: канал за зовнішнім Inbox', [
+                'account_id' => $account->id,
+            ]);
+
+            return response()->json(['ok' => true, 'ignored' => true]);
+        }
+
         if (! $this->verifySecret($request, $account)) {
             Log::warning('Telegram webhook: невірний secret_token', ['account_id' => $account->id]);
 

@@ -81,6 +81,17 @@ return [
         // Порожньо = вебхуки вимкнені (нічого не ставиться в чергу).
         'webhook_url'    => env('INBOX_WEBHOOK_URL'),
         'webhook_secret' => env('INBOX_WEBHOOK_SECRET'),
+
+        // Хто тримає Telegram-ботів: 'inbox' (зовнішня система листування)
+        // чи 'crm' (модуль «Чати» тут).
+        //
+        // У бота може бути РІВНО ОДИН webhook. Якщо підключити бота в CRM,
+        // Telegram перестане слати оновлення в Inbox — і навпаки. Тому це не
+        // питання смаку, а взаємне виключення.
+        //
+        // За рішенням від 2026-08-13 Telegram обробляє Inbox, а CRM віддає
+        // йому дані через /api/inbox/v1/*.
+        'telegram_owner' => env('INBOX_TELEGRAM_OWNER', 'inbox'),
     ],
 
     // Viber Public Account / Bot API.

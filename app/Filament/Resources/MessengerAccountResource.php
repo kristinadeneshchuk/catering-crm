@@ -81,18 +81,35 @@ class MessengerAccountResource extends Resource
                 ])
                 ->columnSpanFull(),
 
-            // ─────────── TELEGRAM (поки заглушка) ───────────
+            // ─────────── TELEGRAM ───────────
             Forms\Components\Section::make('Telegram')
                 ->visible(fn (Get $get) => $get('channel') === MessengerAccount::CHANNEL_TELEGRAM)
                 ->schema([
+                    // Telegram за зовнішнім Inbox — у бота рівно один webhook,
+                    // тож підключення тут забрало б у нього вхідні.
+                    Forms\Components\Placeholder::make('telegram_owned_by_inbox')
+                        ->label('')
+                        ->visible(fn () => config('services.inbox.telegram_owner') !== 'crm')
+                        ->content(new \Illuminate\Support\HtmlString(
+                            '<div style="padding:.6rem .75rem;border-radius:.5rem;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);">'
+                            .'<b>Telegram обробляє зовнішня система листування.</b><br>'
+                            .'CRM віддає їй дані через API (<code>/api/inbox/v1/*</code>) і сама до Telegram не під\'єднується. '
+                            .'У бота може бути лише один webhook — підключення тут перехопило б у неї вхідні повідомлення.<br><br>'
+                            .'<span style="opacity:.75">Щоб вести Telegram у CRM, постав <code>INBOX_TELEGRAM_OWNER=crm</code> у <code>.env</code>.</span>'
+                            .'</div>'
+                        )),
+
                     Forms\Components\TextInput::make('credentials.bot_token')
                         ->label('Токен бота з @BotFather')
                         ->placeholder('7123456789:AAF...')
                         ->helperText('Створи бота в @BotFather, встав сюди токен і збережи. Далі — кнопка «Підключити».')
                         ->password()
-                        ->revealable(),
+                        ->revealable()
+                        ->visible(fn () => config('services.inbox.telegram_owner') === 'crm'),
+
                     Forms\Components\Placeholder::make('telegram_help')
                         ->label('')
+                        ->visible(fn () => config('services.inbox.telegram_owner') === 'crm')
                         ->content(new \Illuminate\Support\HtmlString(
                             '<b>Як під\'єднати бізнес-акаунт бренду:</b><br>'
                             .'1. Збережи акаунт із токеном і натисни «Підключити» — CRM зареєструє webhook.<br>'
@@ -209,10 +226,11 @@ class MessengerAccountResource extends Resource
                     ->label('Підключити')
                     ->icon('heroicon-o-bolt')
                     ->color('success')
-                    ->visible(fn (MessengerAccount $record) => in_array($record->channel, [
-                        MessengerAccount::CHANNEL_VIBER,
-                        MessengerAccount::CHANNEL_TELEGRAM,
-                    ], true))
+                    // Telegram ховаємо, поки канал за зовнішнім Inbox: кнопка
+                    // все одно впаде, а тут вона виглядала б робочою.
+                    ->visible(fn (MessengerAccount $record) => $record->channel === MessengerAccount::CHANNEL_VIBER
+                        || ($record->channel === MessengerAccount::CHANNEL_TELEGRAM
+                            && config('services.inbox.telegram_owner') === 'crm'))
                     ->requiresConfirmation()
                     ->modalHeading(fn (MessengerAccount $record) => $record->channel === MessengerAccount::CHANNEL_TELEGRAM
                         ? 'Підключити Telegram-бота'
