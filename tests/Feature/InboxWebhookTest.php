@@ -175,6 +175,28 @@ class InboxWebhookTest extends TestCase
         });
     }
 
+    public function test_the_signature_matches_the_raw_body_that_was_actually_sent(): void
+    {
+        Http::fake(['*' => Http::response(['ok' => true])]);
+
+        // Кирилиця в полі — саме той випадок, на якому ламалась би підпис,
+        // якби тіло кодувалось двічі різними способами.
+        (new SendInboxWebhook(
+            'order.payment_received',
+            'evt_test',
+            ['order_id' => 1499, 'comment' => 'Оплата від клієнта «Аркадій»'],
+            '2026-08-14T14:31:00+03:00',
+        ))->handle();
+
+        Http::assertSent(function ($request) {
+            $raw = $request->body();
+
+            $expected = hash_hmac('sha256', $raw, config('services.inbox.webhook_secret'));
+
+            return $request->header('X-Crm-Signature')[0] === $expected;
+        });
+    }
+
     public function test_the_job_retries_when_the_receiver_is_down(): void
     {
         Http::fake(['*' => Http::response('boom', 500)]);

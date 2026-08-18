@@ -52,17 +52,27 @@ class SendInboxWebhook implements ShouldQueue
             'data'        => $this->payload,
         ];
 
-        $request = Http::timeout(10)->acceptJson();
+        // Кодуємо тіло самі й відправляємо рівно цей рядок. Якщо віддати масив
+        // у post(), Laravel закодує його по-своєму (з екранованим юнікодом) — і
+        // підпис рахувався б по одному рядку, а летів би інший. Поки в payload
+        // сама латиниця, це збігається випадково; перше ж поле з кирилицею
+        // мовчки зламало б перевірку на приймальній стороні.
+        $json = json_encode($body, JSON_UNESCAPED_UNICODE);
+
+        $request = Http::timeout(10)
+            ->acceptJson()
+            ->withBody($json, 'application/json');
 
         // Підпис тіла — щоб приймальна сторона знала, що це справді ми.
+        // Перевіряти треба сире тіло, до розбору JSON.
         $secret = (string) config('services.inbox.webhook_secret');
         if ($secret !== '') {
             $request = $request->withHeaders([
-                'X-Crm-Signature' => hash_hmac('sha256', json_encode($body, JSON_UNESCAPED_UNICODE), $secret),
+                'X-Crm-Signature' => hash_hmac('sha256', $json, $secret),
             ]);
         }
 
-        $response = $request->post($url, $body);
+        $response = $request->post($url);
 
         if ($response->failed()) {
             Log::warning('Inbox webhook відхилено', [
