@@ -323,11 +323,31 @@ PROMPT;
 
         $menu = $this->menuForDate($targetDate);
 
+        // Сімейне замовлення — це батьківський раціон і дочірні на одного клієнта.
+        // Менеджер відмічає заміну в одному з них, а страва готується та сама, тож
+        // рішення збираємо по клієнту цілком. Інакше поруч стають «схвалено» і
+        // «без» про той самий інгредієнт у тій самій страві.
+        $decidedByClient = [];
+
+        foreach ($activeOrders as $order) {
+            $key = $this->clientKeyFor($order);
+
+            $decidedByClient[$key] ??= ['ingredients' => [], 'dishes' => []];
+
+            foreach ($order->replacements as $rep) {
+                if ($rep->original_product_id) {
+                    $decidedByClient[$key]['ingredients'][] = $rep->dish_id . ':' . $rep->original_product_id;
+                }
+                $decidedByClient[$key]['dishes'][] = (int) $rep->dish_id;
+            }
+        }
+
         $byClient = [];
 
         foreach ($activeOrders as $order) {
             $clientName = $order->client->name ?? "Замовлення #{$order->id}";
-            $items = [];
+            $decided    = $decidedByClient[$this->clientKeyFor($order)];
+            $items      = [];
 
             // Страви, які реально стоять у цього клієнта на цей день.
             $scheduledDishIds = $this->scheduledDishIdsFor($order, $menu, $targetDate);
@@ -379,17 +399,21 @@ PROMPT;
             //    анкету правлять посеред періоду, а order_replacements
             //    з'являються тільки вручну.
             if ($menu) {
-                $decided = $order->replacements
-                    ->filter(fn ($r) => $r->original_product_id)
-                    ->map(fn ($r) => $r->dish_id . ':' . $r->original_product_id)
-                    ->all();
-
                 $excluded    = $order->effectiveExcludedIngredients();
                 $excludedIds = $excluded->pluck('id')->map(fn ($id) => (int) $id)->all();
+                $refusedDishIds = ($order->client?->dishExclusions ?? collect())
+                    ->pluck('id')->map(fn ($id) => (int) $id)->all();
 
                 foreach ($this->planDishesFor($order, $menu, $targetDate) as $dish) {
+                    // Страву відмінили цілком — розбір її складу кухні вже не
+                    // потрібен. Хіба що менеджер вирішив її все-таки готувати.
+                    if (in_array((int) $dish->id, $refusedDishIds, true)
+                        && ! in_array((int) $dish->id, $decided['dishes'], true)) {
+                        continue;
+                    }
+
                     foreach ($excluded as $ingredient) {
-                        if (in_array($dish->id . ':' . $ingredient->id, $decided, true)) continue;
+                        if (in_array($dish->id . ':' . $ingredient->id, $decided['ingredients'], true)) continue;
                         if (! $this->dishContainsIngredient($dish, (int) $ingredient->id)) continue;
 
                         $suggested = $this->bundleReplacementNameFor($order, (int) $ingredient->id, $excludedIds);
@@ -414,11 +438,7 @@ PROMPT;
                 if (! in_array((int) $excludedDish->id, $scheduledDishIds, true)) continue;
 
                 // Менеджер уже щось вирішив по цій страві — замінив або схвалив.
-                $decidedDish = $order->replacements
-                    ->where('dish_id', $excludedDish->id)
-                    ->isNotEmpty();
-
-                if ($decidedDish) continue;
+                if (in_array((int) $excludedDish->id, $decided['dishes'], true)) continue;
 
                 $items[] = [
                     'type' => 'exclusion',
@@ -441,6 +461,14 @@ PROMPT;
         }
 
         return array_values($byClient);
+    }
+
+    /**
+     * Ключ клієнта: сімейні раціони одного клієнта мають ділити рішення менеджера.
+     */
+    private function clientKeyFor(Order $order): string
+    {
+        return $order->client_id ? 'client-' . $order->client_id : 'order-' . $order->id;
     }
 
     /**
