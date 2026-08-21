@@ -743,8 +743,8 @@ public function form(Form $form): Form
             $individualDishesMap = collect();
             if (!empty($individualDishIds)) {
                 $individualDishesMap = Dish::with([
-                    'dishIngredients.ingredient',
-                    'dishIngredients.childDish.dishIngredients.ingredient',
+                    'dishIngredients.ingredient.allergens',
+                    'dishIngredients.childDish.dishIngredients.ingredient.allergens',
                 ])->whereIn('id', array_unique($individualDishIds))->get()->keyBy('id');
             }
 
@@ -766,7 +766,11 @@ public function form(Form $form): Form
                     $baseW  = (float)($dish->base_weight_g ?? 0);
                     $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
 
-                    $components = $this->getHierarchicalIngredients($dish, $scale, 1.0, null, false, null);
+                    // Клієнтам на індивідуальному меню картка малювалась без
+                    // перевірки виключень — кухня бачила звичайну рецептуру навіть
+                    // тоді, коли в анкеті стоїть «не їсть». Рахуємо так само, як
+                    // для циклічних карток: з виключеннями і рішеннями менеджера.
+                    $components = $this->getHierarchicalIngredients($dish, $scale, 1.0, null, true, $order);
                     $totals     = $this->calculateTotals($components);
 
                     $meals[] = [

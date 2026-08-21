@@ -470,14 +470,20 @@
                                                         </td>
                                                     </tr>
                                                     @foreach($comp['sub_ingredients'] ?? [] as $sub)
-                                                        <tr>
-                                                            <td style="padding:3px 10px 3px 20px; border-bottom:1px solid #f3f4f6; color:#374151; font-size:12px;">{{ $sub['name'] }}</td>
+                                                        @php($sc = $sub['conflict'] ?? null)
+                                                        <tr @if($sc && empty($sc['is_force_approved'])) style="background:#fef2f2;" @endif>
+                                                            <td style="padding:3px 10px 3px 20px; border-bottom:1px solid #f3f4f6; color:#374151; font-size:12px;">
+                                                                @include('filament.pages.partials.individual-conflict-name', ['name' => $sub['name'], 'conflict' => $sc])
+                                                            </td>
                                                             <td style="padding:3px 8px; border-bottom:1px solid #f3f4f6; background:#e5e7eb; font-weight:800; text-align:center; color:#111827; width:60px;">{{ round($sub['weight_brutto'] ?? 0) }} г</td>
                                                         </tr>
                                                     @endforeach
                                                 @else
-                                                    <tr>
-                                                        <td style="padding:4px 10px; border-bottom:1px solid #f3f4f6; color:#111827;">{{ $comp['name'] }}</td>
+                                                    @php($cc = $comp['conflict'] ?? null)
+                                                    <tr @if($cc && empty($cc['is_force_approved'])) style="background:#fef2f2;" @endif>
+                                                        <td style="padding:4px 10px; border-bottom:1px solid #f3f4f6; color:#111827;">
+                                                            @include('filament.pages.partials.individual-conflict-name', ['name' => $comp['name'], 'conflict' => $cc])
+                                                        </td>
                                                         <td style="padding:4px 8px; border-bottom:1px solid #f3f4f6; background:#e5e7eb; font-weight:800; text-align:center; color:#111827; width:60px;">{{ round($comp['weight_brutto'] ?? 0) }} г</td>
                                                     </tr>
                                                 @endif
