@@ -350,14 +350,20 @@ PROMPT;
                 }
             }
 
-            // Виключення страв (без replacements запису)
+            // Виключення страв — тільки ті, що реально стоять у клієнта на цей день.
+            // У картках бувають десятки відмов (переважно напівфабрикати), і без
+            // фільтра вони затоплюють план кухні шумом.
+            $scheduledDishIds = $this->scheduledDishIdsFor($order, $menu, $targetDate);
+
             foreach (($order->client?->dishExclusions ?? collect()) as $excluded) {
+                if (! in_array((int) $excluded->id, $scheduledDishIds, true)) continue;
+
                 $hasReplacement = $order->replacements
                     ->where('dish_id', $excluded->id)
                     ->isNotEmpty();
 
                 if (!$hasReplacement) {
-                    $lines[] = "❌ {$clientName}: повністю відмовляється від '{$excluded->name}'";
+                    $lines[] = "❌ {$clientName}: повністю відмовляється від '{$excluded->name}' — потрібна заміна";
                 }
             }
         }
@@ -421,6 +427,30 @@ PROMPT;
         }
 
         return $fromMenu->only($dishIds)->values()->all();
+    }
+
+    /**
+     * Страви, які стоять у клієнта на цю дату: циклічне меню дня, а для
+     * індивідуальних замовлень — призначені персональні страви. Береться з меню,
+     * а не з розрахованого плану, щоб виключена страва не зникла з переліку
+     * ще до того, як кухня про неї дізнається.
+     */
+    private function scheduledDishIdsFor(Order $order, ?DailyMenu $menu, string $targetDate): array
+    {
+        $ids = $menu
+            ? $menu->menuItems->map(fn ($mi) => $mi->dish?->id)->filter()->all()
+            : [];
+
+        if ($order->menu_type === 'individual') {
+            $personal = $order->personalDishes()
+                ->where('date', $targetDate)
+                ->pluck('dish_id')
+                ->all();
+
+            $ids = array_merge($ids, $personal);
+        }
+
+        return array_values(array_unique(array_map('intval', $ids)));
     }
 
     /**
