@@ -538,6 +538,10 @@ class AntLogisticsService
                 $dayIds   = $clientDays->pluck('id')->all();
                 $affected = \App\Models\OrderDay::whereIn('id', $dayIds)->update([
                     'ant_route_num'      => $routeNum,
+                    // Route_Num перенумеровується при перебудові маршрутів,
+                    // Route_Id — стабільний. Саме по ньому маршрут знаходить
+                    // свої доплати за дальню доставку.
+                    'ant_route_id'       => isset($route['Route_Id']) ? (string) $route['Route_Id'] : null,
                     'ant_route_pos'      => $routePos,
                     'ant_driver'         => $driver,
                     'ant_delivery_group' => null,
@@ -933,6 +937,32 @@ class AntLogisticsService
             $saved++;
         }
 
+        // ANT віддає ВСІ маршрути дати (фільтр зміни ми застосовуємо вже у себе),
+        // тож маршрут, якого немає у відповіді, — видалений при перебудові.
+        // updateOrCreate його не чіпав, і він назавжди лишався в CRM: зайві
+        // точки в шапці та зайва ставка в ЗП курʼєра. Видаляємо через модель,
+        // щоб DeliveryRouteObserver переоцінив зміну курʼєра в Табелі.
+        $antIds = collect($routes)
+            ->pluck('Route_Id')
+            ->filter()
+            ->map(fn ($v) => (string) $v)
+            ->all();
+
+        $stale = DeliveryRoute::whereDate('date', $date)
+            ->whereNotNull('ant_route_id')
+            ->whereNotIn('ant_route_id', $antIds)
+            ->get();
+
+        foreach ($stale as $staleRoute) {
+            $staleRoute->delete();
+        }
+
+        if ($stale->isNotEmpty()) {
+            Log::info("[AntLogistics] pullRouteDetails: removed {$stale->count()} stale routes for {$date}", [
+                'ant_route_ids' => $stale->pluck('ant_route_id')->all(),
+            ]);
+        }
+
         Log::info("[AntLogistics] pullRouteDetails: saved {$saved} routes for {$date}");
         return $saved;
     }
@@ -1062,7 +1092,12 @@ class AntLogisticsService
             $nameWords = preg_split('/\s+/u', self::normalizeDriverKey($e->name));
             $antWords  = preg_split('/\s+/u', self::normalizeDriverKey($e->ant_driver_name));
 
-            return empty(array_diff($driverWords, $nameWords)) || empty(array_diff($driverWords, $antWords));
+            // Об'єднання, а не «або»: ім'я в картці може бути іншою мовою
+            // («Коток Анастасия»), а ant_driver_name — лише ім'я («Анастасія»).
+            // Разом вони покривають «Коток Анастасія» з ANT, окремо — ні.
+            $combined = array_unique(array_merge($nameWords, $antWords));
+
+            return empty(array_diff($driverWords, $combined));
         });
 
         return $subset->count() === 1 ? $subset->first() : null;

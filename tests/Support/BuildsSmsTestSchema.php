@@ -69,6 +69,7 @@ trait BuildsSmsTestSchema
             $t->date('delivery_date_override')->nullable();
             $t->decimal('extra_delivery_fee', 10, 2)->default(0);
             $t->integer('ant_route_num')->nullable();
+            $t->string('ant_route_id')->nullable();
             $t->integer('ant_route_pos')->nullable();
             $t->string('ant_driver')->nullable();
             $t->string('ant_delivery_group')->nullable();

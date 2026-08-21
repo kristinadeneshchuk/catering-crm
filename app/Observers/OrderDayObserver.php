@@ -19,11 +19,12 @@ class OrderDayObserver
     {
         $this->syncOrder($orderDay);
         // Якщо при створенні вже виставлено extra_delivery_fee і прив'язано маршрут — додаємо в нього.
-        if ((float) $orderDay->extra_delivery_fee > 0 && $orderDay->ant_route_num) {
+        if ((float) $orderDay->extra_delivery_fee > 0 && ($orderDay->ant_route_id || $orderDay->ant_route_num)) {
             $this->applyExtraDelta(
                 $orderDay->ant_route_num,
                 $orderDay->resolveDeliveryDate(),
                 (float) $orderDay->extra_delivery_fee,
+                $orderDay->ant_route_id,
             );
         }
     }
@@ -39,29 +40,40 @@ class OrderDayObserver
             $this->syncOrder($orderDay);
         }
 
-        if ($orderDay->wasChanged(['extra_delivery_fee', 'ant_route_num', 'date', 'delivery_date_override'])) {
+        if ($orderDay->wasChanged(['extra_delivery_fee', 'ant_route_num', 'ant_route_id', 'date', 'delivery_date_override'])) {
             $oldExtra    = (float) $orderDay->getOriginal('extra_delivery_fee');
             $newExtra    = (float) $orderDay->extra_delivery_fee;
             $oldRouteNum = $orderDay->getOriginal('ant_route_num');
             $newRouteNum = $orderDay->ant_route_num;
-            $oldDeliveryDate = $oldRouteNum ? $this->resolveOriginalDeliveryDate($orderDay) : null;
-            $newDeliveryDate = $newRouteNum ? $orderDay->resolveDeliveryDate() : null;
+            $oldRouteId  = $orderDay->getOriginal('ant_route_id');
+            $newRouteId  = $orderDay->ant_route_id;
+            $oldHasRoute = $oldRouteId || $oldRouteNum;
+            $newHasRoute = $newRouteId || $newRouteNum;
+            $oldDeliveryDate = $oldHasRoute ? $this->resolveOriginalDeliveryDate($orderDay) : null;
+            $newDeliveryDate = $newHasRoute ? $orderDay->resolveDeliveryDate() : null;
 
-            $sameRoute = $oldRouteNum
-                && $newRouteNum
-                && (int) $oldRouteNum === (int) $newRouteNum
+            // Той самий маршрут: за стабільним ant_route_id, якщо він є з обох
+            // боків, інакше — по-старому за номером (легасі-рядки без id).
+            $sameKey = ($oldRouteId && $newRouteId)
+                ? (string) $oldRouteId === (string) $newRouteId
+                : ($oldRouteNum && $newRouteNum && (int) $oldRouteNum === (int) $newRouteNum
+                    && !$oldRouteId && !$newRouteId);
+
+            $sameRoute = $oldHasRoute
+                && $newHasRoute
+                && $sameKey
                 && $oldDeliveryDate?->startOfDay()->equalTo($newDeliveryDate->startOfDay());
 
             if ($sameRoute) {
                 // Звичайний кейс: чекбокс на тому ж маршруті — дельта = newExtra - oldExtra.
-                $this->applyExtraDelta($newRouteNum, $newDeliveryDate, $newExtra - $oldExtra);
+                $this->applyExtraDelta($newRouteNum, $newDeliveryDate, $newExtra - $oldExtra, $newRouteId);
             } else {
                 // Маршрут/дата доставки змінились — старий втрачає oldExtra, новий отримує newExtra.
-                if ($oldRouteNum) {
-                    $this->applyExtraDelta($oldRouteNum, $oldDeliveryDate, -$oldExtra);
+                if ($oldHasRoute) {
+                    $this->applyExtraDelta($oldRouteNum, $oldDeliveryDate, -$oldExtra, $oldRouteId);
                 }
-                if ($newRouteNum) {
-                    $this->applyExtraDelta($newRouteNum, $newDeliveryDate, $newExtra);
+                if ($newHasRoute) {
+                    $this->applyExtraDelta($newRouteNum, $newDeliveryDate, $newExtra, $newRouteId);
                 }
             }
         }
@@ -89,11 +101,12 @@ class OrderDayObserver
     {
         $this->syncOrder($orderDay);
         // Якщо день мав extra і був прив'язаний — зняти суму з маршруту.
-        if ((float) $orderDay->extra_delivery_fee > 0 && $orderDay->ant_route_num) {
+        if ((float) $orderDay->extra_delivery_fee > 0 && ($orderDay->ant_route_id || $orderDay->ant_route_num)) {
             $this->applyExtraDelta(
                 $orderDay->ant_route_num,
                 $orderDay->resolveDeliveryDate(),
                 -(float) $orderDay->extra_delivery_fee,
+                $orderDay->ant_route_id,
             );
         }
     }
@@ -116,15 +129,25 @@ class OrderDayObserver
      * і скорегує баланс курʼєра з єдиної формули (base_rate × виїзди + надбавки).
      * $delta більше не потрібна — залишена в сигнатурі для сумісності викликів.
      */
-    private function applyExtraDelta($routeNum, ?\Carbon\Carbon $date, float $delta): void
+    private function applyExtraDelta($routeNum, ?\Carbon\Carbon $date, float $delta, ?string $routeId = null): void
     {
-        if (!$routeNum || !$date) {
+        if ((!$routeNum && !$routeId) || !$date) {
             return;
         }
 
-        $route = DeliveryRoute::where('ant_route_num', $routeNum)
-            ->whereDate('date', $date)
-            ->first();
+        // Спершу за стабільним ant_route_id — номер перенумеровується при
+        // перебудові маршрутів в ANT. Номер лишається фолбеком для легасі.
+        $route = null;
+        if ($routeId) {
+            $route = DeliveryRoute::where('ant_route_id', (string) $routeId)
+                ->whereDate('date', $date)
+                ->first();
+        }
+        if (!$route && $routeNum) {
+            $route = DeliveryRoute::where('ant_route_num', $routeNum)
+                ->whereDate('date', $date)
+                ->first();
+        }
 
         if (!$route) {
             return;

@@ -110,33 +110,59 @@ class DeliveryRoute extends Model
      */
     public function extraDeliveryFee(): float
     {
-        if (!$this->ant_route_num || !$this->date) {
+        if (!$this->date || (!$this->ant_route_id && !$this->ant_route_num)) {
             return 0;
         }
 
         $routeDate = \Carbon\Carbon::parse($this->date)->startOfDay();
 
-        $query = OrderDay::query()
-            ->where('ant_route_num', $this->ant_route_num)
-            ->where('extra_delivery_fee', '>', 0);
+        $query = OrderDay::query()->where('extra_delivery_fee', '>', 0);
 
-        // Номер маршруту НЕ унікальний у межах дня: коли є ранковий і вечірній
-        // прогони, обидва нумеруються з 1. Без цього звуження доплата за дальню
-        // доставку задвоювалась — падала одразу на двох курʼєрів з однаковим
-        // номером маршруту. Матчимо ще й по водію: OrderDay.ant_driver і
-        // DeliveryRoute.driver_name беруться з одного поля ANT `Driver`.
-        // NULL-водія лишаємо як легасі-fallback (старі рядки без ant_driver).
-        $driver = trim((string) $this->driver_name);
-        if ($driver !== '') {
-            $query->where(function ($q) use ($driver) {
-                $q->whereNull('ant_driver')
-                  ->orWhereRaw('LOWER(TRIM(ant_driver)) = ?', [mb_strtolower($driver)]);
+        // Основний ключ — стабільний ant_route_id: Route_Num в ANT
+        // перенумеровується при кожній перебудові маршрутів, і зв'язка
+        // «номер + водій» розсипалась, щойно логіст перегравав розклад —
+        // доплата за дальню доставку тоді не діставалась нікому.
+        //
+        // Легасі-гілка (num + driver) лишається для днів, записаних до появи
+        // ant_route_id. День зі стабільним id матчиться ТІЛЬКИ по ньому,
+        // інакше при перебудові стара пара num+driver могла б зачепити чужий
+        // маршрут і порахувати доплату двічі.
+        $legacyNum = function ($q) {
+            $q->whereNull('ant_route_id')
+              ->where('ant_route_num', $this->ant_route_num);
+        };
+
+        if ($this->ant_route_id && $this->ant_route_num) {
+            $query->where(function ($q) use ($legacyNum) {
+                $q->where('ant_route_id', (string) $this->ant_route_id)
+                  ->orWhere($legacyNum);
             });
+        } elseif ($this->ant_route_id) {
+            $query->where('ant_route_id', (string) $this->ant_route_id);
+        } else {
+            $query->where('ant_route_num', $this->ant_route_num);
         }
+
+        // Номер маршруту НЕ унікальний у межах дня (ранковий і вечірній прогони
+        // обидва нумеруються з 1), тому легасі-рядки додатково звужуємо по
+        // водію: OrderDay.ant_driver і DeliveryRoute.driver_name — одне поле
+        // ANT `Driver`. Порівнюємо в PHP: SQL-ний LOWER() не знижує кирилицю
+        // на sqlite, а рядків тут одиниці. NULL-водій — фолбек для зовсім
+        // старих рядків без ant_driver.
+        $driver = mb_strtolower(trim((string) $this->driver_name));
 
         return (float) $query
             ->with('order')
             ->get()
+            ->filter(function ($d) use ($driver) {
+                if ($this->ant_route_id && (string) $d->ant_route_id === (string) $this->ant_route_id) {
+                    return true; // стабільний ключ — водія звіряти не треба
+                }
+
+                return $driver === ''
+                    || $d->ant_driver === null
+                    || mb_strtolower(trim((string) $d->ant_driver)) === $driver;
+            })
             ->filter(fn ($d) => $d->resolveDeliveryDate()->startOfDay()->equalTo($routeDate))
             ->sum('extra_delivery_fee');
     }

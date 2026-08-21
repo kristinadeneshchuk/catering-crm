@@ -22,7 +22,7 @@ class OrderDay extends Model
                 'discount_type', 'discount_value', 'discount_amount',
                 'extra_delivery_fee',
                 'fake_kcal', 'fake_prot', 'fake_fat', 'fake_carb',
-                'ant_route_num', 'ant_route_pos', 'ant_driver', 'ant_delivery_group',
+                'ant_route_num', 'ant_route_id', 'ant_route_pos', 'ant_driver', 'ant_delivery_group',
             ])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs()
@@ -36,7 +36,7 @@ class OrderDay extends Model
         'discount_type', 'discount_value', 'discount_amount',
         'extra_delivery_fee',
         'fake_kcal', 'fake_prot', 'fake_fat', 'fake_carb',
-        'ant_route_num', 'ant_route_pos', 'ant_driver', 'ant_delivery_group',
+        'ant_route_num', 'ant_route_id', 'ant_route_pos', 'ant_driver', 'ant_delivery_group',
     ];
 
     protected $casts = [

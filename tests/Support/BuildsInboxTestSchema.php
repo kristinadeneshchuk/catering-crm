@@ -194,6 +194,7 @@ trait BuildsInboxTestSchema
             $t->integer('fake_fat')->nullable();
             $t->integer('fake_carb')->nullable();
             $t->integer('ant_route_num')->nullable();
+            $t->string('ant_route_id')->nullable();
             $t->integer('ant_route_pos')->nullable();
             $t->string('ant_driver')->nullable();
             $t->string('ant_delivery_group')->nullable();
