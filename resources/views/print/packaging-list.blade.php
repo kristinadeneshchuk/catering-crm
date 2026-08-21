@@ -318,6 +318,13 @@
                                                 @endforeach
                                             </tbody>
                                         </table>
+                                        @if(!empty($meal['notes']))
+                                            <div style="padding:3px 6px; background:#fff7ed; font-size:9px; color:#7c2d12; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
+                                                @foreach($meal['notes'] as $note)
+                                                    <div>• {{ $note['text'] }}</div>
+                                                @endforeach
+                                            </div>
+                                        @endif
                                     </td>
                                 @endforeach
                             </tr>

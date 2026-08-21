@@ -508,25 +508,25 @@ class PackagingList extends Page implements HasForms
             }
 
             foreach ($plan['items'] as $item) {
-                $dish = \App\Models\Dish::with('dishIngredients.ingredient', 'dishIngredients.childDish')
-                    ->find($item['dish_id']);
+                $dish = \App\Models\Dish::with([
+                    'dishIngredients.ingredient',
+                    'dishIngredients.childDish.dishIngredients.ingredient',
+                ])->find($item['dish_id']);
                 if (!$dish) continue;
 
                 $weight = (int)$item['weight'];
                 $baseW  = (float)($dish->base_weight_g ?? 0);
                 $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
 
-                $rows = [];
-                foreach ($dish->dishIngredients as $di) {
-                    $name = $this->ingredientRowLabel($di);
-                    $val  = round((float)($di->net_weight_g ?? 0) * $scale);
-                    if ($val > 0) $rows[] = ['name' => $name, 'weight' => $val];
-                }
-
+                // Ті самі хелпери, що й для карток циклічного меню. Раніше тут
+                // просто перелічувались інгредієнти з вагою, тож виключення
+                // клієнта на індивідуальному меню фасувальний не показував
+                // взагалі — ні з анкети, ні з замовлення.
                 $individualByOrder[$oid]['meals'][] = [
                     'meal'      => $item['meal'],
                     'dish_name' => $dish->name,
-                    'rows'      => $rows,
+                    'rows'      => $this->buildCustomClientRows($order, $dish, $scale),
+                    'notes'     => $this->collectOrderNotes($order, $dish),
                 ];
             }
         }
