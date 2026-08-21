@@ -329,9 +329,18 @@ PROMPT;
             $clientName = $order->client->name ?? "Замовлення #{$order->id}";
             $items = [];
 
+            // Страви, які реально стоять у цього клієнта на цей день.
+            $scheduledDishIds = $this->scheduledDishIdsFor($order, $menu, $targetDate);
+
             // 1. Рішення менеджера з виробничого звіту — вони головні і
             //    перекривають те, що написано в картці клієнта.
             foreach ($order->replacements as $rep) {
+                // Заміни живуть у замовленні без прив'язки до дати, а меню
+                // циклічне. Без цього фільтра кухня щодня читає вказівки до
+                // страв, які сьогодні ніхто не готує, і серед них губляться
+                // справжні. Якщо меню на день не знайшлось — не ховаємо нічого.
+                if ($menu && ! in_array((int) $rep->dish_id, $scheduledDishIds, true)) continue;
+
                 $dishName = $rep->dish->name ?? '?';
                 $comment  = $rep->comment ? " — {$rep->comment}" : '';
 
@@ -401,8 +410,6 @@ PROMPT;
             // 3. Відмови від цілих страв — тільки ті, що реально стоять на цей
             //    день. У картках бувають десятки відмов (переважно
             //    напівфабрикати), і без фільтра вони затоплюють список шумом.
-            $scheduledDishIds = $this->scheduledDishIdsFor($order, $menu, $targetDate);
-
             foreach (($order->client?->dishExclusions ?? collect()) as $excludedDish) {
                 if (! in_array((int) $excludedDish->id, $scheduledDishIds, true)) continue;
 
