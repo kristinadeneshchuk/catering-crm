@@ -271,14 +271,44 @@ PROMPT;
     // Збір замін
     // -------------------------------------------------------------------------
 
+    /**
+     * Текстовий вигляд замін для промпту GPT.
+     */
     private function collectReplacementsText(string $targetDate): string
+    {
+        $lines = [];
+
+        foreach ($this->collectReplacements($targetDate) as $client) {
+            foreach ($client['items'] as $item) {
+                $icon = match ($item['type']) {
+                    'force'     => '⚡',
+                    'exclusion' => '❌',
+                    default     => '🔄',
+                };
+
+                $lines[] = "{$icon} {$client['client']} {$item['text']}";
+            }
+        }
+
+        return empty($lines)
+            ? '(індивідуальних замін немає)'
+            : implode("\n", $lines);
+    }
+
+    /**
+     * Єдине джерело правди про індивідуальні заміни на дату — і для сторінки
+     * кухні, і для промпту GPT. Раніше кожен збирав їх сам, і обидва бачили
+     * тільки order_replacements, тобто заміни, заведені руками у виробничому
+     * звіті. Виключення з картки клієнта до кухні не доїжджали взагалі.
+     *
+     * @return array<int, array{client: string, items: array<int, array{type: string, text: string}>}>
+     */
+    public function collectReplacements(string $targetDate): array
     {
         $activeOrders = Order::whereIn('status', ['new', 'active'])
             ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
             ->with([
                 'client',
-                // Виключення з картки клієнта — інакше кухня бачить лише ті заміни,
-                // які менеджер завів руками у виробничому звіті.
                 'client.dishExclusions',
                 'client.ingredientExclusions',
                 'client.replacementBundles.items.originalIngredient',
@@ -293,88 +323,117 @@ PROMPT;
 
         $menu = $this->menuForDate($targetDate);
 
-        $lines = [];
+        $byClient = [];
 
         foreach ($activeOrders as $order) {
             $clientName = $order->client->name ?? "Замовлення #{$order->id}";
+            $items = [];
 
+            // 1. Рішення менеджера з виробничого звіту — вони головні і
+            //    перекривають те, що написано в картці клієнта.
             foreach ($order->replacements as $rep) {
                 $dishName = $rep->dish->name ?? '?';
+                $comment  = $rep->comment ? " — {$rep->comment}" : '';
 
                 if ($rep->force_approved) {
-                    // Примусово схвалено — інгредієнт залишається попри виключення
-                    $what = $rep->originalProduct->name ?? '?';
-                    $lines[] = "⚡ {$clientName} [{$dishName}]: ПРИМУСОВО СХВАЛЕНО '{$what}' (залишається попри виключення клієнта)" . ($rep->comment ? " — {$rep->comment}" : '');
+                    $what = $rep->originalProduct->name ?? null;
+
+                    $items[] = [
+                        'type' => 'force',
+                        'text' => $what
+                            ? "[{$dishName}]: ПРИМУСОВО СХВАЛЕНО '{$what}' (залишається попри виключення клієнта){$comment}"
+                            : "[{$dishName}]: страву ПРИМУСОВО СХВАЛЕНО (готуємо попри виключення клієнта){$comment}",
+                    ];
 
                 } elseif ($rep->replacementDish) {
-                    // Заміна всієї страви
-                    $replaceName = $rep->replacementDish->name;
-                    $lines[] = "🔄 {$clientName}: замість '{$dishName}' → '{$replaceName}'" . ($rep->comment ? " — {$rep->comment}" : '');
+                    $items[] = [
+                        'type' => 'dish',
+                        'text' => "замість '{$dishName}' → '{$rep->replacementDish->name}'{$comment}",
+                    ];
 
                 } elseif ($rep->replacementProduct && $rep->originalProduct) {
-                    // Заміна інгредієнта
-                    $from = $rep->originalProduct->name;
-                    $to   = $rep->replacementProduct->name;
-                    $lines[] = "🔄 {$clientName} [{$dishName}]: замість '{$from}' → '{$to}'" . ($rep->comment ? " — {$rep->comment}" : '');
+                    $items[] = [
+                        'type' => 'ingredient',
+                        'text' => "[{$dishName}]: замість '{$rep->originalProduct->name}' → '{$rep->replacementProduct->name}'{$comment}",
+                    ];
 
-                } elseif ($rep->originalProduct && !$rep->replacementProduct && !$rep->replacementDish) {
-                    // Виключення без заміни
-                    $what = $rep->originalProduct->name;
-                    $lines[] = "❌ {$clientName} [{$dishName}]: без '{$what}'" . ($rep->comment ? " — {$rep->comment}" : '');
+                } elseif ($rep->originalProduct) {
+                    $items[] = [
+                        'type' => 'exclusion',
+                        'text' => "[{$dishName}]: без '{$rep->originalProduct->name}'{$comment}",
+                    ];
                 }
             }
 
-            // Виключення інгредієнтів із анкети клієнта (+ виключення рівня замовлення),
-            // для яких у виробничому звіті ще немає запису заміни. Саме вони раніше
-            // не доїжджали до кухні: анкету правлять посеред періоду, а order_replacements
-            // створюються тільки руками.
+            // 2. Виключення продуктів із картки клієнта та з самого замовлення,
+            //    на які менеджер ще нічого не вирішив. Саме їх кухня не бачила:
+            //    анкету правлять посеред періоду, а order_replacements
+            //    з'являються тільки вручну.
             if ($menu) {
-                $handled = $order->replacements
+                $decided = $order->replacements
                     ->filter(fn ($r) => $r->original_product_id)
                     ->map(fn ($r) => $r->dish_id . ':' . $r->original_product_id)
                     ->all();
 
-                $excluded = $order->effectiveExcludedIngredients();
+                $excluded    = $order->effectiveExcludedIngredients();
+                $excludedIds = $excluded->pluck('id')->map(fn ($id) => (int) $id)->all();
 
                 foreach ($this->planDishesFor($order, $menu, $targetDate) as $dish) {
                     foreach ($excluded as $ingredient) {
-                        if (in_array($dish->id . ':' . $ingredient->id, $handled, true)) continue;
+                        if (in_array($dish->id . ':' . $ingredient->id, $decided, true)) continue;
                         if (! $this->dishContainsIngredient($dish, (int) $ingredient->id)) continue;
 
-                        $suggested = $this->bundleReplacementNameFor($order, (int) $ingredient->id);
+                        $suggested = $this->bundleReplacementNameFor($order, (int) $ingredient->id, $excludedIds);
 
-                        $lines[] = $suggested
-                            ? "🔄 {$clientName} [{$dish->name}]: замість '{$ingredient->name}' → '{$suggested}' (шаблон з картки клієнта)"
-                            : "❌ {$clientName} [{$dish->name}]: без '{$ingredient->name}' (виключення з картки клієнта)";
+                        $items[] = $suggested
+                            ? [
+                                'type' => 'ingredient',
+                                'text' => "[{$dish->name}]: замість '{$ingredient->name}' → '{$suggested}' (шаблон з картки клієнта)",
+                            ]
+                            : [
+                                'type' => 'exclusion',
+                                'text' => "[{$dish->name}]: без '{$ingredient->name}' (виключення з картки клієнта)",
+                            ];
                     }
                 }
             }
 
-            // Виключення страв — тільки ті, що реально стоять у клієнта на цей день.
-            // У картках бувають десятки відмов (переважно напівфабрикати), і без
-            // фільтра вони затоплюють план кухні шумом.
+            // 3. Відмови від цілих страв — тільки ті, що реально стоять на цей
+            //    день. У картках бувають десятки відмов (переважно
+            //    напівфабрикати), і без фільтра вони затоплюють список шумом.
             $scheduledDishIds = $this->scheduledDishIdsFor($order, $menu, $targetDate);
 
-            foreach (($order->client?->dishExclusions ?? collect()) as $excluded) {
-                if (! in_array((int) $excluded->id, $scheduledDishIds, true)) continue;
+            foreach (($order->client?->dishExclusions ?? collect()) as $excludedDish) {
+                if (! in_array((int) $excludedDish->id, $scheduledDishIds, true)) continue;
 
-                $hasReplacement = $order->replacements
-                    ->where('dish_id', $excluded->id)
+                // Менеджер уже щось вирішив по цій страві — замінив або схвалив.
+                $decidedDish = $order->replacements
+                    ->where('dish_id', $excludedDish->id)
                     ->isNotEmpty();
 
-                if (!$hasReplacement) {
-                    $lines[] = "❌ {$clientName}: повністю відмовляється від '{$excluded->name}' — потрібна заміна";
-                }
+                if ($decidedDish) continue;
+
+                $items[] = [
+                    'type' => 'exclusion',
+                    'text' => "повністю відмовляється від '{$excludedDish->name}' — потрібна заміна",
+                ];
             }
+
+            if (empty($items)) continue;
+
+            // У сімейних замовленнях на одного клієнта припадає кілька раціонів,
+            // тож та сама вказівка приходить двічі. Кухні від повтору нічого не додається.
+            $existing = $byClient[$clientName]['items'] ?? [];
+
+            foreach ($items as $item) {
+                $isDuplicate = collect($existing)->contains(fn ($e) => $e['text'] === $item['text']);
+                if (! $isDuplicate) $existing[] = $item;
+            }
+
+            $byClient[$clientName] = ['client' => $clientName, 'items' => $existing];
         }
 
-        // У сімейних замовленнях на одного клієнта припадає кілька раціонів, тож
-        // та сама вказівка приходить двічі. Кухні від повтору нічого не додається.
-        $lines = array_values(array_unique($lines));
-
-        return empty($lines)
-            ? '(індивідуальних замін немає)'
-            : implode("\n", $lines);
+        return array_values($byClient);
     }
 
     /**
@@ -478,13 +537,18 @@ PROMPT;
     /**
      * Назва заміни з прив'язаного до клієнта шаблону, якщо вона там є.
      */
-    private function bundleReplacementNameFor(Order $order, int $ingredientId): ?string
+    private function bundleReplacementNameFor(Order $order, int $ingredientId, array $excludedIds = []): ?string
     {
         foreach (($order->client?->replacementBundles ?? collect()) as $bundle) {
             foreach ($bundle->items as $item) {
-                if ((int) $item->original_ingredient_id === $ingredientId && $item->replacementIngredient) {
-                    return $item->replacementIngredient->name;
-                }
+                if ((int) $item->original_ingredient_id !== $ingredientId) continue;
+                if (! $item->replacementIngredient) continue;
+
+                // Шаблон міг застаріти: інгредієнт-заміна теж може бути в
+                // виключеннях клієнта. Тоді це не підказка, а пастка.
+                if (in_array((int) $item->replacementIngredient->id, $excludedIds, true)) continue;
+
+                return $item->replacementIngredient->name;
             }
         }
 

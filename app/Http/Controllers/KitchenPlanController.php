@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Employee;
 use App\Models\KitchenDailyPlan;
-use App\Models\Order;
 use App\Services\KitchenPlanService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -24,8 +23,9 @@ class KitchenPlanController extends Controller
 
         $existingPlan = KitchenDailyPlan::where('date', $targetDate)->first();
 
-        // Всі заміни з БД — не покладаємось на GPT
-        $allReplacements = $this->collectAllReplacements($targetDate);
+        // Всі заміни з БД — не покладаємось на GPT. Джерело те саме, що й у
+        // промпті плану, щоб сторінка і план не розходились.
+        $allReplacements = $this->service->collectReplacements($targetDate);
 
         return view('kitchen.plan', compact('employees', 'targetDate', 'targetDateFormatted', 'existingPlan', 'allReplacements'));
     }
@@ -71,51 +71,6 @@ class KitchenPlanController extends Controller
         });
 
         return response()->json(['status' => 'started']);
-    }
-
-    private function collectAllReplacements(string $targetDate): array
-    {
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
-            ->with([
-                'client',
-                'replacements.originalProduct',
-                'replacements.replacementProduct',
-                'replacements.dish',
-                'replacements.replacementDish',
-            ])
-            ->get();
-
-        $result = [];
-
-        foreach ($orders as $order) {
-            $clientName = $order->client->name ?? "#{$order->id}";
-            $lines = [];
-
-            foreach ($order->replacements as $rep) {
-                $dishName = $rep->dish->name ?? '?';
-
-                if ($rep->force_approved) {
-                    $what = $rep->originalProduct->name ?? '?';
-                    $lines[] = ['type' => 'force', 'text' => "СХВАЛЕНО '{$what}' у {$dishName}" . ($rep->comment ? " — {$rep->comment}" : '')];
-                } elseif ($rep->replacementDish) {
-                    $lines[] = ['type' => 'dish', 'text' => "замість '{$dishName}' → '{$rep->replacementDish->name}'" . ($rep->comment ? " — {$rep->comment}" : '')];
-                } elseif ($rep->replacementProduct && $rep->originalProduct) {
-                    $lines[] = ['type' => 'ingredient', 'text' => "у {$dishName}: '{$rep->originalProduct->name}' → '{$rep->replacementProduct->name}'" . ($rep->comment ? " — {$rep->comment}" : '')];
-                } elseif ($rep->originalProduct) {
-                    $lines[] = ['type' => 'exclusion', 'text' => "у {$dishName}: без '{$rep->originalProduct->name}'" . ($rep->comment ? " — {$rep->comment}" : '')];
-                }
-            }
-
-            if (!empty($lines)) {
-                $result[] = [
-                    'client' => $clientName,
-                    'items'  => $lines,
-                ];
-            }
-        }
-
-        return $result;
     }
 
     public function status()
