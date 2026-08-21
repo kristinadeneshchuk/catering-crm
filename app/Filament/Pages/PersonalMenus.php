@@ -209,11 +209,19 @@ class PersonalMenus extends Page
                 $currentDishId  = $assigned[$mt->id] ?? null;
                 $availableIds   = $this->getAvailableDishIds($excludedIngIds);
 
+                // Виключення могли з'явитися вже після того, як страву призначили
+                // (анкету правлять посеред періоду) — тоді призначене більше не
+                // проходить по складу і кухня має це побачити.
+                $conflict = $currentDishId !== null
+                    && !empty($excludedIngIds)
+                    && !in_array($currentDishId, $availableIds, true);
+
                 $meals[] = [
                     'meal_type_id'    => $mt->id,
                     'meal_type_name'  => $mt->name,
                     'current_dish_id' => $currentDishId,
                     'available_ids'   => $availableIds,
+                    'conflict'        => $conflict,
                 ];
             }
 
@@ -231,6 +239,7 @@ class PersonalMenus extends Page
                 'meals'      => $meals,
                 'filled'     => count(array_filter($meals, fn($m) => $m['current_dish_id'])),
                 'total'      => count($meals),
+                'conflicts'  => count(array_filter($meals, fn($m) => $m['conflict'])),
             ];
         }
     }

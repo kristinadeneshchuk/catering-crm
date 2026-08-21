@@ -65,6 +65,8 @@
         .pm-meal-btn:hover { border-color:#555555; color:#e2e8f0; }
         .pm-meal-btn.is-filled { border-color:#16a34a; color:#86efac; background:#052e16; }
         .pm-meal-btn.is-filled:hover { border-color:#22c55e; }
+        .pm-meal-btn.is-conflict { border-color:#dc2626; color:#fca5a5; background:#450a0a; }
+        .pm-meal-btn.is-conflict:hover { border-color:#ef4444; }
         .pm-meal-btn-text { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .pm-meal-btn-icon { flex-shrink:0; opacity:.4; }
         .pm-meal-check {
@@ -260,7 +262,7 @@
                         <div class="pm-meal-label">{{ $meal['meal_type_name'] }}</div>
                         <div class="pm-meal-btn-wrap">
                             <button
-                                class="pm-meal-btn {{ $meal['current_dish_id'] ? 'is-filled' : '' }}"
+                                class="pm-meal-btn {{ $meal['current_dish_id'] ? 'is-filled' : '' }} {{ ($meal['conflict'] ?? false) ? 'is-conflict' : '' }}"
                                 wire:click="openDishModal({{ $card['order_id'] }}, {{ $meal['meal_type_id'] }})">
                                 <span class="pm-meal-btn-text">
                                     @if($meal['current_dish_id'])
@@ -275,7 +277,9 @@
                             </button>
                         </div>
                         <div class="pm-meal-check">
-                            @if($meal['current_dish_id'])
+                            @if($meal['conflict'] ?? false)
+                                <span title="Страва містить виключений продукт — потрібна заміна">⚠️</span>
+                            @elseif($meal['current_dish_id'])
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5">
                                     <path d="M20 6 9 17l-5-5"/>
                                 </svg>

@@ -176,17 +176,7 @@ PROMPT;
 
     private function collectDishesText(string $targetDate): string
     {
-        $targetDateObj = Carbon::parse($targetDate);
-
-        // TODO (multi-plan): зараз бере меню з дефолтного плану.
-        $defaultPlan = \App\Models\MenuPlan::default();
-        if (!$defaultPlan) return '(дефолтного плану меню немає)';
-
-        $dayNumber = $defaultPlan->globalDayFor($targetDateObj);
-        $menu = DailyMenu::where('menu_plan_id', $defaultPlan->id)
-            ->where('day_number', $dayNumber)
-            ->with(['menuItems.dish.dishIngredients.ingredient', 'menuItems.mealType'])
-            ->first();
+        $menu = $this->menuForDate($targetDate);
 
         if (!$menu) {
             return '(меню на цей день не знайдено)';
@@ -287,12 +277,21 @@ PROMPT;
             ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
             ->with([
                 'client',
+                // Виключення з картки клієнта — інакше кухня бачить лише ті заміни,
+                // які менеджер завів руками у виробничому звіті.
+                'client.dishExclusions',
+                'client.ingredientExclusions',
+                'client.replacementBundles.items.originalIngredient',
+                'client.replacementBundles.items.replacementIngredient',
+                'ingredientExclusions',
                 'replacements.originalProduct',
                 'replacements.replacementProduct',
                 'replacements.dish',
                 'replacements.replacementDish',
             ])
             ->get();
+
+        $menu = $this->menuForDate($targetDate);
 
         $lines = [];
 
@@ -325,16 +324,40 @@ PROMPT;
                 }
             }
 
-            // Виключення страв (без replacements запису)
-            if ($order->client->relationLoaded('dishExclusions')) {
-                foreach ($order->client->dishExclusions as $excluded) {
-                    $hasReplacement = $order->replacements
-                        ->where('dish_id', $excluded->id)
-                        ->isNotEmpty();
+            // Виключення інгредієнтів із анкети клієнта (+ виключення рівня замовлення),
+            // для яких у виробничому звіті ще немає запису заміни. Саме вони раніше
+            // не доїжджали до кухні: анкету правлять посеред періоду, а order_replacements
+            // створюються тільки руками.
+            if ($menu) {
+                $handled = $order->replacements
+                    ->filter(fn ($r) => $r->original_product_id)
+                    ->map(fn ($r) => $r->dish_id . ':' . $r->original_product_id)
+                    ->all();
 
-                    if (!$hasReplacement) {
-                        $lines[] = "❌ {$clientName}: повністю відмовляється від '{$excluded->name}'";
+                $excluded = $order->effectiveExcludedIngredients();
+
+                foreach ($this->planDishesFor($order, $menu, $targetDate) as $dish) {
+                    foreach ($excluded as $ingredient) {
+                        if (in_array($dish->id . ':' . $ingredient->id, $handled, true)) continue;
+                        if (! $this->dishContainsIngredient($dish, (int) $ingredient->id)) continue;
+
+                        $suggested = $this->bundleReplacementNameFor($order, (int) $ingredient->id);
+
+                        $lines[] = $suggested
+                            ? "🔄 {$clientName} [{$dish->name}]: замість '{$ingredient->name}' → '{$suggested}' (шаблон з картки клієнта)"
+                            : "❌ {$clientName} [{$dish->name}]: без '{$ingredient->name}' (виключення з картки клієнта)";
                     }
+                }
+            }
+
+            // Виключення страв (без replacements запису)
+            foreach (($order->client?->dishExclusions ?? collect()) as $excluded) {
+                $hasReplacement = $order->replacements
+                    ->where('dish_id', $excluded->id)
+                    ->isNotEmpty();
+
+                if (!$hasReplacement) {
+                    $lines[] = "❌ {$clientName}: повністю відмовляється від '{$excluded->name}'";
                 }
             }
         }
@@ -342,6 +365,96 @@ PROMPT;
         return empty($lines)
             ? '(індивідуальних замін немає)'
             : implode("\n", $lines);
+    }
+
+    /**
+     * Меню дефолтного плану на дату, з усіма зв'язками, які потрібні
+     * і для грамажів, і для пошуку виключених інгредієнтів у складі страв.
+     */
+    private function menuForDate(string $targetDate): ?DailyMenu
+    {
+        // TODO (multi-plan): зараз бере меню з дефолтного плану.
+        $defaultPlan = \App\Models\MenuPlan::default();
+        if (!$defaultPlan) return null;
+
+        $dayNumber = $defaultPlan->globalDayFor(Carbon::parse($targetDate));
+
+        return DailyMenu::where('menu_plan_id', $defaultPlan->id)
+            ->where('day_number', $dayNumber)
+            ->with([
+                'menuItems.dish.dishIngredients.ingredient',
+                'menuItems.dish.dishIngredients.childDish.dishIngredients.ingredient',
+                'menuItems.mealType',
+            ])
+            ->first();
+    }
+
+    /**
+     * Страви, які реально потрапили в план цього замовлення на дату
+     * (для індивідуальних меню — персональні, а не циклічні).
+     */
+    private function planDishesFor(Order $order, DailyMenu $menu, string $targetDate): array
+    {
+        $plan = $this->calculateOrderPlan($order, $menu, $targetDate);
+
+        $dishIds = collect($plan['items'])->pluck('dish_id')->unique()->filter()->all();
+        if (empty($dishIds)) return [];
+
+        $fromMenu = $menu->menuItems
+            ->map(fn ($mi) => $mi->dish)
+            ->filter()
+            ->keyBy('id');
+
+        $missing = array_values(array_diff($dishIds, $fromMenu->keys()->all()));
+
+        if ($missing) {
+            // Персональні страви індивідуальних клієнтів не лежать у циклічному меню.
+            $extra = \App\Models\Dish::whereIn('id', $missing)
+                ->with([
+                    'dishIngredients.ingredient',
+                    'dishIngredients.childDish.dishIngredients.ingredient',
+                ])
+                ->get()
+                ->keyBy('id');
+
+            $fromMenu = $fromMenu->union($extra);
+        }
+
+        return $fromMenu->only($dishIds)->values()->all();
+    }
+
+    /**
+     * Чи є інгредієнт у складі страви — з урахуванням вкладених напівфабрикатів.
+     */
+    private function dishContainsIngredient($dish, int $ingredientId): bool
+    {
+        foreach ($dish->dishIngredients as $di) {
+            if ((int) $di->ingredient_id === $ingredientId) return true;
+
+            if ($di->childDish) {
+                foreach ($di->childDish->dishIngredients as $sub) {
+                    if ((int) $sub->ingredient_id === $ingredientId) return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Назва заміни з прив'язаного до клієнта шаблону, якщо вона там є.
+     */
+    private function bundleReplacementNameFor(Order $order, int $ingredientId): ?string
+    {
+        foreach (($order->client?->replacementBundles ?? collect()) as $bundle) {
+            foreach ($bundle->items as $item) {
+                if ((int) $item->original_ingredient_id === $ingredientId && $item->replacementIngredient) {
+                    return $item->replacementIngredient->name;
+                }
+            }
+        }
+
+        return null;
     }
 
     // -------------------------------------------------------------------------

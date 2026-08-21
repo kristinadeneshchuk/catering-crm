@@ -10,6 +10,7 @@ use App\Filament\Resources\OrderResource\RelationManagers\DeliveryCalendarRelati
 use App\Filament\Resources\OrderResource\RelationManagers\ActivityLogsRelationManager;
 use App\Models\Order;
 use App\Models\Client;
+use App\Models\Ingredient;
 use App\Models\Account;
 use App\Models\Tariff;
 use Filament\Notifications\Notification;
@@ -364,6 +365,36 @@ class OrderResource extends Resource
                     ->description('Додаються поверх виключень із картки клієнта. Якщо клієнт уже не їсть інгредієнт — він буде виключений у всіх його замовленнях.')
                     ->collapsed()
                     ->schema([
+                        // Виключення з анкети діють на всі замовлення клієнта одразу
+                        // (звіти рахують їх наживо). Показуємо їх тут, щоб було видно,
+                        // що вже враховано, і не дублювати те саме на рівні замовлення.
+                        Placeholder::make('client_exclusions_preview')
+                            ->label('З картки клієнта (діють автоматично)')
+                            ->columnSpanFull()
+                            ->content(function (Get $get) {
+                                $client = Client::with([
+                                    'ingredientExclusions',
+                                    'dishExclusions',
+                                    'replacementBundles.items.originalIngredient',
+                                ])->find($get('client_id'));
+
+                                if (! $client) {
+                                    return 'Спочатку оберіть клієнта.';
+                                }
+
+                                $ingredients = Ingredient::whereIn('id', $client->effectiveExcludedIngredientIds())
+                                    ->orderBy('name')
+                                    ->pluck('name')
+                                    ->all();
+                                $dishes = $client->dishExclusions->pluck('name')->sort()->values()->all();
+
+                                $parts = [];
+                                if ($ingredients) $parts[] = 'Продукти: ' . implode(', ', $ingredients);
+                                if ($dishes)      $parts[] = 'Страви: ' . implode(', ', $dishes);
+
+                                return $parts ? implode(' · ', $parts) : 'Виключень у картці клієнта немає.';
+                            }),
+
                         Select::make('ingredientExclusions')
                             ->label('Продукти виключення (тільки для цього замовлення)')
                             ->relationship('ingredientExclusions', 'name')
