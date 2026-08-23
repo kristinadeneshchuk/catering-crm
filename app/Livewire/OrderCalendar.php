@@ -54,6 +54,13 @@ class OrderCalendar extends Component
     // Доплата за дальню доставку (фіксована з settings.far_delivery_fee)
     public bool $modalIsFarDelivery = false;
 
+    // Дата доставки цього дня та чи вона вже минула. Календар показує дати ЇЖІ,
+    // а везуть раніше: при закритому слоті недільний раціон їде ще в п'ятницю.
+    // Без цієї підказки менеджер прибирав день, який клієнт уже отримав, — і
+    // CRM мовчки знімала з замовлення гроші за доставлений раціон.
+    public ?string $modalDeliveryDate = null;
+    public bool $modalDeliveryPassed = false;
+
     // Фейкове КБЖУ дня (тільки для меню по QR, на виробництво не впливає)
     public ?string $modalFakeKcal = null;
     public ?string $modalFakeProt = null;
@@ -179,6 +186,12 @@ class OrderCalendar extends Component
         $this->modalFakeProt = $day->fake_prot !== null ? (string) $day->fake_prot : null;
         $this->modalFakeFat  = $day->fake_fat  !== null ? (string) $day->fake_fat  : null;
         $this->modalFakeCarb = $day->fake_carb !== null ? (string) $day->fake_carb : null;
+        $deliveryDate = $day->resolveDeliveryDate();
+        $this->modalDeliveryDate = $deliveryDate->format('d.m.Y');
+        // Сьогоднішню доставку теж вважаємо доставленою: маршрути будують
+        // зранку, і до моменту правки курʼєр здебільшого вже виїхав.
+        $this->modalDeliveryPassed = $deliveryDate->startOfDay()->lessThanOrEqualTo(Carbon::today());
+
         $this->addressSearch  = '';
         $this->addressResults = [];
         // Завантажуємо адреси клієнта
@@ -231,6 +244,8 @@ class OrderCalendar extends Component
         $this->modalDeliveryTime = null;
         $this->modalDeliveryDateOverride = null;
         $this->modalIsFarDelivery = false;
+        $this->modalDeliveryDate = null;
+        $this->modalDeliveryPassed = false;
     }
 
     public function searchAddress(): void
@@ -310,7 +325,11 @@ class OrderCalendar extends Component
         $day = OrderDay::find($this->modalDayId);
         if (!$day) return;
 
-        $pricePerDay = $this->calculatePricePerDay();
+        $pricePerDay  = $this->calculatePricePerDay();
+        $deliveryDate = $day->resolveDeliveryDate();
+        $wasDelivered = $deliveryDate->startOfDay()->lessThanOrEqualTo(Carbon::today());
+        $deliveredOn  = $deliveryDate->format('d.m.Y');
+
         $day->delete();
         $this->updateOrderStatus();
         $this->closeAddressModal();
@@ -320,6 +339,17 @@ class OrderCalendar extends Component
             ->map(fn ($d) => Carbon::parse($d->date)->format('Y-m-d'))
             ->values()->toArray();
         $this->dispatch('update-selected-days', days: $updatedDays);
+
+        if ($wasDelivered) {
+            Notification::make()
+                ->title('День скасовано, але доставка вже була')
+                ->body("Раціон везли {$deliveredOn}. З замовлення знято {$pricePerDay} грн за те, що клієнт уже отримав — перевірте оплату.")
+                ->warning()
+                ->persistent()
+                ->send();
+
+            return;
+        }
 
         Notification::make()->title('День скасовано')->body("Повернуто на баланс: {$pricePerDay} грн")->success()->send();
     }
