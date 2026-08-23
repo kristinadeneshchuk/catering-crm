@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\SitemapController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -9,7 +10,10 @@ use Illuminate\Support\Facades\Route;
 Route::get('/robots.txt', function () {
     $body = config('app.noindex')
         ? "User-agent: *\nDisallow: /\n"
-        : "User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /booking\n";
+        : "User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /booking\n"
+            .'Sitemap: '.route('sitemap')."\n";
 
     return response($body)->header('Content-Type', 'text/plain');
 });
+
+Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');

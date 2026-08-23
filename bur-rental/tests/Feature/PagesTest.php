@@ -47,6 +47,29 @@ class PagesTest extends TestCase
         }
     }
 
+    public function test_sitemap_lists_the_catalog_and_robots_points_at_it(): void
+    {
+        config(['app.noindex' => false]);
+
+        $product = Product::where('slug', 'bosch-gbh-2-26-dre')->firstOrFail();
+
+        $this->get('/sitemap.xml')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/xml')
+            ->assertSee(route('product', $product))
+            ->assertSee(route('category', Category::where('slug', 'perforatory')->firstOrFail()));
+
+        $this->get('/robots.txt')->assertOk()->assertSee(route('sitemap'));
+    }
+
+    public function test_staging_hides_both_robots_and_sitemap(): void
+    {
+        config(['app.noindex' => true]);
+
+        $this->get('/robots.txt')->assertOk()->assertSee('Disallow: /');
+        $this->get('/sitemap.xml')->assertNotFound();
+    }
+
     public function test_missing_page_returns_a_useful_404(): void
     {
         // 404 має лишатися повноцінною сторінкою з пошуком, а не порожнім екраном.

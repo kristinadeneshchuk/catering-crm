@@ -1,5 +1,8 @@
 <?php
 
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Support\Facades\Artisan;
+
 /*
  | Одноразовий запуск міграцій і сидів на хостингу без SSH.
  |
@@ -13,7 +16,7 @@
 require __DIR__.'/../vendor/autoload.php';
 
 $app = require_once __DIR__.'/../bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+$kernel = $app->make(Kernel::class);
 $kernel->bootstrap();
 
 $expected = env('SETUP_TOKEN');
@@ -35,15 +38,15 @@ $commands = $fresh
 
 foreach ($commands as [$command, $options]) {
     echo "→ php artisan {$command}\n";
-    Illuminate\Support\Facades\Artisan::call($command, $options);
-    echo Illuminate\Support\Facades\Artisan::output()."\n";
+    Artisan::call($command, $options);
+    echo Artisan::output()."\n";
 }
 
 foreach (['storage:link', 'config:cache', 'view:cache', 'event:cache'] as $command) {
     echo "→ php artisan {$command}\n";
     try {
-        Illuminate\Support\Facades\Artisan::call($command);
-        echo Illuminate\Support\Facades\Artisan::output()."\n";
+        Artisan::call($command);
+        echo Artisan::output()."\n";
     } catch (Throwable $e) {
         echo "  пропущено: {$e->getMessage()}\n";
     }

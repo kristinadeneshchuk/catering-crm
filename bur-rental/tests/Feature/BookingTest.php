@@ -109,6 +109,28 @@ class BookingTest extends TestCase
             ->assertSessionHas('taken', fn (array $taken) => in_array($product->name, $taken, true));
     }
 
+    public function test_booking_beyond_stock_never_holds_more_units_than_the_shelf_has(): void
+    {
+        $product = Product::with('tiers')->where('slug', 'bosch-gbh-2-26-dre')->firstOrFail();
+        $branch = Branch::where('slug', 'poznyaky')->firstOrFail();
+        $from = Carbon::today()->toDateString();
+        $to = Carbon::today()->addDays(4)->toDateString();
+
+        $availability = app(Availability::class);
+        $stock = $availability->stock($product, $branch);
+
+        // Свідомо перебираємо склад: заявок більше, ніж перфораторів на полиці.
+        for ($i = 0; $i < $stock + 3; $i++) {
+            $this->post('/booking', $this->payload());
+        }
+
+        // Ключова перевірка: зайнято рівно стільки, скільки є. Без блокування
+        // в транзакції зайнятість переповзала за склад і календар починав
+        // обіцяти техніку, якої немає.
+        $peak = $availability->takenByDate($product, $branch, $from, $to)->max();
+        $this->assertSame($stock, $peak);
+    }
+
     public function test_company_booking_requires_edrpou_and_email(): void
     {
         $this->post('/booking', $this->payload([
@@ -121,6 +143,23 @@ class BookingTest extends TestCase
     {
         $this->post('/booking', $this->payload(['phone' => '0672458080']))
             ->assertSessionHasErrors('phone');
+    }
+
+    public function test_lead_form_stops_accepting_after_a_flood(): void
+    {
+        $lead = [
+            'kind' => 'callback',
+            'name' => 'Світлана',
+            'phone' => '+380 67 245 80 80',
+        ];
+
+        for ($i = 0; $i < 10; $i++) {
+            $this->post('/leads', $lead)->assertRedirect();
+        }
+
+        // Одинадцята заявка за годину — це вже скрипт, а не людина.
+        $this->post('/leads', $lead)->assertSessionHasErrors('phone');
+        $this->assertSame(10, Lead::where('phone', $lead['phone'])->count());
     }
 
     public function test_callback_lead_is_stored(): void

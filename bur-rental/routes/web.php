@@ -34,7 +34,8 @@ Route::get('/kits/{kit}', [KitController::class, 'show'])->name('kit');
 Route::get('/brand/{brand}', BrandController::class)->name('brand');
 
 Route::get('/booking', [BookingController::class, 'create'])->name('booking.create');
-Route::post('/booking', [BookingController::class, 'store'])->name('booking.store');
+Route::post('/booking', [BookingController::class, 'store'])
+    ->middleware('throttle:booking')->name('booking.store');
 Route::get('/booking/{booking}', [BookingController::class, 'show'])->name('booking.show');
 
 Route::get('/search', SearchController::class)->name('search');
@@ -45,7 +46,8 @@ Route::get('/returns', [PageController::class, 'returns'])->name('returns');
 Route::get('/contacts', [PageController::class, 'contacts'])->name('contacts');
 Route::get('/b2b', [PageController::class, 'b2b'])->name('b2b');
 
-Route::post('/leads', [LeadController::class, 'store'])->name('leads.store');
+Route::post('/leads', [LeadController::class, 'store'])
+    ->middleware('throttle:leads')->name('leads.store');
 
 /*
 | Гео-маршрути йдуть останніми і жорстко обмежені slug'ами міст —

@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreBookingRequest;
 use App\Models\Booking;
-use App\Models\Branch;
 use App\Models\DeliveryZone;
 use App\Models\Extra;
 use App\Models\Product;
@@ -61,13 +60,6 @@ class BookingController extends Controller
             'qty' => (int) $row['qty'],
         ]);
 
-        // Друга перевірка наявності: між додаванням у кошик і натисканням
-        // «Забронювати» міг пройти день, і позицію встигли забрати.
-        $branch = Branch::findOrFail($data['branch_id']);
-        $taken = $items->reject(fn (array $i) => $this->availability->isFree(
-            $i['product'], $branch, $i['from'], $i['to'], $i['qty']
-        ));
-
         $zone = $data['fulfilment'] === 'delivery'
             ? DeliveryZone::find($data['delivery_zone_id'])
             : null;
@@ -75,7 +67,12 @@ class BookingController extends Controller
         $days = $items->max('days');
         $totals = $this->pricing->itemsTotal($items);
 
-        $booking = DB::transaction(function () use ($data, $items, $extras, $zone, $days, $totals) {
+        // Перевірка наявності живе всередині транзакції: між додаванням
+        // у кошик і натисканням «Забронювати» позицію могли забрати, а два
+        // одночасні запити на останній екземпляр мають розійтися.
+        $taken = [];
+
+        $booking = DB::transaction(function () use ($data, $items, $extras, $zone, $days, $totals, &$taken) {
             $booking = Booking::create([
                 'number' => $this->nextNumber(),
                 'branch_id' => $data['branch_id'],
@@ -110,10 +107,15 @@ class BookingController extends Controller
                     'deposit' => $item['product']->deposit * $item['qty'],
                 ]);
 
-                // Екземпляри резервуються одразу — інакше їх забронюють двічі.
-                $this->availability->hold(
+                $reserved = $this->availability->reserve(
                     $booking, $item['product'], $item['qty'], $item['from'], $item['to']
                 );
+
+                // Не вистачило екземплярів — бронь лишається, але дати не
+                // блокуються: менеджер передзвонить і запропонує заміну.
+                if (! $reserved) {
+                    $taken[] = $item['product']->name;
+                }
             }
 
             foreach ($extras as $extra) {
@@ -135,7 +137,7 @@ class BookingController extends Controller
 
         return redirect()
             ->route('booking.show', $booking)
-            ->with('taken', $taken->pluck('product.name')->all());
+            ->with('taken', $taken);
     }
 
     public function show(Booking $booking): View

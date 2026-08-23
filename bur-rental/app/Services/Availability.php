@@ -74,6 +74,40 @@ class Availability
             ->all();
     }
 
+    /**
+     * Атомарно перевіряє і займає екземпляри.
+     *
+     * Два клієнти, які тиснуть «Забронювати» в одну секунду на останній
+     * перфоратор, без блокування проходили обидва: кожен встигав побачити
+     * «вільно» до того, як інший записав свою бронь. Тепер рядок складу
+     * блокується на час транзакції — друга спроба стає в чергу і чесно
+     * отримує відмову.
+     *
+     * @return bool чи вдалося зарезервувати
+     */
+    public function reserve(Booking $booking, Product $product, int $qty, string $from, string $to): bool
+    {
+        $branch = $booking->branch()->first();
+
+        if (! $branch) {
+            return false;
+        }
+
+        DB::table('inventory')
+            ->where('product_id', $product->id)
+            ->where('branch_id', $branch->id)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $this->isFree($product, $branch, $from, $to, $qty)) {
+            return false;
+        }
+
+        $this->hold($booking, $product, $qty, $from, $to);
+
+        return true;
+    }
+
     /** Займає екземпляри під бронь на весь її строк. */
     public function hold(Booking $booking, Product $product, int $qty, string $from, string $to): void
     {
