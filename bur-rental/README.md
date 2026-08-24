@@ -237,27 +237,43 @@ localStorage (`resources/js/stores/booking.js`) і переживають пер
 
 ## Шрифти
 
-Зараз Oswald / Golos Text / JetBrains Mono підключені через Google Fonts у
-`layouts/app.blade.php`. Для продакшену їх варто self-host'ити: шрифти лежать
-у критичному шляху LCP, а сторонній домен додає зайвий handshake. Найпростіше —
-плагін шрифтів `laravel-vite-plugin`:
+Oswald (дисплей), Golos Text (текст), JetBrains Mono (числа) — свої, лежать у
+`resources/fonts/`, підключені через `@font-face` на початку `resources/css/app.css`.
+Vite їх хешує і кладе в `public/build/assets/`.
 
-```js
-// vite.config.js
-import { bunny } from 'laravel-vite-plugin/fonts';
+Чому не CDN: шрифти в критичному шляху LCP, а сторонній домен — це зайвий DNS +
+TLS-handshake перед першим байтом. На мобільному 3G це половина секунди порожнього
+тексту. Плюс сайт більше не залежить від доступності чужого CDN.
 
-laravel({
-    input: ['resources/css/app.css', 'resources/js/app.js'],
-    fonts: [
-        bunny('Oswald', { weights: [500, 600, 700], subsets: ['cyrillic-ext', 'latin'] }),
-        bunny('Golos Text', { weights: [400, 500, 600], subsets: ['cyrillic-ext', 'latin'] }),
-        bunny('JetBrains Mono', { weights: [400, 600, 700], subsets: ['cyrillic-ext', 'latin'] }),
-    ],
-}),
+Дев'ять файлів, 188 КБ разом: три родини × три підмножини. Усі три родини
+варіативні, тому один файл покриває весь діапазон ваг (`font-weight: 400 600`) —
+окремі файли на кожну вагу не потрібні.
+
+Підмножини й навіщо кожна:
+
+| Підмножина | Навіщо |
+| --- | --- |
+| `cyrillic` | основний текст; і, ї, є, ґ саме тут |
+| `cyrillic-ext` | заради **₴** (U+20B4) — без неї гривня падає в системний шрифт і стоїть чужою поруч із ціною |
+| `latin` | назви брендів (Bosch, Makita), лапки, тире, апостроф |
+
+Грецька та в'єтнамська підмножини свідомо не тягнуться.
+
+Preload у layout — тільки на `golos-text-cyrillic.woff2`: ним набрано майже все
+на першому екрані. Решту браузер витягне сам за `unicode-range`; вантажити їх
+наперед означало б відбирати смугу в того єдиного файлу, від якого залежить LCP.
+
+Оновити шрифти:
+
+```bash
+curl -H 'User-Agent: Mozilla/5.0 Chrome/120' \
+  'https://fonts.googleapis.com/css2?family=Golos+Text:wght@400..600&family=JetBrains+Mono:wght@400..700&family=Oswald:wght@500..700&display=swap'
 ```
 
-після чого прибрати `<link>` на Google Fonts з layout. Обов'язково лишіть
-підмножину `cyrillic-ext` — без неї зникнуть і, ї, є, ґ.
+— у відповіді лежать посилання на `.woff2` по підмножинах. Завантажити потрібні
+три (`cyrillic-ext`, `cyrillic`, `latin`), покласти в `resources/fonts/` під тими ж
+іменами, `unicode-range` у `app.css` звірити з відповіддю: Google їх час від часу
+переглядає.
 
 ## Структура
 

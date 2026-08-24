@@ -16,15 +16,14 @@
 
     {{--
         Шрифти: Oswald (дисплей), Golos Text (текст), JetBrains Mono (числа) —
-        усі з повною українською кирилицею. Для продакшену їх варто self-host'ити
-        через @font-face з font-display: swap і підмножиною кирилиці: шрифти
-        лежать у критичному шляху LCP, а сторонній домен додає зайвий handshake.
-        Див. bur-rental/README.md, розділ «Шрифти».
+        свої, з @font-face у app.css. Preload тільки на кирилицю Golos Text:
+        це основний текстовий шрифт, ним набрано майже все на першому екрані.
+        Решту підмножин браузер витягне сам за unicode-range — вантажити їх
+        наперед означало б відбирати смугу в того єдиного файлу, від якого
+        залежить LCP.
     --}}
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;600;700&family=Oswald:wght@500;600;700&display=swap">
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="{{ Vite::asset('resources/fonts/golos-text-cyrillic.woff2') }}">
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('head')
