@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\Availability;
+use App\Services\Search\ProductSearch;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,6 +23,10 @@ class Product extends Model
     protected static function booted(): void
     {
         static::addGlobalScope('published', fn (Builder $query) => $query->where('published', true));
+
+        // Пошуковий рядок збирається при кожному збереженні — інакше товар,
+        // якому в адмінці поміняли бренд, шукався б за старим.
+        static::saving(fn (Product $product) => $product->search_text = app(ProductSearch::class)->haystack($product));
     }
 
     protected function casts(): array
@@ -156,15 +161,7 @@ class Product extends Model
 
     public function scopeSearch(Builder $query, ?string $term): Builder
     {
-        if (! $term) {
-            return $query;
-        }
-
-        return $query->where(function (Builder $q) use ($term) {
-            $q->where('name', 'like', "%{$term}%")
-                ->orWhere('sku', 'like', "%{$term}%")
-                ->orWhereHas('brand', fn (Builder $b) => $b->where('name', 'like', "%{$term}%"));
-        });
+        return app(ProductSearch::class)->apply($query, $term);
     }
 
     public function scopeInBranch(Builder $query, ?Branch $branch): Builder

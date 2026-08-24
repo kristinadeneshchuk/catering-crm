@@ -39,7 +39,7 @@ npm run build
 php artisan serve
 ```
 
-Тести: `php artisan test` — **40 тестів, усі зелені**. Стиль: `./vendor/bin/pint`.
+Тести: `php artisan test` — **51 тест, усі зелені**. Стиль: `./vendor/bin/pint`.
 Адмінка: `/admin`, доступи з `.env` (`ADMIN_EMAIL` / `ADMIN_PASSWORD`).
 
 ## 3. Що вже зроблено
@@ -51,6 +51,8 @@ php artisan serve
 | Життєвий цикл броні з перерахунком при поверненні | готово |
 | Наявність по екземплярах + атомарне резервування | готово |
 | Ліміти на публічні форми, `robots.txt` і `sitemap.xml` | готово |
+| Пошук: розкладка, транслітерація, синоніми, одруківки | готово |
+| Шрифти self-host | готово |
 | Каталог під ринок: 48 позицій, 24 категорії, 21 бренд, 8 комплектів | готово |
 | Telegram-сповіщення менеджеру | готово, чекає токен бота |
 | Парсер budprokat + імпорт чернетками | код готовий, **жодного разу не запускався на живому сайті** |
@@ -77,6 +79,11 @@ php artisan serve
 займає дати. Викликати `hold()` напряму з контролера не можна: два запити на
 останній екземпляр устигали обидва побачити «вільно» і зайнятість переповзала за
 склад. Є тест `test_booking_beyond_stock_never_holds_more_units_than_the_shelf_has`.
+
+**`products.search_text` збирається подією `saving`.** Якщо міняєте товари в
+обхід моделі (прямий `DB::table()->update()`, імпорт, перейменування бренду чи
+категорії) — після цього `php artisan search:reindex`, інакше товар шукатиметься
+за старими даними.
 
 **Ціни рахує тільки сервер.** `App\Services\RentalPricing` бере тариф із бази за
 фактичним строком. Ціна, надіслана браузером, ігнорується повністю. Є тест
@@ -159,8 +166,8 @@ php artisan catalog:import import/budprokat.json
    вміє. Рішення про шлюз (LiqPay / Fondy / monobank) за замовником.
 2. **Фото.** Скрізь плейсхолдери `<x-image-slot>` із зарезервованими
    пропорціями (вимога нульового CLS). Реальні фото від замовника.
-3. Кабінет клієнта, «обране», пошук на Meilisearch (зараз `LIKE` — не пробачає
-   одруківок).
+3. Кабінет клієнта і «обране» — у хендофі є лише пунктами навігації, екранів
+   немає.
 
 ## 6. Карта коду
 
@@ -177,20 +184,22 @@ app/
     RentalPricing.php     ← увесь рахунок оренди
     BookingWorkflow.php   ← життєвий цикл броні + календар
     ManagerAlerts.php     ← тексти Telegram-сповіщень
+    Search/               розбір запиту, синоніми, пошук по каталогу
     Import/               парсер budprokat
   Jobs/                   NotifyManagerInTelegram (черга, 3 спроби)
-  Console/Commands/       scrape:budprokat, catalog:import
+  Console/Commands/       scrape:budprokat, catalog:import, search:reindex
 database/
-  migrations/             8 файлів за доменами
+  migrations/             9 файлів за доменами
   seeders/data/           контент каталогу окремо від коду
 deploy/shared-hosting/    setup.php, index-alt.php
 resources/
-  css/app.css             токени дизайн-системи
+  css/app.css             токени дизайн-системи + @font-face
+  fonts/                  woff2, self-host
   js/components/          pdp, calendar, filters, booking-form
   js/stores/booking.js    кошик, місто, дати — localStorage
   views/components/       ~20 Blade-компонентів
   views/pages/            екрани
-tests/                    40 тестів
+tests/                    51 тест
 ```
 
 Детальніше — у `README.md`: там розписані дизайн-рішення, ринкові орієнтири цін

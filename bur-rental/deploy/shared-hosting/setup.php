@@ -42,7 +42,8 @@ foreach ($commands as [$command, $options]) {
     echo Artisan::output()."\n";
 }
 
-foreach (['storage:link', 'config:cache', 'view:cache', 'event:cache'] as $command) {
+// Сиди наповнюють пошуковий рядок самі, але міграція на вже наявну базу — ні.
+foreach (['search:reindex', 'storage:link', 'config:cache', 'view:cache', 'event:cache'] as $command) {
     echo "→ php artisan {$command}\n";
     try {
         Artisan::call($command);

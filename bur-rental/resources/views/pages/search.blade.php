@@ -28,6 +28,16 @@
             </div>
         @endif
 
+        @if ($corrected)
+            {{-- Точних збігів немає, показане знайдене з поправкою на одруківку.
+                 Про це треба сказати прямо: інакше клієнт вирішить, що ми не
+                 зрозуміли запит, і піде до конкурента. --}}
+            <p class="mt-4 flex items-center gap-2 text-sm text-text-2">
+                <x-ui-icon name="search" class="size-4 shrink-0 text-text-3" />
+                Точних збігів немає — показуємо найближче за назвою.
+            </p>
+        @endif
+
         @if ($categories->isNotEmpty())
             <x-section title="Категорії">
                 <div class="flex flex-wrap gap-2">
