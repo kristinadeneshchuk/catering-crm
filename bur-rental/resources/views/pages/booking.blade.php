@@ -4,7 +4,7 @@
 @section('description', 'Оформлення оренди: склад, дати, філія, доставка й оплата — одним екраном.')
 
 @section('content')
-    <div class="container-bur" x-data="bookingForm({ zones: {{ Js::from($zones->map->only(['slug', 'name', 'price', 'eta'])) }}, deposit: 0 })">
+    <div class="container-bur" x-data="bookingForm({ zones: {{ Js::from($zones->map->only(['slug', 'name', 'price', 'eta'])) }}, deposit: 0, client: {{ Js::from($client ? ['phone' => $client->display_phone, 'name' => $client->name, 'company' => $client->company, 'edrpou' => $client->edrpou, 'email' => $client->email] : null) }} })">
         <x-breadcrumbs :items="['Головна' => route('home'), 'Бронювання' => null]" />
 
         <h1 class="t-h1">Бронювання</h1>

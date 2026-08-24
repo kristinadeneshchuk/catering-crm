@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Client;
 use App\Models\User;
 
 return [
@@ -42,6 +43,16 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        /*
+        | Клієнти сайту — окремий guard і окрема таблиця. `users` — це
+        | співробітники з доступом до Filament, і жодна помилка в ролях не
+        | повинна пустити клієнта в адмінку.
+        */
+        'client' => [
+            'driver' => 'session',
+            'provider' => 'clients',
+        ],
     ],
 
     /*
@@ -65,6 +76,11 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', User::class),
+        ],
+
+        'clients' => [
+            'driver' => 'eloquent',
+            'model' => Client::class,
         ],
 
         // 'users' => [

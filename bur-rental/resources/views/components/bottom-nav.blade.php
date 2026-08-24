@@ -16,10 +16,15 @@
             </span>
             Кошик
         </button>
-        <a href="{{ route('catalog.index') }}" class="flex min-h-11 flex-col items-center justify-center gap-[3px] text-[11px] font-semibold text-text-2 no-underline hover:text-brand hover:no-underline">
-            <x-ui-icon name="heart" class="size-[22px]" /> Обране
+        <a href="{{ route('favourites') }}" class="flex min-h-11 flex-col items-center justify-center gap-[3px] text-[11px] font-semibold text-text-2 no-underline hover:text-brand hover:no-underline">
+            <span class="relative">
+                <x-ui-icon name="heart" class="size-[22px]" />
+                <span x-show="$store.favourites.count" x-cloak x-text="$store.favourites.count"
+                      class="absolute -right-2.5 -top-1.5 rounded-[8px] bg-brand px-1.5 py-px font-mono text-[10px] font-bold text-white"></span>
+            </span>
+            Обране
         </a>
-        <a href="{{ route('contacts') }}" class="flex min-h-11 flex-col items-center justify-center gap-[3px] text-[11px] font-semibold text-text-2 no-underline hover:text-brand hover:no-underline">
+        <a href="{{ route('cabinet') }}" class="flex min-h-11 flex-col items-center justify-center gap-[3px] text-[11px] font-semibold text-text-2 no-underline hover:text-brand hover:no-underline">
             <x-ui-icon name="user" class="size-[22px]" /> Кабінет
         </a>
     </div>

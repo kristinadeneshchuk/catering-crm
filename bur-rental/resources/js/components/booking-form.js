@@ -3,7 +3,7 @@
  | Багатосторінковий чекаут тут коштував би конверсії — половина трафіку
  | оформлює замовлення з телефона, стоячи на об'єкті.
  */
-export default function bookingForm({ zones = [], deposit = 0 }) {
+export default function bookingForm({ zones = [], deposit = 0, client = null }) {
     return {
         step: 1,
         zones,
@@ -14,11 +14,13 @@ export default function bookingForm({ zones = [], deposit = 0 }) {
         payment: 'card',
         depositWay: 'card-hold',
 
-        phone: '',
-        name: '',
-        company: '',
-        edrpou: '',
-        email: '',
+        // Дані залогіненого клієнта підставляються одразу: набирати телефон
+        // і ЄДРПОУ вдруге — найдурніша причина кинути оформлення.
+        phone: client?.phone ?? '',
+        name: client?.name ?? '',
+        company: client?.company ?? '',
+        edrpou: client?.edrpou ?? '',
+        email: client?.email ?? '',
         zone: zones[0]?.slug ?? null,
         address: '',
         errors: {},

@@ -39,6 +39,13 @@
                class="flex h-11 flex-1 items-center justify-center rounded-[6px] bg-brand text-sm font-semibold text-white no-underline hover:bg-brand-hover hover:text-white hover:no-underline">
                 Забронювати
             </a>
+            <button type="button" @click="$store.favourites.toggle({{ $product->id }})"
+                    :aria-pressed="$store.favourites.has({{ $product->id }})"
+                    :class="$store.favourites.has({{ $product->id }}) ? 'border-brand text-brand' : 'border-border-1 text-text-3'"
+                    class="inline-flex size-11 cursor-pointer items-center justify-center rounded-[6px] border"
+                    title="В обране">
+                <x-ui-icon name="heart" class="size-[18px]" />
+            </button>
             <button type="button" @click="$store.booking.toggleCompare({{ $product->id }})"
                     :aria-pressed="$store.booking.inCompare({{ $product->id }})"
                     :class="$store.booking.inCompare({{ $product->id }}) ? 'border-brand text-brand' : 'border-border-1 text-text-3'"

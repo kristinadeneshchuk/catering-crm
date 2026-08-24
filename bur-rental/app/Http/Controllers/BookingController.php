@@ -28,6 +28,8 @@ class BookingController extends Controller
 
         return view('pages.booking', [
             'branches' => $city->branches,
+            // Залогінений не набирає свої дані вдруге.
+            'client' => auth('client')->user(),
             'zones' => $city->deliveryZones,
             // Кошик живе в localStorage, тому сторінка вміє дістати товар
             // за slug'ом і показати актуальну ціну, а не збережену торік.
@@ -75,6 +77,9 @@ class BookingController extends Controller
         $booking = DB::transaction(function () use ($data, $items, $extras, $zone, $days, $totals, &$taken) {
             $booking = Booking::create([
                 'number' => $this->nextNumber(),
+                // Бронь залогіненого одразу лягає в його кабінет; гостьова
+                // знайдеться за телефоном, коли він туди зайде.
+                'client_id' => auth('client')->id(),
                 'branch_id' => $data['branch_id'],
                 'client_type' => $data['client_type'],
                 'name' => $data['name'] ?? null,

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\UkrainianPhone;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -21,7 +22,7 @@ class StoreBookingRequest extends FormRequest
 
             'branch_id' => ['required', 'exists:branches,id'],
             'client_type' => ['required', Rule::in(['person', 'company'])],
-            'phone' => ['required', 'string', 'regex:/^\+?380\s?\d{2}\s?\d{3}\s?\d{2}\s?\d{2}$/'],
+            'phone' => ['required', 'string', new UkrainianPhone],
             'name' => ['required_if:client_type,person', 'nullable', 'string', 'max:120'],
             'company' => ['required_if:client_type,company', 'nullable', 'string', 'max:160'],
             'edrpou' => ['required_if:client_type,company', 'nullable', 'digits:8'],
@@ -39,7 +40,6 @@ class StoreBookingRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'phone.regex' => 'Введіть номер у форматі +380 XX XXX XX XX',
             'edrpou.digits' => 'ЄДРПОУ складається з 8 цифр',
             'items.required' => 'Кошик порожній — додайте інструмент',
         ];

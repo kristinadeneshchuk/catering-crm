@@ -16,6 +16,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             ResolveCity::class,
         ]);
+
+        // Кабінет — єдине місце на сайті, куди пускають за сесією. Без цих
+        // двох рядків Laravel шле гостя на неіснуючий /login, а вже
+        // залогіненого — на /dashboard, якого в проєкті теж немає.
+        $middleware->redirectGuestsTo(fn () => route('cabinet.login'));
+        $middleware->redirectUsersTo(fn () => route('cabinet'));
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

@@ -141,8 +141,16 @@ class BookingTest extends TestCase
 
     public function test_phone_format_is_validated(): void
     {
-        $this->post('/booking', $this->payload(['phone' => '0672458080']))
+        // Не номер — відмова.
+        $this->post('/booking', $this->payload(['phone' => '245-80-80']))
             ->assertSessionHasErrors('phone');
+
+        // А от місцеве написання приймається: людина набирає так, як звикла,
+        // а в базу номер лягає канонічним.
+        $this->post('/booking', $this->payload(['phone' => '0672458080']))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('+380 67 245 80 80', Booking::latest('id')->firstOrFail()->phone);
     }
 
     public function test_lead_form_stops_accepting_after_a_flood(): void

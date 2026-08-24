@@ -25,6 +25,18 @@
     <link rel="preload" as="font" type="font/woff2" crossorigin
           href="{{ Vite::asset('resources/fonts/golos-text-cyrillic.woff2') }}">
 
+    @php
+        // Стартовий стан обраного. У гостя список порожній — його підставить
+        // localStorage; у залогіненого приходить із сервера, бо він мусить бути
+        // однаковий на всіх пристроях.
+        $client = auth('client')->user();
+        $favourites = json_encode([
+            'authenticated' => (bool) $client,
+            'ids' => $client ? $client->favourites()->pluck('products.id') : [],
+        ], JSON_UNESCAPED_UNICODE);
+    @endphp
+    <script>window.burFavourites = {!! $favourites !!};</script>
+
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('head')
 </head>

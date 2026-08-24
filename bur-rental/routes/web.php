@@ -3,9 +3,12 @@
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\BranchController;
 use App\Http\Controllers\BrandController;
+use App\Http\Controllers\CabinetController;
 use App\Http\Controllers\CatalogController;
 use App\Http\Controllers\CityController;
+use App\Http\Controllers\ClientAuthController;
 use App\Http\Controllers\DistrictController;
+use App\Http\Controllers\FavouriteController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\KitController;
 use App\Http\Controllers\LeadController;
@@ -48,6 +51,33 @@ Route::get('/b2b', [PageController::class, 'b2b'])->name('b2b');
 
 Route::post('/leads', [LeadController::class, 'store'])
     ->middleware('throttle:leads')->name('leads.store');
+
+/*
+| Кабінет клієнта. Guard `client` — не `web`: у `web` сидять співробітники
+| з доступом до Filament, і плутати ці дві ролі не можна.
+*/
+Route::get('/favourites', [FavouriteController::class, 'index'])->name('favourites');
+Route::get('/favourites/items', [FavouriteController::class, 'items'])->name('favourites.items');
+// Прив'язка по id, а не по slug: у localStorage лежать саме id.
+Route::post('/favourites/{product:id}', [FavouriteController::class, 'toggle'])->name('favourites.toggle');
+Route::post('/favourites-sync', [FavouriteController::class, 'sync'])->name('favourites.sync');
+
+Route::middleware('guest:client')->group(function () {
+    Route::get('/cabinet/login', [ClientAuthController::class, 'form'])->name('cabinet.login');
+    Route::post('/cabinet/login', [ClientAuthController::class, 'requestCode'])
+        ->middleware('throttle:login-code')->name('cabinet.request-code');
+    Route::get('/cabinet/code', [ClientAuthController::class, 'codeForm'])->name('cabinet.code');
+    Route::post('/cabinet/code', [ClientAuthController::class, 'login'])
+        ->middleware('throttle:login-code')->name('cabinet.verify');
+});
+
+Route::middleware('auth:client')->group(function () {
+    Route::get('/cabinet', [CabinetController::class, 'index'])->name('cabinet');
+    Route::get('/cabinet/profile', [CabinetController::class, 'profile'])->name('cabinet.profile');
+    Route::put('/cabinet/profile', [CabinetController::class, 'updateProfile'])->name('cabinet.profile.update');
+    Route::get('/cabinet/booking/{booking}', [CabinetController::class, 'booking'])->name('cabinet.booking');
+    Route::post('/cabinet/logout', [ClientAuthController::class, 'logout'])->name('cabinet.logout');
+});
 
 /*
 | Гео-маршрути йдуть останніми і жорстко обмежені slug'ами міст —

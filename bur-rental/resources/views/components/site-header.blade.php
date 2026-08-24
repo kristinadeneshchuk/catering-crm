@@ -62,6 +62,23 @@
                 </button>
             </div>
 
+            {{-- Обране й кабінет на десктопі: на мобільному вони в нижній навігації --}}
+            <a href="{{ route('favourites') }}"
+               class="flex items-center gap-1.5 text-sm font-medium text-text-1 no-underline hover:text-brand hover:no-underline max-nav:hidden">
+                <span class="relative">
+                    <x-ui-icon name="heart" class="size-5" />
+                    <span x-show="$store.favourites.count" x-cloak x-text="$store.favourites.count"
+                          class="absolute -right-2 -top-1.5 rounded-[8px] bg-brand px-1.5 py-px font-mono text-[10px] font-bold text-white"></span>
+                </span>
+                Обране
+            </a>
+
+            <a href="{{ route('cabinet') }}"
+               class="flex items-center gap-1.5 text-sm font-medium text-text-1 no-underline hover:text-brand hover:no-underline max-nav:hidden">
+                <x-ui-icon name="user" class="size-5" />
+                {{ auth('client')->check() ? 'Кабінет' : 'Увійти' }}
+            </a>
+
             <button type="button" @click="$store.booking.drawerOpen = true"
                     class="flex cursor-pointer items-center gap-1.5 text-sm font-medium text-text-1">
                 <span class="relative">
