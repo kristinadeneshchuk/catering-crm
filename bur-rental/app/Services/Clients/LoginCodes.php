@@ -4,6 +4,7 @@ namespace App\Services\Clients;
 
 use App\Models\Client;
 use App\Models\ClientLoginCode;
+use App\Services\Messaging\Sms;
 use App\Support\Phone;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
@@ -22,7 +23,7 @@ class LoginCodes
 
     public const MAX_ATTEMPTS = 3;
 
-    public function __construct(private readonly CodeSender $sender) {}
+    public function __construct(private readonly Sms $sms) {}
 
     /**
      * Видає код і віддає його на канал доставки.
@@ -47,7 +48,11 @@ class LoginCodes
             'ip' => $ip,
         ]);
 
-        $this->sender->send($phone, $code);
+        $this->sms->send($phone, sprintf(
+            'Код входу в кабінет БУР: %s. Діє %d хвилин. Нікому його не передавайте.',
+            $code,
+            self::LIFETIME_MINUTES
+        ));
 
         return $code;
     }

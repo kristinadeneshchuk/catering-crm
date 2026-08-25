@@ -39,7 +39,7 @@ npm run build
 php artisan serve
 ```
 
-Тести: `php artisan test` — **70 тестів, усі зелені**. Стиль: `./vendor/bin/pint`.
+Тести: `php artisan test` — **77 тестів, усі зелені**. Стиль: `./vendor/bin/pint`.
 Адмінка: `/admin`, доступи з `.env` (`ADMIN_EMAIL` / `ADMIN_PASSWORD`).
 
 ## 3. Що вже зроблено
@@ -53,6 +53,7 @@ php artisan serve
 | Ліміти на публічні форми, `robots.txt` і `sitemap.xml` | готово |
 | Пошук: розкладка, транслітерація, синоніми, одруківки | готово |
 | Кабінет клієнта і обране | готово, **вхід поки без SMS** |
+| Нагадування за добу до повернення | готово, **чекає SMS-шлюз** |
 | Шрифти self-host | готово |
 | Каталог під ринок: 48 позицій, 24 категорії, 21 бренд, 8 комплектів | готово |
 | Telegram-сповіщення менеджеру | готово, чекає токен бота |
@@ -145,8 +146,12 @@ view-composer у `ViewServiceProvider`.
    в `public_html` разом із вмістом `bur_app/public/`.
 3. Відкрити `https://домен/setup.php?token=<SETUP_TOKEN з .env>` — скрипт
    зробить міграції, сиди, кеші й **видалить сам себе**. Перевірити, що видалив.
-4. Крон раз на хвилину (без нього не підуть Telegram-сповіщення):
-   `cd ~/bur_app && php artisan queue:work --stop-when-empty --max-time=50`
+4. Два крон-рядки. Черга (без неї не підуть Telegram-сповіщення) і планувальник
+   (без нього не підуть нагадування про повернення):
+   ```
+   * * * * * cd ~/bur_app && php artisan queue:work --stop-when-empty --max-time=50
+   * * * * * cd ~/bur_app && php artisan schedule:run >> /dev/null 2>&1
+   ```
 5. Увімкнути Let's Encrypt: `APP_URL` уже `https://`.
 
 Тестовий майданчик закритий від пошуковиків: `SITE_NOINDEX=true` дає `noindex`
@@ -173,17 +178,19 @@ php artisan catalog:import import/budprokat.json
 
 ### 5.3. Далі за пріоритетом
 
-1. **SMS для входу в кабінет.** Зараз код іде в лог (`LogCodeSender`) — на
-   бойовому так лишати не можна. Треба один клас на `CodeSender` і рядок у
-   `config/clients.php`. На тестовому майданчику код можна показувати на
-   екрані: `CLIENT_SHOW_CODE=true` (працює тільки разом із `SITE_NOINDEX=true`).
+1. **SMS-шлюз.** Це єдине, що лишилось увімкнути: від нього залежать і код
+   входу в кабінет, і нагадування про повернення. Зараз обидва пишуться в лог
+   (`LogSms`, рівень `warning`). Треба один клас на інтерфейс
+   `App\Services\Messaging\Sms` і рядок у `config/clients.php`. На тестовому
+   майданчику код входу можна показувати на екрані: `CLIENT_SHOW_CODE=true`
+   (працює тільки разом із `SITE_NOINDEX=true`).
 2. **Оплата.** Спосіб оплати зберігається в брони, шлюзу немає. Окремо продумати
    заставу: це не платіж, а заморозка на картці (hold), і не кожен провайдер це
    вміє. Рішення про шлюз (LiqPay / Fondy / monobank) за замовником.
 3. **Фото.** Скрізь плейсхолдери `<x-image-slot>` із зарезервованими
    пропорціями (вимога нульового CLS). Реальні фото від замовника.
-4. Пуш або SMS-нагадування за добу до повернення — дані для цього вже є
-   (`Booking::returns_in`), каналу немає.
+4. Ресурс «Клієнти» в адмінці — зараз менеджер бачить телефони в бронях, але
+   не бачить, хто з них постійний.
 
 ## 6. Карта коду
 
@@ -203,12 +210,15 @@ app/
     BookingWorkflow.php   ← життєвий цикл броні + календар
     ManagerAlerts.php     ← тексти Telegram-сповіщень
     Search/               розбір запиту, синоніми, пошук по каталогу
-    Clients/              одноразові коди входу + канал доставки
+    Clients/              одноразові коди входу
+    Messaging/            канал SMS (поки лог)
+    ReturnReminders.php   ← нагадування за добу до повернення
     Import/               парсер budprokat
   Jobs/                   NotifyManagerInTelegram (черга, 3 спроби)
-  Console/Commands/       scrape:budprokat, catalog:import, search:reindex
+  Console/Commands/       scrape:budprokat, catalog:import, search:reindex,
+                          reminders:returns
 database/
-  migrations/             10 файлів за доменами
+  migrations/             11 файлів за доменами
   seeders/data/           контент каталогу окремо від коду
 deploy/shared-hosting/    setup.php, index-alt.php
 resources/
@@ -218,7 +228,7 @@ resources/
   js/stores/booking.js    кошик, місто, дати — localStorage
   views/components/       ~20 Blade-компонентів
   views/pages/            екрани
-tests/                    70 тестів
+tests/                    77 тестів
 ```
 
 Детальніше — у `README.md`: там розписані дизайн-рішення, ринкові орієнтири цін

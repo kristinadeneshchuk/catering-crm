@@ -7,8 +7,8 @@ use App\Models\Branch;
 use App\Models\Client;
 use App\Models\ClientLoginCode;
 use App\Models\Product;
-use App\Services\Clients\CodeSender;
 use App\Services\Clients\LoginCodes;
+use App\Services\Messaging\Sms;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -39,17 +39,18 @@ class CabinetTest extends TestCase
     public function test_login_by_phone_and_code(): void
     {
         // Підміняємо канал доставки: у тесті ми і є «SMS».
-        $sent = new class implements CodeSender
+        $sent = new class implements Sms
         {
             public string $code = '';
 
-            public function send(string $phone, string $code): void
+            public function send(string $phone, string $text): void
             {
-                $this->code = $code;
+                preg_match('~\d{6}~', $text, $m);
+                $this->code = $m[0] ?? '';
             }
         };
 
-        $this->app->instance(CodeSender::class, $sent);
+        $this->app->instance(Sms::class, $sent);
 
         $this->post('/cabinet/login', ['phone' => '+380 67 245 80 80'])
             ->assertRedirect(route('cabinet.code'));

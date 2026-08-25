@@ -1,8 +1,15 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+/*
+| Нагадування про повернення — о 18:00, за добу до дати здачі.
+|
+| Час обраний не випадково: раніше клієнт ще на об'єкті й забуде, пізніше —
+| вже не встигне перепланувати завтрашній день. Команда сама пропускає броні,
+| яким нагадування вже пішло, тому зайвий запуск нічого не зіпсує.
+|
+| На шаред-хостингу планувальник заводиться одним крон-рядком:
+| * * * * * cd ~/bur_app && php artisan schedule:run >> /dev/null 2>&1
+*/
+Schedule::command('reminders:returns')->dailyAt('18:00')->withoutOverlapping();

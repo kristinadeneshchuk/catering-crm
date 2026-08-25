@@ -2,7 +2,7 @@
 
 namespace App\Providers;
 
-use App\Services\Clients\CodeSender;
+use App\Services\Messaging\Sms;
 use App\Support\Phone;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -16,7 +16,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->bind(CodeSender::class, fn () => $this->app->make(config('clients.code_sender')));
+        $this->app->bind(Sms::class, fn () => $this->app->make(config('clients.sms')));
     }
 
     /**

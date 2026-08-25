@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Jobs\NotifyManagerInTelegram;
 use App\Models\Booking;
 use App\Models\Lead;
+use Illuminate\Support\Collection;
 
 /**
  * Тексти сповіщень менеджеру. Формат один: що сталося, хто, скільки,
@@ -54,6 +55,29 @@ class ManagerAlerts
             ($lead->message ? "\n".e($lead->message)."\n" : '').
             ($lead->context ? "\nЗвідки: {$lead->context}\n" : '').
             "\n".url('/admin/leads')
+        );
+    }
+
+    /**
+     * Список повернень на завтра — одним повідомленням увечері.
+     *
+     * Менеджеру потрібен не сигнал по кожній броні, а перелік: скільки одиниць
+     * заходить, хто саме і кому дзвонити, якщо не приїхали.
+     *
+     * @param  Collection<int, Booking>  $bookings
+     */
+    public function returnsTomorrow(Collection $bookings): void
+    {
+        $rows = $bookings
+            ->map(fn (Booking $b) => "• {$b->number} · ".e($b->company ?: $b->name ?: '—').
+                " · {$b->phone}\n   ".e($b->items->pluck('title')->join(', ')))
+            ->join("\n");
+
+        $this->send(
+            '📦 <b>Завтра повертають ('.$bookings->count()." шт.)</b>\n\n".
+            $rows."\n\n".
+            "Клієнтам нагадування вже пішло.\n".
+            url('/admin/bookings')
         );
     }
 
