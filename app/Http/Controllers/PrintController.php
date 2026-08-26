@@ -336,6 +336,9 @@ class PrintController extends Controller
         // Меню кешуємо по plan_id — кожен план має свій день циклу
         $menusByPlan = $this->getMenusForOrders($orders, $targetDate);
 
+        // Назви прийомів по sort_order — щоб не смикати БД у циклі.
+        $mealNames = \App\Models\MealType::orderBy('sort_order')->pluck('name', 'sort_order');
+
         $stickers = [];
 
         foreach ($orders as $order) {
@@ -361,6 +364,42 @@ class PrintController extends Controller
                 $isEvening = $hour >= 12;
             } else {
                 $isEvening = \App\Services\ScheduleService::isEvening($order->schedule_type);
+            }
+
+            // Клієнт свідомо без якогось прийому: у фасувальний і виробничий
+            // лист він по ньому просто не потрапляє — це правильно, але на
+            // кухні виглядає як збій системи. Тому друкуємо окремий стікер.
+            // Клієнти зі стандартним набором сюди не потрапляють.
+            $ownMeals = $order->client?->mealTypes?->pluck('sort_order')->all() ?? [];
+
+            if ($ownMeals) {
+                $missing = array_diff(
+                    \App\Models\MealPlan::getAllowedSortOrders((int) $order->calories),
+                    $ownMeals,
+                );
+
+                if ($missing) {
+                    $stickers[] = [
+                        'client'          => $order->client?->name ?? 'Без імені',
+                        'client_id'       => $order->client?->id ?? '---',
+                        'meal'            => 'УВАГА',
+                        'meal_type_id'    => null,
+                        'meal_sort_order' => null,
+                        'dish'            => '',
+                        'weight'          => 0,
+                        'time'            => 0, // друкується першим серед стікерів клієнта
+                        'calories'        => (int) $order->calories,
+                        'project'         => $order->project,
+                        'changes'         => [],
+                        'missing_meals'   => collect($missing)->sort()
+                            ->map(fn ($so) => $mealNames[$so] ?? ('Прийом '.$so))
+                            ->values()->all(),
+                        'date'            => $targetDate,
+                        'bundles'         => [],
+                        'is_evening'      => $isEvening,
+                        'delivery_slot'   => $isEvening ? 'Вечір' : 'Ранок',
+                    ];
+                }
             }
 
             foreach ($calc['items'] as $it) {
