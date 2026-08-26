@@ -283,6 +283,44 @@ class PrintController extends Controller
             ];
         }
 
+        // Кілька раціонів на одну адресу в одну доставку.
+        //
+        // Курʼєр бере один пакет і йде, бо не знає, що їх два (клієнт + дружина,
+        // додатковий раціон тощо). Наліпку при цьому не прибираємо в жодного —
+        // інакше пакет поїхав би зовсім без неї.
+        $groups = [];
+
+        foreach ($manifests as $i => $m) {
+            $address = trim((string) ($m['address'] ?? ''));
+
+            if ($address === '' || $address === 'Самовивіз') {
+                continue;
+            }
+
+            // Ранкові й вечірні їдуть різними рейсами — це не «одна адреса».
+            $key = mb_strtolower(preg_replace('/\s+/u', ' ', $address))
+                .'|'.($m['is_evening'] ? 'evening' : 'morning');
+
+            $groups[$key][] = $i;
+        }
+
+        foreach ($groups as $indexes) {
+            if (count($indexes) < 2) {
+                continue;
+            }
+
+            // Порядок стабільний, щоб 1/2 і 2/2 не мінялися місцями між друками.
+            usort($indexes, fn ($a, $b) => [(string) $manifests[$a]['client_id'], (int) $manifests[$a]['calories']]
+                <=> [(string) $manifests[$b]['client_id'], (int) $manifests[$b]['calories']]);
+
+            foreach ($indexes as $pos => $i) {
+                $manifests[$i]['same_address'] = [
+                    'pos'   => $pos + 1,
+                    'total' => count($indexes),
+                ];
+            }
+        }
+
         usort($manifests, function ($a, $b) {
             // 1. Індивідуальні — спочатку
             if ($a['is_individual'] !== $b['is_individual']) {

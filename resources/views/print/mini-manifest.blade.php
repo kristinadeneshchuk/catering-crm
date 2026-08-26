@@ -262,6 +262,22 @@
             letter-spacing: 0.2px;
         }
 
+        /* Кілька раціонів на одну адресу. Помітно, але не кричить: це не
+           помилка, а підказка курʼєру не забути другий пакет. */
+        .tag-same-address {
+            display: inline-block;
+            font-size: 6.5pt;
+            font-weight: 900;
+            color: #9a3412;
+            background: #ffedd5;
+            border: 0.3pt solid #fdba74;
+            border-radius: 1mm;
+            padding: 0.3mm 1.2mm;
+            margin-top: 0.8mm;
+            letter-spacing: 0.2px;
+            white-space: nowrap;
+        }
+
         .tag-address {
             font-size: 5.5pt;
             color: #6b7280;
@@ -547,6 +563,12 @@
                         </span>
                     @endif
                 </div>
+                @if(!empty($man['same_address']))
+                    {{-- Кілька пакетів на одну адресу: щоб курʼєр забрав усі. --}}
+                    <span class="tag-same-address">
+                        ОДНА АДРЕСА 📦 {{ $man['same_address']['pos'] }}/{{ $man['same_address']['total'] }}
+                    </span>
+                @endif
                 @if(($man['address'] ?? 'Самовивіз') !== 'Самовивіз')
                     <span class="tag-address">{{ $man['address'] }}</span>
                 @else
