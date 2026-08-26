@@ -7,6 +7,8 @@
     .emp-btn:hover { opacity: .75; }
     .emp-cell-btn { border: none; cursor: pointer; transition: transform .12s; background: transparent; }
     .emp-cell-btn:hover { transform: scale(1.12); }
+    .emp-slot-item:hover { background: #27272a !important; }
+    [x-cloak] { display: none !important; }
     .emp-duty-star { transition: transform .12s ease, background .15s, box-shadow .15s; }
     .emp-duty-star:hover { transform: scale(1.18); }
     .emp-duty-star.is-active { animation: emp-duty-pulse 2s ease-in-out infinite; }
@@ -137,6 +139,22 @@
                             <span style="display:inline-block;width:4px;height:4px;border-radius:50%;background:#3b82f6;"></span>
                             @endif
                         </span>
+
+                        {{-- День настав, а плани ще не підтверджені. Автоматично
+                             перетворювати план у факт не можна: заплатили б тому,
+                             хто не вийшов. Тому — кнопка на весь день, а тих, хто
+                             не вийшов, менеджер знімає кліком по клітинці. --}}
+                        @php $plannedHere = (int) ($data['planned_by_date'][$date] ?? 0); @endphp
+                        @if($plannedHere > 0 && $date <= $today)
+                        <button wire:click="confirmDay('{{ $date }}')"
+                                wire:confirm="Підтвердити {{ $plannedHere }} запланован{{ $plannedHere === 1 ? 'ий вихід' : 'і виходи' }} за {{ \Carbon\Carbon::parse($date)->format('d.m') }}? Нарахується ставка."
+                                title="Підтвердити виходи ({{ $plannedHere }})"
+                                style="display:block;margin:4px auto 0;padding:1px 6px;border-radius:6px;cursor:pointer;
+                                       background:#052e16;border:1px solid #16a34a;color:#4ade80;
+                                       font-size:10px;font-weight:700;line-height:1.6;white-space:nowrap;">
+                            ✓ {{ $plannedHere }}
+                        </button>
+                        @endif
                     </th>
                     @endforeach
                 </tr>
@@ -186,19 +204,91 @@
                         $isDuty  = $dayInfo['is_duty'];
                         $isHalf  = $dayInfo['is_half'] ?? false;
                         $isCourier = $row['position'] === 'courier';
+                        $isPlan  = $dayInfo['is_planned'] ?? false;
+                        $slot    = $dayInfo['slot'] ?? null;
                         // Для курʼєра терміни інші: 1 круг = 2 виїзди, ½ = 1 виїзд.
                         $tipFull = $isCourier ? '2 виїзди (клік — 1 виїзд)' : 'Повна зміна (клік — зробити пів зміни)';
                         $tipHalf = $isCourier ? '1 виїзд (клік — прибрати)' : 'Пів зміни (клік — прибрати)';
                     @endphp
                     <td style="text-align:center;padding:6px 4px;">
                         <div style="position:relative;display:inline-block;width:34px;height:34px;">
-                            @if($status === 'present')
+                            @if($isCourier)
+                                {{-- Курʼєр працює виїздами: ранок, вечір або обидва.
+                                     Циклом кліків це не вибереш, тому — меню.
+                                     Меню position:fixed, інакше горизонтальний скрол
+                                     таблиці його обріже. --}}
+                                @php
+                                    $face = match ($slot) {
+                                        'morning' => '☀',
+                                        'evening' => '☾',
+                                        default   => $status === 'present' ? '✓' : '–',
+                                    };
+                                    $fillC = $status === 'present' ? '#1e3a5f' : 'transparent';
+                                @endphp
+                                <div x-data="{ open: false, mx: 0, my: 0 }"
+                                     @keydown.escape.window="open = false"
+                                     style="display:inline-block;">
+                                    <button type="button" class="emp-cell-btn"
+                                        @click="const r = $el.getBoundingClientRect(); mx = r.left + r.width / 2; my = r.bottom + 6; open = ! open"
+                                        @click.outside="open = false"
+                                        title="{{ $status === 'present' ? ($isPlan ? 'План: ' : '') . ($dayInfo['slot_label'] ?? '') . ' · ' . ($dayInfo['rate'] ?? 0) . ' ₴' : 'Поставити зміну' }}"
+                                        style="width:34px;height:34px;border-radius:50%;
+                                               background:{{ $isPlan ? 'transparent' : $fillC }};
+                                               border:{{ $isPlan ? '2px dashed #60a5fa' : 'none' }};
+                                               display:inline-flex;align-items:center;justify-content:center;
+                                               color:{{ $status === 'present' ? '#60a5fa' : '#3f3f46' }};
+                                               font-size:{{ $slot === 'full' || $slot === null ? '15px' : '14px' }};
+                                               font-weight:600;line-height:1;">
+                                        {{ $face }}
+                                    </button>
+
+                                    <div x-show="open" x-cloak
+                                         :style="`position:fixed;left:${mx}px;top:${my}px;transform:translateX(-50%);`"
+                                         style="z-index:9999;min-width:170px;padding:5px;border-radius:10px;
+                                                background:#18181b;border:1px solid #3f3f46;
+                                                box-shadow:0 10px 30px rgba(0,0,0,.6);text-align:left;">
+                                        @foreach([
+                                            ['morning', '☀ Ранок',           '1 виїзд'],
+                                            ['evening', '☾ Вечір',           '1 виїзд'],
+                                            ['full',    '☀☾ Ранок + вечір',  '2 виїзди'],
+                                        ] as [$key, $label, $hint])
+                                        <button type="button" class="emp-slot-item"
+                                                wire:click="setSlot({{ $row['id'] }}, '{{ $date }}', '{{ $key }}')"
+                                                @click="open = false"
+                                                style="display:flex;width:100%;align-items:center;justify-content:space-between;
+                                                       gap:10px;padding:6px 9px;border-radius:7px;cursor:pointer;
+                                                       background:{{ $slot === $key ? '#1e3a5f' : 'transparent' }};
+                                                       border:none;color:#e4e4e7;font-size:12px;white-space:nowrap;">
+                                            <span>{{ $label }}</span>
+                                            <span style="color:#71717a;font-size:11px;">{{ $hint }}</span>
+                                        </button>
+                                        @endforeach
+
+                                        @if($status === 'present')
+                                        <button type="button" class="emp-slot-item"
+                                                wire:click="setSlot({{ $row['id'] }}, '{{ $date }}', null)"
+                                                @click="open = false"
+                                                style="display:block;width:100%;text-align:left;margin-top:3px;
+                                                       padding:6px 9px;border-radius:7px;cursor:pointer;
+                                                       background:transparent;border:none;color:#f87171;font-size:12px;">
+                                            Прибрати зміну
+                                        </button>
+                                        @endif
+
+                                        @if($date > $today)
+                                        <p style="margin:5px 9px 3px;color:#52525b;font-size:10px;line-height:1.4;">
+                                            Це план. Гроші нарахуються, коли день підтвердять.
+                                        </p>
+                                        @endif
+                                    </div>
+                                </div>
+                            @elseif($status === 'present')
                                 @php $fill = $isDuty ? '#78350f' : ($row['is_kitchen'] ? '#14532d' : '#1e3a5f'); @endphp
                                 <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
                                     title="{{ $isHalf ? $tipHalf : $tipFull }}"
                                     style="width:34px;height:34px;border-radius:50%;
-                                           background:{{ $isHalf ? 'linear-gradient(90deg, ' . $fill . ' 50%, #27272a 50%)' : $fill }};
-                                           {{ $isHalf ? 'border:2px solid ' . $fill . ';' : '' }}
+                                           background:{{ $isPlan ? 'transparent' : ($isHalf ? 'linear-gradient(90deg, ' . $fill . ' 50%, #27272a 50%)' : $fill) }};
+                                           {{ $isPlan ? 'border:2px dashed #60a5fa;' : ($isHalf ? 'border:2px solid ' . $fill . ';' : '') }}
                                            {{ $isDuty ? 'box-shadow:0 0 0 2px #f59e0b;' : '' }}
                                            display:inline-flex;align-items:center;justify-content:center;">
                                     @if($isHalf)
@@ -228,8 +318,15 @@
                                     –
                                 </button>
                             @else
-                                <span style="color:#27272a;font-size:17px;font-weight:300;
-                                             display:inline-block;width:34px;text-align:center;line-height:34px;">–</span>
+                                {{-- Майбутній день: клік ставить ПЛАН — рядок є, баланс не рухається. --}}
+                                <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
+                                    title="Запланувати зміну"
+                                    style="width:34px;height:34px;border-radius:50%;
+                                           background:transparent;border:none;
+                                           display:inline-flex;align-items:center;justify-content:center;
+                                           color:#27272a;font-size:17px;font-weight:300;line-height:1;">
+                                    –
+                                </button>
                             @endif
 
                             {{-- Прапорець пробігу — для кур'єрів (минулі і сьогоднішній день) --}}
@@ -367,6 +464,12 @@
                 <span style="font-size:11px;font-weight:800;color:#e4e4e7;line-height:1;">½</span>
             </div>
             <span style="color:#71717a;font-size:12px;">Пів зміни <span style="color:#52525b;">(курʼєр: 1 виїзд, ½ ставки)</span></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;">
+            <span style="width:20px;height:20px;border-radius:50%;border:2px dashed #60a5fa;
+                         display:inline-flex;align-items:center;justify-content:center;
+                         color:#60a5fa;font-size:11px;font-weight:600;line-height:1;">☀</span>
+            <span style="color:#71717a;font-size:12px;">Заплановано <span style="color:#52525b;">(грошей ще нема — підтвердьте день кнопкою ✓ у шапці)</span></span>
         </div>
         <div style="display:flex;align-items:center;gap:6px;">
             <div style="width:20px;height:20px;border-radius:50%;border:2px dashed #f87171;

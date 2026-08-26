@@ -83,9 +83,139 @@ class EmployeeAttendance extends Page
      * (це робиться окремо у Логістиці, для пробігу); якщо у БД є morning/evening
      * записи (застаріла split-логіка) — консолідуємо їх у 'full' перед циклом.
      */
+    /**
+     * Поставити курʼєру конкретний слот: ранок, вечір або обидва.
+     *
+     * Слот замінює собою «пів зміни»: одна зміна — це ранок АБО вечір, тобто
+     * один виїзд і одинарна ставка. Дві зміни — і ранок, і вечір, два виїзди
+     * і подвійна. «Половини ранку» не існує.
+     *
+     * На майбутню дату створюється ПЛАН: рядок є, ставка порахована для
+     * перегляду, але баланс не рухається. Гроші нараховує лише підтвердження
+     * виходу — інакше зарплата пішла б за невідпрацьовані дні.
+     */
+    public function setSlot(int $employeeId, string $date, ?string $slot): void
+    {
+        $employee = Employee::findOrFail($employeeId);
+
+        DB::transaction(function () use ($employee, $employeeId, $date, $slot) {
+            $shifts = EmployeeShift::where('employee_id', $employeeId)->where('date', $date)->get();
+
+            // Знімаємо старе нарахування — план грошей не тримає, факт тримає.
+            foreach ($shifts as $old) {
+                if (! $old->is_planned) {
+                    $employee->decrement('balance', (float) $old->rate);
+                }
+                $old->delete();
+            }
+
+            if ($slot === null) {
+                return;
+            }
+
+            $isPlan = $date > now()->format('Y-m-d');
+            $rate   = $this->slotRate($employee, $date, $slot);
+
+            EmployeeShift::create([
+                'employee_id' => $employeeId,
+                'date'        => $date,
+                'shift_slot'  => $slot,
+                'rate'        => $rate,
+                'is_duty'     => false,
+                'is_half'     => false,
+                'is_planned'  => $isPlan,
+            ]);
+
+            if (! $isPlan) {
+                $employee->increment('balance', $rate);
+            }
+        });
+    }
+
+    /**
+     * Ставка за слот. Для курʼєра base_rate — ціна одного виїзду.
+     */
+    private function slotRate(Employee $employee, string $date, string $slot): float
+    {
+        $base      = (float) $employee->base_rate;
+        $isCourier = $employee->position === 'courier';
+
+        $extras = $isCourier
+            ? \App\Services\CourierShiftPricingService::calcExtras($employee->id, $date, $base)
+            : 0.0;
+
+        $trips = $slot === EmployeeShift::SLOT_FULL ? 2 : 1;
+
+        return ($isCourier ? $base * $trips : $base) + $extras;
+    }
+
+    /**
+     * Підтвердити всі заплановані виходи за день — план стає фактом.
+     *
+     * Ставку рахуємо заново: за минулий час могли зʼявитись доплати за
+     * додаткові точки чи дальню доставку, і план їх ще не знав.
+     *
+     * Тих, хто не вийшов, менеджер знімає окремо — саме тому підтвердження
+     * не робиться автоматично при настанні дня.
+     */
+    public function confirmDay(string $date): void
+    {
+        $planned = EmployeeShift::with('employee')
+            ->where('date', $date)
+            ->where('is_planned', true)
+            ->get();
+
+        if ($planned->isEmpty()) {
+            \Filament\Notifications\Notification::make()
+                ->title('Немає запланованих виходів на цей день')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        DB::transaction(function () use ($planned, $date) {
+            foreach ($planned as $shift) {
+                $employee = $shift->employee;
+
+                if (! $employee) {
+                    continue;
+                }
+
+                $rate = $this->slotRate($employee, $date, $shift->shift_slot ?? EmployeeShift::SLOT_FULL);
+
+                if ($shift->is_half) {
+                    $rate = $employee->position === 'courier' ? $rate : $rate / 2;
+                }
+
+                if ($shift->is_duty) {
+                    $rate += $this->dutyBonus();
+                }
+
+                $shift->update(['is_planned' => false, 'rate' => $rate]);
+                $employee->increment('balance', $rate);
+            }
+        });
+
+        \Filament\Notifications\Notification::make()
+            ->title('Виходи підтверджено: '.$planned->count())
+            ->body('Тих, хто не вийшов, зніміть кліком по клітинці.')
+            ->success()
+            ->send();
+    }
+
     public function toggleShift(int $employeeId, string $date): void
     {
         $employee = Employee::findOrFail($employeeId);
+
+        // Курʼєр обирає слот у меню. Пускати його сюди не можна: консолідація
+        // нижче зліпила б ранок і вечір назад у 'full' і стерла вибір.
+        if ($employee->position === 'courier') {
+            $has = EmployeeShift::where('employee_id', $employeeId)->where('date', $date)->exists();
+            $this->setSlot($employeeId, $date, $has ? null : EmployeeShift::SLOT_FULL);
+
+            return;
+        }
 
         DB::transaction(function () use ($employee, $employeeId, $date) {
             // 1) Консолідація: якщо є 2+ рядки (напр. morning+evening від попередньої
@@ -134,9 +264,28 @@ class EmployeeAttendance extends Page
             $bonus     = $this->dutyBonus();
 
             // 3) Порожній стаб (rate=0 без duty/half) поводиться як «немає».
-            $isEmpty = $shift && (float) $shift->rate <= 0.001 && ! $shift->is_half && ! $shift->is_duty;
+            $isEmpty = $shift && (float) $shift->rate <= 0.001
+                && ! $shift->is_half && ! $shift->is_duty && ! $shift->is_planned;
 
             // 4) Стандартний цикл: немає → повна → половина → немає.
+            // На майбутню дату ставимо ПЛАН: рядок є, ставка порахована для
+            // перегляду, але баланс не рухається. Гроші нараховує лише
+            // підтвердження виходу.
+            $isPlan = $date > now()->format('Y-m-d');
+
+            // Знімати нарахування треба тільки з факту — план грошей не тримав.
+            $refund = function ($sh) use ($employee) {
+                if ($sh && ! $sh->is_planned) {
+                    $employee->decrement('balance', (float) $sh->rate);
+                }
+            };
+
+            $credit = function (float $amount) use ($employee, $isPlan) {
+                if (! $isPlan) {
+                    $employee->increment('balance', $amount);
+                }
+            };
+
             if (! $shift) {
                 EmployeeShift::create([
                     'employee_id' => $employeeId,
@@ -145,18 +294,19 @@ class EmployeeAttendance extends Page
                     'rate'        => $fullRate,
                     'is_duty'     => false,
                     'is_half'     => false,
+                    'is_planned'  => $isPlan,
                 ]);
-                $employee->increment('balance', $fullRate);
+                $credit($fullRate);
             } elseif ($isEmpty) {
-                $shift->update(['rate' => $fullRate, 'is_half' => false]);
-                $employee->increment('balance', $fullRate);
+                $shift->update(['rate' => $fullRate, 'is_half' => false, 'is_planned' => $isPlan]);
+                $credit($fullRate);
             } elseif (! $shift->is_half) {
-                $employee->decrement('balance', (float) $shift->rate);
+                $refund($shift);
                 $newRate = $halfRate + ($shift->is_duty ? $bonus : 0);
-                $shift->update(['is_half' => true, 'rate' => $newRate]);
-                $employee->increment('balance', $newRate);
+                $shift->update(['is_half' => true, 'rate' => $newRate, 'is_planned' => $isPlan]);
+                $credit($newRate);
             } else {
-                $employee->decrement('balance', (float) $shift->rate);
+                $refund($shift);
                 $shift->delete();
             }
         });
@@ -256,6 +406,10 @@ class EmployeeAttendance extends Page
         // Використовуємо для лічильників — щоб щойно розділений день (0₴+0₴) не рахувався як +2 зміни.
         $realShifts = $allShifts->filter(fn ($s) => (float) $s->rate > 0.001 || $s->is_duty || $s->is_half);
 
+        // Гроші і лічильники рахуємо тільки з факту. План — це намір, а не
+        // відпрацьована зміна: інакше зарплата за тиждень наперед з'їхала б.
+        $factShifts = $realShifts->where('is_planned', false);
+
         // Прапорці пробігу кур'єрів: employee_id => [Y-m-d => true|false]
         $mileageFlags = [];
         $mileageRows = CourierMileageLog::whereBetween('date', [$rangeStart, $rangeEnd])
@@ -267,8 +421,13 @@ class EmployeeAttendance extends Page
             $mileageFlags[$m->employee_id][$ymd] = ($mileageFlags[$m->employee_id][$ymd] ?? false) || $filled;
         }
 
-        $shiftsCount = $realShifts->count();
-        $salary      = round($realShifts->sum('rate'));
+        $shiftsCount = $factShifts->count();
+        $salary      = round($factShifts->sum('rate'));
+        $plannedCount = $realShifts->where('is_planned', true)->count();
+
+        // Скільки планів чекає підтвердження на кожну дату — для кнопки дня.
+        $plannedByDate = $realShifts->where('is_planned', true)
+            ->groupBy('date')->map->count();
 
         // Помісячні посади (оклад) не беруть участі в табелі змін
         $perMonthKeys = \App\Models\Position::where('payment_type', 'per_month')->pluck('key')->all();
@@ -277,7 +436,7 @@ class EmployeeAttendance extends Page
         if ($inRange) {
             $activeCount = Employee::where('is_active', true)->whereNotIn('position', $perMonthKeys)->count();
             // Присутні сьогодні = унікальні співробітники, у яких хоча б один реальний слот сьогодні.
-            $presentToday = $realShifts->where('date', $today)->pluck('employee_id')->unique()->count();
+            $presentToday = $factShifts->where('date', $today)->pluck('employee_id')->unique()->count();
             $absentToday  = max(0, $activeCount - $presentToday);
         }
 
@@ -311,6 +470,7 @@ class EmployeeAttendance extends Page
         $filteredEmployeeIds = $employees->pluck('id')->all();
         $shiftsByDate = $allShifts
             ->whereIn('employee_id', $filteredEmployeeIds)
+            ->where('is_planned', false)
             ->groupBy('date');
 
         $costPerPortion = [];
@@ -363,19 +523,26 @@ class EmployeeAttendance extends Page
                     // візуальне представлення: якщо ХОЧ ОДНА зі змін is_half, показуємо ½.
                     $anyDuty = $realDayShifts->contains('is_duty', true);
                     $anyHalf = $realDayShifts->contains('is_half', true);
+                    $first   = $realDayShifts->first();
+                    $slot    = $first->shift_slot ?: EmployeeShift::SLOT_FULL;
+
                     $days[$date] = [
-                        'status'  => 'present',
-                        'is_duty' => $anyDuty,
-                        'is_half' => $anyHalf,
-                        'mileage' => $mileageState,
+                        'status'     => 'present',
+                        'is_duty'    => $anyDuty,
+                        'is_half'    => $anyHalf,
+                        'is_planned' => (bool) $first->is_planned,
+                        'slot'       => $slot,
+                        'slot_label' => $first->slotLabel(),
+                        'rate'       => round((float) $realDayShifts->sum('rate')),
+                        'mileage'    => $mileageState,
                     ];
                 } elseif ($date > $today) {
-                    $days[$date] = ['status' => 'future', 'is_duty' => false, 'mileage' => null];
+                    $days[$date] = ['status' => 'future', 'is_duty' => false, 'is_planned' => false, 'slot' => null, 'mileage' => null];
                 } elseif ($date === $today) {
-                    $days[$date] = ['status' => 'absent_today', 'is_duty' => false, 'mileage' => $mileageState];
+                    $days[$date] = ['status' => 'absent_today', 'is_duty' => false, 'is_planned' => false, 'slot' => null, 'mileage' => $mileageState];
                     $absentEmployee = true;
                 } else {
-                    $days[$date] = ['status' => 'off', 'is_duty' => false, 'mileage' => $mileageState];
+                    $days[$date] = ['status' => 'off', 'is_duty' => false, 'is_planned' => false, 'slot' => null, 'mileage' => $mileageState];
                 }
             }
 
@@ -397,8 +564,10 @@ class EmployeeAttendance extends Page
                 'shifts'       => $shiftsCount,
                 'salary'       => $salary,
                 'absent_today' => $absentToday,
+                'planned'      => $plannedCount,
             ],
             'rows'             => $rows,
+            'planned_by_date'  => $plannedByDate,
             'portions'         => $producedPortions,
             'cost_per_portion' => $costPerPortion,
             'today'            => $today,
