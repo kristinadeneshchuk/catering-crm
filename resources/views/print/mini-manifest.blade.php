@@ -565,9 +565,7 @@
                 </div>
                 @if(!empty($man['same_address']))
                     {{-- Кілька пакетів на одну адресу: щоб курʼєр забрав усі. --}}
-                    <span class="tag-same-address">
-                        ОДНА АДРЕСА 📦 {{ $man['same_address']['pos'] }}/{{ $man['same_address']['total'] }}
-                    </span>
+                    <span class="tag-same-address">📦 {{ $man['same_address']['pos'] }}/{{ $man['same_address']['total'] }}</span>
                 @endif
                 @if(($man['address'] ?? 'Самовивіз') !== 'Самовивіз')
                     <span class="tag-address">{{ $man['address'] }}</span>
