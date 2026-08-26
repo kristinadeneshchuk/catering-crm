@@ -24,7 +24,8 @@ class PortionGridResource extends Resource
 
     protected static ?string $model = PortionGrid::class;
 
-    protected static ?string $navigationIcon  = 'heroicon-o-squares-2x2';
+    // Іконки тут бути не може: у групи «Довідник» вона вже є, а Filament
+    // забороняє мати іконку і в групи, і в її пунктів — падає весь сайдбар.
     protected static ?string $navigationGroup = 'Довідник';
     protected static ?string $navigationLabel = 'Сітка порцій';
     protected static ?string $modelLabel      = 'Тариф сітки';
