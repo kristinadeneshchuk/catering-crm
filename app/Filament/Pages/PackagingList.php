@@ -28,6 +28,21 @@ class PackagingList extends Page implements HasForms
 
     public ?array $data = [];
     public array $report = [];
+
+    /**
+     * Версія фасування: 'v1' — чинна (вага рахується під калораж кожного
+     * замовлення), 'v2' — дві порції на страву за сіткою тарифів.
+     *
+     * Обидві живуть поруч і рахуються з тих самих техкарт. Стару не чіпаємо:
+     * поки друга не обкатана, кухня працює за першою.
+     */
+    public string $version = 'v1';
+
+    /** Результат другої версії: прийом → страва → ваги і кількості. */
+    public array $reportV2 = [];
+
+    /** Замовлення, для калоражу яких немає рядка в сітці порцій. */
+    public array $missingGrids = [];
     public array $clientComments = [];
     public array $missingPlans = []; // плани з замовленнями, у яких немає меню на цей день циклу
     public ?string $debugMessage = null;
@@ -162,6 +177,109 @@ class PackagingList extends Page implements HasForms
         ])->statePath('data');
     }
 
+    public function switchVersion(string $version): void
+    {
+        $this->version = $version === 'v2' ? 'v2' : 'v1';
+    }
+
+    /**
+     * Друга версія: у страви рівно дві ваги, розмір бере сітка тарифів.
+     *
+     * Групуємо не по замовленнях, а по парі «страва + прийом + розмір» — саме
+     * так стоїть фасувальна станція: одна страва, дві ваги, лічильник порцій.
+     */
+    private function buildVersionTwo($orders, string $targetDate): void
+    {
+        $this->reportV2 = [];
+        $this->missingGrids = [];
+
+        $calc  = app(\App\Services\Portion\PortionCalculator::class);
+        $grids = \App\Models\PortionGrid::with('slots.mealType')->where('is_active', true)->get()->keyBy('calories');
+
+        // Меню кешуємо по плану — у кожного свій день циклу.
+        $menus = [];
+        $rows  = [];
+
+        foreach ($orders as $order) {
+            $grid = $grids[(int) $order->calories] ?? null;
+
+            if (! $grid) {
+                $key = (int) $order->calories;
+                $this->missingGrids[$key] = ($this->missingGrids[$key] ?? 0) + 1;
+
+                continue;
+            }
+
+            $plan = $order->effectiveMenuPlan();
+
+            if (! $plan) {
+                continue;
+            }
+
+            if (! array_key_exists($plan->id, $menus)) {
+                $menus[$plan->id] = \App\Models\DailyMenu::where('menu_plan_id', $plan->id)
+                    ->where('day_number', $plan->globalDayFor($targetDate))
+                    ->with('menuItems.dish')
+                    ->first();
+            }
+
+            $menu = $menus[$plan->id];
+
+            if (! $menu) {
+                continue;
+            }
+
+            foreach ($grid->slots as $slot) {
+                $item = $menu->menuItems->firstWhere('meal_type_id', $slot->meal_type_id);
+
+                if (! $item?->dish || ! $slot->mealType) {
+                    continue;
+                }
+
+                $portion = $calc->portion($item->dish, $slot->mealType, $slot->isLarge());
+
+                if (! $portion) {
+                    continue;
+                }
+
+                $key = $slot->meal_type_id.'|'.$item->dish->id.'|'.$slot->size;
+
+                if (! isset($rows[$key])) {
+                    $rows[$key] = [
+                        'meal'      => $slot->mealType->name,
+                        'meal_sort' => $slot->mealType->sort_order ?? 99,
+                        'dish'      => $item->dish->name,
+                        'size'      => $slot->sizeLabel(),
+                        'is_large'  => $slot->isLarge(),
+                        'weight'    => $portion['weight'],
+                        'tolerance' => $portion['tolerance'],
+                        'kcal_box'  => $portion['kcal_box'],
+                        'count'     => 0,
+                    ];
+                }
+
+                $rows[$key]['count']++;
+
+                // Додатковий снек — ще одна порція тієї самої страви.
+                $snack = $grid->snackBox();
+
+                if ($snack && $snack->id === $slot->meal_type_id) {
+                    $rows[$key]['count'] += $slot->isLarge()
+                        ? $grid->extra_snacks_large
+                        : $grid->extra_snacks_std;
+                }
+            }
+        }
+
+        $this->reportV2 = collect($rows)
+            ->sortBy([['meal_sort', 'asc'], ['dish', 'asc'], ['is_large', 'asc']])
+            ->groupBy('meal')
+            ->map(fn ($g) => $g->values()->all())
+            ->all();
+
+        ksort($this->missingGrids);
+    }
+
     public function calculate(): void
     {
         $selectedDate  = $this->data['date'] ?? now()->format('Y-m-d');
@@ -191,6 +309,8 @@ class PackagingList extends Page implements HasForms
         if ($orders->isEmpty()) {
             return;
         }
+
+        $this->buildVersionTwo($orders, $targetDate);
 
         // Збираємо глобальні коментарі клієнтів — один блок зверху
         $this->clientComments = [];

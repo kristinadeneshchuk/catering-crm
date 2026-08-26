@@ -56,6 +56,30 @@ class MealTypeResource extends Resource
                     ->required()
                     ->default(20),
 
+                // === ДРУГА ВЕРСІЯ ФАСУВАННЯ ===
+                // Тут енергія бокса задається прямо в кілокалоріях, а не
+                // відсотком. Завдяки цьому у страви рівно дві ваги замість
+                // однієї на кожен калораж.
+                Forms\Components\Fieldset::make('Розмір бокса (друга версія фасування)')
+                    ->schema([
+                        Forms\Components\TextInput::make('box_kcal_std')
+                            ->label('Звичайна порція, ккал')
+                            ->helperText('Напр. 400 для сніданку, 200 для снека, 600 для обіду.')
+                            ->numeric()
+                            ->suffix('ккал'),
+
+                        Forms\Components\TextInput::make('box_kcal_large')
+                            ->label('Велика порція, ккал')
+                            ->helperText('Напр. 600 для сніданку, 400 для снека, 800 для обіду.')
+                            ->numeric()
+                            ->suffix('ккал'),
+
+                        Forms\Components\Placeholder::make('box_hint')
+                            ->label('')
+                            ->columnSpanFull()
+                            ->content('Порожньо — прийом у другій версії не бере участі. На стару фасовку ці поля не впливають.'),
+                    ])->columns(2),
+
                 ColorPicker::make('color')
                     ->label('Колір (для стікерів)')
                     ->helperText('Колір кружечка на стікері заміни')

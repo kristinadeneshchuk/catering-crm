@@ -23,6 +23,28 @@
             @if($this->debugMessage)
                 <div style="color: #fbbf24; margin-top: 10px; font-weight: bold; font-size: 12px;">{{ $this->debugMessage }}</div>
             @endif
+
+            {{-- Перемикач версій фасування. Обидві рахуються з тих самих
+                 техкарт, стара лишається робочою, поки друга не обкатана. --}}
+            <div style="display:flex; gap:8px; margin-top:16px; align-items:center; flex-wrap:wrap;">
+                <span style="font-size:11px; color:#71717a; text-transform:uppercase; letter-spacing:.5px; font-weight:800;">Версія фасування</span>
+
+                <button type="button" wire:click="switchVersion('v1')"
+                        style="padding:6px 14px; font-size:12px; font-weight:800; border-radius:8px; cursor:pointer; border:1px solid {{ $this->version === 'v1' ? '#fbbf24' : '#3f3f46' }}; background:{{ $this->version === 'v1' ? 'rgba(251,191,36,.14)' : 'transparent' }}; color:{{ $this->version === 'v1' ? '#fbbf24' : '#a1a1aa' }};">
+                    Чинна
+                </button>
+
+                <button type="button" wire:click="switchVersion('v2')"
+                        style="padding:6px 14px; font-size:12px; font-weight:800; border-radius:8px; cursor:pointer; border:1px solid {{ $this->version === 'v2' ? '#22d3ee' : '#3f3f46' }}; background:{{ $this->version === 'v2' ? 'rgba(34,211,238,.14)' : 'transparent' }}; color:{{ $this->version === 'v2' ? '#22d3ee' : '#a1a1aa' }};">
+                    Дві порції (нова)
+                </button>
+
+                @if($this->version === 'v2')
+                    <span style="font-size:11px; color:#71717a;">
+                        Розміри боксів — у довіднику прийомів, набір тарифів — у «Сітці порцій».
+                    </span>
+                @endif
+            </div>
         </div>
 
         {{-- ПОПЕРЕДЖЕННЯ: ПЛАНИ БЕЗ МЕНЮ НА ЦЕЙ ДЕНЬ --}}
@@ -45,6 +67,67 @@
                 </div>
             </div>
         @endif
+
+        {{-- ═══════════ ДРУГА ВЕРСІЯ: ДВІ ПОРЦІЇ НА СТРАВУ ═══════════ --}}
+        @if($this->version === 'v2')
+            @if(!empty($this->missingGrids))
+                <div style="background:#7f1d1d; border:2px solid #f87171; border-radius:12px; padding:16px 20px; margin-bottom:20px; color:#fee2e2;">
+                    <div style="font-weight:900; font-size:14px; margin-bottom:8px; text-transform:uppercase;">
+                        ⚠️ Немає тарифу в сітці порцій
+                    </div>
+                    <div style="font-size:13px;">
+                        @foreach($this->missingGrids as $kcal => $count)
+                            <div>{{ $kcal }} ккал — {{ $count }} замовл.</div>
+                        @endforeach
+                    </div>
+                    <div style="font-size:12px; opacity:.8; margin-top:8px;">
+                        Ці замовлення в новий лист не потрапили. Додайте тариф у «Довідник → Сітка порцій».
+                    </div>
+                </div>
+            @endif
+
+            @forelse($this->reportV2 as $mealName => $rows)
+                <div style="background:#18181b; border:1px solid #27272a; border-radius:14px; margin-bottom:18px; overflow:hidden;">
+                    <div style="background:#22d3ee; color:#082f49; padding:10px 18px; font-weight:900; font-size:14px; text-transform:uppercase; letter-spacing:.5px;">
+                        {{ $mealName }}
+                    </div>
+
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead>
+                            <tr style="background:#27272a; color:#a1a1aa; font-size:11px; text-transform:uppercase; letter-spacing:.4px;">
+                                <th style="padding:8px 18px; text-align:left;">Страва</th>
+                                <th style="padding:8px 12px; text-align:center; width:90px;">Порція</th>
+                                <th style="padding:8px 12px; text-align:right; width:130px;">Вага</th>
+                                <th style="padding:8px 12px; text-align:right; width:100px;">Бокс</th>
+                                <th style="padding:8px 18px; text-align:right; width:110px;">Порцій</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($rows as $r)
+                                <tr style="border-bottom:1px solid #27272a; color:#e4e4e7;">
+                                    <td style="padding:10px 18px; font-weight:600;">{{ $r['dish'] }}</td>
+                                    <td style="padding:10px 12px; text-align:center;">
+                                        <span style="padding:2px 10px; border-radius:6px; font-size:11px; font-weight:900; background:{{ $r['is_large'] ? 'rgba(251,146,60,.16)' : 'rgba(148,163,184,.14)' }}; color:{{ $r['is_large'] ? '#fb923c' : '#94a3b8' }};">
+                                            {{ $r['size'] }}
+                                        </span>
+                                    </td>
+                                    <td style="padding:10px 12px; text-align:right; font-size:17px; font-weight:900; color:#fafafa;">
+                                        {{ $r['weight'] }} <span style="font-size:12px; color:#71717a;">±{{ $r['tolerance'] }} г</span>
+                                    </td>
+                                    <td style="padding:10px 12px; text-align:right; color:#71717a; font-size:12px;">{{ $r['kcal_box'] }} ккал</td>
+                                    <td style="padding:10px 18px; text-align:right; font-size:17px; font-weight:900; color:#22d3ee;">{{ $r['count'] }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @empty
+                <div style="background:#18181b; border:1px solid #27272a; border-radius:14px; padding:40px; text-align:center; color:#71717a;">
+                    Нічого не порахувалось. Перевірте, що в довіднику прийомів задані розміри боксів,
+                    а в «Сітці порцій» є тарифи під калораж замовлень.
+                </div>
+            @endforelse
+        @else
 
         {{-- ПОПЕРЕДНІЙ ПЕРЕГЛЯД --}}
         @if(count($report) > 0)
@@ -256,5 +339,7 @@
                 Замовлень немає або меню на цей день не заповнено
             </div>
         @endif
+
+        @endif {{-- кінець перемикача версій --}}
     </div>
 </x-filament-panels::page>
