@@ -161,43 +161,89 @@ class Client extends Authenticatable
         $this->updateQuietly(['balance' => $income - $refund - $ordersCost]);
     }
 
-    // === ЛОГІКА АВТОМАТИЧНОЇ ОПЛАТИ (FIFO) ===
+    // === ЛОГІКА АВТОМАТИЧНОЇ ОПЛАТИ ===
+
+    /** Копійчана похибка: суми decimal(10,2), порівнювати їх «в лоб» не можна. */
+    private const MONEY_EPSILON = 0.001;
 
     /**
-     * Цей метод бере всі гроші, які вніс клієнт, і "гасить" ними замовлення
-     * у хронологічному порядку (від старих до нових).
+     * Розставляє прапорці оплати по замовленнях клієнта у два проходи.
+     *
+     * 1. Кожне замовлення гаситься СВОЇМИ грошима — тими транзакціями, що
+     *    привязані саме до нього.
+     * 2. Залишок (переплата або платіж однією сумою за кілька замовлень)
+     *    перетікає на непогашені, від старих до нових.
+     *
+     * Раніше був чистий FIFO: увесь гаманець клієнта гасив замовлення від
+     * старих до нових, ігноруючи привязку транзакції. Через це гроші, внесені
+     * на конкретне замовлення, ставили галочку на іншому — менеджер бачив
+     * «оплачено» там, де жодної транзакції немає. Сума боргу при цьому була
+     * правильна, брехало саме розподілення.
+     *
+     * Баланс клієнта рахує syncBalance() окремо і від цього не залежить.
      */
     public function recalculateOrderPaymentStatus()
     {
-        // 1. Рахуємо "Чисті гроші" (Всі оплати мінус Всі повернення)
-        // Використовуємо transactions(), який ми додали вище
-        $totalWallet = $this->transactions()->where('type', 'income')->sum('amount') 
-                     - $this->transactions()->where('type', 'refund')->sum('amount');
-
-        // 2. Беремо всі замовлення клієнта, починаючи з найстаріших
         $orders = $this->orders()->orderBy('start_date', 'asc')->get();
 
+        if ($orders->isEmpty()) {
+            return;
+        }
+
+        $own  = $this->ownPaymentsPerOrder($orders->pluck('id'));
+        $pool = 0.0;
+
+        /** @var array<int, array{order: Order, need: float}> $pending */
+        $pending = [];
+
+        // Прохід 1 — свої гроші.
         foreach ($orders as $order) {
-            // Реальна сума до сплати — завжди final_price (вже враховує знижки)
-            $due = (float) $order->final_price;
+            $due  = (float) $order->final_price;
+            $paid = (float) ($own[$order->id] ?? 0);
 
             if ($due <= 0) {
-                if (!$order->is_paid) $this->setOrderPaid($order, true);
+                // Безкоштовне замовлення (повна знижка) вважається оплаченим,
+                // а гроші, якщо їх туди внесли, йдуть у спільний котел.
+                $this->setOrderPaid($order, true);
+                $pool += $paid;
+
                 continue;
             }
 
-            if ($totalWallet >= $due) {
-                if (!$order->is_paid) {
-                    $this->setOrderPaid($order, true);
-                }
-                $totalWallet -= $due;
+            if ($paid + self::MONEY_EPSILON >= $due) {
+                $this->setOrderPaid($order, true);
+                $pool += $paid - $due;
+
+                continue;
+            }
+
+            // Часткова оплата: те, що вже внесли, лишається за цим замовленням.
+            $pending[] = ['order' => $order, 'need' => $due - $paid];
+        }
+
+        // Прохід 2 — залишок гасить решту, від старих до нових.
+        foreach ($pending as $row) {
+            if ($pool + self::MONEY_EPSILON >= $row['need']) {
+                $this->setOrderPaid($row['order'], true);
+                $pool -= $row['need'];
             } else {
-                if ($order->is_paid) {
-                    $this->setOrderPaid($order, false);
-                }
-                $totalWallet -= $due;
+                $this->setOrderPaid($row['order'], false);
             }
         }
+    }
+
+    /**
+     * Скільки грошей привязано до кожного замовлення: надходження мінус повернення.
+     *
+     * @param  \Illuminate\Support\Collection<int, int>  $orderIds
+     * @return \Illuminate\Support\Collection<int, float>  order_id => сума
+     */
+    private function ownPaymentsPerOrder($orderIds)
+    {
+        return Transaction::whereIn('order_id', $orderIds)
+            ->selectRaw("order_id, SUM(CASE WHEN type = 'income' THEN amount WHEN type = 'refund' THEN -amount ELSE 0 END) AS total")
+            ->groupBy('order_id')
+            ->pluck('total', 'order_id');
     }
 
     /**
@@ -209,6 +255,14 @@ class Client extends Authenticatable
      */
     private function setOrderPaid(Order $order, bool $paid): void
     {
+        // Нічого не змінилось — не чіпаємо БД і не шлемо подію назовні.
+        // Перерахунок викликається на кожну транзакцію і кожне збереження
+        // замовлення, тож без цієї перевірки Inbox отримував би шквал
+        // повідомлень про «оплату», якої не було.
+        if ((bool) $order->is_paid === $paid) {
+            return;
+        }
+
         $order->updateQuietly(['is_paid' => $paid]);
 
         app(\App\Services\Inbox\WebhookNotifier::class)->paymentStatusChanged($order, $paid);

@@ -36,6 +36,11 @@ class InboxOrderBuilderTest extends TestCase
     {
         parent::setUp();
 
+        // Фіксуємо дату. Тести оперують замовленнями серпня 2026, а конструктор
+        // і нагадування зсувають минулі дати на «завтра» — без заморозки
+        // годинника вони починають падати просто тому, що час іде далі.
+        $this->travelTo(\Carbon\Carbon::parse('2026-08-14 10:00:00'));
+
         $this->buildInboxSchema();
         $this->buildChatSchema();
 
