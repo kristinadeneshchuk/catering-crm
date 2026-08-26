@@ -21,10 +21,7 @@ class PrintController extends Controller
         $layout     = $request->input('layout', 'default');
         $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
 
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', function ($query) use ($targetDate) {
-                $query->where('date', $targetDate);
-            })
+        $orders = Order::feedingOn($targetDate)
             ->with([
                 'client.mealTypes',
                 'client.dishExclusions',
@@ -178,10 +175,7 @@ class PrintController extends Controller
         $inputDate  = $request->input('date', now()->format('Y-m-d'));
         $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
 
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', function ($query) use ($targetDate) {
-                $query->where('date', $targetDate);
-            })
+        $orders = Order::feedingOn($targetDate)
             ->with([
                 'client.dishExclusions',
                 'client.ingredientExclusions',
@@ -349,10 +343,7 @@ class PrintController extends Controller
         $inputDate  = $request->input('date', now()->format('Y-m-d'));
         $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
 
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', function ($query) use ($targetDate) {
-                $query->where('date', $targetDate);
-            })
+        $orders = Order::feedingOn($targetDate)
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',
@@ -536,10 +527,7 @@ class PrintController extends Controller
         $inputDate  = $request->input('date', now()->format('Y-m-d'));
         $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
 
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', function ($query) use ($targetDate) {
-                $query->where('date', $targetDate);
-            })
+        $orders = Order::feedingOn($targetDate)
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',
@@ -892,10 +880,7 @@ class PrintController extends Controller
         $inputDate = $request->input('date', now()->format('Y-m-d'));
         $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
 
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', function ($query) use ($targetDate) {
-                $query->where('date', $targetDate);
-            })
+        $orders = Order::feedingOn($targetDate)
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',
@@ -1107,8 +1092,7 @@ class PrintController extends Controller
         $shoppingList = [];
         $planSummaries = []; // [planId => ['plan' => MenuPlan, 'day_number' => int]]
 
-        $orders = Order::whereHas('orderDays', fn ($q) => $q->where('date', $date))
-            ->whereIn('status', ['new', 'active'])
+        $orders = Order::feedingOn($date)
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',
@@ -1286,10 +1270,7 @@ class PrintController extends Controller
         $inputDate = $request->input('date', now()->format('Y-m-d'));
         $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
 
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', function ($query) use ($targetDate) {
-                $query->where('date', $targetDate);
-            })
+        $orders = Order::feedingOn($targetDate)
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',
@@ -1461,8 +1442,7 @@ class PrintController extends Controller
         $inputDate  = $request->input('date', now()->format('Y-m-d'));
         $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
 
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', fn($q) => $q->where('date', $targetDate))
+        $orders = Order::feedingOn($targetDate)
             ->with([
                 'client.dishExclusions',
                 'client.ingredientExclusions',

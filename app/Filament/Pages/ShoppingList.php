@@ -59,8 +59,7 @@ class ShoppingList extends Page implements HasForms
         $this->selectedDate = $date;
 
         // Замовлення через orderDays
-        $orders = Order::whereHas('orderDays', fn ($q) => $q->where('date', $date))
-            ->whereIn('status', ['new', 'active'])
+        $orders = Order::feedingOn($date)
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',

@@ -498,8 +498,7 @@ public function form(Form $form): Form
                             $selectedDate = $this->data['date'] ?? now()->format('Y-m-d');
                             $targetDate   = \Carbon\Carbon::parse($selectedDate)->addDay()->format('Y-m-d');
 
-                            return Order::whereIn('status', ['new', 'active'])
-                                ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
+                            return Order::feedingOn($targetDate)
                                 ->with('client')
                                 ->get()
                                 ->pluck('client.name', 'id')
@@ -606,10 +605,7 @@ public function form(Form $form): Form
         $this->orderPlans = [];
         $this->missingPlans = [];
 
-        $this->activeOrders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', function ($query) use ($targetDate) {
-                $query->where('date', $targetDate);
-            })
+        $this->activeOrders = Order::feedingOn($targetDate)
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',

@@ -20,8 +20,7 @@ class PackagingAssemblyController extends Controller
         $date = $request->input('date', Carbon::tomorrow()->format('Y-m-d'));
 
         // Усі активні замовлення на цю дату
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', fn ($q) => $q->where('date', $date))
+        $orders = Order::feedingOn($date)
             ->with([
                 'client.mealTypes',
                 'client.dishExclusions',

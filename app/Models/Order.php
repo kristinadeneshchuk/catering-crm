@@ -411,6 +411,29 @@ class Order extends Model
      *  - Є майбутні дні → 'new' (єдине замовлення клієнта) або 'active'.
      *    Перетираємо лише з finished/completed/порожнього — щоб не плутати new ↔ active.
      */
+    /**
+     * Замовлення, які годують клієнта у вказану дату.
+     *
+     * Факт доставки — це наявність OrderDay на цю дату, а не поточний статус
+     * замовлення. Статус описує стан ЗАРАЗ, а не тоді.
+     *
+     * Фільтр new/active правильний для сьогодні й майбутнього: на паузу і на
+     * завершене замовлення готувати не треба. Але для минулих дат він викидав
+     * усе — ті замовлення давно finished, і липневий фасувальний лист показував
+     * ОДНЕ замовлення замість сімдесяти чотирьох. Разом із ним брехали
+     * виробничий звіт, список покупок і аналітика.
+     *
+     * Для сьогодні й майбутнього поведінка не змінюється ані на рядок.
+     */
+    public function scopeFeedingOn($query, $date)
+    {
+        $isPast = Carbon::parse($date)->startOfDay()->lt(now()->startOfDay());
+
+        return $query
+            ->whereHas('orderDays', fn ($q) => $q->where('date', $date))
+            ->unless($isPast, fn ($q) => $q->whereIn('status', ['new', 'active']));
+    }
+
     public function recomputeStatus(): void
     {
         if ($this->status === 'paused') {

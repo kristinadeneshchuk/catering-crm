@@ -174,8 +174,7 @@ class PackagingList extends Page implements HasForms
         $this->debugMessage = null;
 
         // Беремо активні та нові замовлення (призупинені — не фасуємо)
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
+        $orders = Order::feedingOn($targetDate)
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',

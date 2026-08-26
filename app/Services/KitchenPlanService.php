@@ -183,8 +183,7 @@ PROMPT;
         }
 
         // Активні замовлення на цю дату
-        $activeOrders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
+        $activeOrders = Order::feedingOn($targetDate)
             ->with(['client', 'replacements.replacementDish'])
             ->get();
 
@@ -305,8 +304,7 @@ PROMPT;
      */
     public function collectReplacements(string $targetDate): array
     {
-        $activeOrders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
+        $activeOrders = Order::feedingOn($targetDate)
             ->with([
                 'client',
                 'client.dishExclusions',
@@ -596,8 +594,7 @@ PROMPT;
 
     private function collectProductionCommentsText(string $targetDate): string
     {
-        $orders = Order::whereIn('status', ['new', 'active'])
-            ->whereHas('orderDays', fn ($q) => $q->where('date', $targetDate))
+        $orders = Order::feedingOn($targetDate)
             ->with('client')
             ->get();
 
