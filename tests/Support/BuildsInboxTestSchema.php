@@ -98,6 +98,7 @@ trait BuildsInboxTestSchema
             $t->string('address_floor')->nullable();
             $t->text('delivery_comment')->nullable();
             $t->text('production_comment')->nullable();
+            $t->text('menu_brief')->nullable();
             $t->text('allergies')->nullable();
             $t->text('manager_comment')->nullable();
             $t->string('ant_comp_id')->nullable();

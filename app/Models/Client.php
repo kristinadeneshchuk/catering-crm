@@ -22,7 +22,7 @@ class Client extends Authenticatable
                 'name', 'phone', 'email', 'sales_source',
                 'instagram_url', 'telegram_username', 'facebook_url',
                 'target_kcal', 'address', 'address_entrance', 'address_apartment', 'address_floor',
-                'delivery_comment', 'production_comment', 'balance',
+                'delivery_comment', 'production_comment', 'menu_brief', 'balance',
                 'has_cutlery', 'water_option', 'manager_comment', 'ant_comp_id',
             ])
             ->logOnlyDirty()
@@ -45,6 +45,7 @@ class Client extends Authenticatable
         'address_floor',
         'delivery_comment',
         'production_comment',
+        'menu_brief',
         'balance',
         'has_cutlery',
         'water_option',

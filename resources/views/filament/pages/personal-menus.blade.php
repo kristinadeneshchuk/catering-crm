@@ -41,6 +41,15 @@
         .pm-badge-evening { background:#2e1065; color:#a78bfa; }
         .pm-counter { font-size:12px; color:#555555; font-weight:700; }
 
+        .pm-ai-btn {
+            font-size:11px; font-weight:800; letter-spacing:.2px;
+            padding:4px 10px; border-radius:6px; border:1px solid #7c3aed;
+            background:rgba(124,58,237,.14); color:#c4b5fd; cursor:pointer;
+            white-space:nowrap; transition:background .1s;
+        }
+        .pm-ai-btn:hover:not(:disabled) { background:rgba(124,58,237,.26); }
+        .pm-ai-btn:disabled { opacity:.55; cursor:default; }
+
         /* Рядок прийому їжі */
         .pm-meal-row {
             display:flex; align-items:center;
@@ -254,6 +263,16 @@
                             {{ $card['slot'] }}
                         </span>
                         <span class="pm-counter">{{ $filled }}/{{ $total }}</span>
+
+                        {{-- Підбір за брифом клієнта. Результат правиться руками нижче. --}}
+                        <button class="pm-ai-btn"
+                                wire:click="generateMenu({{ $card['order_id'] }})"
+                                wire:loading.attr="disabled"
+                                wire:target="generateMenu({{ $card['order_id'] }})"
+                                title="Підібрати страви за брифом клієнта">
+                            <span wire:loading.remove wire:target="generateMenu({{ $card['order_id'] }})">✨ Підібрати</span>
+                            <span wire:loading wire:target="generateMenu({{ $card['order_id'] }})">Підбираю…</span>
+                        </button>
                     </div>
                 </div>
 

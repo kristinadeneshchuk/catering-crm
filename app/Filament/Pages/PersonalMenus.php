@@ -143,6 +143,54 @@ class PersonalMenus extends Page
     // Збереження страви
     // -----------------------------------------------------------------------
 
+    /**
+     * Підбір меню через ШІ за брифом клієнта.
+     *
+     * Модель обирає лише страви, менеджер після цього править руками — те, що
+     * вона вигадала або не змогла підібрати, повертається списком.
+     */
+    public function generateMenu(int $orderId): void
+    {
+        $order = Order::with('client.mealTypes')->find($orderId);
+
+        if (! $order) {
+            return;
+        }
+
+        try {
+            $result = app(\App\Services\Menu\IndividualMenuGenerator::class)
+                ->generate($order, $this->date);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Filament\Notifications\Notification::make()
+                ->title('Меню не складено')
+                ->body(collect($e->errors())->flatten()->first())
+                ->danger()
+                ->persistent()
+                ->send();
+
+            return;
+        } catch (\Throwable $e) {
+            \Filament\Notifications\Notification::make()
+                ->title('Помилка підбору')
+                ->body(mb_substr($e->getMessage(), 0, 300))
+                ->danger()
+                ->persistent()
+                ->send();
+
+            return;
+        }
+
+        $this->loadData();
+
+        \Filament\Notifications\Notification::make()
+            ->title("Підібрано страв: {$result['assigned']}")
+            ->body($result['skipped']
+                ? 'Не вдалося підібрати: '.implode(', ', $result['skipped'])
+                : implode("\n", $result['meals']))
+            ->{$result['skipped'] ? 'warning' : 'success'}()
+            ->send();
+    }
+
     public function setDish(int $orderId, int $mealTypeId, ?int $dishId): void
     {
         if (!$dishId) {

@@ -37,6 +37,10 @@ return [
 
     'openai' => [
         'key' => env('OPENAI_API_KEY'),
+
+        // Модель для підбору персонального меню. Винесена в env, щоб міняти
+        // без релізу: моделі оновлюються частіше, ніж ми деплоїмо.
+        'menu_model' => env('OPENAI_MENU_MODEL', 'gpt-4o'),
     ],
 
     'telegram' => [
