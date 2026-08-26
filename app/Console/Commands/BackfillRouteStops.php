@@ -6,6 +6,7 @@ use App\Models\DeliveryRoute;
 use App\Models\OrderDay;
 use App\Models\RouteStop;
 use App\Services\AntLogisticsService;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 
 /**
@@ -41,14 +42,26 @@ class BackfillRouteStops extends Command
         $this->info("Днів з маршрутом: {$total}");
 
         // Шапки маршрутів — щоб дістати курʼєра, авто і зміну.
-        $routes = DeliveryRoute::with('employee')->get();
+        $routes  = DeliveryRoute::with('employee')->get();
         $byAntId = $routes->filter(fn ($r) => $r->ant_route_id)->keyBy(fn ($r) => (string) $r->ant_route_id);
+
+        // Легасі-ключ. ant_route_id зʼявився пізніше і стоїть лише на 267 днях
+        // з 7809, а от водій записаний скрізь. Номер маршруту не унікальний у
+        // межах дня (ранковий і вечірній прогони обидва нумеруються з 1), тому
+        // додаємо водія — та сама пара, що в DeliveryRoute::extraDeliveryFee().
+        $byNumDriver = $routes
+            ->filter(fn ($r) => $r->ant_route_num && trim((string) $r->driver_name) !== '')
+            ->groupBy(fn ($r) => Carbon::parse($r->date)->format('Y-m-d')
+                . '|' . (int) $r->ant_route_num
+                . '|' . mb_strtolower(trim((string) $r->driver_name)));
 
         $created = 0;
         $skipped = 0;
         $bar = $this->output->createProgressBar($total);
 
-        $query->chunkById(500, function ($days) use (&$created, &$skipped, $byAntId, $ant, $dry, $bar) {
+        $matched = 0;
+
+        $query->chunkById(500, function ($days) use (&$created, &$skipped, &$matched, $byAntId, $byNumDriver, $ant, $dry, $bar) {
             foreach ($days as $day) {
                 $bar->advance();
 
@@ -69,6 +82,23 @@ class BackfillRouteStops extends Command
 
                 $routeId = $day->ant_route_id ? (string) $day->ant_route_id : null;
                 $header  = $routeId ? $byAntId->get($routeId) : null;
+
+                if (! $header && $day->ant_driver) {
+                    $key        = $deliveryDate . '|' . (int) $day->ant_route_num . '|' . mb_strtolower(trim((string) $day->ant_driver));
+                    $candidates = $byNumDriver->get($key);
+
+                    // Тільки однозначний збіг. Двох кандидатів розводити нічим —
+                    // краще лишити точку без авто, ніж приписати їй чуже.
+                    if ($candidates && $candidates->count() === 1) {
+                        $header  = $candidates->first();
+                        $routeId ??= $header->ant_route_id ? (string) $header->ant_route_id : null;
+                    }
+                }
+
+                if ($header) {
+                    $matched++;
+                }
+
                 $courier = $header?->employee;
 
                 if ($dry) {
@@ -105,6 +135,7 @@ class BackfillRouteStops extends Command
         $this->newLine(2);
 
         $this->info(($dry ? 'Було б перенесено: ' : 'Перенесено: ') . $created);
+        $this->line("Знайшли шапку маршруту (курʼєр + авто): {$matched}");
         $this->line("Пропущено (без клієнта або без дати доставки): {$skipped}");
         $this->line('Усього в архіві: ' . RouteStop::count());
 
