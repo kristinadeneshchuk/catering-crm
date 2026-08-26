@@ -43,6 +43,14 @@ class IndividualMenuGenerator
     private const MAX_NESTING = 3;
 
     /**
+     * Інгредієнти, які нічого не кажуть про страву.
+     *
+     * Вода за вагою часто перша (у 60 страв із 211) і витісняла зі списку
+     * справжній продукт. Клієнт у брифі про воду не пише.
+     */
+    private const NOISE_INGREDIENTS = ['вода', 'сіль', 'цукор', 'лід'];
+
+    /**
      * @return array{assigned: int, meals: array<int, string>, skipped: array<int, string>}
      */
     public function generate(Order $order, string $date): array
@@ -160,6 +168,10 @@ class IndividualMenuGenerator
 
         foreach ($weights as $id => $grams) {
             if ($grams < self::MIN_INGREDIENT_G || ! isset($names[$id])) {
+                continue;
+            }
+
+            if (in_array(mb_strtolower(trim($names[$id])), self::NOISE_INGREDIENTS, true)) {
                 continue;
             }
 
