@@ -292,7 +292,9 @@ class IndividualMenuGenerator
             ->post(self::API_URL, [
                 'model'           => config('services.openai.menu_model'),
                 'response_format' => ['type' => 'json_object'],
-                'temperature'     => 0.4,
+                // temperature навмисно не передаємо: моделі від gpt-5.5 приймають
+                // лише значення за замовчуванням і відмовляють на будь-якому
+                // іншому. Без параметра працюють і старі, і нові.
                 'messages'        => [
                     ['role' => 'system', 'content' => $this->systemPrompt()],
                     ['role' => 'user',   'content' => $this->userPrompt($brief, $order, $mealTypes, $dishes, $kitchenIngredientIds)],
