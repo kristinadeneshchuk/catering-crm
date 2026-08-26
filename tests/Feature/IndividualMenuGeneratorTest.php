@@ -29,6 +29,7 @@ class IndividualMenuGeneratorTest extends TestCase
     protected Order $order;
     protected array $dish = [];
     protected array $mealType = [];
+    protected array $ingredient = [];
 
     protected function setUp(): void
     {
@@ -40,6 +41,15 @@ class IndividualMenuGeneratorTest extends TestCase
         $this->buildInboxSchema();
         $this->buildMenuSchema();
         $this->seedCatalog(pricePerDay: 1000);
+
+        // MenuPlan::default() кешується статично на весь процес і переживає
+        // навіть інші тестові класи — скидаємо перед своїм планом.
+        \App\Models\MenuPlan::forgetDefault();
+
+        DB::table('menu_plans')->insert([
+            'id' => 1, 'name' => 'Стандарт', 'is_default' => true,
+            'cycle_days' => 28, 'cycle_start_date' => '2026-08-27',
+        ]);
 
         // Стандарт для 1600 ккал: сніданок, обід, вечеря (спрощено на 3 прийоми).
         $this->mealType['breakfast'] = $this->makeMealType('Сніданок', 1);
@@ -53,10 +63,17 @@ class IndividualMenuGeneratorTest extends TestCase
             DB::table('meal_plan_meal_type')->insert(['meal_plan_id' => 1, 'meal_type_id' => $id]);
         }
 
+        $chicken = $this->makeIngredient('Куряче філе');
+        $beet    = $this->makeIngredient('Буряк');
+        $salt    = $this->makeIngredient('Сіль');
+
         $this->dish['omelette'] = $this->makeDish('Омлет з овочами');
-        $this->dish['soup']     = $this->makeDish('Курячий суп');
-        $this->dish['fish']     = $this->makeDish('Запечена риба');
+        // Курка вже в роботі на кухні, сіль дрібна — у промпт не піде.
+        $this->dish['soup']     = $this->makeDish('Курячий суп', ingredients: [$chicken => 120, $salt => 2]);
+        $this->dish['fish']     = $this->makeDish('Запечена риба', ingredients: [$beet => 80]);
         $this->dish['stock']    = $this->makeDish('Бульйон н/ф', semiFinished: true);
+
+        $this->ingredient = compact('chicken', 'beet', 'salt');
 
         $clientId = $this->makeClient([
             'target_kcal' => 1600,
@@ -115,6 +132,14 @@ class IndividualMenuGeneratorTest extends TestCase
             $t->unsignedBigInteger('meal_type_id');
         });
 
+        Schema::create('dish_ingredients', function (Blueprint $t) {
+            $t->id();
+            $t->unsignedBigInteger('dish_id');
+            $t->unsignedBigInteger('ingredient_id')->nullable();
+            $t->unsignedBigInteger('child_dish_id')->nullable();
+            $t->float('net_weight_g')->default(0);
+        });
+
         Schema::create('daily_menu_dishes', function (Blueprint $t) {
             $t->id();
             $t->unsignedBigInteger('daily_menu_id');
@@ -148,11 +173,24 @@ class IndividualMenuGeneratorTest extends TestCase
         ]);
     }
 
-    protected function makeDish(string $name, bool $semiFinished = false): int
+    protected function makeDish(string $name, bool $semiFinished = false, array $ingredients = []): int
     {
-        return DB::table('dishes')->insertGetId([
+        $id = DB::table('dishes')->insertGetId([
             'name' => $name, 'is_semi_finished' => $semiFinished, 'base_weight_g' => 200,
         ]);
+
+        foreach ($ingredients as $ingredientId => $grams) {
+            DB::table('dish_ingredients')->insert([
+                'dish_id' => $id, 'ingredient_id' => $ingredientId, 'net_weight_g' => $grams,
+            ]);
+        }
+
+        return $id;
+    }
+
+    protected function makeIngredient(string $name): int
+    {
+        return DB::table('ingredients')->insertGetId(['name' => $name]);
     }
 
     /** Тіло відповіді моделі. */
@@ -323,6 +361,61 @@ class IndividualMenuGeneratorTest extends TestCase
     }
 
     // --- що саме питаємо у моделі -----------------------------------------
+
+    public function test_the_prompt_shows_what_each_dish_is_made_of(): void
+    {
+        $this->fakeAi([['meal_type_id' => $this->mealType['breakfast'], 'dish_id' => $this->dish['omelette']]]);
+
+        $this->generate();
+
+        Http::assertSent(function ($request) {
+            $prompt = $request['messages'][1]['content'];
+
+            // Клієнт у брифі пише про продукти, а не про назви страв —
+            // без складу модель не зрозуміє, що суп це курка.
+            return str_contains($prompt, 'Куряче філе')
+                && str_contains($prompt, 'Буряк')
+                // Дрібниця до 20 г промпт не роздуває.
+                && ! str_contains($prompt, 'Сіль');
+        });
+    }
+
+    public function test_ingredients_already_in_the_kitchen_are_starred(): void
+    {
+        // Стандартне меню на цю дату містить курку — отже вона вже в роботі.
+        $menuId = DB::table('daily_menus')->insertGetId(['menu_plan_id' => 1, 'day_number' => 1]);
+        DB::table('daily_menu_dishes')->insert([
+            'daily_menu_id' => $menuId,
+            'dish_id'       => $this->dish['soup'],
+            'meal_type_id'  => $this->mealType['lunch'],
+        ]);
+        $this->fakeAi([['meal_type_id' => $this->mealType['breakfast'], 'dish_id' => $this->dish['omelette']]]);
+
+        $this->generate();
+
+        Http::assertSent(function ($request) {
+            $prompt = $request['messages'][1]['content'];
+
+            // Курка в роботі — із зірочкою; буряк ні.
+            return str_contains($prompt, 'Куряче філе*')
+                && str_contains($prompt, 'Буряк')
+                && ! str_contains($prompt, 'Буряк*');
+        });
+    }
+
+    public function test_the_brief_outranks_the_kitchen_in_the_instructions(): void
+    {
+        $this->fakeAi([['meal_type_id' => $this->mealType['breakfast'], 'dish_id' => $this->dish['omelette']]]);
+
+        $this->generate();
+
+        Http::assertSent(function ($request) {
+            $system = $request['messages'][0]['content'];
+
+            // Зручність кухні не має переважати побажання клієнта.
+            return str_contains($system, 'НІКОЛИ не переважає');
+        });
+    }
 
     public function test_the_prompt_carries_the_brief_and_only_real_dishes(): void
     {

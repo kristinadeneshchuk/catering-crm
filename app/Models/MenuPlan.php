@@ -86,4 +86,16 @@ class MenuPlan extends Model
         }
         return self::$defaultCache;
     }
+
+    /**
+     * Скинути кеш дефолтного плану.
+     *
+     * Кеш статичний і живе весь процес. У вебі це нормально — запит короткий,
+     * але після зміни плану в адмінці або між тестами він віддає застаріле.
+     */
+    public static function forgetDefault(): void
+    {
+        self::$defaultCache = null;
+        self::$defaultLoaded = false;
+    }
 }

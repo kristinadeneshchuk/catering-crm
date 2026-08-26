@@ -255,6 +255,9 @@ trait BuildsInboxTestSchema
             $t->id();
             $t->string('name')->nullable();
             $t->boolean('is_default')->default(false);
+            $t->integer('cycle_days')->default(28);
+            $t->date('cycle_start_date')->nullable();
+            $t->integer('sort_order')->default(0);
             $t->timestamps();
         });
 

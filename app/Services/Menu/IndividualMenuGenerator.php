@@ -32,6 +32,12 @@ class IndividualMenuGenerator
 {
     private const API_URL = 'https://api.openai.com/v1/chat/completions';
 
+    /** Нижче цієї ваги інгредієнт нічого не вирішує: сіль, олія, спеції. */
+    private const MIN_INGREDIENT_G = 20;
+
+    /** Скільки основних інгредієнтів показувати на страву. */
+    private const MAX_INGREDIENTS_SHOWN = 6;
+
     /**
      * @return array{assigned: int, meals: array<int, string>, skipped: array<int, string>}
      */
@@ -69,7 +75,7 @@ class IndividualMenuGenerator
             ]);
         }
 
-        $picked = $this->ask($brief, $order, $mealTypes, $dishes, $this->kitchenDishIds($date));
+        $picked = $this->ask($brief, $order, $mealTypes, $dishes, $this->kitchenIngredientIds($date));
 
         return $this->store($order, $date, $mealTypes, $dishes, $picked);
     }
@@ -105,25 +111,51 @@ class IndividualMenuGenerator
             ->map(fn ($rows) => $rows->pluck('meal_type_id')->all());
 
         return Dish::where('is_semi_finished', false)
+            ->with('dishIngredients.ingredient')
             ->orderBy('name')
-            ->get(['id', 'name'])
+            ->get()
             ->map(fn (Dish $d) => [
-                'id'         => $d->id,
-                'name'       => $d->name,
-                'meal_types' => $usage[$d->id] ?? [],
+                'id'          => $d->id,
+                'name'        => $d->name,
+                'meal_types'  => $usage[$d->id] ?? [],
+                'ingredients' => $this->mainIngredients($d),
             ]);
     }
 
     /**
-     * Страви стандартного меню на цю дату.
+     * Основна сировина страви: id => назва.
      *
-     * Головна причина, чому вони тут: кухня вже їх готує. Взяти для
-     * індивідуального клієнта те, що й так у роботі, дешевше, ніж запускати
-     * окремий процес заради двохсот грамів.
+     * Модель має бачити, з ЧОГО страва, а не лише її назву — клієнт у брифі
+     * пише саме про продукти («люблю курку, не їм буряк»), і за назвою це не
+     * вгадується. Дрібницю до 20 г (сіль, олія, спеції) не показуємо: вона
+     * нічого не вирішує, а промпт роздуває.
+     *
+     * @return array<int, string>
+     */
+    private function mainIngredients(Dish $dish): array
+    {
+        return $dish->dishIngredients
+            ->filter(fn ($di) => $di->ingredient_id && (float) $di->net_weight_g >= self::MIN_INGREDIENT_G)
+            ->sortByDesc(fn ($di) => (float) $di->net_weight_g)
+            ->take(self::MAX_INGREDIENTS_SHOWN)
+            ->mapWithKeys(fn ($di) => [$di->ingredient_id => $di->ingredient?->name ?? ''])
+            ->filter()
+            ->all();
+    }
+
+    /**
+     * Інгредієнти, які кухня вже ріже цього дня для стандартного меню.
+     *
+     * Рахуємо саме інгредієнти, а не страви: користь не в тому, щоб дати
+     * клієнту ту саму страву, а в тому, щоб не запускати окремий процес заради
+     * двохсот грамів. Якщо курка вже в роботі — будь-яка страва з курки
+     * дешева, навіть якщо самої страви сьогодні в меню немає.
+     *
+     * Поріг той самий, що на сторінці «Персональні меню»: від 20 г.
      *
      * @return array<int, int>
      */
-    private function kitchenDishIds(string $date): array
+    private function kitchenIngredientIds(string $date): array
     {
         $plan = MenuPlan::default();
 
@@ -133,16 +165,24 @@ class IndividualMenuGenerator
 
         $menu = DailyMenu::where('menu_plan_id', $plan->id)
             ->where('day_number', $plan->globalDayFor($date))
+            ->with('menuItems.dish.dishIngredients')
             ->first();
 
         if (! $menu) {
             return [];
         }
 
-        return DB::table('daily_menu_dishes')
-            ->where('daily_menu_id', $menu->id)
-            ->pluck('dish_id')
-            ->all();
+        $ids = [];
+
+        foreach ($menu->menuItems as $item) {
+            foreach ($item->dish?->dishIngredients ?? [] as $di) {
+                if ($di->ingredient_id && (float) $di->net_weight_g >= self::MIN_INGREDIENT_G) {
+                    $ids[] = $di->ingredient_id;
+                }
+            }
+        }
+
+        return array_values(array_unique($ids));
     }
 
     /**
@@ -150,7 +190,7 @@ class IndividualMenuGenerator
      *
      * @return array<int, int>
      */
-    private function ask(string $brief, Order $order, $mealTypes, $dishes, array $kitchenDishIds): array
+    private function ask(string $brief, Order $order, $mealTypes, $dishes, array $kitchenIngredientIds): array
     {
         $key = (string) config('services.openai.key');
 
@@ -169,7 +209,7 @@ class IndividualMenuGenerator
                 'temperature'     => 0.4,
                 'messages'        => [
                     ['role' => 'system', 'content' => $this->systemPrompt()],
-                    ['role' => 'user',   'content' => $this->userPrompt($brief, $order, $mealTypes, $dishes, $kitchenDishIds)],
+                    ['role' => 'user',   'content' => $this->userPrompt($brief, $order, $mealTypes, $dishes, $kitchenIngredientIds)],
                 ],
             ]);
 
@@ -208,37 +248,57 @@ class IndividualMenuGenerator
         Ти — технолог служби доставки здорового харчування. Складаєш персональне
         денне меню для клієнта з його анкети.
 
-        Правила, які не можна порушувати:
-        1. Обирай страви ТІЛЬКИ зі списку доступних, за їхніми id. Не вигадуй
-           назв і не пропонуй того, чого немає в списку.
-        2. Рівно одна страва на кожен запитаний прийом їжі.
-        3. Страва має пасувати прийому: у списку вказано, на які прийоми вона
-           зазвичай іде. Не став вечерю на сніданок.
-        4. Поважай анкету: не пропонуй того, що клієнт не їсть або не любить,
-           і по можливості бери те, що він любить.
-        5. За інших рівних обирай страви з позначкою «вже готується сьогодні» —
-           кухня їх і так робить.
-        6. Не рахуй ваги, калорії й БЖУ. Це зробить система.
+        У кожної страви показано її основні інгредієнти. Зірочка (*) означає,
+        що цей інгредієнт кухня вже готує сьогодні для стандартного меню.
+
+        Порядок пріоритетів — саме такий:
+
+        1. АНКЕТА. Це головне. Категорично не пропонуй продуктів і страв, які
+           клієнт не їсть або не любить — дивись на інгредієнти, а не лише на
+           назву страви. І навпаки: активно бери те, що він назвав улюбленим.
+           Якщо людина пише «люблю курку і рибу» — саме вони мають бути в меню.
+        2. ВІДПОВІДНІСТЬ ПРИЙОМУ. Страва має пасувати: у списку вказано, на які
+           прийоми вона зазвичай іде. Не став вечерю на сніданок.
+        3. РІЗНОМАНІТНІСТЬ. Не повторюй ту саму основну сировину в усіх
+           прийомах дня.
+        4. ЕКОНОМІКА КУХНІ. Коли кілька страв однаково підходять за пунктами
+           1–3, обирай ту, де більше інгредієнтів із зірочкою: їх уже ріжуть,
+           і окремий процес заради двохсот грамів запускати не доведеться.
+
+        Пункт 4 НІКОЛИ не переважає пункт 1. Краще окрема страва з улюблених
+        продуктів, ніж зручна кухні страва з тих, які клієнт не їсть.
+
+        Технічні обмеження:
+        - Обирай страви ТІЛЬКИ зі списку доступних, за їхніми id. Не вигадуй
+          назв і не пропонуй того, чого немає в списку.
+        - Рівно одна страва на кожен запитаний прийом їжі.
+        - Не рахуй ваги, калорії й БЖУ. Це зробить система.
 
         Відповідай СУВОРО у форматі JSON:
         {"meals":[{"meal_type_id":1,"dish_id":123,"reason":"коротко чому"}]}
         TXT;
     }
 
-    private function userPrompt(string $brief, Order $order, $mealTypes, $dishes, array $kitchenDishIds): string
+    private function userPrompt(string $brief, Order $order, $mealTypes, $dishes, array $kitchenIngredientIds): string
     {
         $mealsList = $mealTypes
             ->map(fn (MealType $m) => "- id={$m->id}: {$m->name}")
             ->implode("\n");
 
-        $kitchen = array_flip($kitchenDishIds);
+        $kitchen = array_flip($kitchenIngredientIds);
 
         $dishList = $dishes
             ->map(function (array $d) use ($kitchen) {
                 $meals = $d['meal_types'] ? ' | прийоми: '.implode(',', $d['meal_types']) : '';
-                $today = isset($kitchen[$d['id']]) ? ' | ВЖЕ ГОТУЄТЬСЯ СЬОГОДНІ' : '';
 
-                return "id={$d['id']} | {$d['name']}{$meals}{$today}";
+                // Зірочка = інгредієнт уже сьогодні в роботі на кухні.
+                $ingredients = collect($d['ingredients'])
+                    ->map(fn (string $name, int $id) => $name.(isset($kitchen[$id]) ? '*' : ''))
+                    ->implode(', ');
+
+                $ingredients = $ingredients !== '' ? ' | склад: '.$ingredients : '';
+
+                return "id={$d['id']} | {$d['name']}{$meals}{$ingredients}";
             })
             ->implode("\n");
 
