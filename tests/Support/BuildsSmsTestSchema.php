@@ -109,6 +109,7 @@ trait BuildsSmsTestSchema
         });
 
         (require database_path('migrations/2026_07_28_120010_create_sms_logs_table.php'))->up();
+        (require database_path('migrations/2026_08_26_170000_create_route_stops_table.php'))->up();
     }
 
     protected function makeCourier(string $name, ?string $phone = '0671112233'): int
@@ -121,6 +122,8 @@ trait BuildsSmsTestSchema
 
     protected function makeRoute(array $attrs = []): int
     {
+        $attrs['ant_route_id'] ??= 'r' . uniqid('', true);
+
         return DB::table('delivery_routes')->insertGetId(array_merge([
             'date' => $this->deliveryDate, 'shift' => 'all',
             'ant_route_id' => 'r' . uniqid('', true), 'ant_route_num' => 1,
@@ -130,8 +133,18 @@ trait BuildsSmsTestSchema
         ], $attrs));
     }
 
-    /** @return array{client_id:int, order_id:int, day_id:int} */
-    protected function makeOrderDay(array $client = [], array $order = [], array $day = []): array
+    /**
+     * Клієнт + замовлення + день + точка в архіві.
+     *
+     * У проді точку створює вивантаження з ANT (AntLogisticsService::snapshotStop),
+     * копіюючи курʼєра й авто з шапки маршруту. Тут робимо те саме, щоб фікстура
+     * відповідала тому, що реально лежить у базі на момент розсилки.
+     *
+     * @param  array  $stop  перекриття для точки; 'route' — id рядка delivery_routes,
+     *                       якщо на дату їх кілька і потрібен конкретний.
+     * @return array{client_id:int, order_id:int, day_id:int, stop_id:int}
+     */
+    protected function makeOrderDay(array $client = [], array $order = [], array $day = [], array $stop = []): array
     {
         $clientId = DB::table('clients')->insertGetId(array_merge([
             'name' => 'Клієнт Тест', 'phone' => '0501234567',
@@ -146,6 +159,43 @@ trait BuildsSmsTestSchema
             'ant_route_num' => 1, 'ant_driver' => 'Іванов І.І.',
         ], $day));
 
-        return ['client_id' => $clientId, 'order_id' => $orderId, 'day_id' => $dayId];
+        $routeId = $stop['route'] ?? null;
+        unset($stop['route']);
+
+        $route = $routeId
+            ? DB::table('delivery_routes')->find($routeId)
+            : DB::table('delivery_routes')->orderBy('id')->first();
+
+        $courier = $route?->employee_id
+            ? DB::table('employees')->find($route->employee_id)
+            : null;
+
+        $stopId = $this->makeStop(array_merge([
+            'delivery_route_id' => $route?->id,
+            'ant_route_id'      => $route?->ant_route_id,
+            'ant_route_num'     => $route?->ant_route_num,
+            'shift'             => \App\Models\DeliveryRoute::shiftFromRouteTime($route?->route_time_b),
+            'employee_id'       => $route?->employee_id,
+            'driver_name'       => $route?->driver_name,
+            'courier_name'      => $courier?->name,
+            'courier_phone'     => $courier?->phone,
+            'car_number'        => $route?->registration_number,
+            'client_id'         => $clientId,
+            'client_name'       => DB::table('clients')->find($clientId)->name,
+            'client_phone'      => DB::table('clients')->find($clientId)->phone,
+            'order_id'          => $orderId,
+            'order_day_id'      => $dayId,
+        ], $stop));
+
+        return ['client_id' => $clientId, 'order_id' => $orderId, 'day_id' => $dayId, 'stop_id' => $stopId];
+    }
+
+    protected function makeStop(array $attrs = []): int
+    {
+        return DB::table('route_stops')->insertGetId(array_merge([
+            'date'   => $this->deliveryDate,
+            'shift'  => null,
+            'source' => 'ant',
+        ], $attrs));
     }
 }

@@ -511,6 +511,7 @@ class AntLogisticsService
         // 2. Для кожного маршруту завантажуємо точки і оновлюємо order_days
         $totalComps = 0;
         $updated    = 0;
+        $seenStops  = [];   // ant_route_id => [client_id, ...] — для чистки знятих точок
 
         foreach ($routesData as $route) {
             $routeNum = (int) ($route['Route_Num'] ?? 0);
@@ -549,8 +550,16 @@ class AntLogisticsService
 
                 $updated  += $affected;
                 $totalComps++;
+
+                $this->snapshotStop($deliveryDate, $route, $routeNum, $routePos, $clientDays->first());
+
+                if (isset($route['Route_Id'])) {
+                    $seenStops[(string) $route['Route_Id']][] = $clientId;
+                }
             }
         }
+
+        $this->pruneStops($deliveryDate, $seenStops);
 
         Log::info('[AntLogistics] Route assignments pulled', [
             'delivery_date' => $deliveryDate,
@@ -580,6 +589,72 @@ class AntLogisticsService
     // Internal: збираємо OrderDay-и, які фізично доставляються в задану дату/зміну.
     // Враховує закриті слоти (вихідні) та delivery_date_override на OrderDay.
     // -------------------------------------------------------------------------
+
+    /**
+     * Записує точку в архів route_stops.
+     *
+     * Денормалізовано навмисно: курʼєр, авто, телефон і адреса копіюються на
+     * момент виїзду. Через тиждень клієнт змінить адресу, замовлення закриється,
+     * а маршрут у ANT перебудують — запис має лишитись тим, чим був.
+     */
+    private function snapshotStop(string $deliveryDate, array $route, int $routeNum, ?int $routePos, \App\Models\OrderDay $day): void
+    {
+        $client = $day->order?->client;
+
+        if (! $client) {
+            return;
+        }
+
+        $routeId = isset($route['Route_Id']) ? (string) $route['Route_Id'] : null;
+
+        // Курʼєра і авто беремо з уже завантаженої шапки маршруту: там водій
+        // ANT уже зматчений з карткою співробітника.
+        $header = $routeId
+            ? DeliveryRoute::whereDate('date', $deliveryDate)->where('ant_route_id', $routeId)->first()
+            : null;
+
+        $courier = $header?->employee;
+
+        \App\Models\RouteStop::updateOrCreate(
+            ['date' => $deliveryDate, 'ant_route_id' => $routeId, 'client_id' => $client->id],
+            [
+                'shift'             => DeliveryRoute::shiftFromRouteTime($route['RouteTime_B'] ?? null),
+                'delivery_route_id' => $header?->id,
+                'ant_route_num'     => $routeNum,
+                'position'          => $routePos,
+                'employee_id'       => $courier?->id,
+                'driver_name'       => $route['Driver'] ?? null,
+                'courier_name'      => $courier?->name,
+                'courier_phone'     => $courier?->phone,
+                'car_number'        => $header?->registration_number ?? ($route['Registration_Number'] ?? null),
+                'client_name'       => $client->name,
+                'client_phone'      => $client->phone,
+                'address'           => $this->buildClientAddress($client),
+                'order_id'          => $day->order?->id,
+                'order_day_id'      => $day->id,
+                'source'            => \App\Models\RouteStop::SOURCE_ANT,
+            ]
+        );
+    }
+
+    /**
+     * Прибирає точки, яких у щойно завантажених маршрутах більше немає.
+     *
+     * Чистимо ТІЛЬКИ всередині маршрутів, які ANT цього разу віддав. Маршрут
+     * іншої зміни, який логіст видалив в ANT, щоб побудувати цю, лишається
+     * недоторканим — інакше знімок повторив би долю delivery_routes.
+     *
+     * @param  array<string, array<int, int>>  $seen  ant_route_id => [client_id, ...]
+     */
+    private function pruneStops(string $deliveryDate, array $seen): void
+    {
+        foreach ($seen as $routeId => $clientIds) {
+            \App\Models\RouteStop::whereDate('date', $deliveryDate)
+                ->where('ant_route_id', (string) $routeId)
+                ->whereNotIn('client_id', $clientIds ?: [0])
+                ->delete();
+        }
+    }
 
     /**
      * @return array{days: \Illuminate\Support\Collection}
@@ -752,7 +827,7 @@ class AntLogisticsService
         return $results;
     }
 
-    private function buildClientAddress(Client $client): string
+    public function buildClientAddress(Client $client): string
     {
         $addr = $client->addresses()->where('is_default', true)->first()
             ?? $client->addresses()->first();
@@ -911,7 +986,11 @@ class AntLogisticsService
             $createdRoute = DeliveryRoute::updateOrCreate(
                 ['date' => $date, 'ant_route_id' => $routeId],
                 [
-                    'shift'               => $shift,
+                    // Пишемо РЕАЛЬНУ зміну маршруту, а не значення фільтра, з
+                    // яким тягнули. Раніше тут осідало 'all', і колонка shift
+                    // не означала нічого — зміну доводилось щоразу вгадувати
+                    // по route_time_b.
+                    'shift'               => DeliveryRoute::shiftFromRouteTime($route['RouteTime_B'] ?? null) ?? $shift,
                     'ant_route_num'       => $route['Route_Num'] ?? null,
                     'driver_name'         => $driver,
                     'employee_id'         => $employeeId,
@@ -937,21 +1016,41 @@ class AntLogisticsService
             $saved++;
         }
 
-        // ANT віддає ВСІ маршрути дати (фільтр зміни ми застосовуємо вже у себе),
-        // тож маршрут, якого немає у відповіді, — видалений при перебудові.
-        // updateOrCreate його не чіпав, і він назавжди лишався в CRM: зайві
-        // точки в шапці та зайва ставка в ЗП курʼєра. Видаляємо через модель,
-        // щоб DeliveryRouteObserver переоцінив зміну курʼєра в Табелі.
-        $antIds = collect($routes)
-            ->pluck('Route_Id')
-            ->filter()
-            ->map(fn ($v) => (string) $v)
-            ->all();
+        // Маршрут, якого немає у відповіді ANT, вважається видаленим при
+        // перебудові — інакше він назавжди лишався б у CRM: зайві точки в шапці
+        // та зайва ставка в ЗП курʼєра. Видаляємо через модель, щоб
+        // DeliveryRouteObserver переоцінив зміну курʼєра в Табелі.
+        //
+        // АЛЕ чистити можна ТІЛЬКИ ті зміни, які ANT цього разу віддав.
+        //
+        // В ANT на дату вміщується один комплект маршрутів. Логіст будує
+        // вечірні — і видаляє ранкові. Раніше $antIds збирався з усієї
+        // відповіді без огляду на зміну, тож CRM бачила «ранкових більше нема»
+        // і зносила їх у себе: разом з історією виїздів і разом з ранковою
+        // ставкою курʼєра. З 72 днів обидві зміни вціліли лише на 10.
+        //
+        // CRM тут не дзеркало ANT, а накопичувач: ANT показує поточний стан,
+        // CRM памʼятає обидві зміни.
+        $antIds    = [];
+        $antShifts = [];
+
+        foreach ($routes as $route) {
+            if (! empty($route['Route_Id'])) {
+                $antIds[] = (string) $route['Route_Id'];
+            }
+
+            if ($s = DeliveryRoute::shiftFromRouteTime($route['RouteTime_B'] ?? null)) {
+                $antShifts[$s] = true;
+            }
+        }
 
         $stale = DeliveryRoute::whereDate('date', $date)
             ->whereNotNull('ant_route_id')
             ->whereNotIn('ant_route_id', $antIds)
-            ->get();
+            ->get()
+            // Зміну маршруту не визначили — не чіпаємо: краще зайвий рядок,
+            // ніж мовчки стерта історія.
+            ->filter(fn (DeliveryRoute $r) => ($sh = $r->realShift()) !== null && isset($antShifts[$sh]));
 
         foreach ($stale as $staleRoute) {
             $staleRoute->delete();

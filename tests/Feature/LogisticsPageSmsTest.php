@@ -63,6 +63,7 @@ class LogisticsPageSmsTest extends TestCase
     public function test_button_state_becomes_ready(): void
     {
         $this->makeRoute(['employee_id' => $this->makeCourier('Іванов І.І.')]);
+        $this->makeOrderDay();
 
         $page = $this->page();
         $page->loadSmsState();
@@ -85,6 +86,7 @@ class LogisticsPageSmsTest extends TestCase
     public function test_header_actions_expose_the_send_button_with_correct_state(): void
     {
         $this->makeRoute(['employee_id' => $this->makeCourier('Іванов І.І.')]);
+        $this->makeOrderDay();
 
         $page = $this->page();
         $page->loadSmsState();

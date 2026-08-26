@@ -79,10 +79,25 @@ class LogisticsRouteFeeTest extends TestCase
 
     public function test_routes_dropped_by_ant_rebuild_are_removed(): void
     {
-        // Чорновий маршрут, який ANT після перебудови більше не віддає.
-        $stale = $this->makeRoute(['ant_route_id' => '4298', 'ant_route_num' => 1, 'driver_name' => 'Чернетка']);
+        // Чорновий ВЕЧІРНІЙ маршрут, який ANT після перебудови більше не віддає.
+        // Час старту тут принциповий: чистка діє лише в межах тих змін, які ANT
+        // цього разу показав. Ранковий маршрут у цій же відповіді вцілів би —
+        // логіст видаляє ранкові в ANT, щоб побудувати вечірні, і CRM не має
+        // сприймати це як «маршруту більше немає».
+        $stale = $this->makeRoute([
+            'ant_route_id' => '4298', 'ant_route_num' => 1,
+            'driver_name' => 'Чернетка', 'route_time_b' => '05.08.2026 17:30',
+        ]);
         // Живий — прийде у відповіді й має лишитись.
-        $alive = $this->makeRoute(['ant_route_id' => '4306', 'ant_route_num' => 1, 'driver_name' => 'Коток Анастасія ']);
+        $alive = $this->makeRoute([
+            'ant_route_id' => '4306', 'ant_route_num' => 1,
+            'driver_name' => 'Коток Анастасія ', 'route_time_b' => '05.08.2026 17:47',
+        ]);
+        // Ранковий — ANT його не віддасть, і чіпати його не можна.
+        $morning = $this->makeRoute([
+            'ant_route_id' => '4200', 'ant_route_num' => 1,
+            'driver_name' => 'Ранковий', 'route_time_b' => '05.08.2026 09:00',
+        ]);
 
         Http::fake([
             '*/auth*' => Http::response(['Session_Ident' => 'sess-1']),
@@ -98,6 +113,7 @@ class LogisticsRouteFeeTest extends TestCase
 
         $this->assertDatabaseMissing('delivery_routes', ['id' => $stale]);
         $this->assertDatabaseHas('delivery_routes', ['id' => $alive]);
+        $this->assertDatabaseHas('delivery_routes', ['id' => $morning]);
     }
 
     // --- матч водія --------------------------------------------------------

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Setting;
+use Carbon\Carbon;
 use App\Models\SmsLog;
 use App\Services\CourierSmsNotifier;
 use App\Services\ScheduleService;
@@ -68,33 +69,47 @@ class CourierSmsNotifierTest extends TestCase
     // ТЗ п.3 — умови активації кнопки
     // -------------------------------------------------------------------------
 
-    public function test_button_is_blocked_until_routes_are_built(): void
+    public function test_button_is_blocked_until_stops_are_pulled(): void
     {
         $r = $this->notifier()->readiness($this->deliveryDate);
 
         $this->assertFalse($r['ready']);
-        $this->assertStringContainsString('Маршрути ще не побудовані', $r['reason']);
+        $this->assertStringContainsString('Точки ще не завантажені', $r['reason']);
     }
 
-    public function test_button_is_blocked_when_no_route_has_a_courier(): void
+    public function test_building_routes_without_pulling_stops_is_not_enough(): void
+    {
+        // Шапка маршруту є, а точок нема — слати нікому. Раніше кнопка в цей
+        // момент уже світилась, бо готовність міряли маршрутами.
+        $this->makeRoute(['employee_id' => $this->makeCourier('Іванов І.І.')]);
+
+        $this->assertFalse($this->notifier()->readiness($this->deliveryDate)['ready']);
+    }
+
+    public function test_button_is_blocked_when_no_stop_has_a_courier(): void
     {
         $this->makeRoute(['employee_id' => null]);
+        $this->makeOrderDay();
 
         $r = $this->notifier()->readiness($this->deliveryDate);
 
         $this->assertFalse($r['ready']);
         $this->assertSame(1, $r['routes_without_courier']);
-        $this->assertStringContainsString('не призначено курʼєра', $r['reason']);
+        $this->assertStringContainsString('немає курʼєра', $r['reason']);
     }
 
-    public function test_shift_filter_sees_routes_pulled_as_all(): void
+    public function test_both_shifts_are_visible_at_once(): void
     {
-        // Кейс з прода 05.08: маршрути завантажені фільтром «Всі» (shift='all'),
-        // менеджер перемикає на «Ранкова»/«Вечірня» — і сторінка казала
-        // «маршрути не побудовані», кнопка гасла. Розводимо за часом старту.
+        // Головне, заради чого існує архів. В ANT на дату вміщується один
+        // комплект маршрутів, тож логіст, будуючи вечірні, видаляє ранкові.
+        // У знімку живуть обидві зміни одночасно.
         $courier = $this->makeCourier('Іванов І.І.');
-        $this->makeRoute(['employee_id' => $courier, 'shift' => 'all', 'route_time_b' => '05.08.2026 06:03']);
-        $this->makeRoute(['employee_id' => $courier, 'shift' => 'all', 'ant_route_num' => 2, 'route_time_b' => '05.08.2026 17:20']);
+
+        $morningRoute = $this->makeRoute(['employee_id' => $courier, 'route_time_b' => '05.08.2026 06:03']);
+        $eveningRoute = $this->makeRoute(['employee_id' => $courier, 'ant_route_num' => 2, 'route_time_b' => '05.08.2026 17:20']);
+
+        $this->makeOrderDay(['phone' => '0501111111'], [], [], ['route' => $morningRoute]);
+        $this->makeOrderDay(['phone' => '0502222222'], [], [], ['route' => $eveningRoute]);
 
         $morning = $this->notifier()->readiness($this->deliveryDate, 'morning');
         $evening = $this->notifier()->readiness($this->deliveryDate, 'evening');
@@ -106,25 +121,26 @@ class CourierSmsNotifierTest extends TestCase
         $this->assertTrue($evening['ready'], $evening['reason'] ?? '');
     }
 
-    public function test_explicit_shift_column_still_wins_over_time(): void
+    public function test_a_stop_without_a_shift_is_visible_in_both(): void
     {
-        // Якщо маршрут завантажили саме як вечірній — час не має його перебивати.
-        $this->makeRoute([
-            'employee_id'  => $this->makeCourier('Іванов І.І.'),
-            'shift'        => 'evening',
-            'route_time_b' => '05.08.2026 09:00',
-        ]);
+        // Легасі-рядок або маршрут з нерозпізнаваним часом: краще показати
+        // зайву точку, ніж загубити її зовсім.
+        $this->makeRoute(['employee_id' => $this->makeCourier('Іванов І.І.')]);
+        $this->makeOrderDay([], [], [], ['shift' => null]);
 
-        $this->assertSame(1, $this->notifier()->readiness($this->deliveryDate, 'evening')['routes']);
-        $this->assertSame(0, $this->notifier()->readiness($this->deliveryDate, 'morning')['routes']);
+        $this->assertTrue($this->notifier()->readiness($this->deliveryDate, 'morning')['ready']);
+        $this->assertTrue($this->notifier()->readiness($this->deliveryDate, 'evening')['ready']);
     }
 
-    public function test_button_is_ready_with_warning_when_only_part_of_routes_have_courier(): void
+    public function test_button_is_ready_with_warning_when_only_part_of_stops_have_courier(): void
     {
-        // Часткова готовність не блокує відправку по готових маршрутах (ТЗ п.9):
-        // один маршрут із курʼєром, один без — кнопка активна, але з попередженням.
-        $this->makeRoute(['employee_id' => $this->makeCourier('Іванов І.І.')]);
-        $this->makeRoute(['ant_route_num' => 2, 'ant_route_id' => 9002, 'employee_id' => null]);
+        // Часткова готовність не блокує відправку по готових точках (ТЗ п.9):
+        // одна точка з курʼєром, одна без — кнопка активна, але з попередженням.
+        $withCourier = $this->makeRoute(['employee_id' => $this->makeCourier('Іванов І.І.')]);
+        $noCourier   = $this->makeRoute(['ant_route_num' => 2, 'employee_id' => null]);
+
+        $this->makeOrderDay(['phone' => '0501111111'], [], [], ['route' => $withCourier]);
+        $this->makeOrderDay(['phone' => '0502222222'], [], [], ['route' => $noCourier]);
 
         $r = $this->notifier()->readiness($this->deliveryDate);
 
@@ -137,6 +153,7 @@ class CourierSmsNotifierTest extends TestCase
     {
         Setting::where('key', TurboSmsService::KEY_TOKEN)->delete();
         $this->makeRoute(['employee_id' => $this->makeCourier('Іванов І.І.')]);
+        $this->makeOrderDay();
 
         $r = $this->notifier()->readiness($this->deliveryDate);
 
@@ -147,11 +164,125 @@ class CourierSmsNotifierTest extends TestCase
     public function test_button_becomes_ready_when_everything_is_in_place(): void
     {
         $this->makeRoute(['employee_id' => $this->makeCourier('Іванов І.І.')]);
+        $this->makeOrderDay();
 
         $r = $this->notifier()->readiness($this->deliveryDate);
 
         $this->assertTrue($r['ready'], $r['reason'] ?? '');
         $this->assertSame(1, $r['routes']);
+    }
+
+    // -------------------------------------------------------------------------
+    // Вікно розсилки
+    // -------------------------------------------------------------------------
+
+    public function test_sending_is_blocked_outside_the_allowed_window(): void
+    {
+        $this->makeRoute(['employee_id' => $this->makeCourier('Іванов І.І.')]);
+        $this->makeOrderDay();
+
+        // «З 09:00 можна розсилки робити за законом» — о 07:00 не можна.
+        $this->travelTo(Carbon::parse($this->deliveryDate . ' 07:00'));
+
+        $r = $this->notifier()->readiness($this->deliveryDate);
+
+        $this->assertFalse($r['ready']);
+        $this->assertStringContainsString('вікно розсилки', $r['reason']);
+    }
+
+    public function test_send_refuses_outside_the_window_even_from_an_open_modal(): void
+    {
+        $this->makeRoute(['employee_id' => $this->makeCourier('Іванов І.І.')]);
+        $this->makeOrderDay();
+        $this->fakeTurboOk();
+
+        $this->travelTo(Carbon::parse($this->deliveryDate . ' 22:30'));
+
+        $result = $this->notifier()->send($this->deliveryDate);
+
+        $this->assertSame(0, $result['sent']);
+        $this->assertSame(0, SmsLog::count());
+        Http::assertNothingSent();
+    }
+
+    public function test_the_window_is_configurable(): void
+    {
+        Setting::create(['key' => CourierSmsNotifier::KEY_WINDOW_FROM, 'value' => '07:00']);
+
+        $this->makeRoute(['employee_id' => $this->makeCourier('Іванов І.І.')]);
+        $this->makeOrderDay();
+
+        $this->travelTo(Carbon::parse($this->deliveryDate . ' 07:30'));
+
+        $this->assertTrue($this->notifier()->readiness($this->deliveryDate)['ready']);
+    }
+
+    // -------------------------------------------------------------------------
+    // Вечір сьогодні + ранок завтра
+    // -------------------------------------------------------------------------
+
+    public function test_evening_run_covers_tonight_and_tomorrow_morning(): void
+    {
+        // Робочий вечір логіста: вечірні маршрути на сьогодні і ранкові на
+        // завтра побудовані. Клієнтам обох треба сказати про курʼєра одним
+        // заходом — вранці ранкових попереджати вже запізно.
+        $courier = $this->makeCourier('Іванов І.І.');
+
+        $tonight = $this->makeRoute([
+            'employee_id' => $courier, 'route_time_b' => '05.08.2026 18:00',
+            'registration_number' => 'BB2222BB',
+        ]);
+
+        $this->makeOrderDay(['name' => 'Вечірній', 'phone' => '0502222222'], [], [], ['route' => $tonight]);
+
+        // Завтрашній ранок — окрема дата доставки.
+        $this->makeStop([
+            'date' => '2026-08-06', 'shift' => 'morning', 'ant_route_num' => 1,
+            'ant_route_id' => 'r-tomorrow',
+            'courier_name' => 'Іванов І.І.', 'courier_phone' => '0671112233',
+            'car_number' => 'AA1111AA',
+            'client_name' => 'Ранковий', 'client_phone' => '0501111111',
+        ]);
+
+        $this->fakeTurboOk();
+
+        $result = $this->notifier()->send($this->deliveryDate, CourierSmsNotifier::SHIFT_EVENING_PLUS_MORNING);
+
+        $this->assertSame(2, $result['sent'], 'обидва клієнти мають отримати SMS');
+
+        $evening = SmsLog::where('phone', '380502222222')->first();
+        $morning = SmsLog::where('phone', '380501111111')->first();
+
+        $this->assertSame('BB2222BB', $evening->car_number, 'вечірньому клієнту — вечірнє авто');
+        $this->assertSame('AA1111AA', $morning->car_number, 'ранковому клієнту — завтрашнє авто');
+
+        // Лог має лягти на СВОЮ дату доставки, інакше завтра розсилка вирішить,
+        // що ранковим уже слали.
+        $this->assertSame('2026-08-05', $evening->date->format('Y-m-d'));
+        $this->assertSame('2026-08-06', $morning->date->format('Y-m-d'));
+    }
+
+    public function test_the_same_client_gets_both_deliveries(): void
+    {
+        // Один номер, дві доставки різними курʼєрами — має отримати обидві SMS.
+        $courier = $this->makeCourier('Іванов І.І.');
+        $tonight = $this->makeRoute(['employee_id' => $courier, 'route_time_b' => '05.08.2026 18:00', 'registration_number' => 'BB2222BB']);
+
+        $this->makeOrderDay(['phone' => '0509999999'], [], [], ['route' => $tonight]);
+
+        $this->makeStop([
+            'date' => '2026-08-06', 'shift' => 'morning', 'ant_route_id' => 'r-tomorrow',
+            'courier_name' => 'Петров П.П.', 'courier_phone' => '0679998877',
+            'car_number' => 'CC3333CC',
+            'client_name' => 'Клієнт Тест', 'client_phone' => '0509999999',
+        ]);
+
+        $this->fakeTurboOk();
+
+        $result = $this->notifier()->send($this->deliveryDate, CourierSmsNotifier::SHIFT_EVENING_PLUS_MORNING);
+
+        $this->assertSame(2, $result['sent']);
+        $this->assertSame(2, SmsLog::where('phone', '380509999999')->count());
     }
 
     // -------------------------------------------------------------------------
@@ -241,6 +372,7 @@ class CourierSmsNotifierTest extends TestCase
             DB::table('orders')->truncate();
             DB::table('clients')->truncate();
             DB::table('sms_logs')->truncate();
+            DB::table('route_stops')->truncate();
 
             $this->makeRoute(['employee_id' => $this->makeCourier($stored, '0671112233')]);
             DB::table('delivery_routes')->update(['driver_name' => $stored]);
@@ -282,19 +414,20 @@ class CourierSmsNotifierTest extends TestCase
     public static function invalidDataProvider(): array
     {
         return [
-            'клієнт без телефону'      => [['phone' => null], [], [], 'не вказано телефон'],
-            'некоректний телефон'      => [['phone' => '12345'], [], [], 'Некоректний номер'],
-            'замовлення без маршруту'  => [[], [], ['ant_route_num' => null], 'не привʼязане до маршруту'],
-            // Маршрут є в замовленні, але не завантажений у CRM — «Точки ↓»
-            'маршрут не завантажений'  => [[], [], ['ant_route_num' => 77, 'ant_driver' => 'Хтось'], 'ще не завантажений у CRM'],
+            // Причини тепер читаються з самої точки — матчити її з маршрутом
+            // уже не треба, це зроблено на вивантаженні з ANT.
+            'клієнт без телефону' => [['phone' => null], ['client_phone' => null], 'не вказано телефон'],
+            'некоректний телефон' => [['phone' => '12345'], ['client_phone' => '12345'], 'Некоректний номер'],
+            'точка без курʼєра'   => [[], ['courier_name' => null], 'не призначено курʼєра'],
+            'точка без авто'      => [[], ['car_number' => null], 'не вказано номер авто'],
         ];
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('invalidDataProvider')]
-    public function test_invalid_orders_are_reported_and_not_sent(array $client, array $order, array $day, string $expected): void
+    public function test_invalid_orders_are_reported_and_not_sent(array $client, array $stop, string $expected): void
     {
         $this->makeRoute(['employee_id' => $this->makeCourier('Іванов І.І.')]);
-        $this->makeOrderDay($client, $order, $day);
+        $this->makeOrderDay($client, [], [], $stop);
         $this->fakeTurboOk();
 
         $result = $this->notifier()->send($this->deliveryDate);
@@ -337,31 +470,34 @@ class CourierSmsNotifierTest extends TestCase
     // Критичний кейс: ранковий і вечірній маршрут №1 у того самого курʼєра
     // -------------------------------------------------------------------------
 
-    public function test_morning_and_evening_route_number_one_do_not_mix_up_cars(): void
+    public function test_two_shifts_on_one_date_keep_their_own_cars(): void
     {
+        // Номер маршруту в ANT не унікальний у межах дня: ранковий і вечірній
+        // прогони обидва нумеруються з 1. Раніше їх доводилось розводити
+        // здогадками по часу старту; тепер авто прибите до точки на момент виїзду.
         $courier = $this->makeCourier('Іванов І.І.', '0671112233');
 
-        $this->makeRoute([
+        $morningRoute = $this->makeRoute([
             'employee_id' => $courier, 'ant_route_num' => 1,
             'registration_number' => 'AA1111AA', 'route_time_b' => '05.08.2026 09:00',
         ]);
-        $this->makeRoute([
+        $eveningRoute = $this->makeRoute([
             'employee_id' => $courier, 'ant_route_num' => 1,
             'registration_number' => 'BB2222BB', 'route_time_b' => '05.08.2026 18:00',
         ]);
 
-        // Ранковий клієнт: їжа в день доставки.
         $this->makeOrderDay(
             ['name' => 'Ранковий', 'phone' => '0501111111'],
             ['schedule_type' => 'every_day_morning'],
             ['date' => $this->deliveryDate],
+            ['route' => $morningRoute],
         );
 
-        // Вечірній клієнт: їжа наступного дня, доставка — сьогодні ввечері.
         $this->makeOrderDay(
             ['name' => 'Вечірній', 'phone' => '0502222222'],
             ['schedule_type' => 'every_day_evening'],
             ['date' => '2026-08-06'],
+            ['route' => $eveningRoute],
         );
 
         $this->fakeTurboOk();
@@ -407,13 +543,20 @@ class CourierSmsNotifierTest extends TestCase
 
         $this->notifier()->send($this->deliveryDate);
 
-        // Маршрути перебудували: інший курʼєр і авто.
+        // Маршрути перебудували: інший курʼєр і авто. У проді це перезаписує
+        // і шапку, і точку — «Точки маршрутів» знімає обидві разом.
         $newCourier = $this->makeCourier('Петренко П.П.', '0997778899');
         DB::table('delivery_routes')->where('id', $routeId)->update([
             'employee_id' => $newCourier, 'driver_name' => 'Петренко П.П.',
             'registration_number' => 'CC3333CC',
         ]);
-        DB::table('order_days')->update(['ant_driver' => 'Петренко П.П.']);
+        DB::table('route_stops')->update([
+            'employee_id'   => $newCourier,
+            'driver_name'   => 'Петренко П.П.',
+            'courier_name'  => 'Петренко П.П.',
+            'courier_phone' => '0997778899',
+            'car_number'    => 'CC3333CC',
+        ]);
 
         $second = $this->notifier()->send($this->deliveryDate);
 

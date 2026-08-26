@@ -67,7 +67,8 @@ class LogisticsPage extends Page implements HasForms
         // Запам'ятовуємо вибір дати per-user — щоб не скидалась на сьогодні щоразу.
         $this->form->fill([
             'date'  => auth()->user()->uiPref('logistics.date', now()->format('Y-m-d')),
-            'shift' => 'all',
+            'shift'     => 'all',
+            'sms_scope' => 'shift',
         ]);
         $this->loadRoutes();
         $this->loadMileage();
@@ -93,6 +94,20 @@ class LogisticsPage extends Page implements HasForms
                     ->default('all')
                     ->live()
                     ->afterStateUpdated(fn () => $this->loadRoutes()),
+
+                // Робочий вечір: логіст побудував вечірні маршрути на сьогодні і
+                // ранкові на завтра. Клієнтам обох потрібно сказати про курʼєра
+                // одним заходом — розсилка після 21:00 уже не піде, а зранку
+                // ранкових клієнтів попереджати запізно.
+                Select::make('sms_scope')
+                    ->label('Розсилка')
+                    ->options([
+                        'shift' => 'За обрану зміну',
+                        CourierSmsNotifier::SHIFT_EVENING_PLUS_MORNING => 'Вечір сьогодні + ранок завтра',
+                    ])
+                    ->default('shift')
+                    ->live()
+                    ->afterStateUpdated(fn () => $this->loadSmsState()),
             ]),
         ])->statePath('data');
     }
@@ -129,10 +144,20 @@ class LogisticsPage extends Page implements HasForms
      * Тут тільки дешеві запити (маршрути + лічильник логів) — повний розбір
      * замовлень робиться вже при відкритті модалки.
      */
+    /**
+     * Яку зміну беремо для SMS: обрану на сторінці чи звʼязку «вечір + ранок».
+     */
+    protected function smsShift(): string
+    {
+        return ($this->data['sms_scope'] ?? 'shift') === CourierSmsNotifier::SHIFT_EVENING_PLUS_MORNING
+            ? CourierSmsNotifier::SHIFT_EVENING_PLUS_MORNING
+            : ($this->data['shift'] ?? 'all');
+    }
+
     public function loadSmsState(): void
     {
-        $date  = $this->data['date']  ?? now()->format('Y-m-d');
-        $shift = $this->data['shift'] ?? 'all';
+        $date  = $this->data['date'] ?? now()->format('Y-m-d');
+        $shift = $this->smsShift();
 
         // Якщо міграції ще не накатані (sms_logs / employees.phone) — не валимо
         // всю сторінку Логістики, а просто лишаємо кнопку неактивною.
@@ -146,9 +171,16 @@ class LogisticsPage extends Page implements HasForms
             // Рахуємо тільки ті відправки, що перетинаються з обраною зміною:
             // інакше після ранкової розсилки кнопка казала б «вже відправлені»
             // і на вечірній зміні, де ще нікому не слали.
+            $segments = app(CourierSmsNotifier::class)->segments($date, $shift);
+
             $this->smsSentCount = SmsLog::sent()
-                ->whereDate('date', $date)
-                ->when($shift !== 'all', fn ($q) => $q->whereIn('shift', ['all', $shift]))
+                ->where(function ($q) use ($segments) {
+                    foreach ($segments as [$segDate, $segShift]) {
+                        $q->orWhere(fn ($sub) => $sub
+                            ->whereDate('date', $segDate)
+                            ->when($segShift !== 'all', fn ($x) => $x->whereIn('shift', ['all', $segShift])));
+                    }
+                })
                 ->distinct()
                 ->count('phone');
         } catch (\Throwable $e) {
@@ -406,8 +438,8 @@ class LogisticsPage extends Page implements HasForms
      */
     protected function buildSmsPreviewForm(): array
     {
-        $date  = $this->data['date']  ?? now()->format('Y-m-d');
-        $shift = $this->data['shift'] ?? 'all';
+        $date  = $this->data['date'] ?? now()->format('Y-m-d');
+        $shift = $this->smsShift();
 
         $preview = app(CourierSmsNotifier::class)->preview($date, $shift);
 
@@ -443,8 +475,17 @@ class LogisticsPage extends Page implements HasForms
         // для тестової відправки, поки перевіряємо інтеграцію.
         if (! empty($preview['recipients'])) {
             $options = [];
+            // Коли шлемо за два дні одразу, без дати список не читається.
+            $multiDay = count(array_unique(array_column($preview['recipients'], 'date'))) > 1;
+
             foreach ($preview['recipients'] as $r) {
-                $label = $r['client_name'] . ' (+' . $r['phone'] . ') — ' . $r['courier_name'] . ', ' . $r['car_number'];
+                $when = $multiDay
+                    ? Carbon::parse($r['date'])->format('d.m')
+                        . ($r['shift'] === 'morning' ? ' ранок' : ($r['shift'] === 'evening' ? ' вечір' : ''))
+                        . ' · '
+                    : '';
+
+                $label = $when . $r['client_name'] . ' (+' . $r['phone'] . ') — ' . $r['courier_name'] . ', ' . $r['car_number'];
                 if ($r['already_sent'] && ! $r['changed']) {
                     $label .= ' · вже надіслано';
                 } elseif ($r['changed']) {
@@ -696,8 +737,8 @@ class LogisticsPage extends Page implements HasForms
                 ->form(fn () => $this->buildSmsPreviewForm())
                 ->modalSubmitAction(fn ($action) => $action->disabled(! $this->smsCanSubmit))
                 ->action(function (array $data) {
-                    $date  = $this->data['date']  ?? now()->format('Y-m-d');
-                    $shift = $this->data['shift'] ?? 'all';
+                    $date  = $this->data['date'] ?? now()->format('Y-m-d');
+                    $shift = $this->smsShift();
 
                     $notifier = app(CourierSmsNotifier::class);
 

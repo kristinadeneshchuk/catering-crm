@@ -2,8 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\DeliveryRoute;
-use App\Models\OrderDay;
+use App\Models\RouteStop;
 use App\Models\SmsLog;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -12,21 +11,69 @@ use Illuminate\Support\Facades\Log;
 /**
  * Сповіщення клієнтів про курʼєра після побудови маршрутів.
  *
- * Ланцюжок звʼязків:
- *   OrderDay (ant_route_num + ant_driver) → DeliveryRoute → Employee (курʼєр)
- *   Клієнт: OrderDay → Order → Client (phone)
- *   Авто:   DeliveryRoute.registration_number (приходить з ANT)
+ * Джерело даних — архів route_stops, а не живі order_days. Причина в тому, як
+ * влаштований ANT: на дату там вміщується один комплект маршрутів, тож логіст,
+ * будуючи вечірні, видаляє ранкові. У живих даних обидві зміни одночасно не
+ * існують ніколи — а розсилка потребує саме обох: увечері шлемо і за сьогоднішній
+ * вечір, і за завтрашній ранок.
  *
- * Номер маршруту НЕ унікальний у межах дня (ранковий і вечірній прогони обидва
- * нумеруються з 1), тому матчимо парою «номер + водій» — той самий підхід, що і
- * в DeliveryRoute::extraDeliveryFee().
+ * У знімку курʼєр, авто, телефон і адреса вже прибиті до точки на момент виїзду,
+ * тому тут не лишилось ні матчингу «номер маршруту + водій», ні здогадок про
+ * зміну.
  */
 class CourierSmsNotifier
 {
+    /** Увечері: сьогоднішній вечір + завтрашній ранок, одним списком. */
+    public const SHIFT_EVENING_PLUS_MORNING = 'evening_and_next_morning';
+
+    /** Розсилати можна лише вдень — «з 09:00 можна розсилки робити за законом». */
+    public const KEY_WINDOW_FROM = 'sms_window_from';
+    public const KEY_WINDOW_TO   = 'sms_window_to';
+
+    public const DEFAULT_WINDOW_FROM = '09:00';
+    public const DEFAULT_WINDOW_TO   = '21:00';
+
     public function __construct(
         private TurboSmsService $sms,
-        private AntLogisticsService $ant,
     ) {
+    }
+
+    /**
+     * Відрізки, з яких складається розсилка: [дата доставки, зміна].
+     *
+     * @return array<int, array{0: string, 1: string}>
+     */
+    public function segments(string $date, string $shift): array
+    {
+        $date = Carbon::parse($date)->format('Y-m-d');
+
+        if ($shift === self::SHIFT_EVENING_PLUS_MORNING) {
+            return [
+                [$date, 'evening'],
+                [Carbon::parse($date)->addDay()->format('Y-m-d'), 'morning'],
+            ];
+        }
+
+        return [[$date, $shift]];
+    }
+
+    /**
+     * Чи можна зараз відправляти. Вікно налаштовується в CRM.
+     *
+     * @return array{allowed: bool, from: string, to: string}
+     */
+    public function timeWindow(): array
+    {
+        $from = trim((string) (\App\Models\Setting::where('key', self::KEY_WINDOW_FROM)->value('value') ?: self::DEFAULT_WINDOW_FROM));
+        $to   = trim((string) (\App\Models\Setting::where('key', self::KEY_WINDOW_TO)->value('value') ?: self::DEFAULT_WINDOW_TO));
+
+        $now = now()->format('H:i');
+
+        return [
+            'allowed' => $now >= $from && $now <= $to,
+            'from'    => $from,
+            'to'      => $to,
+        ];
     }
 
     // -------------------------------------------------------------------------
@@ -34,39 +81,57 @@ class CourierSmsNotifier
     // -------------------------------------------------------------------------
 
     /**
-     * Кнопка активна, щойно є хоч один маршрут із курʼєром: замовлення з
-     * неповними даними не блокують решту — вони показуються списком у модалці
-     * (ТЗ п.9, рекомендований варіант). Повне блокування лишається тільки коли
-     * маршрутів немає взагалі, немає жодного курʼєра або SMS не налаштовано.
+     * Кнопка активна, щойно є хоч одна точка з курʼєром: точки з неповними
+     * даними не блокують решту — вони показуються списком у модалці. Повне
+     * блокування лишається тільки коли точок немає взагалі, немає жодного
+     * курʼєра або SMS не налаштовано.
      *
      * @return array{ready: bool, reason: ?string, warning: ?string, routes: int, routes_without_courier: int}
      */
     public function readiness(string $date, string $shift = 'all'): array
     {
-        $routes = $this->routesFor($date, $shift);
+        $stops = $this->stopsFor($date, $shift);
 
-        $withoutCourier = $routes->filter(fn (DeliveryRoute $r) => ! $r->employee_id)->count();
+        $routes = $stops->pluck('ant_route_id')->filter()->unique()->count()
+            ?: ($stops->isEmpty() ? 0 : 1);
+
+        $withoutCourier = $stops->filter(fn (RouteStop $s) => ! $s->courier_name)->count();
 
         $result = [
-            'routes'                 => $routes->count(),
+            'routes'                 => $routes,
             'routes_without_courier' => $withoutCourier,
             'warning'                => null,
         ];
 
-        if ($routes->isEmpty()) {
-            return $result + ['ready' => false, 'reason' => 'Маршрути ще не побудовані. Натисніть «Точки ↓», щоб завантажити їх з ANT.'];
+        if ($stops->isEmpty()) {
+            return $result + [
+                'ready'  => false,
+                'reason' => 'Точки ще не завантажені в CRM. Натисніть «Точки маршрутів», щоб зняти їх з ANT.',
+            ];
         }
 
-        if ($withoutCourier === $routes->count()) {
-            return $result + ['ready' => false, 'reason' => 'На жодному маршруті не призначено курʼєра. Звірте імʼя в ANT з полем «Імʼя в ANT Logistics» у картці курʼєра.'];
+        if ($withoutCourier === $stops->count()) {
+            return $result + [
+                'ready'  => false,
+                'reason' => 'На жодній точці немає курʼєра. Звірте імʼя в ANT з полем «Імʼя в ANT Logistics» у картці курʼєра і завантажте точки ще раз.',
+            ];
         }
 
         if ($error = $this->sms->configurationError()) {
             return $result + ['ready' => false, 'reason' => $error];
         }
 
+        $window = $this->timeWindow();
+
+        if (! $window['allowed']) {
+            return $result + [
+                'ready'  => false,
+                'reason' => "Зараз не можна відправляти: вікно розсилки {$window['from']}–{$window['to']}.",
+            ];
+        }
+
         if ($withoutCourier > 0) {
-            $result['warning'] = "Без курʼєра: {$withoutCourier} маршрут(ів) — клієнти цих маршрутів SMS не отримають, "
+            $result['warning'] = "Без курʼєра: {$withoutCourier} точ(ок) — ці клієнти SMS не отримають, "
                 . 'вони будуть у списку «проблемних» перед відправкою.';
         }
 
@@ -78,7 +143,7 @@ class CourierSmsNotifier
     // -------------------------------------------------------------------------
 
     /**
-     * Збирає отримувачів та проблемні замовлення, нічого не відправляючи.
+     * Збирає отримувачів та проблемні точки, нічого не відправляючи.
      *
      * @return array{
      *     recipients: array<int, array<string, mixed>>,
@@ -88,102 +153,63 @@ class CourierSmsNotifier
      */
     public function preview(string $date, string $shift = 'all'): array
     {
-        $deliveryDate = Carbon::parse($date)->format('Y-m-d');
-
-        $routes    = $this->routesFor($deliveryDate, $shift);
-        $routeMap  = $this->buildRouteMap($routes);
-        $days      = $this->ant->collectOrderDaysForDelivery($deliveryDate, $shift)['days'];
-
-        $template = $this->sms->template();
-
+        $template   = $this->sms->template();
         $recipients = [];
         $problems   = [];
 
-        foreach ($days as $day) {
-            $order  = $day->order;
-            $client = $order?->client;
+        foreach ($this->stopsFor($date, $shift) as $stop) {
+            $clientName = $stop->client_name ?: ('Замовлення #' . ($stop->order_id ?? '—'));
 
-            $clientName = $client?->name ?: ('Замовлення #' . ($order?->id ?? '—'));
-            $orderId    = $order?->id;
-
-            // Ключ по замовленню+причині: клієнт з кількома днями в одній
-            // доставці не має задвоюватись у списку проблем.
-            $fail = function (string $reason) use (&$problems, $clientName, $orderId): void {
-                $problems[$orderId . '|' . $reason] = [
+            // Ключ по замовленню+причині: клієнт з кількома точками не має
+            // задвоюватись у списку проблем.
+            $fail = function (string $reason) use (&$problems, $clientName, $stop): void {
+                $problems[$stop->order_id . '|' . $reason] = [
                     'client'   => $clientName,
-                    'order_id' => $orderId,
+                    'order_id' => $stop->order_id,
                     'reason'   => $reason,
                 ];
             };
 
-            if (! $client) {
-                $fail('Замовлення без клієнта');
-                continue;
-            }
+            $rawPhone = trim((string) ($stop->client_phone ?? ''));
 
-            $rawPhone = trim((string) ($client->phone ?? ''));
             if ($rawPhone === '') {
                 $fail('У клієнта не вказано телефон');
                 continue;
             }
 
             $phone = TurboSmsService::normalizePhone($rawPhone);
+
             if ($phone === null) {
                 $fail("Некоректний номер телефону клієнта: {$rawPhone}");
                 continue;
             }
 
-            $routeNum = (int) ($day->ant_route_num ?? 0);
-            if (! $routeNum) {
-                $fail('Замовлення не привʼязане до маршруту');
+            if (! $stop->courier_name) {
+                $fail('На маршруті №' . ($stop->ant_route_num ?: '—') . ' не призначено курʼєра');
                 continue;
             }
 
-            $route = $this->matchRoute($routeMap, $routeNum, $day->ant_driver, $day);
-            if (! $route) {
-                // Розрізняємо дві різні біди. Маршруту нема в CRM взагалі —
-                // це «забули натиснути Точки ↓» (класика: маршрути добудували
-                // в ANT після останнього завантаження). Маршрут є, але
-                // кандидатів кілька — це вже неоднозначність зміни.
-                $known = isset($routeMap['by_num'][$routeNum]);
+            $courierPhone = TurboSmsService::normalizePhone($stop->courier_phone);
 
-                $fail($known
-                    ? "Не вдалося однозначно визначити маршрут №{$routeNum}"
-                        . ($day->ant_driver ? " (водій «{$day->ant_driver}»)" : '')
-                        . '. Оберіть конкретну зміну (Ранкова / Вечірня).'
-                    : "Маршрут №{$routeNum}"
-                        . ($day->ant_driver ? " (водій «{$day->ant_driver}»)" : '')
-                        . ' ще не завантажений у CRM — натисніть «Точки ↓».');
-                continue;
-            }
-
-            $courier = $route->employee;
-            if (! $courier) {
-                $fail("На маршруті №{$routeNum} не призначено курʼєра");
-                continue;
-            }
-
-            $courierPhone = TurboSmsService::normalizePhone($courier->phone);
             if ($courierPhone === null) {
-                $fail("У курʼєра «{$courier->name}» не вказано (або некоректний) телефон");
+                $fail("У курʼєра «{$stop->courier_name}» не вказано (або некоректний) телефон");
                 continue;
             }
 
-            $car = trim((string) ($route->registration_number ?? ''));
+            $car = trim((string) ($stop->car_number ?? ''));
+
             if ($car === '') {
-                $fail("На маршруті №{$routeNum} не вказано номер авто");
+                $fail('На маршруті №' . ($stop->ant_route_num ?: '—') . ' не вказано номер авто');
                 continue;
             }
 
-            $courierName = $this->courierDisplayName($courier->name);
+            $courierName = $this->courierDisplayName($stop->courier_name);
             $fingerprint = $this->fingerprint($courierName, $courierPhone, $car);
 
-            // Ключ «номер + курʼєр», а не самий номер. Подвійний раціон (кілька
-            // днів на одному маршруті) дає однаковий fingerprint і згортається в
-            // одну SMS. А от коли в клієнта і ранкова, і вечірня доставка різними
-            // курʼєрами — це два різні fingerprint, і він має отримати обидві,
+            // Ключ «дата + номер + курʼєр». Клієнт, у якого і вечірня, і
+            // ранкова доставка різними курʼєрами, має отримати обидві SMS —
             // інакше про другого курʼєра йому ніхто не скаже.
-            $key = $phone . '|' . $fingerprint;
+            $key = $this->stopDate($stop) . '|' . $phone . '|' . $fingerprint;
 
             if (isset($recipients[$key])) {
                 continue;
@@ -191,22 +217,23 @@ class CourierSmsNotifier
 
             $recipients[$key] = [
                 'key'           => $key,
+                'date'          => $this->stopDate($stop),
+                'shift'         => $stop->shift ?: 'all',
                 'phone'         => $phone,
-                'client_id'     => $client->id,
-                'client_name'   => $client->name,
-                'order_id'      => $orderId,
-                'order_day_id'  => $day->id,
-                'route_num'     => $routeNum,
+                'client_id'     => $stop->client_id,
+                'client_name'   => $stop->client_name,
+                'order_id'      => $stop->order_id,
+                'order_day_id'  => $stop->order_day_id,
+                'route_num'     => $stop->ant_route_num,
                 'courier_name'  => $courierName,
                 'courier_phone' => $courierPhone,
                 'car_number'    => $car,
                 'fingerprint'   => $fingerprint,
-                'text'          => $this->renderText($template, $courierName, $courierPhone, $car, $client->name),
+                'text'          => $this->renderText($template, $courierName, $courierPhone, $car, $stop->client_name),
             ];
         }
 
-        // Позначаємо, кому вже слали таку саму інформацію.
-        $recipients = $this->markAlreadySent($deliveryDate, $recipients);
+        $recipients = $this->markAlreadySent($recipients);
 
         $new       = 0;
         $resend    = 0;
@@ -279,6 +306,17 @@ class CourierSmsNotifier
      */
     private function performSend(string $deliveryDate, string $shift, bool $resendAll, ?array $onlyKeys = null): array
     {
+        // Вікно перевіряємо і тут, а не лише в readiness: відправку можна
+        // запустити з відкритої модалки, коли час уже вийшов.
+        $window = $this->timeWindow();
+
+        if (! $window['allowed']) {
+            return [
+                'sent' => 0, 'failed' => 0, 'skipped' => 0, 'excluded' => 0, 'problems' => [],
+                'errors' => ["Зараз не можна відправляти: вікно розсилки {$window['from']}–{$window['to']}."],
+            ];
+        }
+
         $preview = $this->preview($deliveryDate, $shift);
 
         // За замовчуванням не турбуємо клієнтів, у яких нічого не змінилось.
@@ -324,7 +362,7 @@ class CourierSmsNotifier
                 ] : null;
 
                 foreach ($group as $r) {
-                    $this->writeLog($deliveryDate, $shift, $r, SmsLog::STATUS_FAILED, $globalRow, $result['error'], $userId, $result['raw']);
+                    $this->writeLog($r['date'], $r['shift'], $r, SmsLog::STATUS_FAILED, $globalRow, $result['error'], $userId, $result['raw']);
                     $failed++;
                 }
                 continue;
@@ -335,17 +373,17 @@ class CourierSmsNotifier
 
                 if ($row === null) {
                     $errors[] = "{$r['client_name']} ({$r['phone']}): TurboSMS не повернув статус";
-                    $this->writeLog($deliveryDate, $shift, $r, SmsLog::STATUS_FAILED, null, 'TurboSMS не повернув статус по номеру', $userId, $result['raw']);
+                    $this->writeLog($r['date'], $r['shift'], $r, SmsLog::STATUS_FAILED, null, 'TurboSMS не повернув статус по номеру', $userId, $result['raw']);
                     $failed++;
                     continue;
                 }
 
                 if ($row['ok']) {
-                    $this->writeLog($deliveryDate, $shift, $r, SmsLog::STATUS_SENT, $row, null, $userId, $result['raw']);
+                    $this->writeLog($r['date'], $r['shift'], $r, SmsLog::STATUS_SENT, $row, null, $userId, $result['raw']);
                     $sent++;
                 } else {
                     $errors[] = "{$r['client_name']} ({$r['phone']}): {$row['message']}";
-                    $this->writeLog($deliveryDate, $shift, $r, SmsLog::STATUS_FAILED, $row, $row['message'], $userId, $result['raw']);
+                    $this->writeLog($r['date'], $r['shift'], $r, SmsLog::STATUS_FAILED, $row, $row['message'], $userId, $result['raw']);
                     $failed++;
                 }
             }
@@ -374,83 +412,32 @@ class CourierSmsNotifier
     // -------------------------------------------------------------------------
 
     /**
-     * Маршрути на дату. Фільтр по зміні — такий самий, як на сторінці Логістики,
-     * щоб кнопка відповідала тому, що адміністратор бачить на екрані.
-     */
-    private function routesFor(string $date, string $shift): \Illuminate\Support\Collection
-    {
-        $routes = DeliveryRoute::whereDate('date', Carbon::parse($date)->format('Y-m-d'))
-            ->with('employee')
-            ->get();
-
-        return DeliveryRoute::filterByShift($routes, $shift);
-    }
-
-    /**
-     * Обидва індекси — саме групування, а не «останній перезаписує».
-     * Один курʼєр цілком може вести і ранковий, і вечірній маршрут №1 у той
-     * самий день: якби ми клали їх в один ключ, частина клієнтів отримала б
-     * номер чужого авто.
+     * Точки, за якими шлемо. Кілька відрізків — коли ввечері беремо і
+     * сьогоднішній вечір, і завтрашній ранок.
      *
-     * @return array{by_num_driver: array<string, \Illuminate\Support\Collection>, by_num: array<int, \Illuminate\Support\Collection>}
+     * @return \Illuminate\Support\Collection<int, RouteStop>
      */
-    private function buildRouteMap(\Illuminate\Support\Collection $routes): array
+    private function stopsFor(string $date, string $shift): \Illuminate\Support\Collection
     {
-        return [
-            'by_num_driver' => $routes
-                ->filter(fn (DeliveryRoute $r) => (int) $r->ant_route_num && trim((string) $r->driver_name) !== '')
-                ->groupBy(fn (DeliveryRoute $r) => (int) $r->ant_route_num . '|' . mb_strtolower(trim((string) $r->driver_name)))
-                ->all(),
-            'by_num' => $routes
-                ->filter(fn (DeliveryRoute $r) => (int) $r->ant_route_num)
-                ->groupBy(fn (DeliveryRoute $r) => (int) $r->ant_route_num)
-                ->all(),
-        ];
+        $stops = collect();
+
+        foreach ($this->segments($date, $shift) as [$segDate, $segShift]) {
+            $stops = $stops->merge(
+                RouteStop::forDelivery($segDate, $segShift)
+                    ->orderBy('ant_route_num')
+                    ->orderBy('position')
+                    ->get()
+            );
+        }
+
+        return $stops;
     }
 
-    /**
-     * Матч «номер маршруту + водій». Якщо кандидатів кілька (той самий курʼєр
-     * має ранковий і вечірній прогони з однаковим номером) — розрізняємо їх за
-     * зміною конкретного дня замовлення. Якщо однозначності немає — повертаємо
-     * null, і замовлення потрапляє в «проблемні»: краще не відправити SMS, ніж
-     * відправити клієнту чужий телефон і номер авто.
-     */
-    private function matchRoute(array $map, int $routeNum, ?string $driver, OrderDay $day): ?DeliveryRoute
+    private function stopDate(RouteStop $stop): string
     {
-        $driverKey  = mb_strtolower(trim((string) $driver));
-        $candidates = null;
-
-        if ($driverKey !== '') {
-            $candidates = $map['by_num_driver'][$routeNum . '|' . $driverKey] ?? null;
-        }
-
-        // Fallback на самий номер — коли в OrderDay не записаний водій (легасі-рядки).
-        if ($candidates === null || $candidates->isEmpty()) {
-            $candidates = $map['by_num'][$routeNum] ?? null;
-        }
-
-        if ($candidates === null || $candidates->isEmpty()) {
-            return null;
-        }
-
-        if ($candidates->count() === 1) {
-            return $candidates->first();
-        }
-
-        // Кілька кандидатів — розводимо за зміною (ранок / вечір).
-        $dayIsEvening = $this->ant->orderDayIsEvening($day);
-
-        $matched = $candidates->filter(
-            fn (DeliveryRoute $r) => $this->routeIsEvening($r) === $dayIsEvening
-        );
-
-        return $matched->count() === 1 ? $matched->first() : null;
-    }
-
-    /** Зміна маршруту — єдина логіка живе в моделі (DeliveryRoute::isEvening). */
-    private function routeIsEvening(DeliveryRoute $route): ?bool
-    {
-        return $route->isEvening();
+        return $stop->date instanceof \Carbon\Carbon
+            ? $stop->date->format('Y-m-d')
+            : Carbon::parse((string) $stop->date)->format('Y-m-d');
     }
 
     /**
@@ -488,24 +475,37 @@ class CourierSmsNotifier
     }
 
     /**
-     * Позначає отримувачів, яким уже слали SMS на цю дату:
+     * Позначає отримувачів, яким уже слали SMS:
      *   already_sent — слали взагалі;
      *   changed      — слали, але з іншим курʼєром/авто (маршрути перебудували).
+     *
+     * Звіряємо парою «дата + телефон»: розсилка може охоплювати два дні
+     * (вечір сьогодні + ранок завтра), і вчорашня відправка не має гасити
+     * сьогоднішню.
      */
-    private function markAlreadySent(string $date, array $recipients): array
+    private function markAlreadySent(array $recipients): array
     {
         if (empty($recipients)) {
             return $recipients;
         }
 
+        $dates  = array_values(array_unique(array_column($recipients, 'date')));
+        $phones = array_values(array_unique(array_column($recipients, 'phone')));
+
+        // whereDate, а не whereIn: колонка date приходить з БД як datetime,
+        // і пряме порівняння з 'Y-m-d' не збігається.
         $logs = SmsLog::sent()
-            ->whereDate('date', $date)
-            ->whereIn('phone', array_values(array_unique(array_column($recipients, 'phone'))))
+            ->where(function ($q) use ($dates) {
+                foreach ($dates as $d) {
+                    $q->orWhereDate('date', $d);
+                }
+            })
+            ->whereIn('phone', $phones)
             ->get()
-            ->groupBy('phone');
+            ->groupBy(fn (SmsLog $l) => Carbon::parse((string) $l->date)->format('Y-m-d') . '|' . $l->phone);
 
         foreach ($recipients as $key => $r) {
-            $sentLogs = $logs->get($r['phone']);
+            $sentLogs = $logs->get($r['date'] . '|' . $r['phone']);
 
             $recipients[$key]['already_sent'] = (bool) $sentLogs?->isNotEmpty();
             $recipients[$key]['changed'] = $sentLogs && $sentLogs->isNotEmpty()

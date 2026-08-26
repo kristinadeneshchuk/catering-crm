@@ -4,6 +4,7 @@ namespace App\Filament\Resources\SettingResource\Pages;
 
 use App\Filament\Resources\SettingResource;
 use App\Models\Setting;
+use App\Services\CourierSmsNotifier;
 use App\Services\TurboSmsService;
 use Filament\Actions;
 use Filament\Forms\Components\Placeholder;
@@ -76,9 +77,31 @@ class ListSettings extends ListRecords
                         ))
                         ->default(fn () => Setting::where('key', TurboSmsService::KEY_TEMPLATE)->value('value')
                             ?: TurboSmsService::DEFAULT_TEMPLATE),
+
+                    // Реклама і масові розсилки в Україні обмежені денним часом.
+                    // Поза вікном кнопка гасне, а сама відправка відмовляє —
+                    // модалку могли відкрити о 20:59 і натиснути о 21:05.
+                    TextInput::make(CourierSmsNotifier::KEY_WINDOW_FROM)
+                        ->label('Розсилати з')
+                        ->placeholder(CourierSmsNotifier::DEFAULT_WINDOW_FROM)
+                        ->helperText('Формат ГГ:ХХ. Раніше 09:00 розсилки робити не можна.')
+                        ->default(fn () => Setting::where('key', CourierSmsNotifier::KEY_WINDOW_FROM)->value('value')
+                            ?: CourierSmsNotifier::DEFAULT_WINDOW_FROM),
+
+                    TextInput::make(CourierSmsNotifier::KEY_WINDOW_TO)
+                        ->label('Розсилати до')
+                        ->placeholder(CourierSmsNotifier::DEFAULT_WINDOW_TO)
+                        ->default(fn () => Setting::where('key', CourierSmsNotifier::KEY_WINDOW_TO)->value('value')
+                            ?: CourierSmsNotifier::DEFAULT_WINDOW_TO),
                 ])
                 ->action(function (array $data) {
-                    foreach ([TurboSmsService::KEY_TOKEN, TurboSmsService::KEY_SENDER, TurboSmsService::KEY_TEMPLATE] as $key) {
+                    foreach ([
+                        TurboSmsService::KEY_TOKEN,
+                        TurboSmsService::KEY_SENDER,
+                        TurboSmsService::KEY_TEMPLATE,
+                        CourierSmsNotifier::KEY_WINDOW_FROM,
+                        CourierSmsNotifier::KEY_WINDOW_TO,
+                    ] as $key) {
                         if (array_key_exists($key, $data)) {
                             Setting::updateOrCreate(['key' => $key], ['value' => $data[$key]]);
                         }

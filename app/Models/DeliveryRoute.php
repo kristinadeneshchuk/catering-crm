@@ -32,6 +32,29 @@ class DeliveryRoute extends Model
     public const EVENING_HOUR = 14;
 
     /**
+     * Зміна маршруту з сирого поля ANT `RouteTime_B` ('d.m.Y H:i').
+     *
+     * Потрібна ще до того, як маршрут потрапив у базу: за нею вирішуємо, чиї
+     * саме рядки має право чистити свіжий імпорт з ANT.
+     */
+    public static function shiftFromRouteTime(?string $routeTimeB): ?string
+    {
+        if (! preg_match('/\s(\d{1,2}):/', (string) $routeTimeB, $m)) {
+            return null;
+        }
+
+        return (int) $m[1] >= self::EVENING_HOUR ? 'evening' : 'morning';
+    }
+
+    /** Зміна маршруту рядком: 'morning' | 'evening' | null. */
+    public function realShift(): ?string
+    {
+        $evening = $this->isEvening();
+
+        return $evening === null ? null : ($evening ? 'evening' : 'morning');
+    }
+
+    /**
      * Чи вечірній це маршрут: спершу колонка shift, інакше — година старту.
      * null — визначити не вдалося (немає ні shift, ні розпізнаваного часу).
      */
