@@ -173,6 +173,44 @@ class RouteSnapshotTest extends TestCase
         $this->assertSame('AA0000AA', $stop->car_number);
     }
 
+    public function test_a_real_pull_absorbs_the_backfilled_ghost(): void
+    {
+        // Відновлені з order_days точки не мають ant_route_id — його тоді ще не
+        // писали. Коли маршрут нарешті завантажать, поруч не має зʼявитись
+        // другий запис: неповний привид висів би в «проблемних» вічно.
+        $this->makeStop([
+            'ant_route_id' => null, 'client_id' => 42, 'ant_route_num' => 1,
+            'client_name' => 'Клієнт', 'client_phone' => '0501234567',
+            'source' => RouteStop::SOURCE_BACKFILL,
+        ]);
+
+        $this->makeRoute([
+            'ant_route_id' => 'r1', 'ant_route_num' => 1,
+            'employee_id' => $this->makeCourier('Іванов І.І.'),
+        ]);
+
+        // Клієнт 42 їде цим маршрутом — точку знімають з ANT наново.
+        $this->makeOrderDay(['id' => 42, 'name' => 'Клієнт', 'phone' => '0501234567']);
+
+        $service = app(AntLogisticsService::class);
+        $method  = new \ReflectionMethod($service, 'snapshotStop');
+        $method->setAccessible(true);
+        $method->invoke(
+            $service,
+            $this->deliveryDate,
+            ['Route_Id' => 'r1', 'Driver' => 'Іванов І.І.', 'RouteTime_B' => '05.08.2026 09:00'],
+            1,
+            1,
+            \App\Models\OrderDay::with('order.client')->first(),
+        );
+
+        $stops = RouteStop::where('client_id', 42)->get();
+
+        $this->assertCount(1, $stops, 'привид має розчинитись, а не подвоїтись');
+        $this->assertSame('r1', $stops->first()->ant_route_id);
+        $this->assertSame('Іванов І.І.', $stops->first()->courier_name);
+    }
+
     public function test_both_shifts_live_side_by_side_in_the_archive(): void
     {
         $courier = $this->makeCourier('Іванов І.І.');

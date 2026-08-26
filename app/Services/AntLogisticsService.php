@@ -615,6 +615,17 @@ class AntLogisticsService
 
         $courier = $header?->employee;
 
+        // Прибираємо привид з backfill: у відновлених рядків ant_route_id
+        // порожній (на order_days його тоді ще не писали), тож updateOrCreate
+        // нижче створив би поруч другий запис — а неповний привид назавжди
+        // лишився б у списку «проблемних» перед розсилкою.
+        if ($routeId) {
+            \App\Models\RouteStop::whereDate('date', $deliveryDate)
+                ->where('client_id', $client->id)
+                ->whereNull('ant_route_id')
+                ->delete();
+        }
+
         \App\Models\RouteStop::updateOrCreate(
             ['date' => $deliveryDate, 'ant_route_id' => $routeId, 'client_id' => $client->id],
             [
