@@ -187,8 +187,8 @@
             -webkit-box-orient: vertical;
         }
 
-        /* Прийом прибрано навмисно. Синій, а не червоний: це не помилка, а
-           попередження, щоб на кухні не шукали баг. */
+        /* Прийом прибрано навмисно. Синій, а не червоний: для кухні це не
+           проблема зі стравою. Пояснень не пишемо — стікер бачить клієнт. */
         .missing-box {
             background: #eff6ff;
             border: 0.5px solid #bfdbfe;
@@ -202,14 +202,6 @@
             font-weight: 900;
             color: #1d4ed8;
             line-height: 1.15;
-        }
-
-        .missing-note {
-            font-size: 6.5px;
-            font-weight: 700;
-            color: #3b82f6;
-            text-transform: uppercase;
-            margin-top: 0.5mm;
         }
 
         .changes-box {
@@ -362,7 +354,6 @@
                         {{-- Інформаційний стікер: прийом прибрано навмисно, це не збій. --}}
                         <div class="missing-box">
                             <div class="missing-title">НЕМАЄ: {{ mb_strtoupper(implode(', ', $sticker['missing_meals'])) }}</div>
-                            <div class="missing-note">Прибрано за замовленням — не помилка</div>
                         </div>
                     @else
                     <div class="dish-name">{{ $sticker['dish'] }}</div>
