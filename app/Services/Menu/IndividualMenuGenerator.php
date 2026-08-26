@@ -4,6 +4,7 @@ namespace App\Services\Menu;
 
 use App\Models\DailyMenu;
 use App\Models\Dish;
+use App\Models\Ingredient;
 use App\Models\MealPlan;
 use App\Models\MealType;
 use App\Models\MenuPlan;
@@ -37,6 +38,9 @@ class IndividualMenuGenerator
 
     /** Скільки основних інгредієнтів показувати на страву. */
     private const MAX_INGREDIENTS_SHOWN = 6;
+
+    /** Глибина розкриття вкладених напівфабрикатів. */
+    private const MAX_NESTING = 3;
 
     /**
      * @return array{assigned: int, meals: array<int, string>, skipped: array<int, string>}
@@ -103,15 +107,20 @@ class IndividualMenuGenerator
      */
     private function candidateDishes()
     {
+        // Назвами, а не id: модель міркує про «сніданок», а не про «8».
+        $mealNames = MealType::pluck('name', 'id');
+
         $usage = DB::table('daily_menu_dishes')
             ->select('dish_id', 'meal_type_id')
             ->distinct()
             ->get()
             ->groupBy('dish_id')
-            ->map(fn ($rows) => $rows->pluck('meal_type_id')->all());
+            ->map(fn ($rows) => $rows->pluck('meal_type_id')
+                ->map(fn ($id) => $mealNames[$id] ?? null)
+                ->filter()->unique()->values()->all());
 
         return Dish::where('is_semi_finished', false)
-            ->with('dishIngredients.ingredient')
+            ->with(['dishIngredients.ingredient', 'dishIngredients.childDish.dishIngredients.childDish.dishIngredients'])
             ->orderBy('name')
             ->get()
             ->map(fn (Dish $d) => [
@@ -127,20 +136,85 @@ class IndividualMenuGenerator
      *
      * Модель має бачити, з ЧОГО страва, а не лише її назву — клієнт у брифі
      * пише саме про продукти («люблю курку, не їм буряк»), і за назвою це не
-     * вгадується. Дрібницю до 20 г (сіль, олія, спеції) не показуємо: вона
-     * нічого не вирішує, а промпт роздуває.
+     * вгадується.
+     *
+     * Розкриваємо вкладені напівфабрикати. Без цього «Яловичина карі з паровим
+     * рисом» показувала склад «черрі»: рис і яловичина лежать усередині
+     * вкладених страв, а не прямими інгредієнтами. Це не дрібниця — вкладені
+     * компоненти найбільші за вагою.
+     *
+     * Дрібницю до 20 г (сіль, олія, спеції) не показуємо: вона нічого не
+     * вирішує, а промпт роздуває.
      *
      * @return array<int, string>
      */
     private function mainIngredients(Dish $dish): array
     {
-        return $dish->dishIngredients
-            ->filter(fn ($di) => $di->ingredient_id && (float) $di->net_weight_g >= self::MIN_INGREDIENT_G)
-            ->sortByDesc(fn ($di) => (float) $di->net_weight_g)
-            ->take(self::MAX_INGREDIENTS_SHOWN)
-            ->mapWithKeys(fn ($di) => [$di->ingredient_id => $di->ingredient?->name ?? ''])
-            ->filter()
-            ->all();
+        $weights = $this->collectIngredientWeights($dish);
+
+        arsort($weights);
+
+        $names = Ingredient::whereIn('id', array_keys($weights))->pluck('name', 'id');
+
+        $out = [];
+
+        foreach ($weights as $id => $grams) {
+            if ($grams < self::MIN_INGREDIENT_G || ! isset($names[$id])) {
+                continue;
+            }
+
+            $out[$id] = $names[$id];
+
+            if (count($out) >= self::MAX_INGREDIENTS_SHOWN) {
+                break;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Сумарна вага кожного інгредієнта страви з урахуванням вкладених страв.
+     *
+     * Вкладена страва входить не цілком, а шматком: 400 г від напівфабрикату,
+     * у якого своя базова вага. Тому її склад масштабуємо — інакше поріг
+     * значущості спрацює навмання.
+     *
+     * @param  array<int, bool>  $seen  захист від зациклених вкладень
+     * @return array<int, float>  ingredient_id => грами
+     */
+    private function collectIngredientWeights(Dish $dish, float $scale = 1.0, array $seen = []): array
+    {
+        if ($scale <= 0 || isset($seen[$dish->id]) || count($seen) > self::MAX_NESTING) {
+            return [];
+        }
+
+        $seen[$dish->id] = true;
+        $weights = [];
+
+        foreach ($dish->dishIngredients as $di) {
+            $grams = (float) $di->net_weight_g * $scale;
+
+            if ($di->ingredient_id) {
+                $weights[$di->ingredient_id] = ($weights[$di->ingredient_id] ?? 0) + $grams;
+
+                continue;
+            }
+
+            $child = $di->childDish;
+
+            if (! $child) {
+                continue;
+            }
+
+            $base = (float) ($child->base_weight_g ?? 0);
+
+            foreach ($this->collectIngredientWeights($child, $base > 0 ? $grams / $base : 0, $seen) as $id => $g) {
+                $weights[$id] = ($weights[$id] ?? 0) + $g;
+            }
+        }
+
+        return $weights;
     }
 
     /**
