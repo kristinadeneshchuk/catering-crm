@@ -18,6 +18,7 @@ class Inbox extends Page
     protected static ?string $slug            = 'inbox';
     protected static ?int    $navigationSort  = 1;
 
+
     protected static string $view = 'filament.pages.inbox';
 
     // === Стан компонента (Livewire properties) ===
@@ -97,6 +98,14 @@ class Inbox extends Page
 
     public static function canAccess(): bool
     {
+        // ⏸ Чати тимчасово сховані з системи (2026-08-27, прохання власниці).
+        // Повернути: прибрати рядок з `false` нижче.
+        // Під тестами лишаємо доступ: логіка конструктора замовлень із чату
+        // далі покривається тестами, щоб не зламалась, поки сторінка схована.
+        if (! app()->runningUnitTests()) {
+            return false;
+        }
+
         return auth()->check()
             && in_array(auth()->user()->role, ['admin', 'manager'], true);
     }

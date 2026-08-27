@@ -64,7 +64,7 @@
         ];
     @endphp
 
-    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:1rem;">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1rem; align-content:start; align-items:start;">
         @foreach($cards as $card)
         <div style="background:{{ $card['bg'] }}; border:1px solid {{ $card['border'] }}; border-radius:0.875rem; padding:1.25rem 1.375rem; display:flex; flex-direction:column; gap:0.75rem; position:relative; overflow:hidden;">
 
@@ -92,7 +92,7 @@
             </div>
 
             {{-- опис --}}
-            <span style="font-size:0.72rem; color:#6b7280; margin-top:auto;">
+            <span style="font-size:0.72rem; color:#6b7280;">
                 {{ $card['desc'] }}
             </span>
         </div>

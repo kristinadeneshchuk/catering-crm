@@ -39,7 +39,15 @@
 
             {{-- Скролюємий список --}}
             <div style="max-height:420px; overflow-y:auto; margin:0 -1.5rem; padding:0 1.5rem;">
-                <table style="width:100%; border-collapse:collapse;">
+                {{-- Телефон: ховаємо «Дата» і «Статус», щоб № / Клієнт / Борг
+                     вміщались без горизонтального скролу — борг важливіший за дати. --}}
+                <style>
+                    @media (max-width: 639.98px) {
+                        .debts-tbl th:nth-child(3), .debts-tbl td:nth-child(3),
+                        .debts-tbl th:nth-child(4), .debts-tbl td:nth-child(4) { display: none; }
+                    }
+                </style>
+                <table class="debts-tbl" style="width:100%; border-collapse:collapse;">
                     @php
                         $thBase = 'padding:0.5rem 0.75rem;font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;cursor:pointer;user-select:none;white-space:nowrap;';
                         $thActive = 'color:#60a5fa;';

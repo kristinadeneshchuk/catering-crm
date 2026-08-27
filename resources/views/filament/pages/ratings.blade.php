@@ -43,7 +43,7 @@
                 <span style="font-size:2rem;font-weight:800;color:#f1f5f9;line-height:1;">{{ $card['value'] }}</span>
                 <span style="font-size:0.8rem;color:#6b7280;font-weight:500;">{{ $card['unit'] }}</span>
             </div>
-            <span style="font-size:0.72rem;color:#6b7280;margin-top:auto;">{{ $card['desc'] }}</span>
+            <span style="font-size:0.72rem;color:#6b7280;">{{ $card['desc'] }}</span>
         </div>
         @endforeach
     </div>

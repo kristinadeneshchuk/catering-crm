@@ -17,7 +17,7 @@
     @php $stats = $this->getStats(); @endphp
 
     {{-- ── СТАТИСТИКА ── --}}
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">
 
         <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px 20px;background:rgba(255,255,255,0.03);">
             <div style="font-size:11px;color:#6b7280;text-transform:uppercase;font-weight:600;letter-spacing:0.5px;margin-bottom:6px;">Всього позицій</div>

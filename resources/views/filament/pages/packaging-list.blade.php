@@ -12,6 +12,32 @@
 
             .meal-badge { background: #ea580c; color: white; padding: 8px 20px; border-radius: 8px; font-size: 18px; font-weight: 900; text-transform: uppercase; display: inline-block; margin-bottom: 12px; }
             .replacements-container { font-size: 13px; color: #7f1d1d; background: #fee2e2; padding: 12px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #fca5a5; }
+
+            /* Матриця має колонку на кожен калораж — на телефоні вона фізично
+               не вміщається. Даємо горизонтальний скрол, а назву страви
+               «приклеюємо» зліва, щоб було видно, до чого належать цифри. */
+            .matrix-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .matrix-scroll .matrix-table { min-width: max-content; }
+
+            @media (max-width: 767.98px) {
+                /* sticky у клітинках таблиці не працює при border-collapse:collapse,
+                   тому на телефоні переходимо на separate + власні рамки. */
+                .matrix-table { font-size: 12px; border-collapse: separate; border-spacing: 0; }
+                .matrix-table th, .matrix-table td { padding: 5px 3px; }
+                .row-label {
+                    width: 120px; min-width: 120px;
+                    position: sticky; left: 0; z-index: 2;
+                    background: #f9fafb;
+                    box-shadow: 2px 0 4px rgba(0,0,0,.12);
+                }
+                .matrix-table th.row-label { z-index: 3; }
+                .meal-badge { font-size: 14px; padding: 6px 14px; }
+
+                /* Колонка «Бокс» (ккал) — довідкова; на телефоні ховаємо,
+                   щоб Страва / Вага / Порцій вмістилися без скролу. */
+                .pack-table th:nth-child(4), .pack-table td:nth-child(4) { display: none; }
+                .pack-table th, .pack-table td { padding-left: 8px !important; padding-right: 8px !important; }
+            }
         </style>
 
         {{-- ПАНЕЛЬ КЕРУВАННЯ --}}
@@ -92,7 +118,7 @@
                         {{ $mealName }}
                     </div>
 
-                    <table style="width:100%; border-collapse:collapse;">
+                    <table class="pack-table" style="width:100%; border-collapse:collapse;">
                         <thead>
                             <tr style="background:#27272a; color:#a1a1aa; font-size:11px; text-transform:uppercase; letter-spacing:.4px;">
                                 <th style="padding:8px 18px; text-align:left;">Страва</th>
@@ -166,6 +192,7 @@
                 @foreach($cyclicTables as $table)
                     <div class="meal-section">
                         <div class="meal-badge">{{ $table['meal'] }}: {{ $table['dish_name'] }}</div>
+                        <div class="matrix-scroll">
                         <table class="matrix-table">
                             <thead>
                                 <tr class="header-top">
@@ -209,6 +236,7 @@
                                 @endforeach
                             </tbody>
                         </table>
+                        </div>
                         @if(!empty($table['individual_notes']))
                             <div class="replacements-container">
                                 <div style="font-weight:900;text-transform:uppercase;margin-bottom:5px;font-size:11px;">Індивідуальні заміни:</div>

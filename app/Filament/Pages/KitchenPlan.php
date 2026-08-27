@@ -33,7 +33,10 @@ class KitchenPlan extends Page
 
     public static function canAccess(): bool
     {
-        return in_array(auth()->user()->role, ['admin', 'manager', 'cook'], true);
+        // ⏸ План кухні тимчасово схований (2026-08-27, прохання власниці).
+        // Повернути: розкоментувати рядок нижче і прибрати return false.
+        return false;
+        // return in_array(auth()->user()->role, ['admin', 'manager', 'cook'], true);
     }
 
     public function mount(): void

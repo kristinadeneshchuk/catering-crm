@@ -22,6 +22,9 @@ class MessengerAccountResource extends Resource
 
     protected static ?string $navigationGroup = 'Система';
     protected static ?string $navigationLabel = 'Месенджер-акаунти';
+
+    // ⏸ Сховано разом із Чатами (2026-08-27). Повернути: видалити рядок.
+    protected static bool $shouldRegisterNavigation = false;
     protected static ?string $modelLabel       = 'Месенджер-акаунт';
     protected static ?string $pluralModelLabel = 'Месенджер-акаунти';
     protected static ?int    $navigationSort   = 50;

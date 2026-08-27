@@ -40,7 +40,13 @@
         ];
     @endphp
 
-    <div style="display:flex; flex-direction:column; gap:1rem;">
+    <style>
+        /* Flex-column з definite height (Filament тягне віджети рядка на одну
+           висоту) роздував сітку карток на ~270px порожнечі. Блокова розкладка
+           з відступами дає ту саму картинку, але висота = вміст. */
+        .ncs-root > * + * { margin-top: 1rem; }
+    </style>
+    <div class="ncs-root">
 
         {{-- поля вибору свого періоду --}}
         <div>
@@ -48,7 +54,7 @@
         </div>
 
         {{-- 4 плитки з підсумками --}}
-        <div style="display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1rem;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1rem; align-content:start; align-items:start;">
             @foreach($cards as $card)
             <div style="background:{{ $card['bg'] }}; border:1px solid {{ $card['border'] }}; border-radius:0.875rem; padding:1.25rem 1.375rem; display:flex; flex-direction:column; gap:0.75rem; position:relative; overflow:hidden;">
 
@@ -72,7 +78,7 @@
                     @endif
                 </div>
 
-                <span style="font-size:0.72rem; color:#6b7280; margin-top:auto;">
+                <span style="font-size:0.72rem; color:#6b7280;">
                     {{ $card['desc'] }}
                 </span>
             </div>

@@ -7,7 +7,7 @@
                 <span style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px;">Всього документів</span>
                 <span style="font-size:12px;color:#475569;background:rgba(0,0,0,.3);padding:3px 10px;border-radius:99px;border:1px solid #1e293b;">{{ $countAll }} шт</span>
             </div>
-            <div style="font-size:28px;font-weight:900;color:#e2e8f0;line-height:1.2;">
+            <div style="font-size:clamp(18px,5.5vw,28px);font-weight:900;color:#e2e8f0;line-height:1.2;">
                 {{ number_format($total, 2, '.', ' ') }} ₴
             </div>
             <div style="background:#0f172a;border-radius:99px;height:4px;margin-top:14px;">
@@ -21,7 +21,7 @@
                 <span style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px;">Оплачено</span>
                 <span style="font-size:12px;font-weight:700;color:#22c55e;background:rgba(34,197,94,0.1);padding:3px 10px;border-radius:99px;border:1px solid #22c55e33;">{{ $paidPercent }}% ✓</span>
             </div>
-            <div style="font-size:28px;font-weight:900;color:#22c55e;line-height:1.2;">
+            <div style="font-size:clamp(18px,5.5vw,28px);font-weight:900;color:#22c55e;line-height:1.2;">
                 {{ number_format($paid, 2, '.', ' ') }} ₴
             </div>
             <div style="font-size:12px;color:#475569;margin-top:6px;">{{ $countPaid }} документів</div>
@@ -36,7 +36,7 @@
                 <span style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.8px;">Не оплачено</span>
                 <span style="font-size:12px;font-weight:700;color:#f59e0b;background:rgba(245,158,11,0.1);padding:3px 10px;border-radius:99px;border:1px solid #f59e0b33;">{{ $unpaidPercent }}%</span>
             </div>
-            <div style="font-size:28px;font-weight:900;color:#f59e0b;line-height:1.2;">
+            <div style="font-size:clamp(18px,5.5vw,28px);font-weight:900;color:#f59e0b;line-height:1.2;">
                 {{ number_format($unpaid, 2, '.', ' ') }} ₴
             </div>
             <div style="font-size:12px;color:#475569;margin-top:6px;">{{ $countUnpaid }} документів</div>

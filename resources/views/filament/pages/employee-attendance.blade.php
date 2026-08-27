@@ -45,6 +45,12 @@
         z-index: 3;
         background: #111113;
     }
+    /* Телефон: колонка імен 220px лишала датам чверть екрана — звужуємо. */
+    @media (max-width: 767.98px) {
+        .emp-sticky-head { min-width: 132px !important; padding: 12px 10px !important; }
+        .emp-sticky      { padding: 10px 10px !important; }
+        .emp-sticky div  { font-size: 12px; }
+    }
     /* Shadow separator after sticky column */
     .emp-sticky::after,
     .emp-sticky-head::after {
@@ -81,7 +87,7 @@
     </div>
 
     {{-- СТАТИСТИКА --}}
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
         <div style="background:#18181b;border-radius:14px;padding:16px 20px;border:1px solid #27272a;">
             <p style="color:#52525b;font-size:12px;margin:0 0 6px;font-weight:500;">Змін за період</p>
             <p style="color:#f4f4f5;font-size:26px;font-weight:700;margin:0;line-height:1.2;">{{ $data['stats']['shifts'] }}</p>

@@ -109,12 +109,39 @@ class AdminPanelProvider extends PanelProvider
        мають руками зверстані <table>: широка таблиця рвала екран телефона.
        Робимо їм горизонтальний скрол. Штатні таблиці Filament (.fi-ta-table)
        не чіпаємо — вони вже скролять самі. */
-    .fi-page table:not(.fi-ta-table) {
+    /* Таблиці з власною скрол-обгорткою (.matrix-scroll) виключені: display:block
+       ламає в них sticky-колонку з назвою інгредієнта. */
+    .fi-page table:not(.fi-ta-table):not(.matrix-table):not(.pack-table) {
         display: block;
         max-width: 100%;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
     }
+}
+
+/* Телефони. Кастомні сторінки зверстані inline-стилями (display:flex без
+   flex-wrap, white-space:nowrap) — на вузькому екрані рядки вилазили за край
+   карток (напр. "Всього: 57 порц. (57 стандарт − 2)" у Звіті виробництва).
+   Атрибутні селектори дістають саме inline-стилі. */
+@media (max-width: 767.98px) {
+    /* Будь-який inline-flex рядок може переноситись. wrap спрацьовує лише
+       коли місця справді бракує, тому для рядків, що вміщаються, це no-op. */
+    .fi-page [style*="display: flex"],
+    .fi-page [style*="display:flex"],
+    .fi-page [style*="display: inline-flex"],
+    .fi-page [style*="display:inline-flex"] {
+        flex-wrap: wrap;
+    }
+
+    /* nowrap поза таблицями/кнопками = обрізаний текст на телефоні.
+       У скрольних таблицях і на кнопках nowrap лишаємо. */
+    .fi-page div[style*="nowrap"]:not(button *),
+    .fi-page span[style*="nowrap"] {
+        white-space: normal !important;
+    }
+
+    /* Медіа не ширші за екран */
+    .fi-page img, .fi-page svg, .fi-page video { max-width: 100%; height: auto; }
 }
 </style>'
             ))

@@ -138,9 +138,11 @@ Route::middleware('auth')->group(function () {
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index')->middleware('auth');
 
 Route::middleware('auth')->group(function () {
-    Route::get('/kitchen-plan', [KitchenPlanController::class, 'index'])->name('kitchen.plan');
-    Route::post('/kitchen-plan/generate', [KitchenPlanController::class, 'generate'])->name('kitchen.plan.generate');
-    Route::get('/kitchen-plan/status', [KitchenPlanController::class, 'status'])->name('kitchen.plan.status');
+    // ⏸ План кухні тимчасово схований (2026-08-27, прохання власниці).
+    // Повернути: розкоментувати 3 рядки нижче (і canAccess у Filament/Pages/KitchenPlan.php).
+    // Route::get('/kitchen-plan', [KitchenPlanController::class, 'index'])->name('kitchen.plan');
+    // Route::post('/kitchen-plan/generate', [KitchenPlanController::class, 'generate'])->name('kitchen.plan.generate');
+    // Route::get('/kitchen-plan/status', [KitchenPlanController::class, 'status'])->name('kitchen.plan.status');
 
     // Список пакування на день для менеджера
     Route::get('/packaging-assembly', [PackagingAssemblyController::class, 'index'])->name('packaging.assembly');

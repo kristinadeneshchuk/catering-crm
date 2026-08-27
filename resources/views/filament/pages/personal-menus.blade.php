@@ -27,15 +27,16 @@
         }
         .pm-card-head {
             display:flex; align-items:center; justify-content:space-between;
+            flex-wrap:wrap; row-gap:8px; /* телефон: бейджі переносяться, а не ріжуться */
             padding:14px 20px; border-bottom:1px solid #2d2d2d;
             background:#141414;
         }
-        .pm-card-head-left { display:flex; align-items:center; gap:12px; }
+        .pm-card-head-left { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
         .pm-status-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
         .pm-client-name { font-size:16px; font-weight:800; color:#f1f5f9; text-decoration:none; }
         .pm-client-name:hover { color:#999999; }
         .pm-kcal { font-size:13px; color:#6b6b6b; font-weight:600; }
-        .pm-card-head-right { display:flex; align-items:center; gap:8px; }
+        .pm-card-head-right { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
         .pm-badge { font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; white-space:nowrap; }
         .pm-badge-morning { background:#451a03; color:#fb923c; }
         .pm-badge-evening { background:#2e1065; color:#a78bfa; }
