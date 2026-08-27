@@ -17,7 +17,8 @@ class EmployeeAttendance extends Page
 {
     public static function canAccess(): bool
     {
-        return auth()->user()->role === 'admin';
+        // Менеджери ведуть табель нарівні з адміном (2026-08-27).
+        return in_array(auth()->user()->role, ['admin', 'manager'], true);
     }
 
     protected static ?string $navigationLabel = 'Табель змін';
