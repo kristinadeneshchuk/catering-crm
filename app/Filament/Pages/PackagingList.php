@@ -68,6 +68,7 @@ class PackagingList extends Page implements HasForms
             \Filament\Actions\ActionGroup::make([
                 Action::make('print_stickers')
                     ->label('1. Стікери')
+                    ->tooltip('Наліпки на кожен контейнер: страва, клієнт, дата. Клеїмо перед фасуванням — тому кнопка перша.')
                     ->icon('heroicon-o-tag')
                     ->color('gray')
                     ->url(fn () => route('print.stickers', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
@@ -75,6 +76,7 @@ class PackagingList extends Page implements HasForms
 
                 Action::make('print_mini_manifest')
                     ->label('2. На пакет')
+                    ->tooltip('Маленький листок, що клеїться ЗЗОВНІ на пакет: імʼя клієнта і склад замовлення. По ньому пакувальник збирає пакет.')
                     ->icon('heroicon-o-document-text')
                     ->color('info')
                     ->url(fn () => route('print.mini-manifest', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
@@ -82,12 +84,14 @@ class PackagingList extends Page implements HasForms
 
                 Action::make('print_manifest')
                     ->label('3. В пакет (з меню)')
+                    ->tooltip('Аркуш, що кладеться ВСЕРЕДИНУ пакета для клієнта: його меню на день з вагами і КБЖУ.')
                     ->icon('heroicon-o-shopping-bag')
                     ->color('warning')
                     ->url(fn () => route('print.manifest', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                     ->openUrlInNewTab(),
             ])
             ->label('Друк маркування')
+            ->tooltip('Три документи для фасування — тисни по черзі: 1) наліпки на контейнери, 2) листок на пакет, 3) меню всередину пакета.')
             ->icon('heroicon-o-printer')
             ->button()
             ->color('gray'),
@@ -95,6 +99,7 @@ class PackagingList extends Page implements HasForms
             // 📦 Список упаковки по клієнтах
             Action::make('packaging_assembly')
                 ->label('Список упаковки')
+                ->tooltip('Скільки і якої тари треба на завтра по кожному клієнту: контейнери, пакети, прибори. Рахується на дату +1 день від обраної.')
                 ->icon('heroicon-o-archive-box')
                 ->color('success')
                 ->url(fn () => route('packaging.assembly', [
@@ -107,6 +112,7 @@ class PackagingList extends Page implements HasForms
             \Filament\Actions\ActionGroup::make([
                 Action::make('download_logistics_evening')
                     ->label('Вечір (Сьогодні)')
+                    ->tooltip('Excel для логіста на ВЕЧІРНЮ розвозку сьогодні: адреси, телефони, що везти.')
                     ->icon('heroicon-o-moon')
                     ->color('danger')
                     ->url(fn () => route('print.logistics', [
@@ -116,6 +122,7 @@ class PackagingList extends Page implements HasForms
 
                 Action::make('download_logistics_morning')
                     ->label('Ранок (Завтра)')
+                    ->tooltip('Excel для логіста на РАНКОВУ розвозку завтра: адреси, телефони, що везти.')
                     ->icon('heroicon-o-sun')
                     ->color('success')
                     ->url(fn () => route('print.logistics', [
@@ -124,6 +131,7 @@ class PackagingList extends Page implements HasForms
                     ])),
             ])
             ->label('Логістика (Excel)')
+            ->tooltip('Файли для логіста по змінах: вечірня розвозка сьогодні та ранкова завтра.')
             ->icon('heroicon-o-truck')
             ->button()
             ->color('primary'),
@@ -162,12 +170,14 @@ class PackagingList extends Page implements HasForms
                     \Filament\Forms\Components\Actions::make([
                         \Filament\Forms\Components\Actions\Action::make('assembly_sheet')
                             ->label('Збірний лист')
+                            ->tooltip('Зведення для фасувальника: скільки порцій кожної страви розкласти по контейнерах. Без імен клієнтів — тільки кількість.')
                             ->icon('heroicon-o-clipboard-document-list')
                             ->color('gray')
                             ->url(fn () => route('print.assembly-sheet', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                             ->openUrlInNewTab(),
                         \Filament\Forms\Components\Actions\Action::make('print_view')
                             ->label('Відкрити версію для друку')
+                            ->tooltip('Ця сама таблиця пакування, але у вигляді для друку на папері.')
                             ->color('warning')
                             ->url(fn () => route('print.packaging-list', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                             ->openUrlInNewTab()

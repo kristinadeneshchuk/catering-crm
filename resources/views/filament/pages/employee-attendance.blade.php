@@ -148,7 +148,7 @@
                         @if($plannedHere > 0 && $date <= $today)
                         <button wire:click="confirmDay('{{ $date }}')"
                                 wire:confirm="Підтвердити {{ $plannedHere }} запланован{{ $plannedHere === 1 ? 'ий вихід' : 'і виходи' }} за {{ \Carbon\Carbon::parse($date)->format('d.m') }}? Нарахується ставка."
-                                title="Підтвердити виходи ({{ $plannedHere }})"
+                                x-tooltip="{ content: @js('Підтверджує всі заплановані виходи за цей день (' . $plannedHere . '): план стає фактом і людям нараховуються ставки. Хто не вийшов — зніми клік по його клітинці ДО підтвердження.'), theme: $store.theme }"
                                 style="display:block;margin:4px auto 0;padding:1px 6px;border-radius:6px;cursor:pointer;
                                        background:#052e16;border:1px solid #16a34a;color:#4ade80;
                                        font-size:10px;font-weight:700;line-height:1.6;white-space:nowrap;">
@@ -207,8 +207,8 @@
                         $isPlan  = $dayInfo['is_planned'] ?? false;
                         $slot    = $dayInfo['slot'] ?? null;
                         // Для курʼєра терміни інші: 1 круг = 2 виїзди, ½ = 1 виїзд.
-                        $tipFull = $isCourier ? '2 виїзди (клік — 1 виїзд)' : 'Повна зміна (клік — зробити пів зміни)';
-                        $tipHalf = $isCourier ? '1 виїзд (клік — прибрати)' : 'Пів зміни (клік — прибрати)';
+                        $tipFull = $isCourier ? 'Зараз: 2 виїзди (ранок + вечір). Клік — залишити 1 виїзд (пів зміни).' : 'Зараз: повна зміна, нараховано повну ставку. Клік — зробити пів зміни (половина ставки).';
+                        $tipHalf = $isCourier ? 'Зараз: 1 виїзд (пів зміни). Клік — прибрати зміну зовсім, ставка зніметься.' : 'Зараз: пів зміни (половина ставки). Клік — прибрати зміну зовсім, ставка зніметься.';
                     @endphp
                     <td style="text-align:center;padding:6px 4px;">
                         <div style="position:relative;display:inline-block;width:34px;height:34px;">
@@ -299,7 +299,7 @@
                             @elseif($status === 'present')
                                 @php $fill = $isDuty ? '#78350f' : ($row['is_kitchen'] ? '#14532d' : '#1e3a5f'); @endphp
                                 <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
-                                    title="{{ $isHalf ? $tipHalf : $tipFull }}"
+                                    x-tooltip="{ content: @js($isHalf ? $tipHalf : $tipFull), theme: $store.theme }"
                                     style="width:34px;height:34px;border-radius:50%;
                                            background:{{ $isPlan ? 'transparent' : ($isHalf ? 'linear-gradient(90deg, ' . $fill . ' 50%, #27272a 50%)' : $fill) }};
                                            {{ $isPlan ? 'border:2px dashed #60a5fa;' : ($isHalf ? 'border:2px solid ' . $fill . ';' : '') }}
@@ -316,6 +316,7 @@
                                 </button>
                             @elseif($status === 'absent_today')
                                 <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
+                                    x-tooltip="{ content: 'Планував вийти, але вихід не підтверджено — грошей не нараховано. Клік — поставити зміну вручну (нарахується ставка).', theme: $store.theme }"
                                     style="width:34px;height:34px;border-radius:50%;
                                            border:2px dashed #f87171;
                                            background:transparent;
@@ -325,6 +326,7 @@
                                 </button>
                             @elseif($status === 'off')
                                 <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
+                                    x-tooltip="{ content: 'Вихідний. Клік — поставити повну зміну на цей день.', theme: $store.theme }"
                                     style="width:34px;height:34px;border-radius:50%;
                                            background:transparent;border:none;
                                            display:inline-flex;align-items:center;justify-content:center;
@@ -334,7 +336,7 @@
                             @else
                                 {{-- Майбутній день: клік ставить ПЛАН — рядок є, баланс не рухається. --}}
                                 <button wire:click="toggleShift({{ $row['id'] }}, '{{ $date }}')" class="emp-cell-btn"
-                                    title="Запланувати зміну"
+                                    x-tooltip="{ content: 'Запланувати вихід на майбутнє. Гроші НЕ нараховуються, поки менеджер не підтвердить день галочкою над колонкою.', theme: $store.theme }"
                                     style="width:34px;height:34px;border-radius:50%;
                                            background:transparent;border:none;
                                            display:inline-flex;align-items:center;justify-content:center;
@@ -366,7 +368,7 @@
                             {{-- Зірочка чергового — показуємо завжди для кухаря --}}
                             @if($row['is_cook'])
                                 <button wire:click="toggleDuty({{ $row['id'] }}, '{{ $date }}')"
-                                    title="{{ $isDuty ? 'Зняти чергування' : 'Призначити черговим (+' . number_format($data['duty_bonus'], 0, '.', ' ') . ' ₴)' }}"
+                                    x-tooltip="{ content: @js($isDuty ? 'Зняти чергування — бонус чергового зніметься.' : 'Призначити черговим на цей день: кухар отримає бонус +' . number_format($data['duty_bonus'], 0, '.', ' ') . ' ₴ до ставки.'), theme: $store.theme }"
                                     class="emp-duty-star{{ $isDuty ? ' is-active' : '' }}"
                                     style="position:absolute;top:-8px;right:-8px;width:22px;height:22px;
                                            border-radius:50%;cursor:pointer;padding:0;

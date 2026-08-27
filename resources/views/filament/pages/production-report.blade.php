@@ -136,18 +136,18 @@
                         if ($hasConflict) {
                             $html .= '<div class="no-print" style="margin-left: 8px; display: flex; flex-direction: column; gap: 2px; align-items: flex-end;">';
                             if ($isForceApproved) {
-                                $html .= '<button type="button" wire:click="mountAction(\'resetReplacement\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['conflict']['original_ing_id'] . ' })" style="color: #64748b; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">Скасувати</button>';
+                                $html .= '<button type="button" wire:click="mountAction(\'resetReplacement\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['conflict']['original_ing_id'] . ' })" x-tooltip="{ content: \'Скасовує зроблену заміну і повертає оригінальний інгредієнт з рецепта.\', theme: \$store.theme }" style="color: #64748b; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">Скасувати</button>';
                             } elseif ($isResolved) {
-                                $html .= '<button type="button" wire:click="mountAction(\'resetReplacement\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['conflict']['original_ing_id'] . ' })" style="color: #64748b; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">Скасувати</button>';
+                                $html .= '<button type="button" wire:click="mountAction(\'resetReplacement\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['conflict']['original_ing_id'] . ' })" x-tooltip="{ content: \'Скасовує зроблену заміну і повертає оригінальний інгредієнт з рецепта.\', theme: \$store.theme }" style="color: #64748b; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">Скасувати</button>';
                             } else {
                                 if (!empty($comp['conflict']['bundle_suggestion'])) {
                                     $sug      = $comp['conflict']['bundle_suggestion'];
                                     $sugName  = htmlspecialchars($sug['name'], ENT_QUOTES);
                                     $sugBundle = addslashes($sug['bundle_name']);
-                                    $html .= '<button type="button" wire:click="mountAction(\'applyBundleSuggestion\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['product_id'] . ', replacement_product_id: ' . (int)$sug['product_id'] . ', bundle_name: \'' . $sugBundle . '\' })" style="color: #5b21b6; font-size: 10px; cursor: pointer; border: 1px solid #c4b5fd; background: #ede9fe; border-radius: 3px; padding: 1px 5px; font-weight: 800; white-space: nowrap;">✓ На: ' . $sugName . '</button>';
+                                    $html .= '<button type="button" wire:click="mountAction(\'applyBundleSuggestion\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['product_id'] . ', replacement_product_id: ' . (int)$sug['product_id'] . ', bundle_name: \'' . $sugBundle . '\' })" x-tooltip="{ content: \'Швидка заміна за збереженим шаблоном: інгредієнт у цій страві зміниться на запропонований.\', theme: \$store.theme }" style="color: #5b21b6; font-size: 10px; cursor: pointer; border: 1px solid #c4b5fd; background: #ede9fe; border-radius: 3px; padding: 1px 5px; font-weight: 800; white-space: nowrap;">✓ На: ' . $sugName . '</button>';
                                 }
-                                $html .= '<button type="button" wire:click="mountAction(\'replaceIngredient\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['product_id'] . ' })" style="color: #ea580c; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">→ Замінити</button>';
-                                $html .= '<button type="button" wire:click="mountAction(\'forceApproveIngredient\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['product_id'] . ' })" style="color: #16a34a; font-size: 10px; cursor: pointer; border: 1px solid #16a34a; background: #f0fdf4; border-radius: 3px; padding: 1px 5px; font-weight: 700;">✓ Одобрити</button>';
+                                $html .= '<button type="button" wire:click="mountAction(\'replaceIngredient\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['product_id'] . ' })" x-tooltip="{ content: \'Підібрати інший інгредієнт замість проблемного — тільки в цій страві для цього клієнта.\', theme: \$store.theme }" style="color: #ea580c; text-decoration: underline; font-size: 10px; cursor: pointer; border: none; background: transparent; padding: 0;">→ Замінити</button>';
+                                $html .= '<button type="button" wire:click="mountAction(\'forceApproveIngredient\', { order_id: ' . $cardOrderId . ', dish_id: ' . $dishRowId . ', product_id: ' . $comp['product_id'] . ' })" x-tooltip="{ content: \'Залишити інгредієнт як є, незважаючи на конфлікт (алергія чи стоп-лист). Склад спишеться саме за ним.\', theme: \$store.theme }" style="color: #16a34a; font-size: 10px; cursor: pointer; border: 1px solid #16a34a; background: #f0fdf4; border-radius: 3px; padding: 1px 5px; font-weight: 700;">✓ Одобрити</button>';
                             }
                             $html .= '</div>';
                         }
@@ -377,7 +377,7 @@
                                                 @endif
                                             </div>
                                             <div class="no-print">
-                                                <button type="button" wire:click="mountAction('replaceDish', { order_id: {{ $card['order_id'] }}, dish_id: {{ $dishRow['dish_id'] }} })" style="background: white; border: 1px solid #ef4444; color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; cursor: pointer;">
+                                                <button type="button" wire:click="mountAction('replaceDish', { order_id: {{ $card['order_id'] }}, dish_id: {{ $dishRow['dish_id'] }} })" x-tooltip="{ content: 'Замінити страву цілком на іншу — тільки для цього клієнта. Нова страва підтягне свій рецепт у списання.', theme: $store.theme }" style="background: white; border: 1px solid #ef4444; color: #ef4444; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; cursor: pointer;">
                                                     Замінити страву
                                                 </button>
                                             </div>
@@ -394,7 +394,7 @@
                                                     <div style="font-size: 10px; color: #ef4444; margin-top: 1px;">Потрібна заміна або пропустити</div>
                                                 </div>
                                                 <div class="no-print">
-                                                    <button type="button" wire:click="mountAction('forceApproveDish', { order_id: {{ $card['order_id'] }}, dish_id: {{ $dishRow['dish_id'] }} })" style="color: #16a34a; font-size: 10px; cursor: pointer; border: 1px solid #16a34a; background: #f0fdf4; border-radius: 4px; padding: 3px 8px; font-weight: 700; white-space: nowrap;">✓ Одобрити</button>
+                                                    <button type="button" wire:click="mountAction('forceApproveDish', { order_id: {{ $card['order_id'] }}, dish_id: {{ $dishRow['dish_id'] }} })" x-tooltip="{ content: 'Залишити страву як є, незважаючи на конфлікт. У списання і у меню клієнта піде саме вона.', theme: $store.theme }" style="color: #16a34a; font-size: 10px; cursor: pointer; border: 1px solid #16a34a; background: #f0fdf4; border-radius: 4px; padding: 3px 8px; font-weight: 700; white-space: nowrap;">✓ Одобрити</button>
                                                 </div>
                                             </div>
 

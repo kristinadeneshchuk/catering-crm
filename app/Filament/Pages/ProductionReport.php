@@ -72,6 +72,7 @@ class ProductionReport extends Page implements HasForms
         return [
             Action::make('debit_stock')
                 ->label($isAlreadyDebited ? "Зміну за {$dateParam} вже закрито" : 'Закрити зміну та списати склад')
+                ->tooltip('Фінальний крок дня: списує зі складу всі інгредієнти за планом виробництва. Спочатку розберись з усіма конфліктами (замінити або одобрити), бо списання піде по тому, що зараз у таблиці.')
                 ->icon($isAlreadyDebited ? 'heroicon-o-lock-closed' : 'heroicon-o-archive-box-arrow-down')
                 ->color($isAlreadyDebited ? 'warning' : 'danger')
                 ->disabled($isAlreadyDebited)
@@ -146,11 +147,13 @@ public function form(Form $form): Form
                         \Filament\Forms\Components\Actions::make([
                             \Filament\Forms\Components\Actions\Action::make('print_view')
                                 ->label('Версія для друку')
+                                ->tooltip('Цей самий звіт, але у вигляді для друку кухні.')
                                 ->color('warning')
                                 ->url(fn () => route('print.production-report', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                                 ->openUrlInNewTab(),
                             \Filament\Forms\Components\Actions\Action::make('print_stock')
                                 ->label('Список списання')
+                                ->tooltip('Перелік, що саме і в якій кількості буде списано зі складу за цей день.')
                                 ->color('gray')
                                 ->url(fn () => route('print.stock-list', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                                 ->openUrlInNewTab(),
@@ -388,6 +391,7 @@ public function form(Form $form): Form
     {
         return Action::make('massReplaceIngredient')
             ->label('Масова заміна')
+            ->tooltip('Замінює інгредієнт одразу в усіх стравах дня. Зручно, коли продукту немає взагалі — не треба міняти в кожній страві окремо.')
             ->icon('heroicon-m-arrows-right-left')
             ->color('warning')
             ->modalHeading('Масова заміна інгредієнта')
@@ -471,6 +475,7 @@ public function form(Form $form): Form
     {
         return Action::make('applyBundle')
             ->label('Застосувати шаблон')
+            ->tooltip('Застосовує збережений набір замін (шаблон) до всього дня одним натисканням.')
             ->icon('heroicon-m-rectangle-stack')
             ->color('info')
             ->modalHeading('Застосувати шаблон замін')
