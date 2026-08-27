@@ -211,6 +211,43 @@ class RouteSnapshotTest extends TestCase
         $this->assertSame('Іванов І.І.', $stops->first()->courier_name);
     }
 
+    public function test_the_backfill_does_not_leave_a_twin_on_a_second_run(): void
+    {
+        // Перший прогон не знайшов маршрут і записав точку без ant_route_id.
+        // Другий знайшов — і оскільки ant_route_id входить у ключ
+        // updateOrCreate, поруч виріс би близнюк, а старий неповний рядок
+        // назавжди лишився б у «проблемних» перед розсилкою.
+        $this->makeStop([
+            'ant_route_id' => null, 'client_id' => 7, 'ant_route_num' => 1,
+            'client_name' => 'Клієнт', 'client_phone' => '0501234567',
+            'source' => RouteStop::SOURCE_BACKFILL,
+        ]);
+
+        $this->makeRoute([
+            'ant_route_id' => 'r1', 'ant_route_num' => 1,
+            'driver_name' => 'Іванов І.І.',
+            'employee_id' => $this->makeCourier('Іванов І.І.'),
+        ]);
+
+        $this->makeOrderDay(
+            ['id' => 7, 'name' => 'Клієнт', 'phone' => '0501234567'],
+            [],
+            ['ant_route_num' => 1, 'ant_driver' => 'Іванов І.І.'],
+        );
+
+        // Прибираємо точку, яку створила фікстура, щоб лишився саме сирітський
+        // рядок першого прогону — вихідна ситуація перед другим запуском.
+        RouteStop::whereNotNull('ant_route_id')->delete();
+
+        $this->artisan('routes:backfill-stops')->assertSuccessful();
+
+        $stops = RouteStop::where('client_id', 7)->get();
+
+        $this->assertCount(1, $stops, 'близнюк не має зʼявитись');
+        $this->assertSame('r1', $stops->first()->ant_route_id);
+        $this->assertSame('Іванов І.І.', $stops->first()->courier_name);
+    }
+
     public function test_both_shifts_live_side_by_side_in_the_archive(): void
     {
         $courier = $this->makeCourier('Іванов І.І.');

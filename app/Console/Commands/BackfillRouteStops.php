@@ -106,6 +106,18 @@ class BackfillRouteStops extends Command
                     continue;
                 }
 
+                // Прибираємо рядок з попереднього прогону, який лишився без
+                // маршруту. ant_route_id входить у ключ updateOrCreate, тож коли
+                // цього разу маршрут знайшовся, а минулого ні — створився б
+                // близнюк, а старий неповний рядок висів би в «проблемних».
+                // Саме так з'явилось 1505 пар після другого прогону.
+                if ($routeId) {
+                    RouteStop::whereDate('date', $deliveryDate)
+                        ->where('client_id', $client->id)
+                        ->whereNull('ant_route_id')
+                        ->delete();
+                }
+
                 RouteStop::updateOrCreate(
                     ['date' => $deliveryDate, 'ant_route_id' => $routeId, 'client_id' => $client->id],
                     [
