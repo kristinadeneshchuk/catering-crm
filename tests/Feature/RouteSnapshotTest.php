@@ -206,7 +206,7 @@ class RouteSnapshotTest extends TestCase
             ['Route_Id' => 'r1', 'Driver' => 'Іванов І.І.', 'RouteTime_B' => '05.08.2026 09:00'],
             1,
             1,
-            \App\Models\OrderDay::with('order.client')->first(),
+            \App\Models\OrderDay::with('order.client')->get(),
         );
 
         $stops = RouteStop::where('client_id', 42)->get();
@@ -252,6 +252,46 @@ class RouteSnapshotTest extends TestCase
         $this->assertCount(1, $stops, 'близнюк не має зʼявитись');
         $this->assertSame('r1', $stops->first()->ant_route_id);
         $this->assertSame('Іванов І.І.', $stops->first()->courier_name);
+    }
+
+    public function test_pruning_spares_the_stop_of_a_finished_order(): void
+    {
+        // Останній день замовлення зʼїли, recompute закрив його — але клієнт
+        // усе ще значиться на маршруті в ANT. Точка легітимна.
+        //
+        // Пастка була в порядку рядків: клієнт реєструвався як «бачений» лише
+        // ПІСЛЯ пошуку його днів, а пошук бачить тільки active/new. Завершене
+        // замовлення → клієнт «не бачений» → pruneStops стирав його точку
+        // рівно в момент завершення. Ранковий крон о 11:00 робив би це щодня.
+        $this->makeRoute([
+            'ant_route_id' => 'r1', 'ant_route_num' => 1,
+            'employee_id' => $this->makeCourier('Іванов І.І.'),
+        ]);
+
+        $ids = $this->makeOrderDay(
+            ['name' => 'Завершений', 'phone' => '0501234567'],
+            ['status' => 'finished'],
+        );
+
+        DB::table('route_stops')->where('id', $ids['stop_id'])->update(['ant_route_id' => 'r1']);
+
+        Http::fake([
+            '*auth*'            => Http::response(['Session_Ident' => 'sess-test']),
+            '*Route/Comps/get*' => Http::response([
+                ['PosType_Id' => 2, 'Comp_Id' => $ids['client_id'], 'Pos_Id' => 1],
+            ]),
+            '*Routes/get*'      => Http::response([
+                $this->antRoute('r1', 1, '05.08.2026 09:00', 'AA0000AA'),
+            ]),
+            '*'                 => Http::response([]),
+        ]);
+
+        app(AntLogisticsService::class)->pullRouteAssignments($this->deliveryDate, 'all');
+
+        $this->assertNotNull(
+            RouteStop::find($ids['stop_id']),
+            'точка завершеного замовлення має пережити повторний знімок',
+        );
     }
 
     public function test_the_backfill_keeps_a_second_delivery_of_the_same_client(): void

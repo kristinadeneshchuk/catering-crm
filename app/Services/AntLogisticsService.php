@@ -532,6 +532,15 @@ class AntLogisticsService
 
                 $routePos = (int) ($comp['Pos_Id'] ?? 0) ?: null;
 
+                // «Бачили» клієнта реєструємо ДО пошуку його днів. ANT показує
+                // його на маршруті — точка легітимна, навіть якщо замовлення
+                // вже не active/new (останній день зʼїли, recompute закрив).
+                // Інакше pruneStops стирав би точку саме в момент завершення
+                // замовлення — рівно та втрата, від якої архів і захищає.
+                if (isset($route['Route_Id'])) {
+                    $seenStops[(string) $route['Route_Id']][] = $clientId;
+                }
+
                 // Знаходимо всі OrderDay цього клієнта, що їдуть саме цією доставкою
                 $clientDays = $daysByClient->get($clientId);
                 if (!$clientDays || $clientDays->isEmpty()) continue;
@@ -551,11 +560,7 @@ class AntLogisticsService
                 $updated  += $affected;
                 $totalComps++;
 
-                $this->snapshotStop($deliveryDate, $route, $routeNum, $routePos, $clientDays->first());
-
-                if (isset($route['Route_Id'])) {
-                    $seenStops[(string) $route['Route_Id']][] = $clientId;
-                }
+                $this->snapshotStop($deliveryDate, $route, $routeNum, $routePos, $clientDays);
             }
         }
 
@@ -597,9 +602,10 @@ class AntLogisticsService
      * момент виїзду. Через тиждень клієнт змінить адресу, замовлення закриється,
      * а маршрут у ANT перебудують — запис має лишитись тим, чим був.
      */
-    private function snapshotStop(string $deliveryDate, array $route, int $routeNum, ?int $routePos, \App\Models\OrderDay $day): void
+    private function snapshotStop(string $deliveryDate, array $route, int $routeNum, ?int $routePos, \Illuminate\Support\Collection $days): void
     {
-        $client = $day->order?->client;
+        $day    = $days->first();
+        $client = $day?->order?->client;
 
         if (! $client) {
             return;
@@ -624,10 +630,12 @@ class AntLogisticsService
         // У клієнта на одну дату буває дві доставки, ранкова і вечірня, ще й під
         // тим самим номером маршруту (в ANT нумерація починається заново кожну
         // зміну). Ту, чия шапка не збереглась, стирати не можна.
+        // Усі дні доставки, не лише перший: при подвійному раціоні привид
+        // з backfill міг записатись з id іншого дня — і пережив би чистку.
         if ($routeId) {
             \App\Models\RouteStop::whereDate('date', $deliveryDate)
                 ->where('client_id', $client->id)
-                ->where('order_day_id', $day->id)
+                ->whereIn('order_day_id', $days->pluck('id'))
                 ->whereNull('ant_route_id')
                 ->delete();
         }
