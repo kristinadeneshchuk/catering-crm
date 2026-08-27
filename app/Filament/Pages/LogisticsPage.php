@@ -117,7 +117,7 @@ class LogisticsPage extends Page implements HasForms
         $date  = $this->data['date'] ?? now()->format('Y-m-d');
         $shift = $this->data['shift'] ?? 'all';
 
-        // Підхоплюємо курʼєрів, заведених/перейменованих уже після «Точки ↓»,
+        // Підхоплюємо курʼєрів, заведених/перейменованих уже після «Курʼєри ↓»,
         // щоб не змушувати менеджера перетягувати маршрути заново.
         try {
             app(AntLogisticsService::class)->rematchRouteCouriers($date, $shift);
@@ -628,7 +628,7 @@ class LogisticsPage extends Page implements HasForms
                 ->label('Відправити замовлення')
                 ->form([
                     Grid::make(2)->schema([
-                        // Дефолти — з фільтра сторінки: «Точки ↓» працює саме по
+                        // Дефолти — з фільтра сторінки: «Курʼєри ↓» працює саме по
                         // ньому, а тут раніше стояло «завтра / Всі». Дві кнопки
                         // легко тягнули різні дні — маршрути є, точок нема.
                         \Filament\Forms\Components\DatePicker::make('date')
@@ -683,10 +683,10 @@ class LogisticsPage extends Page implements HasForms
                 }),
 
             Action::make('pull_routes')
-                ->label('Завантажити маршрути')
+                ->label('Точки маршрутів')
                 ->form([
                     Grid::make(2)->schema([
-                        // Дефолти — з фільтра сторінки: «Точки ↓» працює саме по
+                        // Дефолти — з фільтра сторінки: «Курʼєри ↓» працює саме по
                         // ньому, а тут раніше стояло «завтра / Всі». Дві кнопки
                         // легко тягнули різні дні — маршрути є, точок нема.
                         \Filament\Forms\Components\DatePicker::make('date')
@@ -710,7 +710,7 @@ class LogisticsPage extends Page implements HasForms
                 }),
 
             Action::make('pull_route_details')
-                ->label('Точки маршрутів')
+                ->label('Курʼєри й авто з ANT')
                 ->action(function () {
                     $date  = $this->data['date']  ?? now()->format('Y-m-d');
                     $shift = $this->data['shift'] ?? 'all';
