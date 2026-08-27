@@ -61,7 +61,19 @@
             .num { font-size:12px; }
             thead th { font-size:9px; }
             /* ховаємо Б/Ж/В-заголовки словами, лишаємо літери */
+
+            /* Вузький телефон: 7 колонок не вміщались і «В» (вуглеводи)
+               обрізалась об край картки. Тиснемо падінги і колонку прийому. */
+            .wrap { padding:10px; }
+            .day-block { padding:12px 10px; }
+            thead th, tbody td { padding-left:3px; padding-right:3px; }
+            th.l:first-child, td:first-child { font-size:11px; }
         }
+
+        /* Довгі назви страв можуть зробити таблицю ширшою за екран телефона.
+           Даємо їй горизонтальний скрол усередині картки дня — усі колонки
+           КБЖУ лишаються на місці, нічого не ріжеться. */
+        .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
     </style>
 </head>
 <body>
@@ -87,6 +99,7 @@
             </div>
 
             @if (count($day['items']))
+                <div class="table-scroll">
                 <table>
                     <thead>
                         <tr>
@@ -121,6 +134,7 @@
                         </tr>
                     </tbody>
                 </table>
+                </div>
             @else
                 <div class="empty">Меню на цей день ще не сформоване.</div>
             @endif
