@@ -31,7 +31,7 @@
 
                 {{-- Синхронізація клієнтів --}}
                 <button wire:click="mountAction('sync_clients')"
-                    x-tooltip="{ content: @js('Крок 1. Відправляє всіх активних клієнтів у ANT як торгові точки. Потрібно, коли завели нового клієнта або змінили йому адресу.'), theme: $store.theme }"
+                    x-tooltip="{ content: @js('Крок 1. Передає в ANT ваших клієнтів разом з адресами. Без цього логіст не побачить у себе новачків і не поставить їх у маршрут.'), theme: $store.theme }"
                     style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .15s;background:#1e3a5f;color:#60a5fa;border:1px solid #1e40af;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                     Клієнти
@@ -39,7 +39,7 @@
 
                 {{-- Відправити замовлення --}}
                 <button wire:click="mountAction('push_orders')"
-                    x-tooltip="{ content: @js('Крок 2. Відправляє в ANT замовлення на обрану дату і зміну — з них логіст будує маршрути. Спитає дату і зміну окремо.'), theme: $store.theme }"
+                    x-tooltip="{ content: @js('Крок 2. Передає в ANT доставки на обрану дату — саме з них логіст будує маршрути. Спитає дату і зміну окремо.'), theme: $store.theme }"
                     style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .15s;background:#3b2800;color:#fb923c;border:1px solid #92400e;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>
                     Замовлення →
@@ -50,7 +50,7 @@
                      авто саме звідси, тож у зворотному порядку архів лишиться без них.
                      Тепер порядок натискання читається зліва направо. --}}
                 <button wire:click="mountAction('pull_route_details')"
-                    x-tooltip="{ content: @js('Крок 3. Забирає з ANT курʼєра, авто і вартість по кожному маршруту. Натискати ПЕРШИМ з двох — наступна кнопка бере курʼєра й авто звідси.'), theme: $store.theme }"
+                    x-tooltip="{ content: @js('Крок 3. Забирає з ANT готові маршрути: хто з курʼєрів їде, на якому авто і скільки це коштує. Звідси рахується зарплата курʼєра в Табелі.'), theme: $store.theme }"
                     style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;border:none;cursor:pointer;transition:all .15s;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;box-shadow:0 0 16px #6d28d940;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z"/></svg>
                     Курʼєри ↓
@@ -59,7 +59,7 @@
                 {{-- Точки маршрутів (pullRouteAssignments — хто з клієнтів на якому
                      маршруті + запис в архів route_stops). --}}
                 <button wire:click="mountAction('pull_routes')"
-                    x-tooltip="{ content: @js('Крок 4. Забирає з ANT, хто з клієнтів на якому маршруті, і зберігає це в архів CRM назавжди. Тільки після «Курʼєри ↓». Саме ця кнопка наповнює розсилку.'), theme: $store.theme }"
+                    x-tooltip="{ content: @js('Крок 4. Забирає з ANT адреси клієнтів по кожному маршруту і зберігає їх у CRM назавжди. Звідси беруться дані для SMS клієнтам.'), theme: $store.theme }"
                     style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;border:none;cursor:pointer;transition:all .15s;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;box-shadow:0 0 16px #6d28d940;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
                     Точки ↓
@@ -71,7 +71,10 @@
                 {{-- Сповіщення клієнтам про кур'єра (SMS) --}}
                 @if($smsReady)
                     <button wire:click="mountAction('send_client_sms')"
-                        x-tooltip="{ content: @js(($smsWarning ? $smsWarning . ' ' : '') . 'Крок 5. Клієнти отримають SMS з імʼям курʼєра, його телефоном і номером авто. Перед відправкою покаже список: кому піде і хто не отримає. Працює з 09:00 до 21:00.'), theme: $store.theme }"
+                        {{-- Попередження — в кінці. Спочатку читається, що кнопка
+                             робить: коли зверху висіло «Без курʼєра: 50 точок»,
+                             менеджер не розумів навіть, про що взагалі кнопка. --}}
+                        x-tooltip="{ content: @js('Крок 5. Розсилає клієнтам SMS: хто привезе замовлення, з яким телефоном і на якому авто. Перед відправкою покаже список — кому піде і кого доведеться пропустити. Працює з 09:00 до 21:00.' . ($smsWarning ? ' ⚠️ ' . $smsWarning : '')), theme: $store.theme }"
                         style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;
                             @if($smsSentCount > 0) background:#27272a;color:#a1a1aa;border:1px solid #3f3f46;
                             @else background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;box-shadow:0 0 16px #05966940; @endif">
@@ -86,7 +89,7 @@
                     {{-- Обгортка потрібна: браузер не шле події миші на disabled-кнопку,
                          і підказка з причиною блокування ніколи б не зʼявилась — саме
                          та підказка, якої менеджеру бракує найбільше. --}}
-                    <span x-tooltip="{ content: @js($smsBlockReason ?: 'Відправка поки недоступна.'), theme: $store.theme }"
+                    <span x-tooltip="{ content: @js('Крок 5. Розсилає клієнтам SMS: хто привезе замовлення, з яким телефоном і на якому авто. Зараз кнопка не активна. ' . ($smsBlockReason ?: 'Відправка недоступна.')), theme: $store.theme }"
                           style="display:inline-flex;">
                     <button disabled
                         style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:not-allowed;background:#1c1c1f;color:#52525b;border:1px solid #27272a;">
@@ -98,7 +101,7 @@
 
                 {{-- Журнал SMS --}}
                 <button wire:click="mountAction('sms_log')"
-                    x-tooltip="{ content: @js('Історія відправок SMS за обрану дату: кому, який текст, дійшло чи ні і з якою помилкою.'), theme: $store.theme }"
+                    x-tooltip="{ content: @js('Історія SMS за обрану дату: кому відправили, який був текст і чи дійшло.'), theme: $store.theme }"
                     style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;font-size:13px;font-weight:600;border:1px solid #3f3f46;cursor:pointer;transition:all .15s;background:#27272a;color:#a1a1aa;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5A3.375 3.375 0 0010.125 2.25H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
                     Журнал
@@ -109,7 +112,7 @@
 
                 {{-- Вихідні кур'єрів --}}
                 <button wire:click="mountAction('closed_slots')"
-                    x-tooltip="{ content: @js('Дні і зміни, коли курʼєри не їздять (свята, вихідні). CRM переносить доставку на найближчий робочий слот.'), theme: $store.theme }"
+                    x-tooltip="{ content: @js('Дні, коли курʼєри не їздять. CRM сама перенесе доставку на найближчий робочий день.'), theme: $store.theme }"
                     style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;border:none;cursor:pointer;transition:all .15s;background:#3b2800;color:#fbbf24;border:1px solid #92400e;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/></svg>
                     Вихідні
@@ -117,7 +120,7 @@
 
                 {{-- Ставки --}}
                 <button wire:click="mountAction('settings')"
-                    x-tooltip="{ content: @js('Скільки платимо курʼєрам: ліміт точок у базовій ставці, доплата за точку понад ліміт, амортизація за км і доплата за дальню доставку.'), theme: $store.theme }"
+                    x-tooltip="{ content: @js('Скільки платимо курʼєру: скільки точок входить у ставку, доплата за кожну зайву, амортизація за км і доплата за дальню доставку.'), theme: $store.theme }"
                     style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;font-size:13px;font-weight:600;border:1px solid #3f3f46;cursor:pointer;transition:all .15s;background:#27272a;color:#a1a1aa;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                     Ставки
