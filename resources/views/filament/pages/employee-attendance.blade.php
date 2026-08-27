@@ -228,9 +228,11 @@
                                 <div x-data="{ open: false, mx: 0, my: 0 }"
                                      @keydown.escape.window="open = false"
                                      style="display:inline-block;">
-                                    <button type="button" class="emp-cell-btn"
-                                        @click="const r = $el.getBoundingClientRect(); mx = r.left + r.width / 2; my = r.bottom + 6; open = ! open"
-                                        @click.outside="open = false"
+                                    <button type="button" class="emp-cell-btn" data-slot-trigger
+                                        @click="const r = $el.getBoundingClientRect();
+                                                mx = Math.min(Math.max(r.left + r.width / 2, 100), window.innerWidth - 100);
+                                                my = r.bottom + 6 + (r.bottom + 210 > window.innerHeight ? -(r.height + 222) : 0);
+                                                open = ! open"
                                         title="{{ $status === 'present' ? ($isPlan ? 'План: ' : '') . ($dayInfo['slot_label'] ?? '') . ' · ' . ($dayInfo['rate'] ?? 0) . ' ₴' : 'Поставити зміну' }}"
                                         style="width:34px;height:34px;border-radius:50%;
                                                background:{{ $isPlan ? 'transparent' : $fillC }};
@@ -242,11 +244,21 @@
                                         {{ $face }}
                                     </button>
 
+                                    {{-- Меню виносимо в <body>. Всередині таблиці воно
+                                         йшло під сусідні рядки: наступні клітинки
+                                         малюються пізніше і мають свій фон, а z-index
+                                         зі статичного style губився — Alpine перетирає
+                                         атрибут своїм :style. Тут переліку стилів один,
+                                         і перекрити меню вже нема кому. --}}
+                                    <template x-teleport="body">
                                     <div x-show="open" x-cloak
-                                         :style="`position:fixed;left:${mx}px;top:${my}px;transform:translateX(-50%);`"
-                                         style="z-index:9999;min-width:170px;padding:5px;border-radius:10px;
-                                                background:#18181b;border:1px solid #3f3f46;
-                                                box-shadow:0 10px 30px rgba(0,0,0,.6);text-align:left;">
+                                         {{-- Клік по самій кнопці не гасимо: вона вже
+                                              перемикає open, інакше меню блимало б. --}}
+                                         @click.outside="if (! $event.target.closest('[data-slot-trigger]')) open = false"
+                                         :style="`position:fixed; left:${mx}px; top:${my}px; transform:translateX(-50%);
+                                                  z-index:2147483000; min-width:186px; padding:6px; border-radius:12px;
+                                                  background:#18181b; border:1px solid #52525b;
+                                                  box-shadow:0 16px 44px rgba(0,0,0,.85); text-align:left;`">
                                         @foreach([
                                             ['morning', '☀ Ранок',           '1 виїзд'],
                                             ['evening', '☾ Вечір',           '1 виїзд'],
@@ -256,9 +268,9 @@
                                                 wire:click="setSlot({{ $row['id'] }}, '{{ $date }}', '{{ $key }}')"
                                                 @click="open = false"
                                                 style="display:flex;width:100%;align-items:center;justify-content:space-between;
-                                                       gap:10px;padding:6px 9px;border-radius:7px;cursor:pointer;
+                                                       gap:12px;padding:8px 10px;border-radius:8px;cursor:pointer;
                                                        background:{{ $slot === $key ? '#1e3a5f' : 'transparent' }};
-                                                       border:none;color:#e4e4e7;font-size:12px;white-space:nowrap;">
+                                                       border:none;color:#e4e4e7;font-size:13px;white-space:nowrap;">
                                             <span>{{ $label }}</span>
                                             <span style="color:#71717a;font-size:11px;">{{ $hint }}</span>
                                         </button>
@@ -268,9 +280,10 @@
                                         <button type="button" class="emp-slot-item"
                                                 wire:click="setSlot({{ $row['id'] }}, '{{ $date }}', null)"
                                                 @click="open = false"
-                                                style="display:block;width:100%;text-align:left;margin-top:3px;
-                                                       padding:6px 9px;border-radius:7px;cursor:pointer;
-                                                       background:transparent;border:none;color:#f87171;font-size:12px;">
+                                                style="display:block;width:100%;text-align:left;margin-top:4px;
+                                                       padding:8px 10px;border-radius:8px;cursor:pointer;
+                                                       background:transparent;border:none;color:#f87171;font-size:13px;
+                                                       border-top:1px solid #27272a;">
                                             Прибрати зміну
                                         </button>
                                         @endif
@@ -281,6 +294,7 @@
                                         </p>
                                         @endif
                                     </div>
+                                    </template>
                                 </div>
                             @elseif($status === 'present')
                                 @php $fill = $isDuty ? '#78350f' : ($row['is_kitchen'] ? '#14532d' : '#1e3a5f'); @endphp
