@@ -71,10 +71,12 @@
                 {{-- Сповіщення клієнтам про кур'єра (SMS) --}}
                 @if($smsReady)
                     <button wire:click="mountAction('send_client_sms')"
-                        {{-- Попередження — в кінці. Спочатку читається, що кнопка
-                             робить: коли зверху висіло «Без курʼєра: 50 точок»,
-                             менеджер не розумів навіть, про що взагалі кнопка. --}}
-                        x-tooltip="{ content: @js('Крок 5. Розсилає клієнтам SMS: хто привезе замовлення, з яким телефоном і на якому авто. Перед відправкою покаже список — кому піде і кого доведеться пропустити. Працює з 09:00 до 21:00.' . ($smsWarning ? ' ⚠️ ' . $smsWarning : '')), theme: $store.theme }"
+                        {{-- Підказка статична. Динамічне попередження тут не живе:
+                             Alpine створює tippy один раз, і при зміні дати текст
+                             лишався старим — число точок не мінялось разом з днем.
+                             Хто саме не отримає SMS, видно у самій модалці перед
+                             відправкою, де список актуальний. --}}
+                        x-tooltip="{ content: @js('Крок 5. Розсилає клієнтам SMS: хто привезе замовлення, з яким телефоном і на якому авто. Перед відправкою покаже список — кому піде і кого доведеться пропустити. Працює з 09:00 до 21:00.'), theme: $store.theme }"
                         style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;
                             @if($smsSentCount > 0) background:#27272a;color:#a1a1aa;border:1px solid #3f3f46;
                             @else background:linear-gradient(135deg,#059669,#10b981);color:#fff;border:none;box-shadow:0 0 16px #05966940; @endif">
@@ -89,7 +91,11 @@
                     {{-- Обгортка потрібна: браузер не шле події миші на disabled-кнопку,
                          і підказка з причиною блокування ніколи б не зʼявилась — саме
                          та підказка, якої менеджеру бракує найбільше. --}}
-                    <span x-tooltip="{ content: @js('Крок 5. Розсилає клієнтам SMS: хто привезе замовлення, з яким телефоном і на якому авто. Зараз кнопка не активна. ' . ($smsBlockReason ?: 'Відправка недоступна.')), theme: $store.theme }"
+                    {{-- wire:key від тексту причини: Alpine ставить tippy один раз,
+                         тож без заміни вузла підказка показувала б причину, яка
+                         була актуальна на момент першого рендеру. --}}
+                    <span wire:key="sms-blocked-{{ md5((string) $smsBlockReason) }}"
+                          x-tooltip="{ content: @js('Крок 5. Розсилає клієнтам SMS: хто привезе замовлення, з яким телефоном і на якому авто. Зараз кнопка не активна. ' . ($smsBlockReason ?: 'Відправка недоступна.')), theme: $store.theme }"
                           style="display:inline-flex;">
                     <button disabled
                         style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:not-allowed;background:#1c1c1f;color:#52525b;border:1px solid #27272a;">

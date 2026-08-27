@@ -178,19 +178,24 @@ class RouteSnapshotTest extends TestCase
         // Відновлені з order_days точки не мають ant_route_id — його тоді ще не
         // писали. Коли маршрут нарешті завантажать, поруч не має зʼявитись
         // другий запис: неповний привид висів би в «проблемних» вічно.
-        $this->makeStop([
-            'ant_route_id' => null, 'client_id' => 42, 'ant_route_num' => 1,
-            'client_name' => 'Клієнт', 'client_phone' => '0501234567',
-            'source' => RouteStop::SOURCE_BACKFILL,
-        ]);
-
         $this->makeRoute([
             'ant_route_id' => 'r1', 'ant_route_num' => 1,
             'employee_id' => $this->makeCourier('Іванов І.І.'),
         ]);
 
         // Клієнт 42 їде цим маршрутом — точку знімають з ANT наново.
-        $this->makeOrderDay(['id' => 42, 'name' => 'Клієнт', 'phone' => '0501234567']);
+        $ids = $this->makeOrderDay(['id' => 42, 'name' => 'Клієнт', 'phone' => '0501234567']);
+
+        // Лишаємо саме сирітський рядок: без маршруту, але з тією самою
+        // доставкою — так виглядають рядки, відновлені з order_days.
+        RouteStop::query()->delete();
+
+        $this->makeStop([
+            'ant_route_id' => null, 'client_id' => 42, 'ant_route_num' => 1,
+            'order_day_id' => $ids['day_id'],
+            'client_name' => 'Клієнт', 'client_phone' => '0501234567',
+            'source' => RouteStop::SOURCE_BACKFILL,
+        ]);
 
         $service = app(AntLogisticsService::class);
         $method  = new \ReflectionMethod($service, 'snapshotStop');
@@ -217,27 +222,28 @@ class RouteSnapshotTest extends TestCase
         // Другий знайшов — і оскільки ant_route_id входить у ключ
         // updateOrCreate, поруч виріс би близнюк, а старий неповний рядок
         // назавжди лишився б у «проблемних» перед розсилкою.
-        $this->makeStop([
-            'ant_route_id' => null, 'client_id' => 7, 'ant_route_num' => 1,
-            'client_name' => 'Клієнт', 'client_phone' => '0501234567',
-            'source' => RouteStop::SOURCE_BACKFILL,
-        ]);
-
         $this->makeRoute([
             'ant_route_id' => 'r1', 'ant_route_num' => 1,
             'driver_name' => 'Іванов І.І.',
             'employee_id' => $this->makeCourier('Іванов І.І.'),
         ]);
 
-        $this->makeOrderDay(
+        $ids = $this->makeOrderDay(
             ['id' => 7, 'name' => 'Клієнт', 'phone' => '0501234567'],
             [],
             ['ant_route_num' => 1, 'ant_driver' => 'Іванов І.І.'],
         );
 
-        // Прибираємо точку, яку створила фікстура, щоб лишився саме сирітський
-        // рядок першого прогону — вихідна ситуація перед другим запуском.
-        RouteStop::whereNotNull('ant_route_id')->delete();
+        // Вихідна ситуація перед другим запуском: рядок першого прогону, який
+        // маршруту не знайшов, зате знає свою доставку.
+        RouteStop::query()->delete();
+
+        $this->makeStop([
+            'ant_route_id' => null, 'client_id' => 7, 'ant_route_num' => 1,
+            'order_day_id' => $ids['day_id'],
+            'client_name' => 'Клієнт', 'client_phone' => '0501234567',
+            'source' => RouteStop::SOURCE_BACKFILL,
+        ]);
 
         $this->artisan('routes:backfill-stops')->assertSuccessful();
 
@@ -246,6 +252,41 @@ class RouteSnapshotTest extends TestCase
         $this->assertCount(1, $stops, 'близнюк не має зʼявитись');
         $this->assertSame('r1', $stops->first()->ant_route_id);
         $this->assertSame('Іванов І.І.', $stops->first()->courier_name);
+    }
+
+    public function test_the_backfill_keeps_a_second_delivery_of_the_same_client(): void
+    {
+        // У клієнта за день і ранкова, і вечірня доставка. Ранкову шапку
+        // маршруту в ANT уже стерли, вечірня є. Прибирання близнюків не має
+        // зачепити ранкову точку — це окрема поїздка, а не дубль.
+        $evening = $this->makeRoute([
+            'ant_route_id' => 'e1', 'ant_route_num' => 1,
+            'driver_name' => 'Іванов І.І.', 'route_time_b' => '05.08.2026 18:00',
+            'employee_id' => $this->makeCourier('Іванов І.І.'),
+        ]);
+
+        $ids = $this->makeOrderDay(
+            ['id' => 9, 'name' => 'Клієнт', 'phone' => '0501234567'],
+            [],
+            ['ant_route_num' => 1, 'ant_driver' => 'Іванов І.І.'],
+            ['route' => $evening],
+        );
+
+        // Ранкова точка того самого клієнта: маршрут той самий номер, але
+        // шапки немає, тож і ant_route_id порожній.
+        $this->makeStop([
+            'ant_route_id' => null, 'client_id' => 9, 'ant_route_num' => 1,
+            'driver_name' => 'Личко Володимир', 'order_day_id' => $ids['day_id'] + 100,
+            'client_name' => 'Клієнт', 'client_phone' => '0501234567',
+            'source' => RouteStop::SOURCE_BACKFILL,
+        ]);
+
+        $this->artisan('routes:backfill-stops')->assertSuccessful();
+
+        $stops = RouteStop::where('client_id', 9)->get();
+
+        $this->assertCount(2, $stops, 'друга доставка має вціліти');
+        $this->assertTrue($stops->contains(fn ($s) => $s->driver_name === 'Личко Володимир'));
     }
 
     public function test_both_shifts_live_side_by_side_in_the_archive(): void
