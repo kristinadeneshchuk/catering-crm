@@ -302,7 +302,7 @@
                                     @if(!empty(trim(strip_tags($pf['recipe'] ?? ''))))
                                         <div class="recipe-box" style="margin: 8px; border-radius: 4px;">
                                             <div class="recipe-title">Рецепт НФ</div>
-                                            <div class="recipe-content">{!! $pf['recipe'] !!}</div>
+                                            <div class="recipe-content">{!! \Illuminate\Support\Str::sanitizeHtml($pf['recipe'] ?? '') !!}</div>
                                         </div>
                                     @endif
                                 </div>
@@ -314,7 +314,7 @@
                     @if(!empty(trim(strip_tags($dish['recipe'] ?? ''))))
                         <div class="recipe-box">
                             <div class="recipe-title">Рецепт приготування</div>
-                            <div class="recipe-content">{!! $dish['recipe'] !!}</div>
+                            <div class="recipe-content">{!! \Illuminate\Support\Str::sanitizeHtml($dish['recipe'] ?? '') !!}</div>
                         </div>
                     @endif
 
@@ -445,7 +445,7 @@
                                             @if(!empty(trim(strip_tags($repPf['recipe'] ?? ''))))
                                                 <div class="recipe-box" style="margin: 8px; border-radius: 4px;">
                                                     <div class="recipe-title">Рецепт НФ</div>
-                                                    <div class="recipe-content">{!! $repPf['recipe'] !!}</div>
+                                                    <div class="recipe-content">{!! \Illuminate\Support\Str::sanitizeHtml($repPf['recipe'] ?? '') !!}</div>
                                                 </div>
                                             @endif
                                         </div>
@@ -514,7 +514,7 @@
                                                     <span style="color:#9ca3af;font-style:italic;">без змін</span>
                                                 @else
                                                     @foreach($exceptions as $ex)
-                                                        <div>{!! $ex !!}</div>
+                                                        <div>{!! \Illuminate\Support\Str::sanitizeHtml($ex ?? '') !!}</div>
                                                     @endforeach
                                                 @endif
                                             </td>
@@ -591,7 +591,7 @@
                                             @if(!empty(trim(strip_tags($meal['recipe'] ?? ''))))
                                                 <div style="border-top:1px dashed #fde68a; background:#fffbeb; padding:5px 8px; font-size:9px; line-height:1.45; color:#1f2937; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
                                                     <div style="font-weight:800; color:#92400e; font-size:8px; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:2px;">Рецепт</div>
-                                                    <div class="recipe-content">{!! $meal['recipe'] !!}</div>
+                                                    <div class="recipe-content">{!! \Illuminate\Support\Str::sanitizeHtml($meal['recipe'] ?? '') !!}</div>
                                                 </div>
                                             @endif
                                         </td>

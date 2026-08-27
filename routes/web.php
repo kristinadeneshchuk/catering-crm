@@ -16,9 +16,6 @@ use App\Http\Controllers\Webhooks\TelegramWebhookController;
 use App\Http\Controllers\Webhooks\ViberWebhookController;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\LogisticsExport;
-use App\Models\Order;
-use App\Models\OrderDay;
-use Carbon\Carbon;
 
 /*
 |--------------------------------------------------------------------------
@@ -92,9 +89,12 @@ Route::prefix('cabinet/{token}')->name('cabinet.')->group(function () {
 /**
  * 🖨️ БЛОК ДРУКУ
  */
-Route::get('/print/stickers', [PrintController::class, 'stickers'])->name('print.stickers');
-Route::get('/print/manifest', [PrintController::class, 'manifest'])->name('print.manifest');
-Route::get('/print/packaging-list', [PrintController::class, 'packagingList'])->name('print.packaging-list');
+// 🔒 всі сторінки друку містять ПІБ/адреси клієнтів — тільки для залогінених працівників
+Route::middleware('auth')->group(function () {
+    Route::get('/print/stickers', [PrintController::class, 'stickers'])->name('print.stickers');
+    Route::get('/print/manifest', [PrintController::class, 'manifest'])->name('print.manifest');
+    Route::get('/print/packaging-list', [PrintController::class, 'packagingList'])->name('print.packaging-list');
+});
 
 Route::get('/print/logistics', [PrintController::class, 'logistics'])->name('print.logistics')->middleware('auth');
 Route::get('/print/dish/{dishId}/tech-card', [PrintController::class, 'dishTechCard'])->name('print.dish.tech-card')->middleware('auth');
@@ -119,39 +119,20 @@ Route::prefix('client')->group(function () {
     });
 });
 
-Route::get('/migrate-orders-to-days', function () {
-    $orders = Order::whereNotIn('status', ['completed', 'finished'])->get(); // Беремо тільки активні/нові
-    $count = 0;
+// (одноразовий маршрут /migrate-orders-to-days видалено: міграцію давно виконано,
+//  а неавтентифікований GET, що пише в базу, — дірка в безпеці)
 
-    foreach ($orders as $order) {
-        if (!$order->start_date || !$order->end_date) continue;
-
-        $current = Carbon::parse($order->start_date);
-        $end = Carbon::parse($order->end_date);
-
-        while ($current->lte($end)) {
-            // Створюємо день, якщо його ще немає
-            OrderDay::firstOrCreate([
-                'order_id' => $order->id,
-                'date' => $current->format('Y-m-d')
-            ]);
-            
-            $current->addDay();
-            $count++;
-        }
-    }
-
-    return "Успішно! Ми перетворили старі дати на {$count} окремих записів у календарі.";
+// 🔒 звіти/друк — тільки для залогінених працівників
+Route::middleware('auth')->group(function () {
+    Route::get('/print/production-report', [PrintController::class, 'productionReport'])->name('print.production-report');
+    Route::get('/print/stock-list', [PrintController::class, 'stockList'])->name('print.stock-list');
+    Route::get('/print/shopping-list', [PrintController::class, 'shoppingList'])->name('print.shopping-list');
+    Route::get('/print/mini-manifest', [\App\Http\Controllers\PrintController::class, 'miniManifest'])->name('print.mini-manifest');
+    Route::get('/print/assembly-sheet', [\App\Http\Controllers\PrintController::class, 'assemblySheet'])->name('print.assembly-sheet');
+    Route::get('/print/cycle-menu', [PrintController::class, 'cycleMenu'])->name('print.cycle-menu');
+    Route::get('/print/repeat-clients', [PrintController::class, 'repeatClients'])->name('print.repeat-clients');
+    Route::get('/kitchen', [PrintController::class, 'kitchenMenu'])->name('kitchen.menu');
 });
-
-Route::get('/print/production-report', [PrintController::class, 'productionReport'])->name('print.production-report');
-Route::get('/print/stock-list', [PrintController::class, 'stockList'])->name('print.stock-list');
-Route::get('/print/shopping-list', [PrintController::class, 'shoppingList'])->name('print.shopping-list');
-Route::get('/print/mini-manifest', [\App\Http\Controllers\PrintController::class, 'miniManifest'])->name('print.mini-manifest');
-Route::get('/print/assembly-sheet', [\App\Http\Controllers\PrintController::class, 'assemblySheet'])->name('print.assembly-sheet');
-Route::get('/print/cycle-menu', [PrintController::class, 'cycleMenu'])->name('print.cycle-menu');
-Route::get('/print/repeat-clients', [PrintController::class, 'repeatClients'])->name('print.repeat-clients');
-Route::get('/kitchen', [PrintController::class, 'kitchenMenu'])->name('kitchen.menu');
 
 // 🔥 НОВИЙ МАРШРУТ АНАЛІТИКИ (закритий авторизацією)
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index')->middleware('auth');

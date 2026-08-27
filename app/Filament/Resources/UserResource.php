@@ -29,6 +29,13 @@ protected static ?string $model = User::class;
         return auth()->user()->role === 'admin';
     }
 
+    // 🔒 ЗАХИСТ: закриває ВСІ сторінки ресурсу (list/create/edit) — інакше трейт
+    // RestrictCookAccess пускає менеджера на /admin/users/{id}/edit напряму
+    public static function canAccess(): bool
+    {
+        return auth()->user()->role === 'admin';
+    }
+
     public static function form(Form $form): Form
     {
         return $form

@@ -22,6 +22,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'inbox.token' => \App\Http\Middleware\VerifyInboxToken::class,
         ]);
+
+        // Гостей із захищених сторінок ведемо на відповідний логін, бо іменованого
+        // маршруту "login" немає: клієнтів — на свій, персонал — на логін панелі.
+        $middleware->redirectGuestsTo(fn ($request) => $request->is('client*')
+            ? route('client.login')
+            : '/admin/login');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

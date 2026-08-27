@@ -164,7 +164,7 @@
                                         Рецепт приготування
                                     </div>
                                     <div class="recipe-content" style="font-size: 14px; line-height: 1.7;">
-                                        {!! $dish->description !!}
+                                        {!! \Illuminate\Support\Str::sanitizeHtml($dish->description ?? '') !!}
                                     </div>
                                 </div>
                             @else
@@ -182,7 +182,7 @@
                                             <span style="font-size:12px; font-weight:700; color:#1e40af;">{{ $di->childDish->name }}</span>
                                         </div>
                                         <div class="recipe-content" style="font-size: 14px; line-height: 1.7;">
-                                            {!! $di->childDish->description !!}
+                                            {!! \Illuminate\Support\Str::sanitizeHtml($di->childDish->description ?? '') !!}
                                         </div>
                                     </div>
                                 @endif

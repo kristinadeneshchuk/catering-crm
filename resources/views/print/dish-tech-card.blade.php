@@ -474,7 +474,7 @@
     @if(!empty($dish->description))
         <div class="section-title" style="margin-top:14px;">Рецепт приготування</div>
         <div class="recipe-box">
-            {!! $dish->description !!}
+            {!! \Illuminate\Support\Str::sanitizeHtml($dish->description ?? '') !!}
         </div>
     @endif
 

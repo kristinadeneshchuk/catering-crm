@@ -28,6 +28,13 @@ class SettingResource extends Resource
         return auth()->user()->role === 'admin';
     }
 
+    // 🔒 ЗАХИСТ: закриває і сторінку редагування — інакше трейт RestrictCookAccess
+    // пускає менеджера редагувати налаштування бізнесу напряму по URL
+    public static function canAccess(): bool
+    {
+        return auth()->user()->role === 'admin';
+    }
+
     public static function canCreate(): bool
     {
         return false;
