@@ -3,13 +3,25 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser
 {
     use HasFactory, Notifiable;
+
+    /**
+     * У production Filament пускає в панель лише моделі з FilamentUser.
+     * Усі наші користувачі (admin/manager/cook) — персонал, панель їм доступна;
+     * права всередині панелі обмежують ресурси (RestrictCookAccess, canAccess).
+     */
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return in_array($this->role, [self::ROLE_ADMIN, self::ROLE_MANAGER, self::ROLE_COOK], true);
+    }
 
     // Список доступных ролей
     const ROLE_ADMIN = 'admin';
