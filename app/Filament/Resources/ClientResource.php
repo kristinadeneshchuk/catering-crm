@@ -342,7 +342,9 @@ class ClientResource extends Resource
                                 ->limit(1),
                             $direction
                         );
-                    }),
+                    })
+                    // Телефон: бренд ховаємо, лишаємо ID / Ім'я / День та решту
+                    ->visibleFrom('md'),
 
                 Tables\Columns\TextColumn::make('active_order_progress')
                     ->label('День')

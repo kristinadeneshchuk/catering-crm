@@ -1,4 +1,14 @@
 <x-filament-panels::page>
+<style>
+    /* Телефон: колонка «#» — довідкова нумерація, ховаємо, а падінги тиснемо,
+       щоб «Купити» (головна цифра для закупівлі) не обрізалась. */
+    @media (max-width: 767.98px) {
+        .shop-table th:first-child, .shop-table td:first-child { display: none; }
+        .shop-table th, .shop-table td { padding-left: 6px !important; padding-right: 6px !important; }
+        .shop-table { font-size: 12px; }
+    }
+</style>
+
     <x-filament::section>
         <form wire:submit.prevent="calculate">
             {{ $this->form }}
@@ -57,7 +67,7 @@
         @if(!empty($toBuyList))
         <x-filament::section>
             <x-slot name="heading">Треба купити · {{ count($toBuyList) }} позицій</x-slot>
-            <table style="width:100%;border-collapse:collapse;">
+            <table class="shop-table" style="width:100%;border-collapse:collapse;">
                 <thead>
                     <tr style="border-bottom:2px solid rgba(255,255,255,0.1);">
                         <th style="text-align:left;padding:6px 10px;font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;">#</th>
@@ -90,7 +100,7 @@
         @if(!empty($enoughList))
         <x-filament::section collapsible collapsed>
             <x-slot name="heading">Достатньо на складі · {{ count($enoughList) }} позицій</x-slot>
-            <table style="width:100%;border-collapse:collapse;">
+            <table class="shop-table" style="width:100%;border-collapse:collapse;">
                 <thead>
                     <tr style="border-bottom:2px solid rgba(255,255,255,0.1);">
                         <th style="text-align:left;padding:6px 10px;font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;">#</th>

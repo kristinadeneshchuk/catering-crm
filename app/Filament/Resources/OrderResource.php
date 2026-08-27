@@ -617,7 +617,10 @@ class OrderResource extends Resource
                     ->label('Проєкт')
                     ->badge()
                     ->color(fn ($record): string => $record->projectData?->color ?? 'gray')
-                    ->sortable(),
+                    ->sortable()
+                    // Телефон: лишаємо ID / Клієнт / День / Оплата — решта ховається,
+                    // бо інакше таблиця виїздить за екран.
+                    ->visibleFrom('md'),
 
                 TextColumn::make('client.name')
                     ->label('Клієнт')
@@ -760,12 +763,14 @@ class OrderResource extends Resource
 
                 TextColumn::make('duration')
                     ->label('Днів')
-                    ->alignCenter(),
+                    ->alignCenter()
+                    ->visibleFrom('md'),
 
                 TextColumn::make('start_date')
                     ->label('Початок')
                     ->date()
-                    ->sortable(),
+                    ->sortable()
+                    ->visibleFrom('md'),
 
                 TextColumn::make('status')
                     ->label('Статус')
