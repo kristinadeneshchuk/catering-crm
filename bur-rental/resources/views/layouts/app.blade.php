@@ -10,9 +10,43 @@
 
     <link rel="canonical" href="{{ url()->current() }}">
 
-    @if (config('app.noindex'))
-        <meta name="robots" content="noindex, nofollow">
+    @php
+        /*
+        | Сторінки, яким нема чого робити в індексі. Список тут, а не в кожному
+        | шаблоні: додали маршрут — не забули закрити.
+        |
+        | Пошук найважливіший: без noindex він плодить нескінченні тонкі
+        | сторінки під кожен запит, і саме так сайт заробляє репутацію
+        | неякісного. robots.txt для цього не годиться — заборона обходу лише
+        | не дає роботу прочитати сторінку, але не прибирає її з видачі.
+        */
+        $noindex = config('app.noindex') || request()->routeIs(
+            'search', 'favourites', 'booking.create', 'booking.show',
+            'cabinet', 'cabinet.*',
+        );
+    @endphp
+
+    @if ($noindex)
+        <meta name="robots" content="noindex, follow">
     @endif
+
+    {{--
+        Прев'ю посилання. Основний канал, яким в Україні передають контакт
+        підрядника, — це месенджери; без цих тегів посилання приходить голим
+        рядком. og:image з'явиться разом із реальними фото.
+    --}}
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="БУР">
+    <meta property="og:locale" content="uk_UA">
+    <meta property="og:url" content="{{ url()->current() }}">
+    <meta property="og:title" content="@yield('title', 'БУР — прокат будівельного інструменту')">
+    <meta property="og:description" content="@yield('description', 'Подобова оренда будівельного, садового та вимірювального інструменту. Реальна наявність по датах і філіях.')">
+    <meta name="twitter:card" content="summary">
+
+    <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
+    <link rel="manifest" href="{{ asset('site.webmanifest') }}">
+    <meta name="theme-color" content="#0e5b46">
 
     {{--
         Шрифти: Oswald (дисплей), Golos Text (текст), JetBrains Mono (числа) —
@@ -36,6 +70,8 @@
         ], JSON_UNESCAPED_UNICODE);
     @endphp
     <script>window.burFavourites = {!! $favourites !!};</script>
+
+    <x-schema-site />
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('head')

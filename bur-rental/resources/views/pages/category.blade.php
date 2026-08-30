@@ -210,3 +210,26 @@
         <x-district-links :city="$city" :title="'Оренда '.($category->name_genitive ?? 'інструменту').' у районах '.$city->name" />
     </div>
 @endsection
+
+@push('head')
+    {{--
+        Лістинг як список товарів, а не як суцільний текст: робот бачить, що
+        саме на сторінці, і в якому порядку.
+    --}}
+    @php
+        $listSchema = [
+            '@context' => 'https://schema.org',
+            '@type' => 'ItemList',
+            'name' => $category->name,
+            'numberOfItems' => $products->total(),
+            'itemListElement' => $products->values()->map(fn ($p, $i) => [
+                '@type' => 'ListItem',
+                'position' => $products->firstItem() + $i,
+                'url' => route('product', $p),
+                'name' => $p->brand->name.' '.$p->name,
+            ])->all(),
+        ];
+    @endphp
+
+    <script type="application/ld+json">{!! json_encode($listSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !!}</script>
+@endpush

@@ -443,25 +443,45 @@
 
 @push('head')
     @php
-        $productSchema = [
+        /*
+        | Наявність береться з тих самих даних, що й календар на сторінці:
+        | «вільно» у сніпеті мусить означати те саме, що «вільно» на сайті.
+        | Це головна відмінність від конкурентів — безглуздо ховати її від
+        | пошуку, і шкідливо писати InStock, коли весь парк в оренді.
+        */
+        $freeSomewhere = $branches->contains(
+            fn ($b) => count($busy[$b->id] ?? []) === 0
+        );
+
+        $productSchema = array_filter([
             '@context' => 'https://schema.org',
             '@type' => 'Product',
             'name' => $product->brand->name.' '.$product->name,
             'sku' => $product->sku,
             'brand' => ['@type' => 'Brand', 'name' => $product->brand->name],
-            'aggregateRating' => [
+            /*
+            | Рейтинг віддаємо тільки тоді, коли за ним стоять справжні
+            | опубліковані відгуки. Розмітка неіснуючих відгуків — порушення
+            | правил Google зі санкцією на весь домен, а поля `rating` і
+            | `reviews_count` у товарі заповнюються вручну і легко можуть
+            | лишитися демонстраційними.
+            */
+            'aggregateRating' => $product->reviews->isNotEmpty() ? [
                 '@type' => 'AggregateRating',
-                'ratingValue' => $product->rating,
-                'reviewCount' => $product->reviews_count,
-            ],
+                'ratingValue' => round($product->reviews->avg('rating'), 1),
+                'reviewCount' => $product->reviews->count(),
+            ] : null,
             'offers' => [
                 '@type' => 'Offer',
                 'price' => $product->min_price,
                 'priceCurrency' => 'UAH',
-                'availability' => 'https://schema.org/InStock',
+                'availability' => $freeSomewhere
+                    ? 'https://schema.org/InStock'
+                    : 'https://schema.org/OutOfStock',
                 'url' => route('product', $product),
+                'businessFunction' => 'https://schema.org/LeaseOut',
             ],
-        ];
+        ]);
     @endphp
 
     <script type="application/ld+json">{!! json_encode($productSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !!}</script>

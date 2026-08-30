@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\RememberCampaign;
 use App\Http\Middleware\ResolveCity;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -15,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
             ResolveCity::class,
+            RememberCampaign::class,
         ]);
 
         // Кабінет — єдине місце на сайті, куди пускають за сесією. Без цих

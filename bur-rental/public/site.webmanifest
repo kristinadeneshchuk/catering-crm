@@ -1,0 +1,12 @@
+{
+    "name": "БУР — прокат інструменту",
+    "short_name": "БУР",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#f4f6f5",
+    "theme_color": "#0e5b46",
+    "icons": [
+        { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+        { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+    ]
+}

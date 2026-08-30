@@ -23,6 +23,9 @@ class LeadForm
                 TextInput::make('edrpou')->label('ЄДРПОУ'),
                 TextInput::make('context')->label('Звідки заявка')->disabled()
                     ->helperText('Сторінка, з якої надіслали форму.'),
+                TextInput::make('campaign_label')->label('Рекламна мітка')->disabled()
+                    ->dehydrated(false)
+                    ->helperText('utm з першого переходу на сайт у цій сесії.'),
             ]),
 
             Textarea::make('message')->label('Повідомлення')->rows(4),

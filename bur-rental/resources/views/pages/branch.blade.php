@@ -131,3 +131,35 @@
         <x-district-links :city="$city" title="Райони, які обслуговує ця філія" />
     </div>
 @endsection
+
+@push('head')
+    {{--
+        Філія — це фізична точка, куди приїжджають. Саме ця розмітка зшиває
+        сторінку з карткою в Google Картах, а локальна видача для оренди
+        інструменту дає більше, ніж загальна.
+    --}}
+    @php
+        $branchSchema = array_filter([
+            '@context' => 'https://schema.org',
+            '@type' => 'LocalBusiness',
+            'name' => 'БУР — '.$branch->name,
+            'url' => route('branch', [$city, $branch]),
+            'telephone' => $city->phone,
+            'openingHours' => $branch->hours,
+            'address' => [
+                '@type' => 'PostalAddress',
+                'streetAddress' => $branch->address,
+                'addressLocality' => $city->name,
+                'addressCountry' => 'UA',
+            ],
+            'geo' => $branch->lat && $branch->lng ? [
+                '@type' => 'GeoCoordinates',
+                'latitude' => (float) $branch->lat,
+                'longitude' => (float) $branch->lng,
+            ] : null,
+            'parentOrganization' => ['@id' => url('/').'#organization'],
+        ]);
+    @endphp
+
+    <script type="application/ld+json">{!! json_encode($branchSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !!}</script>
+@endpush

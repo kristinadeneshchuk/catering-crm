@@ -11,7 +11,11 @@ class LeadController extends Controller
 {
     public function store(StoreLeadRequest $request): RedirectResponse
     {
-        $lead = Lead::create($request->validated());
+        $lead = Lead::create([
+            ...$request->validated(),
+            // Мітку бере сесія, а не форма: у формі її може підмінити хто завгодно.
+            'campaign' => $request->session()->get('campaign'),
+        ]);
 
         app(ManagerAlerts::class)->leadCreated($lead);
 

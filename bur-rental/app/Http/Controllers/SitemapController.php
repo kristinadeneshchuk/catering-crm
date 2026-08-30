@@ -38,7 +38,7 @@ class SitemapController extends Controller
         return response($xml)->header('Content-Type', 'application/xml');
     }
 
-    /** @return list<array{loc: string, priority: string, changefreq: string}> */
+    /** @return list<array<string, ?string>> */
     private function statics(): array
     {
         $urls = [$this->url(route('home'), '1.0', 'daily')];
@@ -50,7 +50,7 @@ class SitemapController extends Controller
         return $urls;
     }
 
-    /** @return list<array{loc: string, priority: string, changefreq: string}> */
+    /** @return list<array<string, ?string>> */
     private function catalog(): array
     {
         $urls = [
@@ -59,26 +59,26 @@ class SitemapController extends Controller
         ];
 
         foreach (Category::orderBy('id')->get() as $category) {
-            $urls[] = $this->url(route('category', $category), '0.8', 'daily');
+            $urls[] = $this->url(route('category', $category), '0.8', 'daily', $category->updated_at);
         }
 
         foreach (Product::orderBy('id')->get() as $product) {
-            $urls[] = $this->url(route('product', $product), '0.7', 'daily');
+            $urls[] = $this->url(route('product', $product), '0.7', 'daily', $product->updated_at);
         }
 
         foreach (Kit::orderBy('id')->get() as $kit) {
-            $urls[] = $this->url(route('kit', $kit), '0.6', 'weekly');
+            $urls[] = $this->url(route('kit', $kit), '0.6', 'weekly', $kit->updated_at);
         }
 
         // Бренд без жодного товару в мапі не потрібен: сторінка буде порожня.
         foreach (Brand::has('products')->orderBy('id')->get() as $brand) {
-            $urls[] = $this->url(route('brand', $brand), '0.5', 'weekly');
+            $urls[] = $this->url(route('brand', $brand), '0.5', 'weekly', $brand->updated_at);
         }
 
         return $urls;
     }
 
-    /** @return list<array{loc: string, priority: string, changefreq: string}> */
+    /** @return list<array<string, ?string>> */
     private function geo(): array
     {
         $urls = [];
@@ -98,9 +98,20 @@ class SitemapController extends Controller
         return $urls;
     }
 
-    /** @return array{loc: string, priority: string, changefreq: string} */
-    private function url(string $loc, string $priority, string $changefreq): array
+    /**
+     * `lastmod` не обов'язковий, але з ним робот перевідвідує змінені сторінки
+     * швидше, а незмінені не чіпає — на каталозі в кілька тисяч позицій це
+     * різниця між «переобхід за тиждень» і «за місяць».
+     *
+     * @return array{loc: string, priority: string, changefreq: string, lastmod: ?string}
+     */
+    private function url(string $loc, string $priority, string $changefreq, $lastmod = null): array
     {
-        return ['loc' => $loc, 'priority' => $priority, 'changefreq' => $changefreq];
+        return [
+            'loc' => $loc,
+            'priority' => $priority,
+            'changefreq' => $changefreq,
+            'lastmod' => $lastmod?->toDateString(),
+        ];
     }
 }

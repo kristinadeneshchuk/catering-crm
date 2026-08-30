@@ -39,7 +39,7 @@ npm run build
 php artisan serve
 ```
 
-Тести: `php artisan test` — **90 тестів, усі зелені**. Стиль: `./vendor/bin/pint`.
+Тести: `php artisan test` — **102 тести, усі зелені**. Стиль: `./vendor/bin/pint`.
 Адмінка: `/admin`, доступи з `.env` (`ADMIN_EMAIL` / `ADMIN_PASSWORD`).
 
 ## 3. Що вже зроблено
@@ -51,6 +51,8 @@ php artisan serve
 | Життєвий цикл броні з перерахунком при поверненні | готово |
 | Наявність по екземплярах + атомарне резервування | готово |
 | Ліміти на публічні форми, `robots.txt` і `sitemap.xml` | готово |
+| SEO: noindex службових, OG, LocalBusiness, ItemList, іконки | готово |
+| UTM-мітки доїжджають до заявки | готово |
 | Пошук: розкладка, транслітерація, синоніми, одруківки | готово |
 | Кабінет клієнта і обране | готово, **вхід поки без SMS** |
 | Знижки постійним клієнтам | готово, цифри в `config/loyalty.php` |
@@ -105,6 +107,18 @@ php artisan serve
 повною сумою оренди, знижка стоїть окремим рядком — інакше в звітності зникне,
 скільки ми віддали. Діє тільки на оренду: витратники, доставка й застава не
 дешевшають. Тест `test_client_cannot_ask_for_a_discount_in_the_request`.
+
+**Рейтинг у мікророзмітці — тільки за справжніми відгуками.** Поля
+`products.rating` і `reviews_count` заповнюються руками і в сидах стоять
+демонстраційні. Схема `aggregateRating` віддається лише тоді, коли в товару є
+опубліковані відгуки, і рахується по них. Розмітка неіснуючих відгуків —
+порушення правил Google із ризиком ручних санкцій на весь домен; тест
+`test_rating_is_published_only_when_real_reviews_exist` це стереже.
+
+**Службові сторінки закриті від індексу списком у layout.** Пошук, обране,
+кошик і кабінет віддають `noindex`. Додали новий службовий маршрут — допишіть
+його туди. `robots.txt` для цього не годиться: заборона обходу не прибирає
+сторінку з видачі.
 
 **Ціни рахує тільки сервер.** `App\Services\RentalPricing` бере тариф із бази за
 фактичним строком. Ціна, надіслана браузером, ігнорується повністю. Є тест
@@ -166,6 +180,10 @@ view-composer у `ViewServiceProvider`.
 на кожній сторінці, `robots.txt` з повним `Disallow` і 404 на `/sitemap.xml`.
 На бойовому домені `SITE_NOINDEX` треба зняти — інакше сайт лишиться невидимим.
 
+Повний чеклист запуску в індексацію (що готово, що блокери, що за замовником)
+переданий окремо; головні блокери — реальні фото, справжні відгуки замість
+демонстраційних рейтингів і власне заливка на домен.
+
 ### 5.2. Запустити парсер budprokat
 
 ```bash
@@ -208,7 +226,7 @@ app/
   Filament/Pages/         AvailabilityBoard — календар зайнятості парку
   Filament/Widgets/       інфопанель: справи дня, статистика, виручка
   Http/Controllers/       по контролеру на тип екрана
-  Http/Middleware/        ResolveCity
+  Http/Middleware/        ResolveCity, RememberCampaign
   Rules/                  UkrainianPhone
   Support/Phone.php       канонічний телефон — на ньому тримається кабінет
   Models/                 каталог, гео, наявність, бронювання
@@ -227,7 +245,7 @@ app/
   Console/Commands/       scrape:budprokat, catalog:import, search:reindex,
                           reminders:returns
 database/
-  migrations/             12 файлів за доменами
+  migrations/             13 файлів за доменами
   seeders/data/           контент каталогу окремо від коду
 deploy/shared-hosting/    setup.php, index-alt.php
 resources/
@@ -237,7 +255,7 @@ resources/
   js/stores/booking.js    кошик, місто, дати — localStorage
   views/components/       ~20 Blade-компонентів
   views/pages/            екрани
-tests/                    90 тестів
+tests/                    102 тести
 ```
 
 Детальніше — у `README.md`: там розписані дизайн-рішення, ринкові орієнтири цін

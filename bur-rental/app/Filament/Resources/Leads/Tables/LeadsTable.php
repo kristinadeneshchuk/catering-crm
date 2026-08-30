@@ -30,6 +30,14 @@ class LeadsTable
                     ->description(fn (Lead $r) => $r->phone ?: $r->email),
 
                 TextColumn::make('context')->label('Звідки')->toggleable()->limit(40),
+
+                // Реклама, з якої прийшов клієнт. Без цієї колонки неможливо
+                // сказати, які оголошення дають дзвінки, а які — покази.
+                TextColumn::make('campaign')
+                    ->label('Реклама')
+                    ->state(fn (Lead $r) => $r->campaign_label)
+                    ->placeholder('прямий захід')
+                    ->toggleable(),
                 TextColumn::make('message')->label('Повідомлення')->limit(60)->toggleable(),
 
                 TextColumn::make('status')->label('Статус')->badge()
