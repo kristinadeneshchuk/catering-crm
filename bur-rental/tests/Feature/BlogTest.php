@@ -87,6 +87,20 @@ class BlogTest extends TestCase
             ->assertSee('"@type":"Article"', false);
     }
 
+    public function test_internal_links_in_articles_are_not_broken(): void
+    {
+        // Стаття веде читача вглиб каталогу — і робот ходить тими самими
+        // посиланнями. Товар перейменували, slug змінився — і замість оренди
+        // читач отримує 404. Дешевше зловити це тестом.
+        foreach (Article::all() as $article) {
+            preg_match_all('~\]\((/[a-z0-9/-]+)\)~', $article->body, $m);
+
+            foreach (array_unique($m[1]) as $url) {
+                $this->get($url)->assertOk("{$article->slug} → {$url}");
+            }
+        }
+    }
+
     public function test_reading_time_is_honest(): void
     {
         $article = Article::first();
