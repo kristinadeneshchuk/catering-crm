@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Article;
 use App\Models\Category;
 use App\Models\City;
 use App\Models\Kit;
@@ -25,6 +26,10 @@ class HomeController extends Controller
             'cities' => City::orderBy('position')->get(),
             // Свіжі відгуки з Google — соціальний доказ прямо на головній.
             'reviews' => Review::google()->latest('published_at')->take(3)->get(),
+            // Статті ловлять тих, хто ще не знає, що саме йому орендувати.
+            // На головній вони мають бути видні: інакше блог живе сам по собі
+            // і не отримує ні читачів, ні внутрішньої ваги.
+            'articles' => Article::with('kit')->orderBy('position')->take(3)->get(),
         ]);
     }
 }

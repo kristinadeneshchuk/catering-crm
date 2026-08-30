@@ -51,6 +51,11 @@
                         Комплекти під задачу →
                     </a>
                 </li>
+                <li>
+                    <a href="{{ route('blog.index') }}" class="flex min-h-11 items-center py-2 text-sm font-semibold text-brand no-underline">
+                        Як зробити роботу →
+                    </a>
+                </li>
             </ul>
         </div>
     </div>

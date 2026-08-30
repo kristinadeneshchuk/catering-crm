@@ -131,6 +131,35 @@
 
         <x-reviews :reviews="$reviews" title="Відгуки з Google" />
 
+        @if ($articles->isNotEmpty())
+            {{--
+                Статті на головній стоять після відгуків і перед B2B: людина,
+                яка дочитала до сюди, або вже обрала інструмент, або ще не
+                знає, що їй потрібно. Друга якраз і йде в статті.
+            --}}
+            <x-section title="Як зробити роботу" lead="Розбори з цифрами: скільки матеріалу, чим ущільнювати, скільки сохне."
+                       action="Усі статті" :action-url="route('blog.index')">
+                <div class="grid gap-4 md:grid-cols-3">
+                    @foreach ($articles as $article)
+                        <article class="flex flex-col rounded-[12px] border border-border-1 bg-surface-0 p-5">
+                            <h3 class="text-[16px] font-semibold leading-snug">
+                                <a href="{{ route('article', $article) }}" class="text-text-1 no-underline hover:text-brand hover:no-underline">
+                                    {{ $article->title }}
+                                </a>
+                            </h3>
+                            <p class="mt-2 flex-1 text-sm text-text-2">{{ $article->excerpt }}</p>
+                            <div class="mt-3 font-mono text-xs text-text-3">
+                                {{ $article->reading_minutes }} хв читання
+                                @if ($article->kit)
+                                    · комплект «{{ $article->kit->name }}»
+                                @endif
+                            </div>
+                        </article>
+                    @endforeach
+                </div>
+            </x-section>
+        @endif
+
         {{-- Блок для юросіб: 15% трафіку, але найбільший чек --}}
         <x-section>
             <div class="grid gap-6 rounded-[12px] bg-surface-dark p-8 text-text-on-dark md:grid-cols-[1fr_auto] md:items-center">

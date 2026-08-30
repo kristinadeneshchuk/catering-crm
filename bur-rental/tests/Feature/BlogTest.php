@@ -29,6 +29,18 @@ class BlogTest extends TestCase
         }
     }
 
+    public function test_articles_are_reachable_from_the_home_page(): void
+    {
+        $article = Article::orderBy('position')->firstOrFail();
+
+        // Блог, на який нізвідки не потрапити, не читає ніхто — і внутрішньої
+        // ваги він теж не отримує.
+        $this->get('/')
+            ->assertOk()
+            ->assertSee(route('blog.index'), false)
+            ->assertSee($article->title, false);
+    }
+
     public function test_markdown_becomes_html_and_raw_markup_is_stripped(): void
     {
         $article = Article::create([

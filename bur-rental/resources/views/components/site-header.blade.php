@@ -108,6 +108,11 @@
                class="flex items-baseline justify-between rounded-[6px] px-3 py-2.5 text-sm font-semibold text-brand no-underline hover:bg-surface-1 hover:no-underline">
                 Комплекти під задачу →
             </a>
+
+            <a href="{{ route('blog.index') }}"
+               class="flex items-baseline justify-between rounded-[6px] px-3 py-2.5 text-sm font-semibold text-brand no-underline hover:bg-surface-1 hover:no-underline">
+                Як зробити роботу →
+            </a>
         </div>
     </div>
 </header>
