@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Article;
 use App\Models\Branch;
 use App\Models\Brand;
 use App\Models\Category;
@@ -56,7 +57,14 @@ class SitemapController extends Controller
         $urls = [
             $this->url(route('catalog.index'), '0.9', 'daily'),
             $this->url(route('kits.index'), '0.7', 'weekly'),
+            $this->url(route('blog.index'), '0.6', 'weekly'),
         ];
+
+        // Статті ловлять інформаційні запити — вони приводять іншу аудиторію,
+        // ніж категорії, і робот має знати про них одразу.
+        foreach (Article::orderBy('id')->get() as $article) {
+            $urls[] = $this->url(route('article', $article), '0.6', 'monthly', $article->updated_at);
+        }
 
         foreach (Category::orderBy('id')->get() as $category) {
             $urls[] = $this->url(route('category', $category), '0.8', 'daily', $category->updated_at);

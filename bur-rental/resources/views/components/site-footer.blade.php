@@ -35,6 +35,7 @@
                     <li><a href="{{ route('delivery') }}" class="text-text-on-dark hover:text-white">Доставка й оплата</a></li>
                     <li><a href="{{ route('returns') }}" class="text-text-on-dark hover:text-white">Повернення застави</a></li>
                     <li><a href="{{ route('b2b') }}" class="text-text-on-dark hover:text-white">Умови для юросіб (B2B)</a></li>
+                    <li><a href="{{ route('blog.index') }}" class="text-text-on-dark hover:text-white">Статті</a></li>
                     <li><a href="{{ route('contacts') }}" class="text-text-on-dark hover:text-white">Контакти</a></li>
                 </ul>
             </nav>

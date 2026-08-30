@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ArticleController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\BranchController;
 use App\Http\Controllers\BrandController;
@@ -40,6 +41,9 @@ Route::get('/booking', [BookingController::class, 'create'])->name('booking.crea
 Route::post('/booking', [BookingController::class, 'store'])
     ->middleware('throttle:booking')->name('booking.store');
 Route::get('/booking/{booking}', [BookingController::class, 'show'])->name('booking.show');
+
+Route::get('/blog', [ArticleController::class, 'index'])->name('blog.index');
+Route::get('/blog/{article}', [ArticleController::class, 'show'])->name('article');
 
 Route::get('/search', SearchController::class)->name('search');
 

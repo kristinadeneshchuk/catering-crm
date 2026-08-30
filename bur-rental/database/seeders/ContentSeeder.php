@@ -2,10 +2,12 @@
 
 namespace Database\Seeders;
 
+use App\Models\Article;
 use App\Models\Branch;
 use App\Models\Category;
 use App\Models\City;
 use App\Models\Faq;
+use App\Models\Kit;
 use App\Models\Product;
 use App\Models\Review;
 use Illuminate\Database\Seeder;
@@ -63,6 +65,21 @@ class ContentSeeder extends Seeder
             Faq::create([
                 'faqable_type' => Product::class, 'faqable_id' => $product->id,
                 'question' => $q, 'answer' => $a, 'position' => $i,
+            ]);
+        }
+
+        // Статті блогу. Кожна веде в готовий комплект під задачу — це не
+        // блог заради блогу, а верхня частина тієї самої воронки.
+        foreach (require database_path('seeders/data/articles.php') as $i => $row) {
+            Article::create([
+                'slug' => $row['slug'],
+                'title' => $row['title'],
+                'excerpt' => $row['excerpt'],
+                'body' => $row['body'],
+                'kit_id' => isset($row['kit']) ? Kit::where('slug', $row['kit'])->value('id') : null,
+                'category_id' => isset($row['category']) ? Category::where('slug', $row['category'])->value('id') : null,
+                'published_at' => now()->subDays(($i + 1) * 9),
+                'position' => $i,
             ]);
         }
 

@@ -356,3 +356,63 @@
         scroll-behavior: auto !important;
     }
 }
+
+/*
+ | Типографіка статті. Markdown не знає про дизайн-систему, тому вигляд
+ | задається тут — одним місцем на весь блог. Ширина рядка тримається біля
+ | 65 символів: довші рядки око читає гірше, бо губить початок наступного.
+ */
+.prose-bur {
+    max-width: 68ch;
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--color-text-1);
+}
+
+.prose-bur > * + * { margin-top: 1em; }
+
+.prose-bur h2 {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.2;
+    margin-top: 1.8em;
+}
+
+.prose-bur h3 {
+    font-size: 17px;
+    font-weight: 600;
+    margin-top: 1.5em;
+}
+
+.prose-bur ul,
+.prose-bur ol { padding-left: 1.25em; }
+
+.prose-bur li + li { margin-top: .35em; }
+
+.prose-bur ul { list-style: disc; }
+.prose-bur ol { list-style: decimal; }
+
+.prose-bur strong { font-weight: 600; }
+
+/* Таблиця в статті — це порівняння, і на телефоні воно має скролитися,
+   а не ламати сторінку. */
+.prose-bur table {
+    display: block;
+    overflow-x: auto;
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.prose-bur th,
+.prose-bur td {
+    border: 1px solid var(--color-border-1);
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.prose-bur th {
+    background: var(--color-surface-1);
+    font-weight: 600;
+}

@@ -67,6 +67,7 @@ class AdminPanelTest extends TestCase
             '/admin/branches',
             '/admin/kits',
             ClientResource::getUrl('index'),
+            '/admin/articles',
         ] as $url) {
             $this->get($url)->assertOk();
         }

@@ -37,7 +37,7 @@ class PagesTest extends TestCase
             '/booking',
             '/search?q=перфоратор',
             '/terms', '/delivery', '/returns', '/contacts', '/b2b',
-            '/favourites', '/cabinet/login',
+            '/favourites', '/cabinet/login', '/blog',
             route('city', $city, false),
             route('branch', [$city, $city->branches->first()], false),
             route('district', [$city, $city->districts->first()], false),
