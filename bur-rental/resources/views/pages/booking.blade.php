@@ -4,7 +4,7 @@
 @section('description', 'Оформлення оренди: склад, дати, філія, доставка й оплата — одним екраном.')
 
 @section('content')
-    <div class="container-bur" x-data="bookingForm({ zones: {{ Js::from($zones->map->only(['slug', 'name', 'price', 'eta'])) }}, deposit: 0, client: {{ Js::from($client ? ['phone' => $client->display_phone, 'name' => $client->name, 'company' => $client->company, 'edrpou' => $client->edrpou, 'email' => $client->email] : null) }} })">
+    <div class="container-bur" x-data="bookingForm({ zones: {{ Js::from($zones->map->only(['slug', 'name', 'price', 'eta'])) }}, deposit: 0, discountPercent: {{ $discountPercent }}, client: {{ Js::from($client ? ['phone' => $client->display_phone, 'name' => $client->name, 'company' => $client->company, 'edrpou' => $client->edrpou, 'email' => $client->email] : null) }} })">
         <x-breadcrumbs :items="['Головна' => route('home'), 'Бронювання' => null]" />
 
         <h1 class="t-h1">Бронювання</h1>
@@ -259,6 +259,10 @@
                             <span class="text-text-2">Оренда</span>
                             <span class="font-mono font-semibold" x-text="$store.booking.total.toLocaleString('uk-UA') + ' ₴'"></span>
                         </div>
+                        <div class="flex justify-between text-success-text" x-show="discountPercent > 0" x-cloak>
+                            <span>Знижка постійного клієнта <span class="font-mono" x-text="'−' + discountPercent + '%'"></span></span>
+                            <span class="font-mono font-semibold" x-text="'−' + discountAmount.toLocaleString('uk-UA') + ' ₴'"></span>
+                        </div>
                         <div class="flex justify-between" x-show="pickup === 'delivery'">
                             <span class="text-text-2">Доставка</span>
                             <span class="font-mono font-semibold" x-text="deliveryPrice.toLocaleString('uk-UA') + ' ₴'"></span>
@@ -272,7 +276,7 @@
                     <div class="mt-3 flex items-baseline justify-between border-t border-border-1 pt-3">
                         <span class="text-sm font-semibold">До сплати зараз</span>
                         <span class="font-mono text-[26px] font-bold"
-                              x-text="($store.booking.total + $store.booking.deposit + (pickup === 'delivery' ? deliveryPrice : 0)).toLocaleString('uk-UA') + ' ₴'"></span>
+                              x-text="payable.toLocaleString('uk-UA') + ' ₴'"></span>
                     </div>
 
                     <x-trust-lines class="mt-4 border-t border-border-1 pt-4" />

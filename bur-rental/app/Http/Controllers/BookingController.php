@@ -8,6 +8,7 @@ use App\Models\DeliveryZone;
 use App\Models\Extra;
 use App\Models\Product;
 use App\Services\Availability;
+use App\Services\Loyalty;
 use App\Services\ManagerAlerts;
 use App\Services\RentalPricing;
 use Illuminate\Http\RedirectResponse;
@@ -20,6 +21,7 @@ class BookingController extends Controller
     public function __construct(
         private readonly RentalPricing $pricing,
         private readonly Availability $availability,
+        private readonly Loyalty $loyalty,
     ) {}
 
     public function create(Request $request): View
@@ -30,6 +32,9 @@ class BookingController extends Controller
             'branches' => $city->branches,
             // Залогінений не набирає свої дані вдруге.
             'client' => auth('client')->user(),
+            // Знижка показується до оформлення: інакше вона не мотивує
+            // повертатися, а просто робить приємний сюрприз у чеку.
+            'discountPercent' => $this->loyalty->percentFor(auth('client')->user()),
             'zones' => $city->deliveryZones,
             // Кошик живе в localStorage, тому сторінка вміє дістати товар
             // за slug'ом і показати актуальну ціну, а не збережену торік.
@@ -69,12 +74,18 @@ class BookingController extends Controller
         $days = $items->max('days');
         $totals = $this->pricing->itemsTotal($items);
 
+        // Знижку рахує сервер і шукає клієнта за телефоном, а не за сесією:
+        // постійний клієнт заслуговує на свої відсотки й тоді, коли забув
+        // увійти в кабінет.
+        $percent = $this->loyalty->percentForPhone($data['phone']);
+        $discount = $this->loyalty->amount($totals['rent'], $percent);
+
         // Перевірка наявності живе всередині транзакції: між додаванням
         // у кошик і натисканням «Забронювати» позицію могли забрати, а два
         // одночасні запити на останній екземпляр мають розійтися.
         $taken = [];
 
-        $booking = DB::transaction(function () use ($data, $items, $extras, $zone, $days, $totals, &$taken) {
+        $booking = DB::transaction(function () use ($data, $items, $extras, $zone, $days, $totals, $percent, $discount, &$taken) {
             $booking = Booking::create([
                 'number' => $this->nextNumber(),
                 // Бронь залогіненого одразу лягає в його кабінет; гостьова
@@ -98,6 +109,8 @@ class BookingController extends Controller
                 'extras_total' => $this->pricing->extrasTotal($extras),
                 'delivery_total' => $this->pricing->delivery($zone, $items, $days),
                 'deposit_total' => $totals['deposit'],
+                'discount_percent' => $percent,
+                'discount_total' => $discount,
                 'comment' => $data['comment'] ?? null,
             ]);
 

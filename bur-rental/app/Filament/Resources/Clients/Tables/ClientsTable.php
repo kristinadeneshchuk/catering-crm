@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Clients\Tables;
 
 use App\Models\Client;
+use App\Services\Loyalty;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
@@ -56,6 +57,16 @@ class ClientsTable
                     ->money('UAH', 1)
                     ->sortable()
                     ->description('без застави'),
+
+                TextColumn::make('discount_percent')
+                    ->label('Знижка')
+                    ->badge()
+                    ->color(fn (Client $r) => $r->discount_percent !== null ? 'warning' : 'gray')
+                    // Ручна знижка позначена окремо: менеджер має бачити, що
+                    // цифра стоїть руками, а не порахувалася за історією.
+                    ->state(fn (Client $r) => app(Loyalty::class)->percentFor($r).'%'
+                        .($r->discount_percent !== null ? ' ручна' : ''))
+                    ->placeholder('—'),
 
                 TextColumn::make('last_rent')
                     ->label('Остання оренда')

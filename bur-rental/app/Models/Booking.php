@@ -54,10 +54,17 @@ class Booking extends Model
         return $this->belongsTo(DeliveryZone::class);
     }
 
-    /** До сплати зараз: оренда + витратники + доставка + застава. */
+    /**
+     * До сплати зараз: оренда + витратники + доставка + застава, мінус знижка.
+     *
+     * `rent_total` лишається повною сумою оренди, а знижка стоїть окремим
+     * рядком — і клієнту видно, скільки він зекономив, і в звітності видно,
+     * скільки ми віддали.
+     */
     public function getPayableAttribute(): int
     {
-        return $this->rent_total + $this->extras_total + $this->delivery_total + $this->deposit_total;
+        return $this->rent_total + $this->extras_total + $this->delivery_total
+            + $this->deposit_total - $this->discount_total;
     }
 
     public function getDaysAttribute(): int

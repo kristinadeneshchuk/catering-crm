@@ -20,6 +20,36 @@
             </div>
         </div>
 
+        {{--
+            Статус постійного клієнта. Показуємо і тим, у кого знижки ще немає:
+            без «лишилось дві оренди» блок був би просто похвалою, а він має
+            давати причину повернутися саме до нас.
+        --}}
+        <div class="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[12px] border p-5
+                    {{ $discountPercent ? 'border-success-border bg-success-bg' : 'border-border-1 bg-surface-0' }}">
+            <div>
+                @if ($discountPercent)
+                    <p class="text-[15px] font-semibold text-success-text">
+                        {{ $loyaltyTitle }} · знижка −{{ $discountPercent }}% на оренду
+                    </p>
+                    <p class="mt-0.5 text-[13px] text-text-2">
+                        Діє автоматично, зверху на тарифну сходинку. Застави й доставки не стосується.
+                    </p>
+                @else
+                    <p class="text-[15px] font-semibold">Постійним клієнтам — знижка на оренду</p>
+                    <p class="mt-0.5 text-[13px] text-text-2">
+                        Завершених оренд: {{ $completedRentals }}.
+                    </p>
+                @endif
+            </div>
+
+            @if ($toNextLevel)
+                <p class="font-mono text-[13px] text-text-2">
+                    ще {{ $toNextLevel }} {{ $toNextLevel === 1 ? 'оренда' : 'оренди' }} до наступного рівня
+                </p>
+            @endif
+        </div>
+
         <x-section title="Активні оренди">
             @if ($active->isEmpty())
                 <div class="rounded-[12px] border border-border-1 bg-surface-0 p-8 text-center">

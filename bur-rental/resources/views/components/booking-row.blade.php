@@ -51,6 +51,13 @@
         @endforeach
     </ul>
 
+    @if ($booking->discount_total)
+        <p class="mt-2 text-[13px] font-semibold text-success-text">
+            Знижка постійного клієнта −{{ $booking->discount_percent }}%:
+            −{{ number_format($booking->discount_total, 0, ',', ' ') }} ₴
+        </p>
+    @endif
+
     <div class="mt-3 flex flex-wrap items-baseline justify-between gap-2 border-t border-border-1 pt-3">
         <span class="text-[13px] text-text-2">
             Оренда й послуги

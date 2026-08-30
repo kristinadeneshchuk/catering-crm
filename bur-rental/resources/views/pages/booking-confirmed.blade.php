@@ -95,6 +95,12 @@
                         <span class="font-mono font-semibold">{{ number_format($booking->extras_total, 0, ',', ' ') }} ₴</span>
                     </div>
                 @endif
+                @if ($booking->discount_total)
+                    <div class="flex justify-between text-success-text">
+                        <span>Знижка постійного клієнта −{{ $booking->discount_percent }}%</span>
+                        <span class="font-mono font-semibold">−{{ number_format($booking->discount_total, 0, ',', ' ') }} ₴</span>
+                    </div>
+                @endif
                 @if ($booking->delivery_total)
                     <div class="flex justify-between">
                         <span class="text-text-2">Доставка</span>

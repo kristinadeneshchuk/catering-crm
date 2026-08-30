@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Booking;
 use App\Models\Client;
+use App\Services\Loyalty;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -18,6 +19,8 @@ use Illuminate\View\View;
  */
 class CabinetController extends Controller
 {
+    public function __construct(private readonly Loyalty $loyalty) {}
+
     public function index(): View
     {
         $client = $this->client();
@@ -32,6 +35,12 @@ class CabinetController extends Controller
             'active' => $bookings->whereIn('status', ['new', 'confirmed', 'issued']),
             'past' => $bookings->whereIn('status', ['closed', 'cancelled']),
             'favourites' => $client->favourites()->with(['brand', 'tiers'])->take(4)->get(),
+            'discountPercent' => $this->loyalty->percentFor($client),
+            'loyaltyTitle' => $this->loyalty->titleFor($client),
+            // Скільки лишилось до наступної сходинки — головне, заради чого
+            // цей блок узагалі є: він має мотивувати повернутися.
+            'toNextLevel' => $this->loyalty->rentalsToNextLevel($client),
+            'completedRentals' => $this->loyalty->completedRentals($client),
         ]);
     }
 

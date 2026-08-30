@@ -3,11 +3,16 @@
  | Багатосторінковий чекаут тут коштував би конверсії — половина трафіку
  | оформлює замовлення з телефона, стоячи на об'єкті.
  */
-export default function bookingForm({ zones = [], deposit = 0, client = null }) {
+export default function bookingForm({ zones = [], deposit = 0, discountPercent = 0, client = null }) {
     return {
         step: 1,
         zones,
         deposit,
+
+        // Відсоток приходить із сервера і тут тільки показується. Порахувати
+        // його в браузері означало б дозволити правити знижку в devtools —
+        // остаточну суму все одно рахує BookingController.
+        discountPercent,
 
         clientType: 'person', // person | company
         pickup: 'self', // self | delivery
@@ -35,6 +40,20 @@ export default function bookingForm({ zones = [], deposit = 0, client = null }) 
         get deliveryPrice() {
             if (this.pickup === 'self') return 0;
             return this.zones.find((z) => z.slug === this.zone)?.price ?? 0;
+        },
+
+        /** Знижка діє тільки на оренду — так само, як на сервері. */
+        get discountAmount() {
+            return Math.floor((this.$store.booking.total * this.discountPercent) / 100);
+        },
+
+        get payable() {
+            return (
+                this.$store.booking.total -
+                this.discountAmount +
+                this.$store.booking.deposit +
+                this.deliveryPrice
+            );
         },
 
         validate(section) {

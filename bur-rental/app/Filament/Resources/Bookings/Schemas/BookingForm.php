@@ -84,6 +84,15 @@ class BookingForm
                 TextInput::make('extras_total')->label('Витратники, ₴')->numeric(),
                 TextInput::make('delivery_total')->label('Доставка, ₴')->numeric(),
                 TextInput::make('deposit_total')->label('Застава, ₴')->numeric(),
+
+                // Відсоток зафіксований на момент бронювання: клієнт його
+                // бачив, і заднім числом він не міняється. Сума перераховується
+                // від нього при прийманні техніки.
+                TextInput::make('discount_percent')->label('Знижка, %')->numeric()
+                    ->minValue(0)->maxValue(config('loyalty.max_percent', 10))
+                    ->helperText('Постійного клієнта. Діє тільки на оренду.'),
+                TextInput::make('discount_total')->label('Знижка, ₴')->numeric()
+                    ->helperText('Перераховується при прийманні.'),
             ]),
 
             Section::make()->schema([

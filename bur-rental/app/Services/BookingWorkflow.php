@@ -20,6 +20,7 @@ class BookingWorkflow
     public function __construct(
         private readonly RentalPricing $pricing,
         private readonly Availability $availability,
+        private readonly Loyalty $loyalty,
     ) {}
 
     public function confirm(Booking $booking): Booking
@@ -60,10 +61,15 @@ class BookingWorkflow
                 $rent += $this->repriceItem($item, $actualDays, $overdueDays);
             }
 
+            // Знижку перераховуємо від фактичної суми, але за відсотком, який
+            // стоїть у броні: клієнт бачив його при оформленні, і те, що він
+            // за цю ж оренду перейшов на наступну сходинку, заднім числом
+            // рахунок не міняє.
             $booking->update([
                 'status' => 'closed',
                 'date_to' => $returned,
                 'rent_total' => $rent,
+                'discount_total' => $this->loyalty->amount($rent, $booking->discount_percent),
             ]);
 
             if ($returned->lt($planned)) {
