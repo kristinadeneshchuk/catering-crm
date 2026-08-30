@@ -76,35 +76,17 @@ class CatalogSeeder extends Seeder
     /** @return Collection<string, Category> */
     private function subcategories($cats)
     {
-        $tree = [
-            'perforatory' => [
-                ['sds-plus', 'SDS-plus', 14],
-                ['sds-max', 'SDS-max', 8],
-                ['vidbiyni', 'Відбійні молотки', 11],
-                ['betonolomy', 'Бетоноломи', 5],
-                ['akumulyatorni-perforatory', 'Акумуляторні', 6],
-            ],
-            'vibroplyty' => [
-                ['vibroplyty-lehki', 'Легкі до 100 кг', 7],
-                ['vibroplyty-reversyvni', 'Реверсивні від 160 кг', 6],
-                ['trambovky', 'Вібротрамбовки', 4],
-                ['hlybynni-vibratory', 'Глибинні вібратори', 2],
-            ],
-            'klimat' => [
-                ['pylososy', 'Будівельні пилососи', 9],
-                ['osushuvachi', 'Осушувачі', 8],
-                ['obihriv', 'Теплові гармати', 7],
-            ],
-        ];
-
         $made = collect();
 
-        foreach ($tree as $parent => $children) {
-            foreach ($children as $i => [$slug, $name, $count]) {
+        // Дерево і тексти лежать у data/subcategories.php: контент каталогу
+        // редагують контент-менеджери, а не програмісти.
+        foreach (require __DIR__.'/data/subcategories.php' as $parent => $children) {
+            foreach ($children as $i => [$slug, $name, $count, $seo]) {
                 $made[$slug] = Category::create([
                     'parent_id' => $cats[$parent]->id,
                     'slug' => $slug, 'name' => $name,
                     'products_count' => $count, 'position' => $i,
+                    'seo_text' => $seo,
                 ]);
             }
         }
