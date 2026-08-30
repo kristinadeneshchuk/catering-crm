@@ -6,8 +6,10 @@ use App\Models\Branch;
 use App\Models\City;
 use App\Models\Product;
 use App\Models\Review;
+use App\Models\User;
 use App\Services\Messaging\LogSms;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Hash;
 
 /**
  * Передстартова перевірка.
@@ -182,12 +184,19 @@ class CheckLaunch extends Command
             'без ключа не працюють сесії й шифрування',
         );
 
-        $weak = in_array(env('ADMIN_PASSWORD'), [null, '', 'password', 'secret', 'admin'], true);
+        /*
+        | Перевіряємо не змінну оточення, а справжній хеш у базі: після
+        | `config:cache` env() повертає null, та й пароль могли поміняти
+        | вже після сидів.
+        */
+        $weak = User::whereIn('role', ['admin', 'manager'])->get()
+            ->contains(fn (User $user) => collect(['password', 'secret', 'admin', '12345678'])
+                ->contains(fn (string $guess) => Hash::check($guess, $user->password)));
 
         $this->check(
             ! $weak,
-            'пароль адмінки змінено',
-            'ADMIN_PASSWORD порожній або словниковий',
+            'пароль адмінки не словниковий',
+            'у когось із персоналу стоїть пароль зі словника — адмінка відкривається перебором',
         );
     }
 
