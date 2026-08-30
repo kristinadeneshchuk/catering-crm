@@ -71,7 +71,7 @@
 
         <x-district-links :city="$city" />
         <x-rent-vs-buy />
-        <x-reviews :reviews="$city->reviews" :title="'Відгуки — '.$city->name" :rating="4.8" />
+        <x-reviews :reviews="$city->reviews" :title="'Відгуки — '.$city->name" />
         <x-faq-list :faqs="$faqs" :title="'Питання про оренду '.$city->name_locative" />
     </div>
 @endsection

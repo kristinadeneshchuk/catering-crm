@@ -42,6 +42,8 @@ class ContentSeeder extends Seeder
                 'author' => $author,
                 'author_note' => $note,
                 'rating' => $rating,
+                // Демонстрація для замовника, не для клієнтів і не для Google.
+                'demo' => true,
                 'body' => $body,
                 'source' => $source,
                 'published_at' => $today->copy()->subDays($daysAgo),

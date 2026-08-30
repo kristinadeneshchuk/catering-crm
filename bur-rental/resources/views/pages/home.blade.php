@@ -129,7 +129,7 @@
             </div>
         </x-section>
 
-        <x-reviews :reviews="$reviews" title="Відгуки з Google" :rating="4.8" />
+        <x-reviews :reviews="$reviews" title="Відгуки з Google" />
 
         {{-- Блок для юросіб: 15% трафіку, але найбільший чек --}}
         <x-section>

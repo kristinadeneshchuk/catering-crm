@@ -1,4 +1,15 @@
-@props(['reviews', 'title' => 'Відгуки', 'rating' => null, 'count' => null, 'googleUrl' => null])
+@props(['reviews', 'title' => 'Відгуки', 'googleUrl' => null])
+
+@php
+    /*
+     | Рейтинг рахується з тих самих відгуків, які видно на сторінці, і не
+     | приймається ззовні. Раніше сюди передавали константу «4.8» — цифру,
+     | за якою не стояло нічого. Так робити не можна навіть у верстці: це
+     | обман клієнта, а разом із мікророзміткою ще й привід для санкцій.
+     */
+    $rating = $reviews->isNotEmpty() ? round($reviews->avg('rating'), 1) : null;
+    $count = $reviews->count();
+@endphp
 
 @if ($reviews->isNotEmpty())
     <x-section :id="'reviews'">

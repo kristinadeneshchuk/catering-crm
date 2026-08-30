@@ -39,7 +39,7 @@ npm run build
 php artisan serve
 ```
 
-Тести: `php artisan test` — **102 тести, усі зелені**. Стиль: `./vendor/bin/pint`.
+Тести: `php artisan test` — **106 тестів, усі зелені**. Стиль: `./vendor/bin/pint`.
 Адмінка: `/admin`, доступи з `.env` (`ADMIN_EMAIL` / `ADMIN_PASSWORD`).
 
 ## 3. Що вже зроблено
@@ -108,6 +108,18 @@ php artisan serve
 скільки ми віддали. Діє тільки на оренду: витратники, доставка й застава не
 дешевшають. Тест `test_client_cannot_ask_for_a_discount_in_the_request`.
 
+**Демонстраційні відгуки на сайт не потрапляють.** Сиди позначають свої
+відгуки `demo = true`, глобальний scope їх ховає. Показати можна лише свідомо
+(`DEMO_REVIEWS=true`) і лише на закритому від індексації майданчику: вигаданий
+відгук — це обман клієнта і привід для ручних санкцій водночас. Рейтинги в
+сидах обнулені: зірка з'являється разом із першим справжнім відгуком і
+рахується по ньому, а не стоїть константою у верстці.
+
+**Перед бойовим запуском — `php artisan check:launch`.** Перевіряє те, що
+коштує дорого і не видно оком: debug, APP_URL, noindex, демо-контакти й
+демо-відгуки, залишений `setup.php`, словниковий пароль адмінки, канали
+сповіщень. Червоне означає «індексацію не вмикати».
+
 **Рейтинг у мікророзмітці — тільки за справжніми відгуками.** Поля
 `products.rating` і `reviews_count` заповнюються руками і в сидах стоять
 демонстраційні. Схема `aggregateRating` віддається лише тоді, коли в товару є
@@ -168,6 +180,7 @@ view-composer у `ViewServiceProvider`.
    в `public_html` разом із вмістом `bur_app/public/`.
 3. Відкрити `https://домен/setup.php?token=<SETUP_TOKEN з .env>` — скрипт
    зробить міграції, сиди, кеші й **видалить сам себе**. Перевірити, що видалив.
+   Далі `php artisan check:launch` — він і скаже, що ще лишилось.
 4. Два крон-рядки. Черга (без неї не підуть Telegram-сповіщення) і планувальник
    (без нього не підуть нагадування про повернення):
    ```
@@ -243,9 +256,9 @@ app/
     Import/               парсер budprokat
   Jobs/                   NotifyManagerInTelegram (черга, 3 спроби)
   Console/Commands/       scrape:budprokat, catalog:import, search:reindex,
-                          reminders:returns
+                          reminders:returns, check:launch
 database/
-  migrations/             13 файлів за доменами
+  migrations/             14 файлів за доменами
   seeders/data/           контент каталогу окремо від коду
 deploy/shared-hosting/    setup.php, index-alt.php
 resources/
@@ -255,7 +268,7 @@ resources/
   js/stores/booking.js    кошик, місто, дати — localStorage
   views/components/       ~20 Blade-компонентів
   views/pages/            екрани
-tests/                    102 тести
+tests/                    106 тестів
 ```
 
 Детальніше — у `README.md`: там розписані дизайн-рішення, ринкові орієнтири цін

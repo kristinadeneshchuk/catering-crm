@@ -69,11 +69,14 @@
 
                 <h1 class="t-h1 mt-1">{{ $product->name }}</h1>
 
-                <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-text-3">
+<div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-text-3">
                     <span>арт. {{ $product->sku }}</span>
-                    <span class="text-star">★</span>
-                    <span class="font-semibold text-text-1">{{ str_replace('.', ',', (string) $product->rating) }}</span>
-                    <a href="#reviews" class="text-text-3 underline">· {{ $product->reviews_count }} відгуків</a>
+                    {{-- Зірка з'являється разом із першим справжнім відгуком. --}}
+                    @if ($product->reviews->isNotEmpty())
+                        <span class="text-star">★</span>
+                        <span class="font-semibold text-text-1">{{ str_replace('.', ',', (string) round($product->reviews->avg('rating'), 1)) }}</span>
+                        <a href="#reviews" class="text-text-3 underline">· {{ $product->reviews->count() }} відгуків</a>
+                    @endif
                 </div>
 
                 {{-- ⭐ Тарифна сходинка --}}
@@ -407,8 +410,7 @@
 
         <x-faq-list :faqs="$product->faqs" :title="'Питання про оренду: '.$product->category->name" />
 
-        <x-reviews :reviews="$product->reviews" title="Відгуки"
-                   :rating="$product->rating" :count="$product->reviews_count" />
+        <x-reviews :reviews="$product->reviews" title="Відгуки" />
 
         <x-section title="Де забрати {{ $city->name_locative }}">
             <div class="grid gap-4 md:grid-cols-3">

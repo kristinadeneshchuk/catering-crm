@@ -129,7 +129,9 @@ class CatalogSeeder extends Seeder
                 'kit' => $row['kit'], 'not_included' => $row['not_included'],
                 'deposit' => $row['deposit'], 'base_price' => $row['base'],
                 'retail_price' => $row['retail'], 'weight_kg' => $row['weight'],
-                'rating' => $row['rating'], 'reviews_count' => $row['reviews'],
+                // Рейтинг не сіємо: він мусить прийти з реальних відгуків, інакше на
+                // сайті стоять вигадані 4.9 з 148 відгуків, яких ніхто не писав.
+                'rating' => 0, 'reviews_count' => 0,
                 'popularity' => $row['popularity'],
                 'seo_text' => $row['seo'] ?? null,
                 'manual_url' => '/files/manuals/'.$row['slug'].'.pdf',

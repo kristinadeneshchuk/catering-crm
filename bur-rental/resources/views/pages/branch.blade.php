@@ -124,9 +124,7 @@
             </aside>
         </div>
 
-        <x-reviews :reviews="$branch->reviews" :title="'Відгуки про філію «'.$branch->name.'»'"
-                   :rating="$branch->rating" :count="$branch->reviews_count"
-                   google-url="https://www.google.com/maps" />
+        <x-reviews :reviews="$branch->reviews" :title="'Відгуки про філію «'.$branch->name.'»'" />
 
         <x-district-links :city="$city" title="Райони, які обслуговує ця філія" />
     </div>

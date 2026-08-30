@@ -165,6 +165,54 @@ class SeoTest extends TestCase
             ->assertSee('rel="manifest"', false);
     }
 
+    public function test_demo_reviews_never_reach_the_site(): void
+    {
+        // Сиди наповнюють базу відгуками для показу замовнику. На сайті їх
+        // бути не може: вигаданий відгук — це обман клієнта і привід для
+        // санкцій пошуковика.
+        $this->assertGreaterThan(0, Review::withoutGlobalScope('real')->where('demo', true)->count());
+        $this->assertSame(0, Review::count());
+
+        $this->get('/')->assertOk()->assertDontSee('Відгуки з Google');
+    }
+
+    public function test_no_invented_rating_is_printed_anywhere(): void
+    {
+        $product = Product::where('slug', 'bosch-gbh-2-26-dre')->firstOrFail();
+        $city = City::where('slug', 'kyiv')->firstOrFail();
+
+        foreach (['/', route('product', $product, false), route('city', $city, false)] as $url) {
+            // «4,8» і «★» на сторінці без жодного відгуку — саме те, за що
+            // прилітає ручна санкція.
+            $this->get($url)->assertOk()->assertDontSee('★', false);
+        }
+    }
+
+    public function test_real_review_brings_the_rating_back(): void
+    {
+        $product = Product::where('slug', 'bosch-gbh-2-26-dre')->firstOrFail();
+
+        Review::create([
+            'reviewable_type' => Product::class,
+            'reviewable_id' => $product->id,
+            'author' => 'Олег',
+            'rating' => 5,
+            'body' => 'Взяв на вихідні, все працює.',
+            'published_at' => now(),
+        ]);
+
+        $this->get(route('product', $product, false))->assertOk()->assertSee('★', false);
+    }
+
+    public function test_launch_check_stops_a_release_with_demo_data(): void
+    {
+        config(['app.url' => 'http://localhost', 'content.demo_reviews' => true]);
+
+        // Команда мусить бути червоною, поки в базі демо-контакти, а в конфізі
+        // ввімкнені вигадані відгуки.
+        $this->artisan('check:launch')->assertFailed();
+    }
+
     public function test_campaign_from_the_first_visit_reaches_the_lead(): void
     {
         // Клієнт прийшов з оголошення на категорію, поблукав і лише потім
