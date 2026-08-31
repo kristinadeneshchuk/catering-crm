@@ -175,6 +175,13 @@ class Payroll extends Page implements HasActions, HasForms
             ->get()
             ->groupBy('employee_id');
 
+        // Маршрути курʼєрів на період — для розшифровки «з чого складається сума»
+        // в тултіпі колонки «Зарплата» (базова + точки понад ліміт + дальні).
+        $routesByEmpDate = \App\Models\DeliveryRoute::whereBetween('date', [$start, $end])
+            ->get()
+            ->groupBy(fn ($r) => $r->employee_id . '|' . \Carbon\Carbon::parse($r->date)->format('Y-m-d'));
+        $courierBaseStops = (int) (\App\Models\Setting::where('key', 'courier_base_stops')->value('value') ?: 12);
+
         // Серії окладів для помісячних
         $monthlyEmps = $employees->filter(fn ($e) => optional($positions[$e->position] ?? null)->payment_type === 'per_month');
         $salaryScopes = $monthlyEmps->map(fn ($e) => 'salary:' . $e->id)->all();
@@ -197,12 +204,18 @@ class Payroll extends Page implements HasActions, HasForms
             // ЗП + Бонус
             $salary = 0; $bonus = 0;
 
+            $breakdown = [];
+
             if ($pos->payment_type === 'per_shift') {
                 $empShifts = $shiftsByEmp->get($emp->id, collect());
                 foreach ($empShifts as $shift) {
                     $split = $this->splitRate($shift, $emp);
                     $salary += $split['base'];
                     $bonus  += $split['bonus'];
+
+                    if ($emp->position === 'courier' && ! $shift->is_planned) {
+                        $breakdown[] = $this->courierDayBreakdown($shift, $emp, $routesByEmpDate, $courierBaseStops);
+                    }
                 }
             } else {
                 // per_month — оклад / monthly_working_days × кількість робочих днів періоду
@@ -247,6 +260,7 @@ class Payroll extends Page implements HasActions, HasForms
                 'compensation'   => round($compensation, 2),
                 'sum'            => round($sum, 2),
                 'balance'        => round((float) $emp->balance, 2),
+                'breakdown'      => array_values(array_filter($breakdown)),
             ];
             $rows[] = $row;
 
@@ -444,5 +458,48 @@ class Payroll extends Page implements HasActions, HasForms
                     ->success()
                     ->send();
             });
+    }
+
+    /**
+     * Рядок розшифровки дня курʼєра для тултіпа «Зарплати»:
+     * «27.08 — 1 000 ₴ (базова 900 + 2 точки понад 12 (+100) + дальня 150)».
+     * Складові рахуємо з маршрутів НА МОМЕНТ ПЕРЕГЛЯДУ; якщо після нарахування
+     * маршрути в ANT перебудували і сума розійшлась — чесно кажемо про це.
+     */
+    protected function courierDayBreakdown(EmployeeShift $shift, Employee $emp, $routesByEmpDate, int $baseStops): string
+    {
+        $date  = Carbon::parse($shift->date);
+        $rate  = (float) $shift->rate;
+        $base  = (float) $emp->base_rate;
+
+        $singleTrip = $shift->is_half
+            || in_array($shift->shift_slot, [EmployeeShift::SLOT_MORNING, EmployeeShift::SLOT_EVENING], true);
+        $trips    = $singleTrip ? 1 : 2;
+        $basePart = $base * $trips;
+
+        $routes = $routesByEmpDate->get($emp->id . '|' . $date->format('Y-m-d'), collect());
+        $extraStops = 0; $distanceFee = 0.0;
+        foreach ($routes as $r) {
+            $extraStops  += max(0, (int) $r->count_comps - $baseStops);
+            $distanceFee += (float) $r->extraDeliveryFee();
+        }
+        $extraPerStop = (float) (\App\Models\Setting::where('key', 'courier_extra_per_stop')->value('value') ?: 50);
+        $pointsFee = $extraStops * $extraPerStop;
+
+        $parts = ['базова ' . number_format($basePart, 0, '.', ' ') . ($trips === 2 ? ' (2 виїзди)' : '')];
+        if ($extraStops > 0) {
+            $parts[] = $extraStops . ' точк. понад ' . $baseStops . ' (+' . number_format($pointsFee, 0, '.', ' ') . ')';
+        }
+        if ($distanceFee > 0) {
+            $parts[] = 'дальня +' . number_format($distanceFee, 0, '.', ' ');
+        }
+
+        $line = $date->format('d.m') . ' — ' . number_format($rate, 0, '.', ' ') . ' ₴ (' . implode(' + ', $parts) . ')';
+
+        if (abs(($basePart + $pointsFee + $distanceFee) - $rate) > 0.01) {
+            $line .= ' ⚠ маршрути змінились після нарахування';
+        }
+
+        return $line;
     }
 }

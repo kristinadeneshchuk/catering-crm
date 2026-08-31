@@ -127,7 +127,17 @@
                         </td>
 
                         <td style="padding:11px 16px;text-align:right;color:#f4f4f5;font-weight:600;">
-                            {{ $row['salary'] > 0 ? number_format($row['salary'], 0, '.', ' ') . ' ₴' : '—' }}
+                            @if(!empty($row['breakdown']))
+                                {{-- Курʼєр: наведи (або тапни на телефоні) — розшифровка по днях:
+                                     базова + точки понад ліміт + дальня доставка. --}}
+                                <span x-data
+                                      x-tooltip="{ content: @js(implode('<br>', $row['breakdown'])), allowHTML: true, theme: $store.theme, maxWidth: 420 }"
+                                      style="cursor:help;border-bottom:1px dotted #52525b;padding-bottom:1px;">
+                                    {{ $row['salary'] > 0 ? number_format($row['salary'], 0, '.', ' ') . ' ₴' : '—' }}
+                                </span>
+                            @else
+                                {{ $row['salary'] > 0 ? number_format($row['salary'], 0, '.', ' ') . ' ₴' : '—' }}
+                            @endif
                         </td>
                         <td style="padding:11px 16px;text-align:right;color:{{ $row['bonus'] > 0 ? '#a78bfa' : '#3f3f46' }};font-weight:{{ $row['bonus'] > 0 ? '600' : '400' }};">
                             {{ $row['bonus'] > 0 ? '+' . number_format($row['bonus'], 0, '.', ' ') . ' ₴' : '—' }}
