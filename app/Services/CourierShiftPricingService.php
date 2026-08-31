@@ -32,6 +32,16 @@ class CourierShiftPricingService
      */
     public function reprice(int $employeeId, string $date, ?string $routeShift = null): bool
     {
+        // 🔒 Історію не переоцінюємо. Маршрути минулих дат зачіпаються повторними
+        // імпортами з ANT, правками пробігу тощо — і кожен такий дотик рухав
+        // employee.balance по вже виплачених змінах: у курʼєрів «нізвідки»
+        // виростали борги (хвости), які менеджер щойно обнулила виплатами.
+        // Вікно у 3 дні лишає час на пізні доплати (пробіг вносять наступного
+        // дня, дальні — день-два), а старіші зміни вважаються звіреними.
+        if (\Carbon\Carbon::parse($date)->lt(now()->subDays(3)->startOfDay())) {
+            return false;
+        }
+
         $employee = Employee::find($employeeId);
         if (! $employee || $employee->position !== 'courier') {
             return false;
