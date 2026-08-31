@@ -67,7 +67,15 @@ class CourierShiftPricingService
         }
 
         $baseRate = (float) $employee->base_rate;
-        $trips    = $shift->is_half ? 1 : 2;
+
+        // Один виїзд — це і is_half (легасі-прапорець), і слоти «Ранок»/«Вечір»
+        // з Табеля (вони пишуться з is_half=false). Раніше тут дивились ЛИШЕ на
+        // is_half, тому будь-який імпорт маршрутів з ANT переоцінював ранкову
+        // або вечірню зміну як 2 виїзди — оклад курʼєра подвоювався (800 → 1600),
+        // і менеджеру доводилось виправляти Табель по кілька разів.
+        $singleTrip = $shift->is_half
+            || in_array($shift->shift_slot, [EmployeeShift::SLOT_MORNING, EmployeeShift::SLOT_EVENING], true);
+        $trips    = $singleTrip ? 1 : 2;
         $basePart = $baseRate * $trips;
         $extras   = self::calcExtras($employeeId, $date, $baseRate);
         $newRate  = $basePart + $extras;
