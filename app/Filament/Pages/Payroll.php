@@ -486,15 +486,20 @@ class Payroll extends Page implements HasActions, HasForms
         $extraPerStop = (float) (\App\Models\Setting::where('key', 'courier_extra_per_stop')->value('value') ?: 50);
         $pointsFee = $extraStops * $extraPerStop;
 
-        $parts = ['базова ' . number_format($basePart, 0, '.', ' ') . ($trips === 2 ? ' (2 виїзди)' : '')];
-        if ($extraStops > 0) {
-            $parts[] = $extraStops . ' точк. понад ' . $baseStops . ' (+' . number_format($pointsFee, 0, '.', ' ') . ')';
+        // Формат — рівняння, щоб складові читались як частини суми, а не як
+        // щось «поверх» неї: «950 ₴ = 800 базова + 150 дальня».
+        $parts = [number_format($basePart, 0, '.', ' ') . ' базова' . ($trips === 2 ? ' (2 виїзди)' : '')];
+        if ($pointsFee > 0) {
+            $parts[] = number_format($pointsFee, 0, '.', ' ') . ' за ' . $extraStops . ' точк. понад ' . $baseStops;
         }
         if ($distanceFee > 0) {
-            $parts[] = 'дальня +' . number_format($distanceFee, 0, '.', ' ');
+            $parts[] = number_format($distanceFee, 0, '.', ' ') . ' дальня';
         }
 
-        $line = $date->format('d.m') . ' — ' . number_format($rate, 0, '.', ' ') . ' ₴ (' . implode(' + ', $parts) . ')';
+        $line = $date->format('d.m') . ' — ' . number_format($rate, 0, '.', ' ') . ' ₴';
+        if (count($parts) > 1) {
+            $line .= ' = ' . implode(' + ', $parts);
+        }
 
         if (abs(($basePart + $pointsFee + $distanceFee) - $rate) > 0.01) {
             $line .= ' ⚠ маршрути змінились після нарахування';
