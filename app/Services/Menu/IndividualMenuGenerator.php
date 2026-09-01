@@ -421,7 +421,12 @@ class IndividualMenuGenerator
             $profile[] = '❗ АЛЕРГІЇ (виключити повністю): ' . trim($client->allergies);
         }
 
-        $excludedIngredients = $client->ingredientExclusions->pluck('name')->filter()->implode(', ');
+        // Виключення беремо ЕФЕКТИВНІ: клієнтські ручні + ті, що прийшли з
+        // бандлів замін, + додані окремо на це замовлення. Раніше в промт
+        // ішли лише клієнтські, тому виключення рівня замовлення модель
+        // не бачила взагалі.
+        $excludedIngredients = $order->effectiveExcludedIngredients()
+            ->pluck('name')->filter()->unique()->implode(', ');
         if ($excludedIngredients !== '') {
             $profile[] = 'ПРОДУКТИ-ВИКЛЮЧЕННЯ: ' . $excludedIngredients;
         }
@@ -435,11 +440,22 @@ class IndividualMenuGenerator
             $profile[] = 'КОМЕНТАР ДЛЯ ВИРОБНИЦТВА: ' . trim($client->production_comment);
         }
 
+        // Цільові Б/Ж/В стоять на ЗАМОВЛЕННІ (не на клієнті) і їх реально
+        // заповнюють — без них модель не розуміє, що раціон білковий.
+        $macros = array_filter([
+            $order->target_protein_g ? 'білки ' . (int) $order->target_protein_g . ' г' : null,
+            $order->target_fats_g    ? 'жири '  . (int) $order->target_fats_g . ' г'    : null,
+            $order->target_carbs_g   ? 'вуглеводи ' . (int) $order->target_carbs_g . ' г' : null,
+        ]);
+        // Без відступу: heredoc нижче зрізає власну індентацію лише з літералів,
+        // а вміст змінної вставляється як є.
+        $macrosLine = $macros ? "\nЦІЛЬОВЕ БЖУ НА ДЕНЬ: " . implode(', ', $macros) : '';
+
         $profileBlock = $profile ? implode("\n\n", $profile) . "\n\n" : '';
         $briefBlock   = trim($brief) !== '' ? "АНКЕТА КЛІЄНТА:\n{$brief}\n\n" : "АНКЕТА КЛІЄНТА: не заповнена — спирайся на правила дієти.\n\n";
 
         return <<<TXT
-        {$profileBlock}{$briefBlock}ЦІЛЬОВА КАЛОРІЙНІСТЬ НА ДЕНЬ: {$order->calories} ккал
+        {$profileBlock}{$briefBlock}ЦІЛЬОВА КАЛОРІЙНІСТЬ НА ДЕНЬ: {$order->calories} ккал{$macrosLine}
         (ваги страв підбере система — тобі треба лише обрати страви)
 
         ПРИЙОМИ ЇЖІ, ЯКІ ТРЕБА ЗАКРИТИ:
