@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Clients\Tables;
 
 use App\Models\Client;
 use App\Services\Loyalty;
+use App\Services\WinBack;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
@@ -93,6 +94,10 @@ class ClientsTable
                 Filter::make('repeat')
                     ->label('Постійні (2+ оренди)')
                     ->query(fn (Builder $q) => $q->has('bookings', '>=', 2)),
+
+                Filter::make('winback')
+                    ->label('Давно не орендували')
+                    ->query(fn (Builder $q) => $q->whereKey(app(WinBack::class)->due()->modelKeys())),
 
                 Filter::make('company')
                     ->label('Юрособи')

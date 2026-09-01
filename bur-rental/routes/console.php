@@ -13,3 +13,12 @@ use Illuminate\Support\Facades\Schedule;
 | * * * * * cd ~/bur_app && php artisan schedule:run >> /dev/null 2>&1
 */
 Schedule::command('reminders:returns')->dailyAt('18:00')->withoutOverlapping();
+
+/*
+| Повернення після паузи — раз на тиждень, у вівторок зранку.
+|
+| Не щодня: черга набирається повільно, а щоденний прогін означав би, що
+| хтось отримає повідомлення в неділю о шостій ранку. Вівторок — день, коли
+| планують роботи на тиждень.
+*/
+Schedule::command('reminders:winback')->weeklyOn(2, '11:00')->withoutOverlapping();

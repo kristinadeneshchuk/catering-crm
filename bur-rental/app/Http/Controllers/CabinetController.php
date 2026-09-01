@@ -66,7 +66,11 @@ class CabinetController extends Controller
             'email' => ['nullable', 'email', 'max:190'],
             'company' => ['nullable', 'string', 'max:190'],
             'edrpou' => ['nullable', 'digits_between:8,10'],
+            'marketing_opt_out' => ['nullable', 'boolean'],
         ]);
+
+        // Чекбокс без відмітки в форму не приходить узагалі.
+        $data['marketing_opt_out'] = $request->boolean('marketing_opt_out');
 
         // Телефон не редагується: він і є логін. Зміна номера — це новий вхід.
         $this->client()->update($data);

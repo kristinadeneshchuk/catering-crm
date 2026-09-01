@@ -36,6 +36,20 @@
             <x-field name="company" label="Компанія" :value="$client->company" placeholder="ТОВ «…», для безготівки" />
             <x-field name="edrpou" label="ЄДРПОУ" :value="$client->edrpou" inputmode="numeric" />
 
+            <div class="border-t border-border-1 pt-4">
+                <label class="flex cursor-pointer items-start gap-3">
+                    <input type="checkbox" name="marketing_opt_out" value="1" @checked($client->marketing_opt_out)
+                           class="mt-0.5 size-4 accent-brand">
+                    <span class="text-sm">
+                        Не надсилати розсилки
+                        <span class="block text-[13px] text-text-3">
+                            Нагадування про повернення техніки надходитимуть однаково — це не реклама,
+                            а частина оренди.
+                        </span>
+                    </span>
+                </label>
+            </div>
+
             <button type="submit"
                     class="h-12 w-full cursor-pointer rounded-[6px] bg-brand text-[15px] font-semibold text-white hover:bg-brand-hover">
                 Зберегти

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Jobs\NotifyManagerInTelegram;
 use App\Models\Booking;
+use App\Models\Client;
 use App\Models\Lead;
 use Illuminate\Support\Collection;
 
@@ -78,6 +79,30 @@ class ManagerAlerts
             $rows."\n\n".
             "Клієнтам нагадування вже пішло.\n".
             url('/admin/bookings')
+        );
+    }
+
+    /**
+     * Звіт про розсилку на повернення.
+     *
+     * Менеджеру це не «до відома»: людина, якій щойно написали, може
+     * передзвонити протягом години, і краще, щоб він знав, з чого розмова.
+     *
+     * @param  Collection<int, Client>  $clients
+     */
+    public function winBackSent(Collection $clients): void
+    {
+        $rows = $clients->take(15)
+            ->map(fn (Client $c) => "• {$c->display_phone} · ".e($c->company ?: $c->name ?: '—'))
+            ->join("\n");
+
+        $more = $clients->count() > 15 ? "\n… і ще ".($clients->count() - 15) : '';
+
+        $this->send(
+            '📣 <b>Нагадали про себе ('.$clients->count()." шт.)</b>\n\n".
+            $rows.$more."\n\n".
+            "Це клієнти, які давно не орендували. Можуть передзвонити — знижка постійного в них уже діє.\n".
+            url('/admin/clients')
         );
     }
 

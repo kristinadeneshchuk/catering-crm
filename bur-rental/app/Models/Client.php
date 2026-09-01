@@ -23,7 +23,11 @@ class Client extends Authenticatable
 
     protected function casts(): array
     {
-        return ['last_login_at' => 'datetime'];
+        return [
+            'last_login_at' => 'datetime',
+            'win_back_sent_at' => 'datetime',
+            'marketing_opt_out' => 'bool',
+        ];
     }
 
     /** Телефон завжди лежить у канонічному вигляді 380XXXXXXXXX. */
