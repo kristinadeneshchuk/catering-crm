@@ -439,7 +439,23 @@
                             <span style="font-weight:900; font-size:15px;">{{ $client['client_label'] }}</span>
                             <span style="background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:4px; font-size:12px;">{{ $client['project'] }}</span>
                             <span style="background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:4px; font-size:12px; font-weight:700;">{{ $client['calories'] }} ккал</span>
+                            @if(!empty($client['diet_label']))
+                                <span style="background:#dc2626; padding:2px 10px; border-radius:4px; font-size:12px; font-weight:900; text-transform:uppercase;">⚕ {{ $client['diet_label'] }}</span>
+                            @endif
                         </div>
+
+                        {{-- Правила лікувальної дієти — над стравами, щоб кухар
+                             бачив їх до того, як почне готувати. --}}
+                        @if(!empty($client['diet_kitchen']) || !empty($client['diet_cooking']))
+                            <div style="background:#fef2f2; border-bottom:2px solid #fca5a5; padding:8px 16px; color:#7f1d1d; font-size:12px; line-height:1.5;">
+                                @if(!empty($client['diet_cooking']))
+                                    <div><strong>Спосіб приготування:</strong> {{ $client['diet_cooking'] }}</div>
+                                @endif
+                                @if(!empty($client['diet_kitchen']))
+                                    <div style="margin-top:3px;"><strong>Правила кухні:</strong> {{ $client['diet_kitchen'] }}</div>
+                                @endif
+                            </div>
+                        @endif
                         {{-- Прийоми їжі --}}
                         <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:0;">
                             @foreach($client['meals'] as $meal)
@@ -460,6 +476,11 @@
                                         <div style="font-weight:900; font-size:13px; color:#052e16;">{{ $meal['dish_name'] }}</div>
                                         <div style="font-size:10px; color:#065f46; margin-top:1px;">Нетто: {{ $meal['total_netto'] }}г / Брутто: {{ $meal['total_brutto'] }}г</div>
                                     </div>
+                                    @if(!empty($meal['cooking_note']))
+                                        <div style="background:#fffbeb; border-bottom:1px solid #fde68a; padding:5px 10px; font-size:11px; color:#78350f; line-height:1.45;">
+                                            <strong>⚕ Готувати так:</strong> {{ $meal['cooking_note'] }}
+                                        </div>
+                                    @endif
                                     <table style="width:100%; border-collapse:collapse; font-size:13px;">
                                         <tbody>
                                             @foreach($meal['components'] as $comp)

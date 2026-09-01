@@ -96,6 +96,8 @@ trait CalculatesOrderPlan
                     'weight'       => $weight,
                     'meal'         => $mealType?->name ?? '-',
                     'dish'         => $dish->name,
+                    // Інструкція під лікувальну дієту, яку записав підбір меню.
+                    'cooking_note' => $item->cooking_note ?: null,
                 ];
             }
         }
@@ -433,6 +435,8 @@ trait CalculatesOrderPlan
                 'weight'       => $weight,
                 'meal'         => $mealType?->name ?? '-',
                 'dish'         => $dish->name,
+                // Інструкція під лікувальну дієту (та сама, що й у гілці вище).
+                'cooking_note' => $pd->cooking_note ?: null,
             ];
         }
 

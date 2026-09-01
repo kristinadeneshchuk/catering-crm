@@ -780,14 +780,22 @@ public function form(Form $form): Form
                         'components'    => $components,
                         'total_netto'   => $totals['netto'],
                         'total_brutto'  => $totals['brutto'],
+                        'cooking_note'  => $item['cooking_note'] ?? null,
                     ];
                 }
+
+                // Лікувальна дієта клієнта — кухня має бачити її правила
+                // над стравами, а не шукати в картці клієнта.
+                $diet = $order->client->diet;
 
                 $planIndividuals[$oid] = [
                     'client_label' => '#' . $order->client->id . ' ' . $order->client->name,
                     'calories'     => (int)($order->calories ?? 0),
                     'project'      => $order->projectData?->name ?? ucfirst($order->project ?? ''),
                     'meals'        => $meals,
+                    'diet_label'   => $diet?->label(),
+                    'diet_kitchen' => $diet?->kitchen_note,
+                    'diet_cooking' => $diet?->cooking_methods,
                 ];
             }
 

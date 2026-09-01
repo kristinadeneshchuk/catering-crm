@@ -213,6 +213,20 @@
         }
 
         .dish-kbju { display: flex; gap: 8px; flex-wrap: wrap; }
+
+        /* Пам'ятка дієти: помітна, але не кричить — це турбота, не попередження. */
+        .diet-note {
+            margin: 12px 16px 0;
+            padding: 12px 14px;
+            background: #fff7ed;
+            border: 1px solid #fdba74;
+            border-left: 4px solid #ea580c;
+            border-radius: 10px;
+            color: #7c2d12;
+        }
+        .diet-note-title { font-size: 13px; font-weight: 800; margin-bottom: 4px; }
+        .diet-note-body  { font-size: 13px; line-height: 1.5; }
+        .diet-note-temp  { font-size: 12px; margin-top: 6px; opacity: .85; }
         .kbju-item {
             display: flex;
             flex-direction: column;
@@ -386,6 +400,18 @@
         <div class="header-tariff">{{ $order->tariff->name }} · {{ $order->calories }} ккал</div>
     @endif
 </div>
+
+{{-- ── Пам'ятка для клієнта на лікувальній дієті ──
+     Текст береться з довідника «Лікувальні дієти» → «Для клієнта». --}}
+@if($client->diet?->reheating_note)
+<div class="diet-note">
+    <div class="diet-note-title">⚕ {{ $client->diet->label() }}</div>
+    <div class="diet-note-body">{{ $client->diet->reheating_note }}</div>
+    @if($client->diet->temperature_note)
+        <div class="diet-note-temp">{{ $client->diet->temperature_note }}</div>
+    @endif
+</div>
+@endif
 
 {{-- ── Прогрес бар ── --}}
 @if($order && $progress['goal'] > 0)

@@ -24,7 +24,7 @@ class ClientMenuController extends Controller
     public function show(string $token, Request $request)
     {
         $order = Order::where('menu_token', $token)
-            ->with(['client.mealTypes', 'client.ingredientExclusions', 'client.dishExclusions', 'client.replacementBundles.items.originalIngredient', 'ingredientExclusions'])
+            ->with(['client.mealTypes', 'client.ingredientExclusions', 'client.dishExclusions', 'client.replacementBundles.items.originalIngredient', 'client.diet', 'ingredientExclusions'])
             ->firstOrFail();
 
         $client = $order->client;
