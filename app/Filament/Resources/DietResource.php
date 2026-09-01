@@ -17,7 +17,8 @@ class DietResource extends Resource
 
     protected static ?string $model = Diet::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-check';
+    // Іконку НЕ задаємо: група «Довідник» має власну, а Filament забороняє
+    // мати іконки і в групи, і в її пунктів — інакше падає весь /admin.
     protected static ?string $navigationGroup = 'Довідник';
     protected static ?string $navigationLabel = 'Лікувальні дієти';
     protected static ?string $modelLabel = 'Дієта';
