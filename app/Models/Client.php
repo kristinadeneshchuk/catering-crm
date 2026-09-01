@@ -46,6 +46,7 @@ class Client extends Authenticatable
         'delivery_comment',
         'production_comment',
         'menu_brief',
+        'diet_id',
         'balance',
         'has_cutlery',
         'water_option',
@@ -95,6 +96,12 @@ class Client extends Authenticatable
     public function transactions(): HasManyThrough
     {
         return $this->hasManyThrough(Transaction::class, Order::class);
+    }
+
+    /** Лікувальний стіл клієнта (довідник «Лікувальні дієти»). */
+    public function diet()
+    {
+        return $this->belongsTo(\App\Models\Diet::class);
     }
 
     public function ingredientExclusions(): BelongsToMany

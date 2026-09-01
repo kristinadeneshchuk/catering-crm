@@ -26,6 +26,7 @@ class OrderDayDish extends Model
         'meal_type_id',
         'dish_id',
         'weight_grams',
+        'cooking_note',
     ];
 
     protected $casts = [

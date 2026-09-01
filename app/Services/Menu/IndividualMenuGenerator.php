@@ -63,11 +63,15 @@ class IndividualMenuGenerator
             ]);
         }
 
+        $client->loadMissing(['diet', 'ingredientExclusions', 'dishExclusions']);
+
         $brief = trim((string) $client->menu_brief);
 
-        if ($brief === '') {
+        // Бриф лишається головним джерелом, але клієнту з лікувальною дієтою
+        // меню можна зібрати і без нього — правила столу вже задають рамки.
+        if ($brief === '' && ! $client->diet) {
             throw ValidationException::withMessages([
-                'brief' => "У клієнта «{$client->name}» не заповнений бриф. Картка клієнта → «Бриф для індивідуального меню».",
+                'brief' => "У клієнта «{$client->name}» не заповнений бриф і не обрана дієта. Картка клієнта → «Бриф для індивідуального меню» або «Лікувальна дієта».",
             ]);
         }
 
@@ -87,7 +91,7 @@ class IndividualMenuGenerator
             ]);
         }
 
-        $picked = $this->ask($brief, $order, $mealTypes, $dishes, $this->kitchenIngredientIds($date));
+        $picked = $this->ask($brief, $order, $client, $mealTypes, $dishes, $this->kitchenIngredientIds($date));
 
         return $this->store($order, $date, $mealTypes, $dishes, $picked);
     }
@@ -276,7 +280,7 @@ class IndividualMenuGenerator
      *
      * @return array<int, int>
      */
-    private function ask(string $brief, Order $order, $mealTypes, $dishes, array $kitchenIngredientIds): array
+    private function ask(string $brief, Order $order, \App\Models\Client $client, $mealTypes, $dishes, array $kitchenIngredientIds): array
     {
         $key = (string) config('services.openai.key');
 
@@ -297,7 +301,7 @@ class IndividualMenuGenerator
                 // іншому. Без параметра працюють і старі, і нові.
                 'messages'        => [
                     ['role' => 'system', 'content' => $this->systemPrompt()],
-                    ['role' => 'user',   'content' => $this->userPrompt($brief, $order, $mealTypes, $dishes, $kitchenIngredientIds)],
+                    ['role' => 'user',   'content' => $this->userPrompt($brief, $order, $client, $mealTypes, $dishes, $kitchenIngredientIds)],
                 ],
             ]);
 
@@ -323,7 +327,10 @@ class IndividualMenuGenerator
             $dishId     = (int) ($row['dish_id'] ?? 0);
 
             if ($mealTypeId && $dishId) {
-                $picked[$mealTypeId] = $dishId;
+                $picked[$mealTypeId] = [
+                    'dish_id'      => $dishId,
+                    'cooking_note' => trim((string) ($row['cooking_note'] ?? '')) ?: null,
+                ];
             }
         }
 
@@ -341,7 +348,12 @@ class IndividualMenuGenerator
 
         Порядок пріоритетів — саме такий:
 
-        1. АНКЕТА. Це головне. Категорично не пропонуй продуктів і страв, які
+        0. ЛІКУВАЛЬНА ДІЄТА, якщо вона вказана. Це медичне обмеження, і воно
+           важливіше за все інше, включно з побажаннями з анкети. Заборонений
+           дієтою продукт не можна пропонувати, навіть якщо клієнт написав, що
+           його любить. Дивись на СКЛАД страви, а не лише на назву. Те саме
+           стосується алергій і продуктів-виключень.
+        1. АНКЕТА. Це головне серед побажань. Категорично не пропонуй продуктів і страв, які
            клієнт не їсть або не любить — дивись на інгредієнти, а не лише на
            назву страви. І навпаки: активно бери те, що він назвав улюбленим.
            Якщо людина пише «люблю курку і рибу» — саме вони мають бути в меню.
@@ -362,12 +374,18 @@ class IndividualMenuGenerator
         - Рівно одна страва на кожен запитаний прийом їжі.
         - Не рахуй ваги, калорії й БЖУ. Це зробить система.
 
+        ЯКЩО В КЛІЄНТА Є ЛІКУВАЛЬНА ДІЄТА — для кожної обраної страви додай поле
+        "cooking_note": коротка інструкція кухні українською, як приготувати саме
+        цю страву під цю дієту (напр. «на пару, без скоринки; картоплю відварити,
+        не смажити»). Пиши тільки те, що випливає з правил дієти, нічого не
+        вигадуй. Якщо дієти немає — поле не додавай.
+
         Відповідай СУВОРО у форматі JSON:
-        {"meals":[{"meal_type_id":1,"dish_id":123,"reason":"коротко чому"}]}
+        {"meals":[{"meal_type_id":1,"dish_id":123,"reason":"коротко чому","cooking_note":"..."}]}
         TXT;
     }
 
-    private function userPrompt(string $brief, Order $order, $mealTypes, $dishes, array $kitchenIngredientIds): string
+    private function userPrompt(string $brief, Order $order, \App\Models\Client $client, $mealTypes, $dishes, array $kitchenIngredientIds): string
     {
         $mealsList = $mealTypes
             ->map(fn (MealType $m) => "- id={$m->id}: {$m->name}")
@@ -390,11 +408,38 @@ class IndividualMenuGenerator
             })
             ->implode("\n");
 
-        return <<<TXT
-        АНКЕТА КЛІЄНТА:
-        {$brief}
+        // Профіль клієнта: дієта, алергії, виключення, коментар виробництва.
+        // Раніше в промт ішов лише бриф — через це модель не знала ні про
+        // лікувальний стіл, ні про алергії, які менеджер вніс окремими полями.
+        $profile = [];
 
-        ЦІЛЬОВА КАЛОРІЙНІСТЬ НА ДЕНЬ: {$order->calories} ккал
+        if ($client->diet) {
+            $profile[] = "⚠ У КЛІЄНТА ЛІКУВАЛЬНА ДІЄТА. Її заборони — НАЙВИЩИЙ пріоритет,\nвищий за побажання з анкети.\n" . $client->diet->promptRules();
+        }
+
+        if (trim((string) $client->allergies) !== '') {
+            $profile[] = '❗ АЛЕРГІЇ (виключити повністю): ' . trim($client->allergies);
+        }
+
+        $excludedIngredients = $client->ingredientExclusions->pluck('name')->filter()->implode(', ');
+        if ($excludedIngredients !== '') {
+            $profile[] = 'ПРОДУКТИ-ВИКЛЮЧЕННЯ: ' . $excludedIngredients;
+        }
+
+        $excludedDishes = $client->dishExclusions->pluck('name')->filter()->implode(', ');
+        if ($excludedDishes !== '') {
+            $profile[] = 'СТРАВИ-ВИКЛЮЧЕННЯ: ' . $excludedDishes;
+        }
+
+        if (trim((string) $client->production_comment) !== '') {
+            $profile[] = 'КОМЕНТАР ДЛЯ ВИРОБНИЦТВА: ' . trim($client->production_comment);
+        }
+
+        $profileBlock = $profile ? implode("\n\n", $profile) . "\n\n" : '';
+        $briefBlock   = trim($brief) !== '' ? "АНКЕТА КЛІЄНТА:\n{$brief}\n\n" : "АНКЕТА КЛІЄНТА: не заповнена — спирайся на правила дієти.\n\n";
+
+        return <<<TXT
+        {$profileBlock}{$briefBlock}ЦІЛЬОВА КАЛОРІЙНІСТЬ НА ДЕНЬ: {$order->calories} ккал
         (ваги страв підбере система — тобі треба лише обрати страви)
 
         ПРИЙОМИ ЇЖІ, ЯКІ ТРЕБА ЗАКРИТИ:
@@ -420,7 +465,9 @@ class IndividualMenuGenerator
 
         DB::transaction(function () use ($order, $date, $mealTypes, $picked, $byId, &$meals, &$skipped) {
             foreach ($mealTypes as $mealType) {
-                $dishId = $picked[$mealType->id] ?? null;
+                $choice      = $picked[$mealType->id] ?? null;
+                $dishId      = $choice['dish_id'] ?? null;
+                $cookingNote = $choice['cooking_note'] ?? null;
 
                 if (! $dishId || ! $byId->has($dishId)) {
                     $skipped[] = $mealType->name;
@@ -444,6 +491,8 @@ class IndividualMenuGenerator
                     'dish_id'      => $dishId,
                     // weight_grams лишаємо порожнім — його рахує CRM під калораж.
                     'weight_grams' => null,
+                    // Інструкція під лікувальну дієту — її бачить кухня в Плані виробництва.
+                    'cooking_note' => $cookingNote,
                 ]);
 
                 $meals[] = $mealType->name.': '.$byId[$dishId]['name'];

@@ -107,6 +107,21 @@ class ClientResource extends Resource
                 Section::make('Налаштування раціону')
                     ->description('Введіть калораж, і система автоматично підбере кількість страв.')
                     ->schema([
+                        // Лікувальний стіл. Його правила читає генератор індивідуального
+                        // меню і кухня в Плані виробництва.
+                        Forms\Components\Select::make('diet_id')
+                            ->label('Лікувальна дієта')
+                            ->relationship(
+                                'diet',
+                                'name',
+                                fn ($query) => $query->where('is_active', true)->orderBy('sort_order')
+                            )
+                            ->getOptionLabelFromRecordUsing(fn ($record) => $record->label())
+                            ->searchable()
+                            ->preload()
+                            ->placeholder('Без лікувальної дієти')
+                            ->helperText('Якщо обрано — підбір меню враховує заборони цієї дієти, а кухня отримує інструкцію приготування.'),
+
                         TextInput::make('target_kcal')
                             ->label('Цільові калорії')
                             ->numeric()

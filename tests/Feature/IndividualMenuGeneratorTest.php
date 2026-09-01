@@ -162,6 +162,7 @@ class IndividualMenuGeneratorTest extends TestCase
             $t->unsignedBigInteger('meal_type_id');
             $t->unsignedBigInteger('dish_id')->nullable();
             $t->integer('weight_grams')->nullable();
+            $t->text('cooking_note')->nullable();
             $t->timestamps();
         });
     }
