@@ -447,7 +447,7 @@
                         {{-- Правила лікувальної дієти — над стравами, щоб кухар
                              бачив їх до того, як почне готувати. --}}
                         @if(!empty($client['diet_kitchen']) || !empty($client['diet_cooking']))
-                            <div style="background:#fef2f2; border-bottom:2px solid #fca5a5; padding:8px 16px; color:#7f1d1d; font-size:12px; line-height:1.5;">
+                            <div style="background:#fef2f2; border-bottom:2px solid #fca5a5; padding:10px 16px; color:#7f1d1d; font-size:14px; line-height:1.55;">
                                 @if(!empty($client['diet_cooking']))
                                     <div><strong>Спосіб приготування:</strong> {{ $client['diet_cooking'] }}</div>
                                 @endif
@@ -476,11 +476,6 @@
                                         <div style="font-weight:900; font-size:13px; color:#052e16;">{{ $meal['dish_name'] }}</div>
                                         <div style="font-size:10px; color:#065f46; margin-top:1px;">Нетто: {{ $meal['total_netto'] }}г / Брутто: {{ $meal['total_brutto'] }}г</div>
                                     </div>
-                                    @if(!empty($meal['cooking_note']))
-                                        <div style="background:#fffbeb; border-bottom:1px solid #fde68a; padding:5px 10px; font-size:11px; color:#78350f; line-height:1.45;">
-                                            <strong>⚕ Готувати так:</strong> {{ $meal['cooking_note'] }}
-                                        </div>
-                                    @endif
                                     <table style="width:100%; border-collapse:collapse; font-size:13px;">
                                         <tbody>
                                             @foreach($meal['components'] as $comp)
