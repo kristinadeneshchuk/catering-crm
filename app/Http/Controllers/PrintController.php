@@ -355,6 +355,7 @@ class PrintController extends Controller
                 'replacements.replacementProduct',
                 'replacements.replacementDish',
                 'orderDays' => fn($q) => $q->where('date', $targetDate),
+                'personalDishes' => fn($q) => $q->where('date', $targetDate),
             ])
             ->get();
 
@@ -371,11 +372,18 @@ class PrintController extends Controller
         $stickers = [];
 
         foreach ($orders as $order) {
-            // Індивідуальні меню складаються окремо і в цикл-меню не входять.
-            // Без цього вони все одно потрапляли в стикери: effectiveMenuPlan()
-            // підставляє MenuPlan::default(), і кухня отримувала наклейки із
-            // замінами до страв, яких у цього клієнта взагалі немає.
-            if ($order->menu_type === 'individual') continue;
+            // Індивідуальне меню складається окремо і в цикл-меню не входить —
+            // інакше кухня отримає наклейки до страв, яких у клієнта немає.
+            //
+            // АЛЕ пропускати за самим прапорцем menu_type не можна: частина
+            // «індивідуальних» — це клієнти зі своїм КБЖУ, які їдять звичайне
+            // меню, і персональний набір страв їм не складають. Для них стікери
+            // не друкувались зовсім, тому кухня не бачила їхніх виключень і
+            // робила заміни навмання. Орієнтуємось на факт: є персональні
+            // страви на цю дату — пропускаємо, немає — друкуємо як звичайним.
+            if ($order->menu_type === 'individual' && $order->personalDishes->isNotEmpty()) {
+                continue;
+            }
 
             $menu = $menusByPlan[$order->effectiveMenuPlan()?->id]['menu'] ?? null;
             if (!$menu) continue;
