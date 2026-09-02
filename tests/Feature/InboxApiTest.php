@@ -465,4 +465,60 @@ class InboxApiTest extends TestCase
             ->assertJsonPath('data.0.total', 2000)
             ->assertJsonPath('data.0.payment_status', 'unpaid');
     }
+
+    /**
+     * Inbox бере вікно доставки з історії замовлень. Поки цих полів не було,
+     * він підставляв «Ранкова» наосліп — і вечірні клієнти отримували
+     * замовлення на ранок.
+     */
+    public function test_the_order_history_carries_the_delivery_window_days_and_address(): void
+    {
+        $ids      = $this->seedCatalog(pricePerDay: 500);
+        $clientId = $this->makeClient([
+            'address'           => 'вул. Хрещатик, 1',
+            'address_entrance'  => '2',
+            'address_apartment' => '15',
+            'address_floor'     => '4',
+            'delivery_comment'  => 'Залишити на ресепшені',
+        ]);
+
+        $this->postJson('/api/inbox/v1/orders', [
+            'project_id'      => $ids['project_id'],
+            'client_id'       => $clientId,
+            'tariff_id'       => $ids['tariff_id'],
+            'calories'        => 1600,
+            'days'            => 2,
+            'start_date'      => '2026-09-04',
+            'delivery_window' => 'evening',
+        ], $this->authHeaders())->assertStatus(201);
+
+        $this->getJson("/api/inbox/v1/clients/{$clientId}/orders", $this->authHeaders())
+            ->assertOk()
+            ->assertJsonPath('data.0.delivery_window', 'evening')
+            ->assertJsonPath('data.0.delivery_days', ['2026-09-04', '2026-09-05'])
+            ->assertJsonPath('data.0.address.address', 'вул. Хрещатик, 1')
+            ->assertJsonPath('data.0.address.apartment', '15')
+            ->assertJsonPath('data.0.address.handoff', 'Залишити на ресепшені')
+            ->assertJsonPath('data.0.address.intercom', null);
+    }
+
+    /** Без вікна замовлення лишається ранковим — це поведінка за замовчуванням. */
+    public function test_an_order_without_a_window_reads_back_as_morning(): void
+    {
+        $ids      = $this->seedCatalog(pricePerDay: 500);
+        $clientId = $this->makeClient();
+
+        $this->postJson('/api/inbox/v1/orders', [
+            'project_id' => $ids['project_id'],
+            'client_id'  => $clientId,
+            'tariff_id'  => $ids['tariff_id'],
+            'calories'   => 1600,
+            'days'       => 1,
+            'start_date' => '2026-09-04',
+        ], $this->authHeaders())->assertStatus(201);
+
+        $this->getJson("/api/inbox/v1/clients/{$clientId}/orders", $this->authHeaders())
+            ->assertOk()
+            ->assertJsonPath('data.0.delivery_window', 'morning');
+    }
 }

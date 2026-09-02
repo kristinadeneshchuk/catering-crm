@@ -159,7 +159,12 @@ class ClientController extends Controller
     public function orders(Client $client): JsonResponse
     {
         $orders = $client->orders()
-            ->with('tariff:id,name')
+            ->with([
+                'tariff:id,name',
+                // Дні потрібні для delivery_days і адреси: адресу менеджер може
+                // перевизначити на конкретний день, і саме вона — актуальна.
+                'orderDays:id,order_id,date,address,address_entrance,address_apartment,address_floor,delivery_comment',
+            ])
             ->orderByDesc('start_date')
             ->limit(50)
             ->get()
@@ -177,6 +182,18 @@ class ClientController extends Controller
                 'subtotal'       => (float) $o->total_price,
                 'discount'       => (float) $o->discount_amount,
                 'total'          => (float) ($o->final_price ?? $o->total_price),
+
+                // Час доставки. Раніше цих полів не було, і Inbox не мав з чого
+                // взяти вікно — підставляв «Ранкова» наосліп.
+                'delivery_window' => \App\Services\ScheduleService::isEvening($o->schedule_type) ? 'evening' : 'morning',
+                'delivery_time'   => $o->delivery_time,
+                'delivery_days'   => $o->orderDays
+                    ->sortBy('date')
+                    ->map(fn ($d) => optional($d->date)->toDateString() ?? (string) $d->date)
+                    ->values()
+                    ->all(),
+
+                'address' => $this->orderAddress($o, $client),
             ]);
 
         return response()->json([
@@ -184,6 +201,38 @@ class ClientController extends Controller
             'client_balance' => (float) $client->balance,
             'data'           => $orders,
         ]);
+    }
+
+    /**
+     * Адреса доставки замовлення для Inbox.
+     *
+     * Пріоритет: перевизначення на конкретний день (менеджер міг змінити
+     * адресу посеред замовлення) → адреса з картки клієнта.
+     *
+     * intercom у CRM окремим полем не існує: домофон менеджери пишуть у
+     * коментарі. Тому повертаємо null, а сам коментар віддаємо в handoff.
+     *
+     * @return array<string, ?string>
+     */
+    protected function orderAddress(Order $order, Client $client): array
+    {
+        $day = $order->orderDays
+            ->filter(fn ($d) => filled($d->address))
+            ->sortByDesc('date')
+            ->first();
+
+        $pick = fn (string $field) => $day && filled($day->address)
+            ? $day->{$field}
+            : $client->{$field};
+
+        return [
+            'address'   => $pick('address'),
+            'entrance'  => $pick('address_entrance'),
+            'apartment' => $pick('address_apartment'),
+            'floor'     => $pick('address_floor'),
+            'intercom'  => null,
+            'handoff'   => $pick('delivery_comment'),
+        ];
     }
 
     // --- внутрішнє ---------------------------------------------------------
