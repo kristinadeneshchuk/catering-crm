@@ -230,13 +230,24 @@ class Client extends Authenticatable
         }
 
         // Прохід 2 — залишок гасить решту, від старих до нових.
+        //
+        // Щойно грошей не вистачило на чергове замовлення, зупиняємось: усі
+        // наступні теж неоплачені. Раніше цикл їх перебирав далі й гасив те,
+        // на що вистачало, — дешевше замовлення «перестрибувало» дорожче.
+        // Через це клієнт із боргом бачив «оплачено» на щойно створеному
+        // замовленні, а неоплаченим лишалось старе.
+        $exhausted = false;
+
         foreach ($pending as $row) {
-            if ($pool + self::MONEY_EPSILON >= $row['need']) {
+            if (! $exhausted && $pool + self::MONEY_EPSILON >= $row['need']) {
                 $this->setOrderPaid($row['order'], true);
                 $pool -= $row['need'];
-            } else {
-                $this->setOrderPaid($row['order'], false);
+
+                continue;
             }
+
+            $exhausted = true;
+            $this->setOrderPaid($row['order'], false);
         }
     }
 

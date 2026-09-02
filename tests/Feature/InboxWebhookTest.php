@@ -231,4 +231,37 @@ class InboxWebhookTest extends TestCase
 
         $this->assertSame('telegram_inbox', DB::table('orders')->find($response->json('order.id'))->source);
     }
+
+    /**
+     * Клієнт із боргом: грошей вистачає на старе замовлення, але не на всі.
+     * Новіше замовлення не має ставати «оплаченим» лише тому, що воно дешевше —
+     * саме так у проді свіже замовлення показувалось оплаченим при мінусі на
+     * балансі.
+     */
+    public function test_a_cheaper_newer_order_does_not_jump_the_queue(): void
+    {
+        Queue::fake();
+
+        $clientId = $this->makeClient();
+
+        // Гроші внесені на перше замовлення з надлишком — надлишок іде в котел.
+        $first  = $this->makeInboxOrder($clientId, ['final_price' => 1000, 'start_date' => '2026-09-01']);
+        $second = $this->makeInboxOrder($clientId, ['final_price' => 5000, 'start_date' => '2026-09-05']);
+        $third  = $this->makeInboxOrder($clientId, ['final_price' => 2000, 'start_date' => '2026-09-10']);
+
+        Transaction::create([
+            'type' => 'income', 'category' => 'Оплата', 'amount' => 3500,
+            'date' => now(), 'order_id' => $first->id,
+        ]);
+
+        Client::find($clientId)->recalculateOrderPaymentStatus();
+
+        // 1000 закриває перше, лишається 2500 — на друге (5000) не вистачає.
+        $this->assertTrue((bool) $first->fresh()->is_paid, 'Перше оплачене своїми грошима');
+        $this->assertFalse((bool) $second->fresh()->is_paid, 'На друге грошей не вистачило');
+        $this->assertFalse(
+            (bool) $third->fresh()->is_paid,
+            'Третє дешевше за друге, але черга вже вичерпана — воно теж неоплачене',
+        );
+    }
 }
