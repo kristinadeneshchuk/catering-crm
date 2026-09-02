@@ -213,10 +213,20 @@ class BudprokatParser
         }
 
         if (str_starts_with($href, 'http')) {
-            return str_contains($href, parse_url($baseUrl, PHP_URL_HOST)) ? $href : null;
+            // Чужі домени не наша справа: збираємо тільки той сайт, який обходимо.
+            return parse_url($href, PHP_URL_HOST) === parse_url($baseUrl, PHP_URL_HOST) ? $href : null;
         }
 
-        return rtrim('https://'.parse_url($baseUrl, PHP_URL_HOST), '/').'/'.ltrim($href, '/');
+        /*
+        | Схему й порт беремо з бази, а не приліплюємо «https://» константою:
+        | інакше обхід тестового дзеркала на http або на нестандартному порту
+        | мовчки перетворюється на звернення до чужої адреси.
+        */
+        $scheme = parse_url($baseUrl, PHP_URL_SCHEME) ?: 'https';
+        $host = parse_url($baseUrl, PHP_URL_HOST);
+        $port = parse_url($baseUrl, PHP_URL_PORT);
+
+        return $scheme.'://'.$host.($port ? ':'.$port : '').'/'.ltrim($href, '/');
     }
 
     private function clean(string $text): string

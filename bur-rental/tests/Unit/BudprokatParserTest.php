@@ -84,4 +84,23 @@ class BudprokatParserTest extends TestCase
             'https://budprokat.kiev.ua/ua/perforatory/makita-hm1203/',
         ], $links);
     }
+
+    public function test_links_keep_the_scheme_and_port_of_the_base(): void
+    {
+        // Дзеркало на http і нестандартному порту — звичайна ситуація при
+        // налагодженні. Приліплений «https://» мовчки перетворював обхід на
+        // звернення до зовсім іншої адреси.
+        $html = '<div class="product"><a href="/ua/perforatory/gbh/">GBH</a></div>';
+
+        $links = $this->parser->productLinks($html, 'http://127.0.0.1:8099/ua/');
+
+        $this->assertSame(['http://127.0.0.1:8099/ua/perforatory/gbh/'], $links);
+    }
+
+    public function test_links_to_other_domains_are_dropped(): void
+    {
+        $html = '<div class="product"><a href="https://rozetka.com.ua/ua/perforatory/gbh/">GBH</a></div>';
+
+        $this->assertSame([], $this->parser->productLinks($html, 'https://budprokat.kiev.ua/ua/'));
+    }
 }
