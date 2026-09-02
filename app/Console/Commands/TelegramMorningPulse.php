@@ -11,7 +11,7 @@ use Illuminate\Console\Command;
 
 class TelegramMorningPulse extends Command
 {
-    protected $signature = 'telegram:morning-pulse';
+    protected $signature = 'telegram:morning-pulse {--dry : Показати повідомлення в консолі, нічого не відправляючи}';
     protected $description = 'Відправити операційний пульс в Telegram о 11:00';
 
     public function handle(TelegramService $telegram): void
@@ -22,6 +22,11 @@ class TelegramMorningPulse extends Command
         // Порції
         $portionsToday    = OrderDay::whereDate('date', $today)->count();
         $portionsTomorrow = OrderDay::whereDate('date', $tomorrow)->count();
+
+        // Розбивка по брендах: у дужках — скільки з них індивідуальних.
+        $brandNames    = \App\Models\Project::pluck('name', 'slug')->all();
+        $brandsToday    = $this->portionsByBrand($today);
+        $brandsTomorrow = $this->portionsByBrand($tomorrow);
 
         // Підписки що закінчуються завтра
         $expiringOrders = Order::whereDate('end_date', $tomorrow)
@@ -74,7 +79,13 @@ class TelegramMorningPulse extends Command
 
         $lines[] = "📦 <b>Порцій:</b>";
         $lines[] = "  Сьогодні: <b>{$portionsToday}</b>";
+        foreach ($this->brandLines($brandsToday, $brandNames) as $line) {
+            $lines[] = $line;
+        }
         $lines[] = "  Завтра: <b>{$portionsTomorrow}</b>";
+        foreach ($this->brandLines($brandsTomorrow, $brandNames) as $line) {
+            $lines[] = $line;
+        }
         $lines[] = "";
 
         // Підписки що закінчуються
@@ -103,7 +114,8 @@ class TelegramMorningPulse extends Command
         $lines[] = "⏸ <b>На паузі > 7 днів:</b> " . $longPausedOrders->count();
         if ($longPausedOrders->isNotEmpty()) {
             foreach ($longPausedOrders->take(5) as $order) {
-                $days = now()->diffInDays($order->updated_at);
+                // Carbon 3 віддає знакове число з дробом — звідси «-35.69 дн.».
+                $days = (int) round(abs(now()->diffInDays($order->updated_at)));
                 $name = $order->client?->name ?? '—';
                 $lines[] = "  • {$name} ({$days} дн.)";
             }
@@ -115,8 +127,53 @@ class TelegramMorningPulse extends Command
         }
 
         $message = implode("\n", $lines);
+
+        if ($this->option('dry')) {
+            $this->line(strip_tags($message));
+            $this->info('Сухий прогін — нічого не відправлено.');
+
+            return;
+        }
+
         $telegram->sendToOwnerAndManager($message);
 
         $this->info('Morning pulse sent.');
+    }
+
+    /**
+     * Скільки порцій на дату по кожному бренду і скільки з них індивідуальних.
+     *
+     * @return \Illuminate\Support\Collection<int, object{project: ?string, total: int, individual: int}>
+     */
+    protected function portionsByBrand(Carbon $date)
+    {
+        return OrderDay::query()
+            ->join('orders', 'orders.id', '=', 'order_days.order_id')
+            ->whereDate('order_days.date', $date)
+            ->groupBy('orders.project')
+            ->orderByDesc('total')
+            ->selectRaw('orders.project as project')
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw("SUM(CASE WHEN orders.menu_type = 'individual' THEN 1 ELSE 0 END) as individual")
+            ->get();
+    }
+
+    /**
+     * Рядки розбивки. Бренд без індивідуальних дужок не отримує — щоб
+     * не засмічувати зведення нулями.
+     *
+     * @return array<int, string>
+     */
+    protected function brandLines($brands, array $names): array
+    {
+        $out = [];
+
+        foreach ($brands as $b) {
+            $label = $names[$b->project] ?? ($b->project ?: '—');
+            $ind   = (int) $b->individual;
+            $out[] = "    • {$label}: {$b->total}" . ($ind > 0 ? " ({$ind} інд.)" : '');
+        }
+
+        return $out;
     }
 }
