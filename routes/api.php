@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Inbox\V1\InvoiceController;
 use App\Http\Controllers\Api\Inbox\V1\OrderController;
 use App\Http\Controllers\Api\Inbox\V1\ProjectController;
 use App\Http\Controllers\Api\Inbox\V1\QuoteController;
+use App\Http\Controllers\Api\Lunch\LunchApiController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -36,4 +37,25 @@ Route::prefix('inbox/v1')
 
         Route::post('orders', [OrderController::class, 'store']);
         Route::post('orders/{order}/invoice', [InvoiceController::class, 'store']);
+    });
+
+/*
+|--------------------------------------------------------------------------
+| Lunch API
+|--------------------------------------------------------------------------
+|
+| Міст до Lunch Hub — сервісу корпоративних обідів. Він тримає власні техкартки,
+| але рахує їх з наших закупівельних цін, тож тягне звідси каталог страв і
+| довідник інгредієнтів. Назад віддає зведення «скільки чого готувати».
+|
+| Тільки читання; зведення лягає у файл, не в базу.
+|
+*/
+
+Route::prefix('lunch')
+    ->middleware('lunch.token')
+    ->group(function () {
+        Route::get('dishes', [LunchApiController::class, 'dishes']);
+        Route::get('ingredients', [LunchApiController::class, 'ingredients']);
+        Route::post('kitchen-plan', [LunchApiController::class, 'kitchenPlan']);
     });

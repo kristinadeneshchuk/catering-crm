@@ -40,6 +40,12 @@ class CourierSmsNotifierTest extends TestCase
 
         Setting::create(['key' => TurboSmsService::KEY_TOKEN, 'value' => 'test-token']);
         Setting::create(['key' => TurboSmsService::KEY_SENDER, 'value' => 'UFIT']);
+
+        // Заморожуємо годинник у межах вікна розсилки. Без цього вся сюїта
+        // червоніла після 21:00: readiness чесно відповідає «зараз не можна»,
+        // а тести цього не очікують. Час доби не має вирішувати, чи пройде
+        // збірка — тести про саме вікно ставлять свій час окремо.
+        $this->travelTo(now()->setTime(12, 0));
     }
 
     private function fakeTurboOk(): void

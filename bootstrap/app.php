@@ -21,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Сервісний токен для Telegram Inbox (/api/inbox/v1/*).
         $middleware->alias([
             'inbox.token' => \App\Http\Middleware\VerifyInboxToken::class,
+            'lunch.token' => \App\Http\Middleware\VerifyLunchToken::class,
         ]);
 
         // Гостей із захищених сторінок ведемо на відповідний логін, бо іменованого
