@@ -133,6 +133,27 @@
             letter-spacing: 0.3px;
         }
 
+        /* Клієнт зі своїм КБЖУ на звичайному меню — кухня має бачити це
+           поруч з ID, бо заміни в нього оформлені індивідуально. */
+        .ind-tag {
+            font-size: 7px;
+            font-weight: 900;
+            background: #7c3aed;
+            color: #fff;
+            padding: 1px 4px;
+            border-radius: 2px;
+            display: inline-block;
+            margin-top: 1px;
+            margin-left: 2px;
+            letter-spacing: 0.3px;
+        }
+
+        .sticker.has-changes .ind-tag {
+            font-size: 10px;
+            padding: 2px 5px;
+            margin-top: 1.5px;
+        }
+
         .calories {
             font-size: 10px;
             font-weight: 900;
@@ -334,7 +355,7 @@
                             @if(!empty($sticker['bundles']))
                                 <div class="client-bundles">{{ implode(', ', $sticker['bundles']) }}</div>
                             @endif
-                            <span class="client-id">ID: {{ $sticker['client_id'] }}</span>
+                            <span class="client-id">ID: {{ $sticker['client_id'] }}</span>@if(!empty($sticker['is_individual']))<span class="ind-tag">ІНД</span>@endif
                         </div>
                         @if($logoBase64)
                             <img src="{{ $logoBase64 }}" class="brand-logo" alt="logo">

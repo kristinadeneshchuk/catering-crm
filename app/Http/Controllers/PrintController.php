@@ -427,6 +427,7 @@ class PrintController extends Controller
                         'time'            => 0, // друкується першим серед стікерів клієнта
                         'calories'        => (int) $order->calories,
                         'project'         => $order->project,
+                        'is_individual'   => $order->menu_type === 'individual',
                         'changes'         => [],
                         'missing_meals'   => collect($missing)->sort()
                             ->map(fn ($so) => $mealNames[$so] ?? ('Прийом '.$so))
@@ -476,6 +477,10 @@ class PrintController extends Controller
                         'time'            => $menuItem->mealType?->sort_order ?? 99,
                         'calories'        => (int) $order->calories,
                         'project'         => $order->project,
+                        // Клієнт зі своїм КБЖУ на звичайному меню (персональних страв
+                        // на цю дату немає — інакше стікери взагалі не друкуються).
+                        // Кухні треба бачити, що заміна саме в такого клієнта.
+                        'is_individual'   => $order->menu_type === 'individual',
                         'changes'         => $changes,
                         'date'            => $targetDate,
                         'bundles'         => $order->client?->replacementBundles?->pluck('name')->values()->all() ?? [],
