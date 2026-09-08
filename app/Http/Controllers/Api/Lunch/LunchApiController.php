@@ -139,8 +139,8 @@ class LunchApiController extends Controller
             'total_qty'     => array_sum(array_column($data['lines'], 'qty')),
         ];
 
-        Storage::disk('local')->put(
-            "lunch/kitchen-plan-{$date}.json",
+        Storage::disk('lunch')->put(
+            "kitchen-plan-{$date}.json",
             json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT),
         );
 

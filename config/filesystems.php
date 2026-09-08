@@ -30,6 +30,15 @@ return [
 
     'disks' => [
 
+        // Зведення на кухню від Lunch Hub. Окремий диск, бо корінь 'local' у
+        // Laravel 11 переїхав у storage/app/private, а інтеграція документує
+        // саме storage/app/lunch — шлях не має залежати від дефолту фреймворку.
+        'lunch' => [
+            'driver' => 'local',
+            'root'   => storage_path('app/lunch'),
+            'throw'  => false,
+        ],
+
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),

@@ -237,7 +237,7 @@ class LunchApiTest extends TestCase
 
     public function test_a_kitchen_plan_is_stored_as_a_file(): void
     {
-        Storage::fake('local');
+        Storage::fake('lunch');
 
         $response = $this->postJson('/api/lunch/kitchen-plan', [
             'date'  => '2026-09-10',
@@ -249,9 +249,9 @@ class LunchApiTest extends TestCase
 
         $response->assertOk()->assertJson(['ok' => true, 'lines' => 2]);
 
-        Storage::disk('local')->assertExists('lunch/kitchen-plan-2026-09-10.json');
+        Storage::disk('lunch')->assertExists('kitchen-plan-2026-09-10.json');
 
-        $saved = json_decode(Storage::disk('local')->get('lunch/kitchen-plan-2026-09-10.json'), true);
+        $saved = json_decode(Storage::disk('lunch')->get('kitchen-plan-2026-09-10.json'), true);
 
         $this->assertSame('2026-09-10', $saved['date']);
         $this->assertEquals(20, $saved['total_qty']);
@@ -260,7 +260,7 @@ class LunchApiTest extends TestCase
 
     public function test_resending_the_same_day_replaces_the_plan(): void
     {
-        Storage::fake('local');
+        Storage::fake('lunch');
 
         $send = fn (int $qty) => $this->postJson('/api/lunch/kitchen-plan', [
             'date'  => '2026-09-10',
@@ -272,7 +272,7 @@ class LunchApiTest extends TestCase
 
         // Логіст перебудував план і надіслав ще раз. Два зведення на один день
         // кухні тільки заважали б.
-        $saved = json_decode(Storage::disk('local')->get('lunch/kitchen-plan-2026-09-10.json'), true);
+        $saved = json_decode(Storage::disk('lunch')->get('kitchen-plan-2026-09-10.json'), true);
 
         $this->assertEquals(20, $saved['total_qty']);
     }
