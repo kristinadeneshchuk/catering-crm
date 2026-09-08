@@ -434,11 +434,11 @@ class PackagingList extends Page implements HasForms
                     // порціях (sum_scale). Тут лише лічильники для шапки й розбивки по брендах,
                     // щоб кухня бачила реальну кількість раціонів калоражу, а червона цифра
                     // в дужках показувала, скільки з них — з індивідуальною зміною.
-                    $cKey  = (string)(int)($order->calories ?? 0);
+                    $cKey  = \App\Support\CalorieGroup::keyFor((int)($order->calories ?? 0));
                     $cSlug = $order->project ?? 'none';
                     $cName = $order->projectData?->name ?? ucfirst($cSlug);
                     if (!isset($tableData['columns'][$cKey])) {
-                        $tableData['columns'][$cKey] = ['count' => 0, 'sum_scale' => 0.0, 'projects' => [], 'custom_count' => 0];
+                        $tableData['columns'][$cKey] = ['label' => \App\Support\CalorieGroup::labelFor($cKey), 'count' => 0, 'sum_scale' => 0.0, 'projects' => [], 'custom_count' => 0];
                     }
                     $tableData['columns'][$cKey]['custom_count'] = ($tableData['columns'][$cKey]['custom_count'] ?? 0) + 1;
                     if (!isset($tableData['columns'][$cKey]['projects'][$cSlug])) {
@@ -460,7 +460,7 @@ class PackagingList extends Page implements HasForms
                         $repBaseW  = (float)($repDish->base_weight_g ?? 0);
                         $repScale  = $repBaseW > 0 ? ((float)$plannedWeight / $repBaseW) : 0.0;
 
-                        $colKey   = (string)(int)($order->calories ?? 0);
+                        $colKey   = \App\Support\CalorieGroup::keyFor((int)($order->calories ?? 0));
                         $projSlug = $order->project ?? 'none';
                         $projName = $order->projectData?->name ?? ucfirst($projSlug);
 
@@ -476,6 +476,7 @@ class PackagingList extends Page implements HasForms
                         }
                         if (!isset($replacementDishData[$repDishId]['columns'][$colKey])) {
                             $replacementDishData[$repDishId]['columns'][$colKey] = [
+                                'label' => \App\Support\CalorieGroup::labelFor($colKey),
                                 'count' => 0, 'sum_scale' => 0.0, 'projects' => [],
                             ];
                         }
@@ -528,12 +529,13 @@ class PackagingList extends Page implements HasForms
                     continue;
                 }
 
-                $colKey   = (string)(int)($order->calories ?? 0);
+                $colKey   = \App\Support\CalorieGroup::keyFor((int)($order->calories ?? 0));
                 $projSlug = $order->project ?? 'none';
                 $projName = $order->projectData?->name ?? ucfirst($projSlug);
 
                 if (!isset($tableData['columns'][$colKey])) {
                     $tableData['columns'][$colKey] = [
+                        'label'        => \App\Support\CalorieGroup::labelFor($colKey),
                         'count'        => 0,
                         'sum_scale'    => 0.0,
                         'projects'     => [],

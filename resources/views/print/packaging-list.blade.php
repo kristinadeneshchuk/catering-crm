@@ -28,7 +28,10 @@
         
         /* 🔥 КОЛЬОРИ КАЛОРІЙНОСТЕЙ (як на графіку) 🔥 */
         .kcal-950 { background-color: #a3e635 !important; color: white !important; font-size: 15px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.4); } 
+        .kcal-900 { background-color: #22c55e !important; color: white !important; font-size: 15px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.4); }
         .kcal-1200 { background-color: #22c55e !important; color: white !important; font-size: 15px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.4); } 
+        .kcal-1400 { background-color: #fde047 !important; color: white !important; font-size: 15px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.6); }
+        .kcal-2000 { background-color: #f97316 !important; color: white !important; font-size: 15px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.4); }
         .kcal-1500 { background-color: #fde047 !important; color: white !important; font-size: 15px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.6); } 
         .kcal-1800 { background-color: #fbbf24 !important; color: white !important; font-size: 15px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.4); } 
         .kcal-2100 { background-color: #f97316 !important; color: white !important; font-size: 15px; font-weight: bold; text-shadow: 0px 1px 2px rgba(0,0,0,0.4); } 
@@ -166,7 +169,7 @@
                 <tr>
                     @foreach($table['columns'] as $colKey => $colData)
                         <th class="kcal-{{ trim($colKey) }}">
-                            {{ $colKey }} <span style="font-size:11px;font-weight:400;opacity:.85;">({{ ($colData['count'] ?? 0) + ($colData['custom_count'] ?? 0) }})</span>
+                            {{ $colData['label'] ?? $colKey }} <span style="font-size:11px;font-weight:400;opacity:.85;">({{ ($colData['count'] ?? 0) + ($colData['custom_count'] ?? 0) }})</span>
                         </th>
                     @endforeach
                 </tr>

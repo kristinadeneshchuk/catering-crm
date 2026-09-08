@@ -203,7 +203,7 @@
                                 <tr class="header-kcal">
                                     @foreach($table['columns'] as $label => $info)
                                         <th style="font-size:15px;font-weight:900;">
-                                            {{ $label }} <span style="font-size:11px;font-weight:500;opacity:.8;">({{ ($info['count'] ?? 0) + ($info['custom_count'] ?? 0) }})</span>
+                                            {{ $info['label'] ?? $label }} <span style="font-size:11px;font-weight:500;opacity:.8;">({{ ($info['count'] ?? 0) + ($info['custom_count'] ?? 0) }})</span>
                                         </th>
                                     @endforeach
                                 </tr>

@@ -627,11 +627,11 @@ class PrintController extends Controller
                     // Грамажі рядків НЕ чіпаємо — вони по стандартних порціях (sum_scale).
                     // Тут лише лічильники для шапки й розбивки по брендах: червона цифра в дужках
                     // = скільки раціонів калоражу/бренду мають індивідуальну зміну.
-                    $cKey  = (string)(int)($order->calories ?? 0);
+                    $cKey  = \App\Support\CalorieGroup::keyFor((int)($order->calories ?? 0));
                     $cSlug = $order->project ?? 'none';
                     $cName = $order->projectData?->name ?? ucfirst($cSlug);
                     if (!isset($tableData['columns'][$cKey])) {
-                        $tableData['columns'][$cKey] = ['count' => 0, 'sum_scale' => 0.0, 'projects' => [], 'custom_count' => 0];
+                        $tableData['columns'][$cKey] = ['label' => \App\Support\CalorieGroup::labelFor($cKey), 'count' => 0, 'sum_scale' => 0.0, 'projects' => [], 'custom_count' => 0];
                     }
                     $tableData['columns'][$cKey]['custom_count'] = ($tableData['columns'][$cKey]['custom_count'] ?? 0) + 1;
                     if (!isset($tableData['columns'][$cKey]['projects'][$cSlug])) {
@@ -651,7 +651,7 @@ class PrintController extends Controller
                         $repBaseW  = (float)($repDish->base_weight_g ?? 0);
                         $repScale  = $repBaseW > 0 ? ($realW / $repBaseW) : 0.0;
 
-                        $colKey   = (string)(int)($order->calories ?? 0);
+                        $colKey   = \App\Support\CalorieGroup::keyFor((int)($order->calories ?? 0));
                         $projSlug = $order->project ?? 'none';
                         $projName = $order->projectData?->name ?? ucfirst($projSlug);
 
@@ -667,6 +667,7 @@ class PrintController extends Controller
                         }
                         if (!isset($replacementDishData[$repDishId]['columns'][$colKey])) {
                             $replacementDishData[$repDishId]['columns'][$colKey] = [
+                                'label' => \App\Support\CalorieGroup::labelFor($colKey),
                                 'count' => 0, 'sum_scale' => 0.0, 'projects' => [],
                             ];
                         }
@@ -713,12 +714,13 @@ class PrintController extends Controller
                 }
 
                 // Стандартний клієнт — акумулюємо у колонку страви.
-                $colKey   = (string)(int)($order->calories ?? 0);
+                $colKey   = \App\Support\CalorieGroup::keyFor((int)($order->calories ?? 0));
                 $projSlug = $order->project ?? 'none';
                 $projName = $order->projectData?->name ?? ucfirst($projSlug);
 
                 if (!isset($tableData['columns'][$colKey])) {
                     $tableData['columns'][$colKey] = [
+                        'label'        => \App\Support\CalorieGroup::labelFor($colKey),
                         'count'        => 0,
                         'sum_scale'    => 0.0,
                         'projects'     => [],
