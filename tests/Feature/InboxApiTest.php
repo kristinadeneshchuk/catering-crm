@@ -371,6 +371,28 @@ class InboxApiTest extends TestCase
         $this->assertStringContainsString('Telegram Inbox', $order->comment);
     }
 
+    public function test_the_agent_can_say_the_client_pays_cash(): void
+    {
+        // Готівка — сигнал для курʼєра: замовлення потрапить у рядки «готівка
+        // від клієнтів» шаблону звіту зміни.
+        $ids      = $this->seedCatalog(pricePerDay: 898);
+        $clientId = $this->makeClient();
+
+        $response = $this->postJson('/api/inbox/v1/orders', [
+            'project_id' => $ids['project_id'], 'client_id' => $clientId,
+            'tariff_id' => $ids['tariff_id'], 'calories' => 1600, 'days' => 5,
+            'start_date' => '2026-08-17', 'payment_method' => 'cash',
+        ], $this->authHeaders())->assertStatus(201);
+
+        $this->assertSame('cash', Order::find($response->json('order.id'))->payment_method);
+
+        $this->postJson('/api/inbox/v1/orders', [
+            'project_id' => $ids['project_id'], 'client_id' => $clientId,
+            'tariff_id' => $ids['tariff_id'], 'calories' => 1600, 'days' => 5,
+            'start_date' => '2026-08-17', 'payment_method' => 'crypto',
+        ], $this->authHeaders())->assertUnprocessable();
+    }
+
     public function test_it_creates_an_order_from_an_explicit_list_of_days(): void
     {
         $ids      = $this->seedCatalog(pricePerDay: 1000);

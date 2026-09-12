@@ -182,6 +182,15 @@ class Payroll extends Page implements HasActions, HasForms
             ->groupBy(fn ($r) => $r->employee_id . '|' . \Carbon\Carbon::parse($r->date)->format('Y-m-d'));
         $courierBaseStops = (int) (\App\Models\Setting::where('key', 'courier_base_stops')->value('value') ?: 12);
 
+        // Погоджені в Telegram виплати курʼєрів за період. Сума тут — «до виплати»
+        // (нараховане мінус готівка на руках), тобто те, що реально віддати.
+        $payoutsByEmp = ! \App\Support\SchemaReady::has('courier_payouts')
+            ? collect()
+            : \App\Models\CourierPayout::whereBetween('date', [$start, $end])
+                ->whereIn('status', [\App\Models\CourierPayout::STATUS_APPROVED, \App\Models\CourierPayout::STATUS_SENT])
+                ->get()
+                ->groupBy('employee_id');
+
         // Серії окладів для помісячних
         $monthlyEmps = $employees->filter(fn ($e) => optional($positions[$e->position] ?? null)->payment_type === 'per_month');
         $salaryScopes = $monthlyEmps->map(fn ($e) => 'salary:' . $e->id)->all();
@@ -261,6 +270,12 @@ class Payroll extends Page implements HasActions, HasForms
                 'sum'            => round($sum, 2),
                 'balance'        => round((float) $emp->balance, 2),
                 'breakdown'      => array_values(array_filter($breakdown)),
+                'approved_payout' => round((float) $payoutsByEmp->get($emp->id, collect())
+                    ->where('status', \App\Models\CourierPayout::STATUS_APPROVED)->sum('to_pay'), 2),
+                'approved_days'   => $payoutsByEmp->get($emp->id, collect())
+                    ->where('status', \App\Models\CourierPayout::STATUS_APPROVED)->count(),
+                'awaiting_days'   => $payoutsByEmp->get($emp->id, collect())
+                    ->where('status', \App\Models\CourierPayout::STATUS_SENT)->count(),
             ];
             $rows[] = $row;
 
@@ -451,6 +466,13 @@ class Payroll extends Page implements HasActions, HasForms
                         'user_id'     => auth()->id(),
                     ]);
                 });
+
+                // Погоджені в Telegram дні цього періоду тепер виплачені: платять, як
+                // і раніше, вручну — погодження лише каже, що суму перевірено.
+                if (\App\Support\SchemaReady::has('courier_payouts')) {
+                    [$from, $to] = $this->dateRange();
+                    app(\App\Services\Couriers\CourierPayoutService::class)->markPaid($employee, $from, $to);
+                }
 
                 Notification::make()
                     ->title('Виплату проведено')

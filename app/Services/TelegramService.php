@@ -98,4 +98,105 @@ class TelegramService
             ]);
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Кнопки й діалог — для погодження виплат і звітів курʼєрів
+    // -------------------------------------------------------------------------
+
+    /** Чати, чиїм кнопкам ми віримо: власник і старший менеджер. */
+    public function approverChatIds(): array
+    {
+        return array_values(array_filter([
+            (string) ($this->ownerChatId ?? ''),
+            (string) ($this->managerChatId ?? ''),
+        ]));
+    }
+
+    /**
+     * Повідомлення з кнопками. Повертає message_id — щоб потім його оновити.
+     *
+     * @param  array<int, array<int, array<string, string>>>|null  $keyboard  inline_keyboard
+     */
+    public function sendMessage(string $chatId, string $text, ?array $keyboard = null): ?int
+    {
+        $payload = ['chat_id' => $chatId, 'text' => $text, 'parse_mode' => 'HTML'];
+
+        if ($keyboard !== null) {
+            $payload['reply_markup'] = ['inline_keyboard' => $keyboard];
+        }
+
+        $response = $this->call('sendMessage', $payload);
+
+        return $response['result']['message_id'] ?? null;
+    }
+
+    /** Оновити вже надіслане: після правки чи погодження — те саме повідомлення. */
+    public function editMessage(string $chatId, int $messageId, string $text, ?array $keyboard = null): void
+    {
+        $payload = [
+            'chat_id'    => $chatId,
+            'message_id' => $messageId,
+            'text'       => $text,
+            'parse_mode' => 'HTML',
+            // Порожня клавіатура прибирає кнопки: погоджене вдруге не натиснеш.
+            'reply_markup' => ['inline_keyboard' => $keyboard ?? []],
+        ];
+
+        $this->call('editMessageText', $payload);
+    }
+
+    /** Відповідь на натискання кнопки — інакше в Telegram «годинник» крутиться вічно. */
+    public function answerCallback(string $callbackId, string $text = ''): void
+    {
+        $this->call('answerCallbackQuery', ['callback_query_id' => $callbackId, 'text' => $text]);
+    }
+
+    /**
+     * Завантажити файл (фото одометра) у приватне сховище. Повертає шлях.
+     */
+    public function downloadFile(string $fileId, string $directory): ?string
+    {
+        $info = $this->call('getFile', ['file_id' => $fileId]);
+        $path = $info['result']['file_path'] ?? null;
+
+        if (! $path || empty($this->token)) {
+            return null;
+        }
+
+        $body = Http::timeout(30)->get("https://api.telegram.org/file/bot{$this->token}/{$path}");
+
+        if (! $body->successful()) {
+            return null;
+        }
+
+        $target = rtrim($directory, '/').'/'.basename($path);
+        \Illuminate\Support\Facades\Storage::disk('local')->put($target, $body->body());
+
+        return $target;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function call(string $method, array $payload): array
+    {
+        if (empty($this->token)) {
+            Log::warning("TelegramService: TELEGRAM_BOT_TOKEN not set, {$method} skipped");
+
+            return [];
+        }
+
+        $response = Http::timeout(15)->post("https://api.telegram.org/bot{$this->token}/{$method}", $payload);
+
+        if (! $response->successful()) {
+            Log::error("TelegramService: {$method} failed", [
+                'status' => $response->status(),
+                'body'   => $response->body(),
+            ]);
+
+            return [];
+        }
+
+        return $response->json() ?? [];
+    }
 }

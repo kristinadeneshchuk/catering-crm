@@ -81,6 +81,7 @@ class OrderCreator
                 'discount_value'  => $discount['value'] ?? null,
                 'discount_reason' => $data['discount_reason'] ?? null,
                 'source'          => $data['source'] ?? null,
+                'payment_method'  => $data['payment_method'] ?? null,
                 'comment'         => $data['comment'] ?? null,
             ]);
 

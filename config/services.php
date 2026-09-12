@@ -56,6 +56,18 @@ return [
         'cook_chat_id'    => env('TELEGRAM_COOK_CHAT_ID'),
         'kitchen_chat_id' => env('TELEGRAM_KITCHEN_CHAT_ID'),
 
+        // Вебхук бота сповіщень: звіти курʼєрів і кнопки погодження виплат.
+        // Порожній секрет — вебхук не приймає нічого (503).
+        'webhook_secret'  => env('TELEGRAM_BOT_WEBHOOK_SECRET', ''),
+        // Імʼя бота без @ — для посилання підключення t.me/<бот>?start=<код>.
+        'bot_username'    => env('TELEGRAM_BOT_USERNAME', ''),
+
+        // Коли слати шаблон звіту зміни і нагадування (HH:MM, час сервера).
+        'report_morning_at'        => env('COURIER_REPORT_MORNING_AT', '05:45'),
+        'report_morning_remind_at' => env('COURIER_REPORT_MORNING_REMIND_AT', '12:30'),
+        'report_evening_at'        => env('COURIER_REPORT_EVENING_AT', '17:00'),
+        'report_evening_remind_at' => env('COURIER_REPORT_EVENING_REMIND_AT', '22:00'),
+
         // Для месенджер-інтеграції через MadelineProto (наступна фаза).
         // api_id / api_hash береш на https://my.telegram.org/apps
         'api_id'   => env('TELEGRAM_API_ID'),

@@ -16,6 +16,15 @@ Schedule::command('activitylog:clean')->dailyAt('03:30');
 // менеджер тисне «Точки маршрутів» вручну, архів пишеться одразу.
 Schedule::command('routes:snapshot')->dailyAt('11:00')->withoutOverlapping();
 
+// Звіт зміни курʼєра в Telegram: шаблон на початку зміни, нагадування в кінці —
+// лише тим, хто ще не здав. Шлемо тільки курʼєрам, які самі підключились до
+// бота, тож поки ніхто не підключений, ці задачі нікого не турбують.
+// Ранкові маршрути стартують близько 06:00, вечірні — близько 17:30.
+Schedule::command('couriers:shift-report morning')->dailyAt(config('services.telegram.report_morning_at', '05:45'));
+Schedule::command('couriers:shift-report morning --remind')->dailyAt(config('services.telegram.report_morning_remind_at', '12:30'));
+Schedule::command('couriers:shift-report evening')->dailyAt(config('services.telegram.report_evening_at', '17:00'));
+Schedule::command('couriers:shift-report evening --remind')->dailyAt(config('services.telegram.report_evening_remind_at', '22:00'));
+
 // Telegram аналітика
 Schedule::command('telegram:morning-pulse')->dailyAt('11:00');
 Schedule::command('telegram:evening-summary')->dailyAt('18:00');

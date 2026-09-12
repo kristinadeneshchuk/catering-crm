@@ -23,7 +23,7 @@ class Order extends Model
     {
         return LogOptions::defaults()
             ->logOnly([
-                'client_id', 'parent_order_id', 'tariff_id', 'project', 'is_paid',
+                'client_id', 'parent_order_id', 'tariff_id', 'project', 'is_paid', 'payment_method',
                 'start_date', 'end_date', 'duration', 'status',
                 'calories', 'target_protein_g', 'target_fats_g', 'target_carbs_g',
                 'price_per_day', 'total_price',
@@ -37,7 +37,7 @@ class Order extends Model
     }
 
     protected $fillable = [
-        'client_id', 'parent_order_id', 'tariff_id', 'project', 'is_paid',
+        'client_id', 'parent_order_id', 'tariff_id', 'project', 'is_paid', 'payment_method',
         'start_date', 'end_date', 'duration', 'status', 'source',
         'calories', 'target_protein_g', 'target_fats_g', 'target_carbs_g',
         'scale_factor', 'price_per_day', 'total_price',

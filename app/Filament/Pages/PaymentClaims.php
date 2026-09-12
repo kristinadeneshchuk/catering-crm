@@ -37,11 +37,17 @@ class PaymentClaims extends Page implements HasTable
 
     public static function canAccess(): bool
     {
-        return PaymentClaimService::canResolve(auth()->user());
+        // Поки міграція не пройшла, сторінки для меню не існує.
+        return \App\Support\SchemaReady::has('payment_claims')
+            && PaymentClaimService::canResolve(auth()->user());
     }
 
     public static function getNavigationBadge(): ?string
     {
+        if (! \App\Support\SchemaReady::has('payment_claims')) {
+            return null;
+        }
+
         $count = PaymentClaim::pending()
             ->where('source', '!=', PaymentClaim::SOURCE_INVOICE_SENT)
             ->count();

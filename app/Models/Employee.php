@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Employee extends Model
 {
-    protected $fillable = ['name', 'ant_driver_name', 'phone', 'position', 'project_id', 'base_rate', 'balance', 'is_active', 'archived_at', 'fuel_consumption', 'mileage_unit'];
+    protected $fillable = ['name', 'ant_driver_name', 'phone', 'telegram_chat_id', 'telegram_link_code', 'position', 'project_id', 'base_rate', 'balance', 'is_active', 'archived_at', 'fuel_consumption', 'mileage_unit'];
 
     protected $casts = [
         'is_active'        => 'boolean',

@@ -54,6 +54,11 @@ Route::get('/invoices/{token}',     [InvoiceController::class, 'show'])->name('i
 Route::post('/webhooks/telegram/{account}', [TelegramWebhookController::class, 'handle'])
     ->name('webhooks.telegram');
 
+// Бот сповіщень (звіти курʼєрів і погодження виплат). Окремо від Business-акаунтів
+// Inbox вище: інший бот, інший токен. Автентичність — secret_token у заголовку.
+Route::post('/webhooks/telegram-bot', \App\Http\Controllers\Webhooks\TelegramBotWebhookController::class)
+    ->name('webhooks.telegram-bot');
+
 // OAuth для Instagram (через Facebook Login).
 // start — потребує авторизованого менеджера. callback — редирект з FB, без auth-middleware.
 Route::middleware('auth')->group(function () {

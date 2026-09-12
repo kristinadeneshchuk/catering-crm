@@ -162,6 +162,7 @@ trait BuildsInboxTestSchema
             $t->decimal('discount_amount', 10, 2)->default(0);
             $t->decimal('final_price', 10, 2)->default(0);
             $t->boolean('is_paid')->default(false);
+            $t->string('payment_method', 16)->nullable();
             $t->string('status')->nullable();
             $t->string('source', 32)->nullable();
             $t->string('schedule_type')->nullable();

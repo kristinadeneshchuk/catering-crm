@@ -296,49 +296,11 @@ class LogisticsPage extends Page implements HasForms
         }
 
         $date = $this->data['date'] ?? now()->format('Y-m-d');
-        $employee = Employee::findOrFail($employeeId);
 
-        $value = $value === '' || $value === null ? null : $value;
-        if ($field === 'fuel_price_per_liter') {
-            $value = $value === null ? 0 : round((float) $value, 2);
-        } elseif ($value !== null) {
-            $value = (int) $value;
-        }
-
-        DB::transaction(function () use ($employeeId, $date, $slot, $field, $value, $employee) {
-            $log = CourierMileageLog::where('employee_id', $employeeId)
-                ->whereDate('date', $date)
-                ->where('shift_slot', $slot)
-                ->lockForUpdate()
-                ->first();
-
-            $oldComp = $log?->compensation ?? 0;
-
-            if (! $log) {
-                $log = new CourierMileageLog([
-                    'employee_id'      => $employeeId,
-                    'date'             => $date,
-                    'shift_slot'       => $slot,
-                    'amort_per_km'     => CourierMileageLog::currentAmortPerKm(),
-                    'fuel_consumption' => (float) ($employee->fuel_consumption ?? 0),
-                    'mileage_unit'     => $employee->mileage_unit ?? 'km',
-                ]);
-            }
-
-            if ((float) ($log->fuel_consumption ?? 0) <= 0
-                && (float) ($employee->fuel_consumption ?? 0) > 0) {
-                $log->fuel_consumption = (float) $employee->fuel_consumption;
-            }
-
-            $log->{$field} = $value;
-            $log->save();
-
-            $newComp = $log->compensation;
-            $delta = round($newComp - $oldComp, 2);
-            if (abs($delta) > 0.001) {
-                $employee->increment('balance', $delta);
-            }
-        });
+        // Та сама логіка, що і в звіті курʼєра з Telegram: одна точка запису
+        // пробігу, щоб два шляхи не розійшлись у тому, як рухається баланс.
+        app(\App\Services\Couriers\CourierMileageService::class)
+            ->set(Employee::findOrFail($employeeId), $date, $slot, [$field => $value]);
 
         $this->loadMileage();
     }

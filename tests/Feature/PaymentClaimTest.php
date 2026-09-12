@@ -150,6 +150,21 @@ class PaymentClaimTest extends TestCase
         $this->get('/admin/payment-claims')->assertForbidden();
     }
 
+    public function test_the_admin_survives_before_the_migration_runs(): void
+    {
+        // Вікно, яке буває завжди: на horenko між git pull і migrate, на afood і
+        // shinshin — завжди (там деплой без міграцій). Бейдж у меню рахується на
+        // кожній сторінці — без запобіжника впала б уся бічна панель.
+        Schema::drop('payment_claims');
+        \App\Support\SchemaReady::flush();
+
+        $this->assertNull(PaymentClaims::getNavigationBadge());
+        $this->assertFalse(PaymentClaims::canAccess());
+
+        $this->getJson("/api/inbox/v1/clients/{$this->client->id}/orders", $this->authHeaders())
+            ->assertOk();
+    }
+
     public function test_a_cook_cannot_confirm_through_the_service_either(): void
     {
         $claim = $this->claim($this->order());

@@ -233,6 +233,38 @@ class EmployeeResource extends Resource
                         Notification::make()->title('Співробітника заархівовано')->success()->send();
                     }),
 
+                // Підключення курʼєра до бота звітів. Посилання одноразове: після
+                // відкриття бот запамʼятовує чат, а код гасне.
+                Action::make('telegram_link')
+                    ->label('')
+                    ->tooltip(fn (Employee $record) => $record->telegram_chat_id ? 'Telegram підключено' : 'Підключити Telegram')
+                    ->icon(fn (Employee $record) => $record->telegram_chat_id ? 'heroicon-o-chat-bubble-left-ellipsis' : 'heroicon-o-link')
+                    ->color(fn (Employee $record) => $record->telegram_chat_id ? 'success' : 'gray')
+                    ->visible(fn (Employee $record) => $record->position === 'courier' && is_null($record->archived_at))
+                    ->modalHeading(fn (Employee $record) => "Telegram для звітів: {$record->name}")
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Закрити')
+                    ->modalContent(function (Employee $record) {
+                        $bot = (string) config('services.telegram.bot_username');
+
+                        if ($bot === '') {
+                            return new \Illuminate\Support\HtmlString('<p>Не задано імʼя бота (<code>TELEGRAM_BOT_USERNAME</code>) — посилання не зібрати.</p>');
+                        }
+
+                        if (! $record->telegram_link_code) {
+                            $record->update(['telegram_link_code' => \Illuminate\Support\Str::lower(\Illuminate\Support\Str::random(16))]);
+                        }
+
+                        $url    = "https://t.me/{$bot}?start={$record->telegram_link_code}";
+                        $status = $record->telegram_chat_id
+                            ? '<p style="color:#16a34a;margin:0 0 8px;">Уже підключено. Нове посилання перепідключить курʼєра на інший телефон.</p>'
+                            : '';
+
+                        return new \Illuminate\Support\HtmlString($status
+                            .'<p style="margin:0 0 8px;">Надішліть курʼєру це посилання. Він відкриє його в Telegram і натисне «Start» — і далі шаблон звіту зміни приходитиме йому автоматично.</p>'
+                            .'<p style="margin:0;"><a href="'.e($url).'" target="_blank" style="color:#2563eb;word-break:break-all;">'.e($url).'</a></p>');
+                    }),
+
                 // Відновити з архіву
                 Action::make('restore')
                     ->label('')

@@ -150,6 +150,16 @@
                         </td>
                         <td style="padding:11px 16px;text-align:right;color:{{ $row['balance'] > 0 ? '#ef4444' : '#3f3f46' }};font-weight:{{ $row['balance'] > 0 ? '700' : '400' }};">
                             {{ $row['balance'] > 0 ? number_format($row['balance'], 0, '.', ' ') . ' ₴' : '—' }}
+                            {{-- Погодження виплати в Telegram: власник перевірив суму. --}}
+                            @if(($row['approved_days'] ?? 0) > 0)
+                                <div style="font-size:11px;font-weight:600;color:#16a34a;margin-top:2px;"
+                                     title="Погоджено власником у Telegram">
+                                    ✅ погоджено {{ number_format($row['approved_payout'], 0, '.', ' ') }} ₴ · {{ $row['approved_days'] }} дн.
+                                </div>
+                            @endif
+                            @if(($row['awaiting_days'] ?? 0) > 0)
+                                <div style="font-size:11px;color:#d97706;margin-top:2px;">⏳ на погодженні: {{ $row['awaiting_days'] }} дн.</div>
+                            @endif
                         </td>
                         <td style="padding:11px 16px;text-align:right;color:#34d399;font-weight:800;font-size:14px;">
                             {{ number_format($row['sum'], 0, '.', ' ') }} ₴

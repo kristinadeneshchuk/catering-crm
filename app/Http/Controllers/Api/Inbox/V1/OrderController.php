@@ -37,6 +37,9 @@ class OrderController extends Controller
             'discount_reason'          => ['nullable', 'string', 'max:255'],
             'comment'                  => ['nullable', 'string'],
             'source'                   => ['nullable', 'string', 'max:64'],
+            // Як клієнт платитиме. cash — курʼєр отримає рядок «готівка» у
+            // шаблоні звіту зміни і візьме гроші на доставці.
+            'payment_method'           => ['nullable', 'in:cash,transfer'],
             'external_conversation_id' => ['nullable', 'integer'],
             'address'                  => ['nullable', 'array'],
             'address.address'          => ['nullable', 'string'],
@@ -67,6 +70,7 @@ class OrderController extends Controller
             'delivery_time'   => $data['delivery_time'] ?? null,
             'discount_reason' => $data['discount_reason'] ?? null,
             'source'          => WebhookNotifier::SOURCE_INBOX,
+            'payment_method'  => $data['payment_method'] ?? null,
             'comment'         => $this->buildComment($data),
             'address'         => $data['address'] ?? [],
         ]);
