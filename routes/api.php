@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Inbox\V1\ClientController;
 use App\Http\Controllers\Api\Inbox\V1\InvoiceController;
 use App\Http\Controllers\Api\Inbox\V1\OrderController;
+use App\Http\Controllers\Api\Inbox\V1\PaymentClaimController;
 use App\Http\Controllers\Api\Inbox\V1\ProjectController;
 use App\Http\Controllers\Api\Inbox\V1\QuoteController;
 use App\Http\Controllers\Api\Lunch\LunchApiController;
@@ -37,6 +38,11 @@ Route::prefix('inbox/v1')
 
         Route::post('orders', [OrderController::class, 'store']);
         Route::post('orders/{order}/invoice', [InvoiceController::class, 'store']);
+
+        // Заяви про оплату: агент лише фіксує слова клієнта. Ставити оплату він не
+        // може — це робить менеджер у CRM.
+        Route::post('orders/{order}/payment-claims', [PaymentClaimController::class, 'store']);
+        Route::get('orders/{order}/payment', [PaymentClaimController::class, 'show']);
     });
 
 /*

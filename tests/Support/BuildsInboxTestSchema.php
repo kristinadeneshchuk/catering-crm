@@ -211,6 +211,10 @@ trait BuildsInboxTestSchema
             $t->date('date')->nullable();
             $t->text('comment')->nullable();
             $t->unsignedBigInteger('order_id')->nullable();
+            $t->unsignedBigInteger('client_id')->nullable();
+            $t->unsignedBigInteger('employee_id')->nullable();
+            $t->unsignedBigInteger('stock_document_id')->nullable();
+            $t->string('method')->nullable();
             $t->unsignedBigInteger('account_id')->nullable();
             $t->unsignedBigInteger('user_id')->nullable();
             $t->timestamps();
@@ -219,9 +223,14 @@ trait BuildsInboxTestSchema
         Schema::create('accounts', function (Blueprint $t) {
             $t->id();
             $t->string('name')->nullable();
+            $t->string('type')->nullable();
+            $t->boolean('is_default')->default(false);
             $t->decimal('balance', 12, 2)->default(0);
             $t->timestamps();
         });
+
+        // Справжня міграція — заодно перевіряємо і її.
+        (require database_path('migrations/2026_09_12_120000_create_payment_claims_table.php'))->up();
 
         Schema::create('kitchen_notifications', function (Blueprint $t) {
             $t->id();
@@ -361,6 +370,15 @@ trait BuildsInboxTestSchema
         return DB::table('clients')->insertGetId(array_merge([
             'name' => 'Тестовий Клієнт', 'phone' => '0955532677', 'balance' => 0,
         ], $attrs));
+    }
+
+    /**
+     * Каса. Надходження на замовлення без каси запобіжник у Transaction не
+     * пропускає — так само, як на проді.
+     */
+    protected function makeAccount(string $type = 'cash', string $name = 'Готівка'): int
+    {
+        return DB::table('accounts')->insertGetId(['name' => $name, 'type' => $type, 'balance' => 0]);
     }
 
     /** Заголовки з валідним сервісним токеном. */

@@ -474,13 +474,25 @@ class InboxOrderBuilderTest extends TestCase
         $this->assertSame(1, DB::table('order_calls')->where('order_id', $order->id)->count());
     }
 
+    /**
+     * «Оплачено» в чаті тепер модалка з вибором каси. Раніше кнопка писала
+     * транзакцію без каси: гроші потрапляли в is_paid, але не в касу.
+     */
+    protected function confirmFromChat(Order $order, array $data = []): \Livewire\Features\SupportTesting\Testable
+    {
+        return $this->page()->callAction('confirmPayment', array_merge([
+            'account_id' => $this->makeAccount(),
+            'amount'     => (float) $order->final_price,
+        ], $data), ['orderId' => $order->id]);
+    }
+
     public function test_confirming_payment_records_income_and_marks_the_order_paid(): void
     {
         $order = $this->makeOrderFromChat();
 
         $this->assertFalse((bool) $order->is_paid);
 
-        $this->page()->call('confirmPayment', $order->id);
+        $this->confirmFromChat($order)->assertHasNoActionErrors();
 
         $this->assertTrue((bool) $order->refresh()->is_paid);
         $this->assertDatabaseHas('transactions', [
@@ -488,11 +500,75 @@ class InboxOrderBuilderTest extends TestCase
         ]);
     }
 
+    public function test_payment_from_the_chat_lands_in_the_chosen_cash_box(): void
+    {
+        // Сам баг: кнопка не писала account_id, і каса розходилась із фактом.
+        $order   = $this->makeOrderFromChat();
+        $account = $this->makeAccount('online', 'ФОП Горенко');
+
+        $this->confirmFromChat($order, ['account_id' => $account]);
+
+        $this->assertDatabaseHas('transactions', [
+            'order_id' => $order->id, 'type' => 'income', 'account_id' => $account,
+        ]);
+    }
+
+    public function test_payment_from_the_chat_needs_a_cash_box(): void
+    {
+        $order = $this->makeOrderFromChat();
+
+        $this->confirmFromChat($order, ['account_id' => null])
+            ->assertHasActionErrors(['account_id' => 'required']);
+
+        $this->assertFalse((bool) $order->refresh()->is_paid);
+        $this->assertSame(0, DB::table('transactions')->where('order_id', $order->id)->where('type', 'income')->count());
+    }
+
+    public function test_the_chat_confirms_the_agents_claim_instead_of_adding_a_second(): void
+    {
+        // Агент уже завів «клієнт оплатив». Менеджер натискає «Оплачено» — має
+        // закритись саме ця заява, а не виникнути поруч друга, яка висітиме вічно.
+        $order = $this->makeOrderFromChat();
+
+        $claim = app(\App\Services\Payments\PaymentClaimService::class)->create($order, [
+            'source' => \App\Models\PaymentClaim::SOURCE_CLIENT_TRANSFER,
+            'amount' => (float) $order->final_price,
+            'reported_by_type' => \App\Models\PaymentClaim::REPORTED_BY_AGENT,
+        ]);
+
+        $this->confirmFromChat($order);
+
+        $this->assertSame(\App\Models\PaymentClaim::STATUS_CONFIRMED, $claim->fresh()->status);
+        $this->assertSame(1, \App\Models\PaymentClaim::where('order_id', $order->id)->count());
+    }
+
+    public function test_a_cook_cannot_confirm_payment_even_bypassing_the_page(): void
+    {
+        $order = $this->makeOrderFromChat();
+
+        $cook = new User(['name' => 'Кухар', 'email' => 'c@test.local']);
+        $cook->role = 'cook';
+        $cook->password = bcrypt('secret');
+        $cook->save();
+        $this->actingAs($cook);
+
+        // До чатів кухар не доходить узагалі.
+        $this->assertFalse(Inbox::canAccess());
+
+        // А якщо дійде іншим шляхом — запобіжник у Transaction не пропустить.
+        $this->expectException(\Illuminate\Auth\Access\AuthorizationException::class);
+
+        \App\Models\Transaction::create([
+            'type' => 'income', 'category' => 'Оплата клієнта', 'amount' => 100,
+            'date' => now(), 'order_id' => $order->id, 'account_id' => $this->makeAccount(),
+        ]);
+    }
+
     public function test_a_payment_leaves_a_note_in_the_conversation(): void
     {
         $order = $this->makeOrderFromChat();
 
-        $this->page()->call('confirmPayment', $order->id);
+        $this->confirmFromChat($order);
 
         $note = \App\Models\Message::where('conversation_id', $this->conversationId)
             ->where('sender_type', \App\Models\Message::SENDER_SYSTEM)
@@ -515,7 +591,7 @@ class InboxOrderBuilderTest extends TestCase
         ]);
 
         $this->page()->call('scheduleReminder', $order->id, '3');
-        $this->page()->call('confirmPayment', $order->id);
+        $this->confirmFromChat($order);
 
         $this->assertSame(0, DB::table('order_calls')->count());
         $this->assertFalse((bool) $order->refresh()->is_paid);

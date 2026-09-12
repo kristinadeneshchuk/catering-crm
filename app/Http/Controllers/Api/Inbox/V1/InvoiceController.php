@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\Inbox\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Models\PaymentClaim;
 use App\Services\Inbox\InvoiceService;
+use App\Services\Payments\PaymentClaimService;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -15,10 +17,14 @@ use Illuminate\Http\JsonResponse;
  */
 class InvoiceController extends Controller
 {
-    public function store(Order $order, InvoiceService $invoices): JsonResponse
+    public function store(Order $order, InvoiceService $invoices, PaymentClaimService $claims): JsonResponse
     {
         $invoice = $invoices->forOrder($order);
         $r = $invoice->requisites ?? [];
+
+        // Рахунок агент виставив — отже, чекаємо переказ. Менеджер побачить це в
+        // «Чекають підтвердження». Повторний виклик другої заяви не створює.
+        $claims->recordInvoice($invoice, PaymentClaim::REPORTED_BY_AGENT);
 
         return response()->json([
             'invoice' => [

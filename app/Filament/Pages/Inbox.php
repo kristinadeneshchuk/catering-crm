@@ -251,6 +251,15 @@ class Inbox extends Page
 
         $invoice->update(['sent_at' => now()]);
 
+        // Рахунок пішов — фіксуємо очікування. Грошей за ним ще немає, але в
+        // «Чекають підтвердження» видно, на що чекати, і що підтвердити, коли
+        // переказ прийде. Повторний рахунок другої заяви не створює.
+        app(\App\Services\Payments\PaymentClaimService::class)->recordInvoice(
+            $invoice,
+            \App\Models\PaymentClaim::REPORTED_BY_MANAGER,
+            auth()->id(),
+        );
+
         \Filament\Notifications\Notification::make()
             ->title("Рахунок №{$invoice->number} надіслано")
             ->body(number_format((float) $invoice->amount, 2, '.', ' ').' грн')
@@ -259,45 +268,98 @@ class Inbox extends Page
     }
 
     /**
-     * Підтвердити оплату: заводимо надходження на суму замовлення.
+     * «Оплачено» в картці чату — той самий сценарій, що й на сторінці
+     * «Чекають підтвердження»: обовʼязкова каса, перевірка ролі, слід в історії.
      *
-     * Статус самого замовлення не чіпаємо — is_paid перерахує FIFO-логіка
-     * Client::recalculateOrderPaymentStatus() від транзакції. Ставити прапорець
-     * руками означало б розійтись із балансом клієнта.
+     * Раніше кнопка писала транзакцію напряму — без каси (гроші потрапляли в
+     * is_paid, але не в касу) і без перевірки, хто натискає.
+     *
+     * Якщо агент уже завів заяву «клієнт оплатив», підтверджуємо саме її, а не
+     * створюємо поруч другу: інакше заява агента висіла б у списку вічно.
+     *
+     * Статус замовлення не чіпаємо — is_paid перерахує
+     * Client::recalculateOrderPaymentStatus() від транзакції.
      */
-    public function confirmPayment(int $orderId): void
+    public function confirmPaymentAction(): \Filament\Actions\Action
     {
-        $order = $this->orderOfSelectedClient($orderId);
+        return \Filament\Actions\Action::make('confirmPayment')
+            ->label('Оплачено')
+            ->visible(fn () => \App\Services\Payments\PaymentClaimService::canResolve(auth()->user()))
+            ->modalHeading(fn (array $arguments) => 'Оплата замовлення #'.($arguments['orderId'] ?? ''))
+            ->modalDescription(function (array $arguments) {
+                $claim = $this->pendingClaimFor((int) ($arguments['orderId'] ?? 0));
 
-        if (! $order || $order->is_paid) {
-            return;
-        }
+                return $claim
+                    ? 'Клієнт повідомив про оплату '.number_format((float) $claim->amount, 2, '.', ' ')
+                        .' грн — підтверджуємо саме цю заяву.'
+                    : 'Гроші зʼявляться в касі, замовлення перерахує статус оплати.';
+            })
+            ->form(function (array $arguments) {
+                $order = $this->orderOfSelectedClient((int) ($arguments['orderId'] ?? 0));
+                $claim = $order ? $this->pendingClaimFor($order->id) : null;
+                $due   = $order ? app(\App\Services\Payments\PaymentClaimService::class)->orderPaymentState($order)['debt'] : 0;
 
-        $amount = (float) ($order->final_price ?? $order->total_price);
+                return [
+                    \Filament\Forms\Components\Select::make('account_id')
+                        ->label('Каса')
+                        ->options(\App\Models\Account::orderBy('name')->pluck('name', 'id'))
+                        ->default($claim?->isCash() ? \App\Models\Account::where('type', 'cash')->value('id') : null)
+                        ->required(),
 
-        if ($amount <= 0) {
-            return;
-        }
+                    \Filament\Forms\Components\TextInput::make('amount')
+                        ->label('Отримано, грн')
+                        ->numeric()
+                        ->minValue(0.01)
+                        ->default($claim ? (float) $claim->amount : $due)
+                        ->required(),
+                ];
+            })
+            ->action(function (array $data, array $arguments) {
+                $order = $this->orderOfSelectedClient((int) ($arguments['orderId'] ?? 0));
 
-        \App\Models\Transaction::create([
-            'type'     => 'income',
-            'category' => 'Оплата клієнта',
-            'amount'   => $amount,
-            'date'     => now(),
-            'order_id' => $order->id,
-            'comment'  => "Оплата замовлення #{$order->id} (підтверджено з чату)",
-            'user_id'  => auth()->id(),
-        ]);
+                if (! $order) {
+                    return;
+                }
 
-        // Слід у самій переписці: наступний менеджер має бачити, що оплату
-        // прийняли, не відкриваючи замовлення.
-        $this->noteInConversation("💳 Оплату отримано: ".number_format($amount, 2, '.', ' ')." грн (замовлення #{$order->id})");
+                $service = app(\App\Services\Payments\PaymentClaimService::class);
+                $claim   = $this->pendingClaimFor($order->id)
+                    ?? $service->create($order, [
+                        'source'           => \App\Models\PaymentClaim::SOURCE_CLIENT_TRANSFER,
+                        'amount'           => $data['amount'],
+                        'reported_by_type' => \App\Models\PaymentClaim::REPORTED_BY_MANAGER,
+                        'reported_by_id'   => auth()->id(),
+                        'comment'          => 'Підтверджено з чату',
+                    ]);
 
-        \Filament\Notifications\Notification::make()
-            ->title('Оплату проведено')
-            ->body(number_format($amount, 2, '.', ' ').' грн')
-            ->success()
-            ->send();
+                $service->confirm(
+                    $claim,
+                    \App\Models\Account::findOrFail($data['account_id']),
+                    auth()->user(),
+                    (float) $data['amount'],
+                );
+
+                // Слід у самій переписці: наступний менеджер має бачити, що оплату
+                // прийняли, не відкриваючи замовлення.
+                $amount = (float) $data['amount'];
+                $this->noteInConversation('💳 Оплату отримано: '.number_format($amount, 2, '.', ' ')." грн (замовлення #{$order->id})");
+
+                \Filament\Notifications\Notification::make()
+                    ->title('Оплату проведено')
+                    ->body(number_format($amount, 2, '.', ' ').' грн')
+                    ->success()
+                    ->send();
+            });
+    }
+
+    /** Остання заява «гроші є» по замовленню, яку ще ніхто не опрацював. */
+    protected function pendingClaimFor(int $orderId): ?\App\Models\PaymentClaim
+    {
+        return \App\Models\PaymentClaim::pending()
+            ->where('order_id', $orderId)
+            ->where('source', '!=', \App\Models\PaymentClaim::SOURCE_INVOICE_SENT)
+            ->where(fn ($q) => $q->whereNull('paired_claim_id')->orWhereColumn('id', '<', 'paired_claim_id'))
+            ->latest('id')
+            ->first();
     }
 
     /**

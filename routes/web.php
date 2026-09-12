@@ -147,3 +147,13 @@ Route::middleware('auth')->group(function () {
     // Список пакування на день для менеджера
     Route::get('/packaging-assembly', [PackagingAssemblyController::class, 'index'])->name('packaging.assembly');
 });
+/**
+ * Скрін платіжки до заяви про оплату. Лежить у приватному сховищі: там банківські
+ * дані клієнта, тож публічного посилання немає — лише менеджеру, який підтверджує.
+ */
+Route::middleware('auth')->get('/admin/payment-claims/{claim}/attachment', function (\App\Models\PaymentClaim $claim) {
+    abort_unless(\App\Services\Payments\PaymentClaimService::canResolve(auth()->user()), 403);
+    abort_unless($claim->attachment_path && \Illuminate\Support\Facades\Storage::disk('local')->exists($claim->attachment_path), 404);
+
+    return \Illuminate\Support\Facades\Storage::disk('local')->response($claim->attachment_path);
+})->name('payment-claims.attachment');

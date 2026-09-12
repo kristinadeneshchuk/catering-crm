@@ -45,6 +45,51 @@ class WebhookNotifier
         );
     }
 
+    /**
+     * Менеджер опрацював заяву про оплату — агент має знати, що сказати клієнту.
+     *
+     * confirmed → «Оплату отримали, дякую!»;
+     * rejected  → «Не можемо знайти оплату… надішліть квитанцію».
+     *
+     * Окремо від order.payment_received: заява може бути підтверджена, а
+     * замовлення лишитись неоплаченим (частина суми), і навпаки.
+     */
+    public function claimResolved(\App\Models\PaymentClaim $claim): void
+    {
+        $order = $claim->order;
+
+        if (! $order || ! $this->enabled($order)) {
+            return;
+        }
+
+        $event = match ($claim->status) {
+            \App\Models\PaymentClaim::STATUS_CONFIRMED => 'payment_claim.confirmed',
+            \App\Models\PaymentClaim::STATUS_REJECTED  => 'payment_claim.rejected',
+            default                                     => null,
+        };
+
+        if ($event === null) {
+            return;
+        }
+
+        SendInboxWebhook::dispatch(
+            $event,
+            'evt_'.Str::ulid(),
+            [
+                'claim_id'      => $claim->id,
+                'order_id'      => $order->id,
+                'client_id'     => $order->client_id,
+                'source'        => $claim->source,
+                'amount'        => (float) $claim->amount,
+                'confirmed_amount' => $claim->transaction ? (float) $claim->transaction->amount : null,
+                'status'        => $claim->status,
+                'reject_reason' => $claim->reject_reason,
+                'order_is_paid' => (bool) $order->fresh()->is_paid,
+            ],
+            now()->toIso8601String(),
+        );
+    }
+
     protected function enabled(Order $order): bool
     {
         return $order->source === self::SOURCE_INBOX

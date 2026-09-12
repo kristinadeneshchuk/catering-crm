@@ -178,6 +178,9 @@ class ClientController extends Controller
                 'end_date'       => optional($o->end_date)->toDateString() ?? $o->end_date,
                 'status'         => $o->status,
                 'payment_status' => $o->is_paid ? 'paid' : 'unpaid',
+                // Повний стан: скільки внесено, скільки чекає підтвердження,
+                // борг і остання заява. Саме з цього агент будує відповідь.
+                'payment'        => app(\App\Services\Payments\PaymentClaimService::class)->orderPaymentState($o),
                 'is_paid'        => (bool) $o->is_paid,
                 'subtotal'       => (float) $o->total_price,
                 'discount'       => (float) $o->discount_amount,

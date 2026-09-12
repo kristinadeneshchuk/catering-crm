@@ -501,11 +501,14 @@
                                             style="padding:0.25rem 0.5rem;font-size:0.66rem;font-weight:700;border-radius:0.375rem;background:rgba(56,189,248,0.12);color:#38bdf8;border:none;cursor:pointer;">
                                         Рахунок
                                     </button>
-                                    <button type="button" wire:click="confirmPayment({{ $order->id }})"
-                                            wire:confirm="Провести оплату замовлення #{{ $order->id }}?"
-                                            style="padding:0.25rem 0.5rem;font-size:0.66rem;font-weight:700;border-radius:0.375rem;background:rgba(74,222,128,0.12);color:#4ade80;border:none;cursor:pointer;">
-                                        Оплачено
-                                    </button>
+                                    {{-- Модалка з вибором каси. Кнопку бачить лише той, хто
+                                         має право підтверджувати оплату. --}}
+                                    @if(\App\Services\Payments\PaymentClaimService::canResolve(auth()->user()))
+                                        <button type="button" wire:click="mountAction('confirmPayment', { orderId: {{ $order->id }} })"
+                                                style="padding:0.25rem 0.5rem;font-size:0.66rem;font-weight:700;border-radius:0.375rem;background:rgba(74,222,128,0.12);color:#4ade80;border:none;cursor:pointer;">
+                                            Оплачено
+                                        </button>
+                                    @endif
                                 @endif
 
                                 <button type="button" wire:click="draftOrderConfirmation({{ $order->id }})"

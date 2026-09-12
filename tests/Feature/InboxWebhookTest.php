@@ -68,7 +68,7 @@ class InboxWebhookTest extends TestCase
         // Клієнт вносить гроші — FIFO гасить замовлення.
         Transaction::create([
             'type' => 'income', 'category' => 'Оплата', 'amount' => 5000,
-            'date' => now(), 'order_id' => $order->id,
+            'date' => now(), 'order_id' => $order->id, 'account_id' => $this->makeAccount(),
         ]);
 
         Queue::assertPushed(SendInboxWebhook::class, function (SendInboxWebhook $job) use ($order, $clientId) {
@@ -90,7 +90,7 @@ class InboxWebhookTest extends TestCase
 
         Transaction::create([
             'type' => 'income', 'category' => 'Оплата', 'amount' => 5000,
-            'date' => now(), 'order_id' => $order->id,
+            'date' => now(), 'order_id' => $order->id, 'account_id' => $this->makeAccount(),
         ]);
 
         Queue::assertNotPushed(SendInboxWebhook::class);
@@ -106,7 +106,7 @@ class InboxWebhookTest extends TestCase
 
         Transaction::create([
             'type' => 'income', 'category' => 'Оплата', 'amount' => 5000,
-            'date' => now(), 'order_id' => $order->id,
+            'date' => now(), 'order_id' => $order->id, 'account_id' => $this->makeAccount(),
         ]);
 
         Queue::assertNotPushed(SendInboxWebhook::class);
@@ -121,7 +121,7 @@ class InboxWebhookTest extends TestCase
 
         Transaction::create([
             'type' => 'income', 'category' => 'Оплата', 'amount' => 5000,
-            'date' => now(), 'order_id' => $order->id,
+            'date' => now(), 'order_id' => $order->id, 'account_id' => $this->makeAccount(),
         ]);
 
         // Ще один перерахунок нічого не змінює — статус той самий.
@@ -139,7 +139,7 @@ class InboxWebhookTest extends TestCase
 
         $payment = Transaction::create([
             'type' => 'income', 'category' => 'Оплата', 'amount' => 5000,
-            'date' => now(), 'order_id' => $order->id,
+            'date' => now(), 'order_id' => $order->id, 'account_id' => $this->makeAccount(),
         ]);
 
         // Гроші повернули — замовлення знову неоплачене.
@@ -251,7 +251,7 @@ class InboxWebhookTest extends TestCase
 
         Transaction::create([
             'type' => 'income', 'category' => 'Оплата', 'amount' => 3500,
-            'date' => now(), 'order_id' => $first->id,
+            'date' => now(), 'order_id' => $first->id, 'account_id' => $this->makeAccount(),
         ]);
 
         Client::find($clientId)->recalculateOrderPaymentStatus();

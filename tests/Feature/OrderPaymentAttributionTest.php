@@ -26,6 +26,8 @@ class OrderPaymentAttributionTest extends TestCase
 
     protected Client $client;
 
+    protected ?int $accountId = null;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -60,6 +62,8 @@ class OrderPaymentAttributionTest extends TestCase
             'amount'   => $amount,
             'date'     => now(),
             'order_id' => $order->id,
+            // Надходження на замовлення без каси запобіжник не пропускає.
+            'account_id' => $this->accountId ??= $this->makeAccount(),
         ]);
     }
 
