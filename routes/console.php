@@ -25,6 +25,12 @@ Schedule::command('couriers:shift-report morning --remind')->dailyAt(config('ser
 Schedule::command('couriers:shift-report evening')->dailyAt(config('services.telegram.report_evening_at', '17:00'));
 Schedule::command('couriers:shift-report evening --remind')->dailyAt(config('services.telegram.report_evening_remind_at', '22:00'));
 
+// Закриття кухонної зміни: о 06:00 списуємо зі складу вчорашнє готування за
+// нормою (п'ятниця — одразу сб+нд, субота — вихідний). Якщо кухня вже закрила
+// зміну кнопкою — нічого не робить. Помилки й відсутні меню пише в лог.
+Schedule::command('stock:debit-norm')->dailyAt('06:00')->withoutOverlapping()
+    ->onFailure(fn () => \Illuminate\Support\Facades\Log::error('stock:debit-norm: автосписання о 06:00 не вдалось — див. попередні записи'));
+
 // Telegram аналітика
 Schedule::command('telegram:morning-pulse')->dailyAt('11:00');
 Schedule::command('telegram:evening-summary')->dailyAt('18:00');
