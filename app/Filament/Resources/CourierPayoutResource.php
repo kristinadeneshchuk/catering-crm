@@ -16,10 +16,11 @@ use Filament\Tables\Table;
 use Illuminate\Support\HtmlString;
 
 /**
- * Виплати курʼєрам на погодженні.
+ * Виплати курʼєрам: розклад дня → «ЗП погоджена» з вибором рахунку (ФОП чи
+ * готівка) → повідомлення в чат оплат з карткою курʼєра.
  *
- * Сюди веде кнопка ✏️ «Виправити» з Telegram: власник бачить помилку в
- * розкладі, виправляє тут — і повідомлення в обох чатах оновлюється саме.
+ * Погоджує лише адмін (docs/tz-ops-agent.md §5). Щоденні кнопки в Telegram
+ * власнику більше не шлемо.
  */
 class CourierPayoutResource extends Resource
 {
@@ -48,7 +49,7 @@ class CourierPayoutResource extends Resource
             return null;
         }
 
-        $n = CourierPayout::where('status', CourierPayout::STATUS_SENT)->count();
+        $n = CourierPayout::whereIn('status', [CourierPayout::STATUS_DRAFT, CourierPayout::STATUS_SENT])->count();
 
         return $n > 0 ? (string) $n : null;
     }
@@ -103,6 +104,8 @@ class CourierPayoutResource extends Resource
                 Tables\Columns\TextColumn::make('total')->label('Нараховано')->money('UAH', locale: 'uk'),
                 Tables\Columns\TextColumn::make('cash_on_hand')->label('Готівка на руках')->money('UAH', locale: 'uk'),
                 Tables\Columns\TextColumn::make('to_pay')->label('До виплати')->money('UAH', locale: 'uk')->weight('bold'),
+                Tables\Columns\TextColumn::make('account.name')->label('Рахунок')->placeholder('—')
+                    ->description(fn (CourierPayout $r) => $r->paid_amount !== null ? 'виплачено '.number_format((float) $r->paid_amount, 0, ',', ' ').' ₴' : null),
                 Tables\Columns\TextColumn::make('status')
                     ->label('Статус')
                     ->badge()
@@ -120,20 +123,127 @@ class CourierPayoutResource extends Resource
                 Tables\Filters\SelectFilter::make('employee_id')->label('Курʼєр')
                     ->options(fn () => Employee::where('position', 'courier')->orderBy('name')->pluck('name', 'id')),
             ])
+            ->headerActions([
+                Tables\Actions\Action::make('refresh_day')
+                    ->label('Порахувати день')
+                    ->icon('heroicon-o-calculator')
+                    ->visible(fn () => static::isAdmin())
+                    ->form([
+                        Forms\Components\DatePicker::make('date')->label('Дата')->required()->native(false)
+                            ->displayFormat('d.m.Y')->default(now()->subDay())->maxDate(now()),
+                    ])
+                    ->action(function (array $data) {
+                        $n = app(CourierPayoutService::class)->refreshDay(\Carbon\Carbon::parse($data['date'])->toDateString());
+                        Notification::make()->title("Пораховано курʼєрів: {$n}")->success()->send();
+                    }),
+            ])
             ->actions([
-                Tables\Actions\Action::make('send')
-                    ->label('На погодження')
-                    ->icon('heroicon-o-paper-airplane')
-                    ->visible(fn (CourierPayout $r) => in_array($r->status, [CourierPayout::STATUS_DRAFT, CourierPayout::STATUS_REJECTED], true))
+                static::approveAction(),
+                Tables\Actions\Action::make('cancel_payment')
+                    ->label('Скасувати виплату')
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->color('danger')
+                    ->visible(fn (CourierPayout $r) => $r->status === CourierPayout::STATUS_PAID && $r->account_id && static::isAdmin())
                     ->requiresConfirmation()
+                    ->modalDescription('Транзакцію виплати буде видалено, борг повернеться курʼєру, у чаті оплат зʼявиться «Скасовано — не платити».')
                     ->action(function (CourierPayout $r) {
-                        $service = app(CourierPayoutService::class);
-                        $service->sendForApproval($service->refresh($r->employee, $r->dateString()));
-                        Notification::make()->title('Надіслано власнику')->success()->send();
+                        app(CourierPayoutService::class)->cancelPayment($r);
+                        Notification::make()->title('Виплату скасовано')->warning()->send();
                     }),
                 Tables\Actions\EditAction::make()->label('Виправити')
                     ->visible(fn (CourierPayout $r) => ! $r->isLocked()),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkAction::make('approve_many')
+                    ->label('ЗП погоджена — вибраним')
+                    ->icon('heroicon-o-check-badge')
+                    ->color('success')
+                    ->visible(fn () => static::isAdmin())
+                    ->form([static::accountSelect()])
+                    ->action(function (\Illuminate\Support\Collection $records, array $data) {
+                        $service = app(CourierPayoutService::class);
+                        $ok = 0;
+                        $errors = [];
+
+                        foreach ($records as $r) {
+                            $res = $service->approveAndPay($r, (int) $data['account_id'], null, auth()->id());
+                            $res['ok'] ? $ok++ : $errors[] = $r->employee?->name.' '.$r->dateString().': '.$res['error'];
+                        }
+
+                        Notification::make()
+                            ->title("Погоджено: {$ok}")
+                            ->body($errors ? implode("\n", $errors) : null)
+                            ->{$errors ? 'warning' : 'success'}()
+                            ->send();
+                    })
+                    ->deselectRecordsAfterCompletion(),
             ]);
+    }
+
+    public static function isAdmin(): bool
+    {
+        return (bool) auth()->user()?->isAdmin();
+    }
+
+    public static function accountSelect(): Forms\Components\Select
+    {
+        return Forms\Components\Select::make('account_id')
+            ->label('З якого рахунку платимо')
+            ->options(function () {
+                $ids = config('ops.payout_account_ids', []);
+
+                return \App\Models\Account::query()
+                    ->when($ids !== [], fn ($q) => $q->whereIn('id', $ids))
+                    ->orderBy('name')
+                    ->pluck('name', 'id');
+            })
+            ->required()
+            ->native(false)
+            ->placeholder('ФОП або готівка');
+    }
+
+    public static function approveAction(): Tables\Actions\Action
+    {
+        return Tables\Actions\Action::make('approve')
+            ->label('ЗП погоджена')
+            ->icon('heroicon-o-check-badge')
+            ->color('success')
+            ->visible(fn (CourierPayout $r) => $r->status !== CourierPayout::STATUS_PAID && static::isAdmin())
+            ->modalHeading(fn (CourierPayout $r) => 'ЗП · '.$r->employee?->name.' · '.\Carbon\Carbon::parse($r->dateString())->format('d.m'))
+            ->modalSubmitActionLabel('Погодити й відправити в чат оплат')
+            ->form(fn (CourierPayout $r) => [
+                Forms\Components\Placeholder::make('breakdown')
+                    ->label('Розклад')
+                    ->content(new HtmlString('<pre style="white-space:pre-wrap;font-family:inherit;margin:0;line-height:1.5;">'
+                        .app(CourierPayoutService::class)->render($r).'</pre>')),
+                static::accountSelect(),
+                Forms\Components\TextInput::make('amount')
+                    ->label('Сума виплати')
+                    ->numeric()
+                    ->suffix('₴')
+                    ->default(max(0, (float) $r->to_pay))
+                    ->helperText((float) $r->cash_on_hand > 0
+                        ? 'Готівку на руках '.number_format((float) $r->cash_on_hand, 0, ',', ' ').' ₴ уже віднято. Якщо курʼєр здав її менеджеру — поставте '.number_format((float) $r->total, 0, ',', ' ').' ₴.'
+                        : null),
+                Forms\Components\TextInput::make('comment')->label('Коментар (необовʼязково)'),
+            ])
+            ->action(function (CourierPayout $r, array $data) {
+                $res = app(CourierPayoutService::class)->approveAndPay(
+                    $r, (int) $data['account_id'], (float) $data['amount'], auth()->id(), $data['comment'] ?? null,
+                );
+
+                if (! $res['ok']) {
+                    Notification::make()->title($res['error'])->danger()->send();
+
+                    return;
+                }
+
+                Notification::make()
+                    ->title('ЗП погоджено')
+                    ->body($res['sent'] ? 'Повідомлення в чаті оплат.' : 'Чат оплат не налаштовано (TELEGRAM_PAYMENTS_CHAT_ID) — повідомлення не відправлено.')
+                    ->{$res['sent'] ? 'success' : 'warning'}()
+                    ->send();
+            });
     }
 
     public static function getPages(): array

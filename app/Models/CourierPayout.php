@@ -27,6 +27,7 @@ class CourierPayout extends Model
         'components', 'total', 'cash_on_hand', 'to_pay', 'status',
         'approved_by_tg', 'approved_by', 'approved_at', 'paid_at',
         'tg_messages', 'reject_reason', 'comment',
+        'account_id', 'transaction_id', 'paid_amount', 'payment_message',
     ];
 
     protected $casts = [
@@ -37,6 +38,8 @@ class CourierPayout extends Model
         'to_pay'       => 'decimal:2',
         'approved_at'  => 'datetime',
         'paid_at'      => 'datetime',
+        'paid_amount'  => 'decimal:2',
+        'payment_message' => 'array',
     ];
 
     public static function statusLabels(): array
@@ -53,6 +56,11 @@ class CourierPayout extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function account(): BelongsTo
+    {
+        return $this->belongsTo(Account::class);
     }
 
     public function dateString(): string

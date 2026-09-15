@@ -74,8 +74,39 @@ class StockDocumentResource extends Resource
     {
         return $form
             ->schema([
+                Section::make('Перевірка')
+                    ->description('Чернетка видна тут, але не рухає склад, ціни й касу, поки адмін її не проведе.')
+                    ->schema([
+                        Forms\Components\Placeholder::make('draft_state')
+                            ->label('Статус')
+                            ->content(fn (?StockDocument $record) => $record
+                                ? (StockDocument::statusLabels()[$record->status] ?? $record->status)
+                                    .($record->source === StockDocument::SOURCE_AI ? ' · створено ШІ' : '')
+                                : '—'),
+                        Forms\Components\Placeholder::make('ai_comment_view')
+                            ->label('Коментар ШІ')
+                            ->content(fn (?StockDocument $record) => $record?->ai_comment ?: '—')
+                            ->visible(fn (?StockDocument $record) => filled($record?->ai_comment)),
+                        Forms\Components\Placeholder::make('attachments_view')
+                            ->label('Фото / файли')
+                            ->content(fn (?StockDocument $record) => new HtmlString(collect($record?->attachments ?? [])
+                                ->map(fn ($a) => '<a href="'.e(\Illuminate\Support\Facades\URL::temporarySignedRoute('ops.attachment', now()->addHour(), ['path' => is_array($a) ? ($a['path'] ?? '') : $a])).'" target="_blank" class="underline">'.e(basename(is_array($a) ? ($a['path'] ?? '') : $a)).'</a>')
+                                ->implode(' · ') ?: '—'))
+                            ->visible(fn (?StockDocument $record) => ! empty($record?->attachments)),
+                    ])
+                    ->columns(3)
+                    ->visible(fn (?StockDocument $record) => $record?->isDraft() || filled($record?->ai_comment)),
+
                 Section::make('Основні відомості')
                     ->schema([
+                        Toggle::make('is_draft')
+                            ->label('Зберегти як чернетку')
+                            ->helperText('Документ не вплине на склад і касу, поки адмін не натисне «Провести».')
+                            ->dehydrated(false)
+                            ->default(false)
+                            ->visibleOn('create')
+                            ->columnSpanFull(),
+
                         Select::make('type')
                             ->label('Тип запису')
                             ->options([
@@ -522,6 +553,14 @@ class StockDocumentResource extends Resource
                         default     => 'gray',
                     }),
 
+                TextColumn::make('status')
+                    ->label('Статус')
+                    ->badge()
+                    ->formatStateUsing(fn ($state, StockDocument $record) => (StockDocument::statusLabels()[$state] ?? $state)
+                        .($record->source === StockDocument::SOURCE_AI ? ' · ШІ' : ''))
+                    ->color(fn ($state) => $state === StockDocument::STATUS_DRAFT ? 'warning' : 'gray')
+                    ->tooltip(fn (StockDocument $record) => $record->ai_comment),
+
                 TextColumn::make('supplier.name')
                     ->label('Постачальник')
                     ->placeholder('—')
@@ -535,9 +574,11 @@ class StockDocumentResource extends Resource
                         Tables\Columns\Summarizers\Summarizer::make()
                             ->label('Підсумок за фільтром')
                             ->using(function ($query) {
-                                $total  = (clone $query)->sum('total_sum');
-                                $paid   = (clone $query)->where('is_paid', true)->sum('total_sum');
-                                $unpaid = (clone $query)->where('is_paid', false)->sum('total_sum');
+                                // Чернетки в підсумок грошей не входять.
+                                $posted = fn () => (clone $query)->where('status', '!=', StockDocument::STATUS_DRAFT);
+                                $total  = $posted()->sum('total_sum');
+                                $paid   = $posted()->where('is_paid', true)->sum('total_sum');
+                                $unpaid = $posted()->where('is_paid', false)->sum('total_sum');
                                 return compact('total', 'paid', 'unpaid');
                             })
                             ->formatStateUsing(function ($state) {
@@ -592,6 +633,11 @@ class StockDocumentResource extends Resource
                         }
                         return $indicators;
                     }),
+
+                Tables\Filters\SelectFilter::make('status')
+                    ->label('Статус')
+                    ->options(StockDocument::statusLabels())
+                    ->placeholder('Усі'),
 
                 // Фільтр по типу документу
                 Tables\Filters\SelectFilter::make('type')
@@ -664,7 +710,9 @@ class StockDocumentResource extends Resource
             ->filtersFormColumns(6)
             ->defaultSort('operation_date', 'desc')
             ->actions([
+                static::postTableAction(),
                 Tables\Actions\Action::make('toggle_paid')
+                    ->hidden(fn (StockDocument $record) => $record->isDraft())
                     ->label(fn ($record) => $record->is_paid ? 'Скасувати оплату' : 'Позначити оплаченим')
                     ->icon(fn ($record) => $record->is_paid ? 'heroicon-o-x-circle' : 'heroicon-o-check-circle')
                     ->color(fn ($record) => $record->is_paid ? 'warning' : 'success')
@@ -681,6 +729,28 @@ class StockDocumentResource extends Resource
                 Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
                 Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
             ]);
+    }
+
+    /** Провести чернетку — лише адмін. */
+    public static function canPost(): bool
+    {
+        return (bool) auth()->user()?->isAdmin();
+    }
+
+    public static function postTableAction(): Tables\Actions\Action
+    {
+        return Tables\Actions\Action::make('post')
+            ->label('Провести')
+            ->icon('heroicon-o-check-badge')
+            ->color('success')
+            ->visible(fn (StockDocument $record) => $record->isDraft() && static::canPost())
+            ->requiresConfirmation()
+            ->modalHeading('Провести чернетку?')
+            ->modalDescription('Позиції потраплять на склад, середня ціна інгредієнтів перерахується, оплата — у касу, якщо документ позначено оплаченим.')
+            ->action(function (StockDocument $record) {
+                $record->post(auth()->id());
+                \Filament\Notifications\Notification::make()->title('Документ проведено')->success()->send();
+            });
     }
 
     public static function getPages(): array

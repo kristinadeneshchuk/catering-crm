@@ -18,12 +18,12 @@ class StockDocumentStats extends Widget
 
     protected function getViewData(): array
     {
-        $total       = StockDocument::sum('total_sum');
-        $paid        = StockDocument::where('is_paid', true)->sum('total_sum');
-        $unpaid      = StockDocument::where('is_paid', false)->sum('total_sum');
-        $countAll    = StockDocument::count();
-        $countPaid   = StockDocument::where('is_paid', true)->count();
-        $countUnpaid = StockDocument::where('is_paid', false)->count();
+        $total       = StockDocument::posted()->sum('total_sum');
+        $paid        = StockDocument::posted()->where('is_paid', true)->sum('total_sum');
+        $unpaid      = StockDocument::posted()->where('is_paid', false)->sum('total_sum');
+        $countAll    = StockDocument::posted()->count();
+        $countPaid   = StockDocument::posted()->where('is_paid', true)->count();
+        $countUnpaid = StockDocument::posted()->where('is_paid', false)->count();
 
         return [
             'total'         => $total,

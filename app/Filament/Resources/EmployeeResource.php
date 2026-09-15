@@ -117,6 +117,27 @@ class EmployeeResource extends Resource
                             ->helperText('Якщо в авто одометр у милях (імпорт з США тощо) — обери «Милі». CRM автоматично перекладе в км для всіх розрахунків (компенсація, амортизація, пальне).')
                             ->visible(fn (\Filament\Forms\Get $get) => $get('position') === 'courier'),
 
+                        // Картка для виплат: зберігається зашифрованою, у форму не
+                        // підвантажується. Порожнє поле при збереженні не затирає наявну.
+                        TextInput::make('payout_card')
+                            ->label('Картка для виплат')
+                            ->placeholder(fn (?\App\Models\Employee $record) => $record?->maskedPayoutCard()
+                                ? $record->maskedPayoutCard().' — щоб змінити, введіть новий номер'
+                                : '16 цифр')
+                            ->rule('nullable')
+                            ->rule('regex:/^[\d\s]{16,23}$/')
+                            ->validationMessages(['regex' => 'Номер картки — 16 цифр.'])
+                            ->dehydrateStateUsing(fn ($state) => filled($state) ? preg_replace('/\D/', '', $state) : null)
+                            ->dehydrated(fn ($state) => filled($state))
+                            ->helperText('Іде лише в чат оплат після «ЗП погоджена». У CRM видно тільки останні 4 цифри.')
+                            ->visible(fn (\Filament\Forms\Get $get) => $get('position') === 'courier' && auth()->user()?->isAdmin()),
+
+                        TextInput::make('inbox_conversation_id')
+                            ->label('Чат курʼєра в Inbox (id)')
+                            ->numeric()
+                            ->helperText('Діалог у робочому акаунті Avocado, куди курʼєр шле звіти. ШІ читатиме звіти звідти.')
+                            ->visible(fn (\Filament\Forms\Get $get) => $get('position') === 'courier' && auth()->user()?->isAdmin()),
+
                         Toggle::make('is_active')
                             ->label('Працює')
                             ->default(true)

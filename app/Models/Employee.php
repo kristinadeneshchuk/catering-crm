@@ -6,13 +6,33 @@ use Illuminate\Database\Eloquent\Model;
 
 class Employee extends Model
 {
-    protected $fillable = ['name', 'ant_driver_name', 'phone', 'telegram_chat_id', 'telegram_link_code', 'position', 'project_id', 'base_rate', 'balance', 'is_active', 'archived_at', 'fuel_consumption', 'mileage_unit'];
+    protected $fillable = ['name', 'ant_driver_name', 'phone', 'telegram_chat_id', 'telegram_link_code', 'position', 'project_id', 'base_rate', 'balance', 'is_active', 'archived_at', 'fuel_consumption', 'mileage_unit', 'payout_card', 'inbox_conversation_id'];
+
+    // Номер картки для виплат — у БД лише зашифрований.
+    protected $hidden = ['payout_card'];
 
     protected $casts = [
         'is_active'        => 'boolean',
         'archived_at'      => 'datetime',
         'fuel_consumption' => 'decimal:2',
+        'payout_card'      => 'encrypted',
     ];
+
+    /** «•••• 3333» — для списків і форм, де повний номер не потрібен. */
+    public function maskedPayoutCard(): ?string
+    {
+        $digits = preg_replace('/\D/', '', (string) $this->payout_card);
+
+        return $digits === '' ? null : '•••• '.substr($digits, -4);
+    }
+
+    /** «5375 4141 2222 3333» — лише для повідомлення в чат оплат. */
+    public function formattedPayoutCard(): ?string
+    {
+        $digits = preg_replace('/\D/', '', (string) $this->payout_card);
+
+        return $digits === '' ? null : trim(chunk_split($digits, 4, ' '));
+    }
 
     // Посада-довідник (звʼязок за стабільним ключем, як Order->projectData за slug).
     // Назва positionData (не position!), щоб не конфліктувати з рядковою колонкою position.

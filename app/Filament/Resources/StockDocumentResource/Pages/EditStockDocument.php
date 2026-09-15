@@ -15,6 +15,19 @@ class EditStockDocument extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('post')
+                ->label('Провести')
+                ->icon('heroicon-o-check-badge')
+                ->color('success')
+                ->visible(fn () => $this->record->isDraft() && StockDocumentResource::canPost())
+                ->requiresConfirmation()
+                ->modalHeading('Провести чернетку?')
+                ->modalDescription('Збережіть правки перед проведенням. Позиції потраплять на склад, середня ціна перерахується.')
+                ->action(function () {
+                    $this->record->post(auth()->id());
+                    \Filament\Notifications\Notification::make()->title('Документ проведено')->success()->send();
+                    $this->redirect($this->getResource()::getUrl('index'));
+                }),
             Actions\DeleteAction::make(),
         ];
     }

@@ -38,7 +38,9 @@ class CourierReportService
         private CourierMileageService $mileage,
         private PaymentClaimService $claims,
         private CourierPayoutService $payouts,
+        private ?CourierReportAnomalies $anomalies = null,
     ) {
+        $this->anomalies ??= new CourierReportAnomalies();
     }
 
     // -------------------------------------------------------------------------
@@ -265,6 +267,12 @@ class CourierReportService
             return 'Не бачу відкритого звіту зміни. Шаблон приходить на початку зміни — якщо його не було, напишіть менеджеру.';
         }
 
+        // Підтверджений адміном звіт курʼєр уже не переписує: гроші за нього
+        // могли виплатити. Виправлення — через менеджера.
+        if ($report->isAccepted() && config('ops.courier_reports_require_review', true)) {
+            return 'Цей звіт уже перевірено. Якщо щось не так — напишіть менеджеру.';
+        }
+
         $parsed = $report->parsed ?? [];
 
         if ($text !== null && trim($text) !== '') {
@@ -296,7 +304,144 @@ class CourierReportService
 
         $report->save();
 
+        // Звіт повний. За рішенням власника його спершу перевіряє адмін у CRM:
+        // пробіг і гроші рухаються лише після «Підтвердити».
+        if (config('ops.courier_reports_require_review', true)) {
+            return $this->toDraft($report->fresh());
+        }
+
         return $this->accept($report->fresh());
+    }
+
+    // -------------------------------------------------------------------------
+    // Перевірка адміном
+    // -------------------------------------------------------------------------
+
+    /**
+     * Повний звіт → чернетка з позначками. Нічого не записує: ні пробігу, ні
+     * заяв про готівку, ні балансу.
+     */
+    public function toDraft(CourierShiftReport $report): string
+    {
+        $parsed    = $report->parsed ?? [];
+        $parsed['cash'] = $this->cashPreview($report, $parsed);
+        $anomalies = $this->anomalies->detect($report, $parsed);
+
+        $report->update([
+            'parsed'    => $parsed,
+            'status'    => CourierShiftReport::STATUS_DRAFT,
+            'problems'  => [],
+            'anomalies' => $anomalies,
+        ]);
+
+        $km    = $report->fresh()->mileageSummary()['km'];
+        $cash  = collect($parsed['cash'] ?? [])->sum('received');
+        $reply = 'Прийнято на перевірку ✅'.($km !== null ? " Пробіг {$km} км" : '');
+
+        if ($cash > 0) {
+            $reply .= ', готівка '.number_format($cash, 0, ',', ' ').' ₴';
+        }
+
+        return $reply.'.';
+    }
+
+    /**
+     * Адмін підтвердив чернетку (за потреби виправивши цифри). Пробіг іде через
+     * той самий сервіс, що й Логістика, готівка стає заявами, виплата дня
+     * перераховується. Рівно один раз: повторне підтвердження нічого не робить.
+     *
+     * @param  array{start_km?: ?int, end_km?: ?int, fuel_price?: ?float, cash?: array<int|string, float|int|string|null>}  $overrides
+     *         cash — [order_id => отримав]
+     * @return array{ok: bool, note: ?string}
+     */
+    public function confirm(CourierShiftReport $report, ?int $userId, array $overrides = []): array
+    {
+        $result = DB::transaction(function () use ($report, $userId, $overrides) {
+            $fresh = CourierShiftReport::lockForUpdate()->find($report->id);
+
+            if (! $fresh || ! $fresh->isDraft()) {
+                return ['ok' => false, 'note' => 'Звіт уже не на перевірці.'];
+            }
+
+            $parsed = $fresh->parsed ?? [];
+
+            foreach (['start_km', 'end_km'] as $f) {
+                if (array_key_exists($f, $overrides) && $overrides[$f] !== null && $overrides[$f] !== '') {
+                    $parsed[$f] = (int) $overrides[$f];
+                }
+            }
+
+            if (array_key_exists('fuel_price', $overrides) && $overrides['fuel_price'] !== null && $overrides['fuel_price'] !== '') {
+                $parsed['fuel_price'] = round((float) $overrides['fuel_price'], 2);
+            }
+
+            if (! empty($overrides['cash'])) {
+                $parsed['cash'] = collect($parsed['cash'] ?? [])
+                    ->map(function ($line) use ($overrides) {
+                        $id = $line['order_id'] ?? null;
+                        if ($id !== null && array_key_exists($id, $overrides['cash'])) {
+                            $line['received'] = round((float) $overrides['cash'][$id], 2);
+                        }
+
+                        return $line;
+                    })
+                    ->all();
+            }
+
+            $employee = $fresh->employee;
+            $date     = $fresh->dateString();
+
+            $parsed['mileage_note'] = $this->writeMileage($fresh, $employee, $date, $parsed);
+            $parsed['cash']         = $this->fileCashClaims($fresh, $parsed);
+
+            $fresh->update([
+                'parsed'      => $parsed,
+                'status'      => CourierShiftReport::STATUS_ACCEPTED,
+                'accepted_at' => now(),
+                'reviewed_by' => $userId,
+                'reviewed_at' => now(),
+            ]);
+
+            return ['ok' => true, 'note' => $parsed['mileage_note']];
+        });
+
+        if ($result['ok']) {
+            $this->payouts->refresh($report->employee, $report->dateString());
+        }
+
+        return $result;
+    }
+
+    public function reject(CourierShiftReport $report, ?int $userId, string $reason): bool
+    {
+        if (! $report->isDraft()) {
+            return false;
+        }
+
+        return (bool) $report->update([
+            'status'        => CourierShiftReport::STATUS_REJECTED,
+            'reject_reason' => mb_substr($reason, 0, 500),
+            'reviewed_by'   => $userId,
+            'reviewed_at'   => now(),
+        ]);
+    }
+
+    /**
+     * Рядки готівки для показу в чернетці: що чекали і що курʼєр написав.
+     * Заяв не створює — це робить confirm().
+     */
+    private function cashPreview(CourierShiftReport $report, array $parsed): array
+    {
+        $expected = collect($report->expected['cash'] ?? [])->keyBy('order_id');
+        $got      = collect($parsed['cash'] ?? [])->keyBy('order_id');
+
+        return $expected->keys()->merge($got->keys())->unique()
+            ->map(fn ($id) => array_merge(
+                $expected[$id] ?? ['order_id' => $id],
+                ['received' => (float) ($got[$id]['received'] ?? 0)],
+            ))
+            ->values()
+            ->all();
     }
 
     /**
@@ -547,8 +692,9 @@ class CourierReportService
      */
     private function openReport(Employee $employee, ?string $text): ?CourierShiftReport
     {
+        // Чернетку курʼєр ще може виправити — новий звіт перерахує позначки.
         $query = CourierShiftReport::where('employee_id', $employee->id)
-            ->whereIn('status', [CourierShiftReport::STATUS_SENT, CourierShiftReport::STATUS_INCOMPLETE, CourierShiftReport::STATUS_ACCEPTED])
+            ->whereIn('status', [CourierShiftReport::STATUS_SENT, CourierShiftReport::STATUS_INCOMPLETE, CourierShiftReport::STATUS_DRAFT, CourierShiftReport::STATUS_ACCEPTED])
             ->whereDate('date', '>=', now()->subDays(2)->toDateString());
 
         if ($text && preg_match('/звіт зміни\s*·\s*(\d{2})\.(\d{2})\s*·\s*(ранок|вечір)/iu', $text, $m)) {
@@ -563,7 +709,7 @@ class CourierReportService
         }
 
         return (clone $query)
-            ->whereIn('status', [CourierShiftReport::STATUS_SENT, CourierShiftReport::STATUS_INCOMPLETE])
+            ->whereIn('status', [CourierShiftReport::STATUS_SENT, CourierShiftReport::STATUS_INCOMPLETE, CourierShiftReport::STATUS_DRAFT])
             ->orderByDesc('date')->orderByDesc('template_sent_at')
             ->first();
     }

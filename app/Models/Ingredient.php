@@ -65,7 +65,7 @@ class Ingredient extends Model
         $avgData = \App\Models\StockDocumentItem::query()
             ->where('itemable_id', $this->id)
             ->where('itemable_type', self::class)
-            ->whereHas('stockDocument', fn($q) => $q->where('type', 'receipt'))
+            ->whereHas('stockDocument', fn($q) => $q->where('type', 'receipt')->posted())
             ->selectRaw('SUM(qty * price) as total_cost, SUM(qty) as total_qty')
             ->first();
 
@@ -92,6 +92,7 @@ class Ingredient extends Model
         $rows = \Illuminate\Support\Facades\DB::table('stock_document_items as sdi')
             ->join('stock_documents as sd', 'sd.id', '=', 'sdi.stock_document_id')
             ->where('sd.type', 'receipt')
+            ->where('sd.status', '!=', \App\Models\StockDocument::STATUS_DRAFT)
             ->where('sdi.itemable_type', self::class)
             ->selectRaw('sdi.itemable_id as id, SUM(sdi.qty * sdi.price) as total_cost, SUM(sdi.qty) as total_qty')
             ->groupBy('sdi.itemable_id')
@@ -114,7 +115,7 @@ class Ingredient extends Model
         return (float) \App\Models\StockDocumentItem::query()
             ->whereIn('itemable_type', [self::class, 'App\Models\Ingredient'])
             ->where('itemable_id', $this->id)
-            ->whereHas('stockDocument', fn($q) => $q->where('type', 'receipt'))
+            ->whereHas('stockDocument', fn($q) => $q->where('type', 'receipt')->posted())
             ->sum(\Illuminate\Support\Facades\DB::raw('qty * price'));
     }
 

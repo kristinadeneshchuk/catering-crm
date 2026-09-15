@@ -139,6 +139,9 @@ class StockDocumentItem extends Model
     {
         if (!$this->itemable || !$this->stockDocument) return;
 
+        // Позиції чернетки склад не рухають — лише після StockDocument::post().
+        if ($this->stockDocument->isDraft()) return;
+
         $qty = (float) $this->qty;
         $type = $this->stockDocument->type;
 
@@ -157,6 +160,9 @@ class StockDocumentItem extends Model
         $originalQty = (float) ($this->getOriginal('qty') ?: $this->qty);
 
         if (!$originalType || !$originalId || !$this->stockDocument) return;
+
+        // Чернетка склад не рухала — нема чого відкочувати.
+        if ($this->stockDocument->isDraft()) return;
 
         $itemable = $originalType::find($originalId);
         if (!$itemable) return;

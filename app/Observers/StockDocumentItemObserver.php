@@ -12,7 +12,7 @@ class StockDocumentItemObserver
     // сторінка вже віддана браузеру. Користувач не чекає, сервер не грузиться.
     private function recalculateIfReceipt(StockDocumentItem $item): void
     {
-        if ($item->stockDocument?->type === 'receipt') {
+        if ($item->stockDocument?->type === 'receipt' && ! $item->stockDocument->isDraft()) {
             RecalculateDailyMenuCosts::dispatchAfterResponse();
         }
     }

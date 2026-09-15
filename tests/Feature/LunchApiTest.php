@@ -75,7 +75,7 @@ class LunchApiTest extends TestCase
 
         // Середня ціна рахується зі складських документів.
         Schema::create('stock_documents', function (Blueprint $t) {
-            $t->id(); $t->string('type')->nullable(); $t->timestamps();
+            $t->id(); $t->string('type')->nullable(); $t->string('status')->default('completed'); $t->timestamps();
         });
 
         Schema::create('stock_document_items', function (Blueprint $t) {

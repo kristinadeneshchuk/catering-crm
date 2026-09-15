@@ -102,6 +102,11 @@ Route::middleware('auth')->group(function () {
 });
 
 Route::get('/print/logistics', [PrintController::class, 'logistics'])->name('print.logistics')->middleware('auth');
+
+// Фото й файли чернеток операційного агента (одометр, накладні, голосові).
+Route::get('/ops/attachment', \App\Http\Controllers\Ops\OpsAttachmentController::class)
+    ->middleware(['auth', 'signed'])
+    ->name('ops.attachment');
 Route::get('/print/dish/{dishId}/tech-card', [PrintController::class, 'dishTechCard'])->name('print.dish.tech-card')->middleware('auth');
 Route::get('/print/daily-menu/{dailyMenuId}/tech-cards', [PrintController::class, 'dailyMenuTechCards'])->name('print.daily-menu.tech-cards')->middleware('auth');
 

@@ -117,6 +117,7 @@ trait BuildsCourierTestSchema
 
         (require database_path('migrations/2026_08_26_170000_create_route_stops_table.php'))->up();
         (require database_path('migrations/2026_09_12_130000_create_courier_payout_tables.php'))->up();
+        (require database_path('migrations/2026_09_15_120100_add_courier_report_review.php'))->up();
     }
 
     protected function makeCourier(array $attrs = []): Employee
