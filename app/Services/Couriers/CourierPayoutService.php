@@ -181,20 +181,8 @@ class CourierPayoutService
      */
     public function approveAndPay(CourierPayout $payout, int $accountId, ?float $amount, ?int $userId, ?string $comment = null): array
     {
-        if ($payout->status === CourierPayout::STATUS_PAID) {
-            return ['ok' => false, 'error' => 'Цей день уже виплачено.'];
-        }
-
-        $employee = $payout->employee;
-        $date     = $payout->dateString();
-
-        $drafts = \App\Models\CourierShiftReport::where('employee_id', $employee->id)
-            ->whereDate('date', $date)
-            ->where('status', \App\Models\CourierShiftReport::STATUS_DRAFT)
-            ->count();
-
-        if ($drafts > 0) {
-            return ['ok' => false, 'error' => 'Спершу перевірте звіт курʼєра за цей день (Логістика → Звіти курʼєрів).'];
+        if (($blocker = $this->paymentBlocker($payout)) !== null) {
+            return ['ok' => false, 'error' => $blocker];
         }
 
         $account = \App\Models\Account::find($accountId);
@@ -204,8 +192,71 @@ class CourierPayoutService
         }
 
         // Свіжий знімок: після перевірки звіту цифри могли змінитись.
-        $payout = $this->refresh($employee, $date);
+        $payout = $this->refresh($payout->employee, $payout->dateString());
         $amount = round((float) ($amount ?? max(0, (float) $payout->to_pay)), 2);
+
+        $this->applyPayment($payout, $account, $amount, $userId, $comment);
+
+        return ['ok' => true, 'sent' => $this->sendPaymentMessage(collect([$payout->fresh()]))];
+    }
+
+    /**
+     * Погодити кілька днів одного курʼєра — одна транзакція на день і **одне**
+     * повідомлення в чат оплат з розкладом по днях (як платять зараз руками).
+     *
+     * @param  \Illuminate\Support\Collection<int, CourierPayout>  $payouts
+     * @return array{ok: bool, paid: int, errors: array<int, string>, sent: bool}
+     */
+    public function approveAndPayMany($payouts, int $accountId, ?int $userId, ?string $comment = null): array
+    {
+        $account = \App\Models\Account::find($accountId);
+        $paid    = collect();
+        $errors  = [];
+
+        if (! $account) {
+            return ['ok' => false, 'paid' => 0, 'errors' => ['Оберіть рахунок, з якого платимо.'], 'sent' => false];
+        }
+
+        foreach (collect($payouts)->sortBy(fn (CourierPayout $p) => $p->dateString()) as $payout) {
+            $check = $this->paymentBlocker($payout);
+
+            if ($check !== null) {
+                $errors[] = $payout->employee?->name.' '.$payout->dateString().': '.$check;
+
+                continue;
+            }
+
+            $fresh = $this->refresh($payout->employee, $payout->dateString());
+            $this->applyPayment($fresh, $account, max(0, (float) $fresh->to_pay), $userId, $comment);
+            $paid->push($fresh->fresh());
+        }
+
+        $sent = $paid->isNotEmpty() && $this->sendPaymentMessage($paid);
+
+        return ['ok' => $paid->isNotEmpty(), 'paid' => $paid->count(), 'errors' => $errors, 'sent' => $sent];
+    }
+
+    /** Чому цей день ще не можна виплатити; null — можна. */
+    public function paymentBlocker(CourierPayout $payout): ?string
+    {
+        if ($payout->status === CourierPayout::STATUS_PAID) {
+            return 'Цей день уже виплачено.';
+        }
+
+        $drafts = \App\Models\CourierShiftReport::where('employee_id', $payout->employee_id)
+            ->whereDate('date', $payout->dateString())
+            ->where('status', \App\Models\CourierShiftReport::STATUS_DRAFT)
+            ->count();
+
+        return $drafts > 0
+            ? 'Спершу перевірте звіт курʼєра за цей день (Логістика → Звіти курʼєрів).'
+            : null;
+    }
+
+    private function applyPayment(CourierPayout $payout, \App\Models\Account $account, float $amount, ?int $userId, ?string $comment): void
+    {
+        $employee = $payout->employee;
+        $date     = $payout->dateString();
 
         DB::transaction(function () use ($payout, $employee, $account, $amount, $userId, $comment, $date) {
             $transactionId = null;
@@ -236,8 +287,6 @@ class CourierPayoutService
                 'comment'        => $comment ?: $payout->comment,
             ]);
         });
-
-        return ['ok' => true, 'sent' => $this->sendPaymentMessage($payout->fresh())];
     }
 
     /**
@@ -252,7 +301,7 @@ class CourierPayoutService
 
         // Текст беремо до скидання полів: у ньому ще видно, звідки платили.
         // У БД текст не зберігаємо — у ньому повний номер картки.
-        $text = $this->renderPaymentMessage($payout);
+        $text = $this->renderPaymentMessage(collect([$payout]));
 
         DB::transaction(function () use ($payout) {
             if ($payout->transaction_id) {
@@ -305,111 +354,110 @@ class CourierPayoutService
         return $n;
     }
 
-    public function sendPaymentMessage(CourierPayout $payout): bool
+    /** @param  \Illuminate\Support\Collection<int, CourierPayout>  $payouts  дні одного курʼєра */
+    public function sendPaymentMessage($payouts): bool
     {
-        $chatId = (string) config('ops.payments_chat_id');
+        $payouts = collect($payouts);
+        $chatId  = (string) config('ops.payments_chat_id');
 
-        if ($chatId === '') {
+        if ($chatId === '' || $payouts->isEmpty()) {
             return false;
         }
 
-        $text = $this->renderPaymentMessage($payout);
-        $id   = $this->telegram->sendMessage($chatId, $text);
+        $id = $this->telegram->sendMessage($chatId, $this->renderPaymentMessage($payouts));
 
         if ($id) {
-            $payout->update(['payment_message' => ['chat_id' => $chatId, 'message_id' => $id]]);
+            foreach ($payouts as $payout) {
+                $payout->update(['payment_message' => ['chat_id' => $chatId, 'message_id' => $id]]);
+            }
         }
 
         return (bool) $id;
     }
 
-    public function renderPaymentMessage(CourierPayout $payout): string
+    /**
+     * Повідомлення в чат оплат — у тому ж вигляді, у якому виплати пишуть руками:
+     * імʼя, картка, рядки по днях (ЗП окремо, пальне з амортизацією окремо) і
+     * підсумок «ДО ВИПЛАТИ».
+     *
+     * @param  \Illuminate\Support\Collection<int, CourierPayout>  $payouts  дні одного курʼєра
+     */
+    public function renderPaymentMessage($payouts): string
     {
-        $c        = $payout->components ?? [];
-        $employee = $payout->employee;
-        $money    = fn ($v) => number_format((float) $v, 0, ',', ' ').' ₴';
+        $payouts  = collect($payouts)->sortBy(fn (CourierPayout $p) => $p->dateString())->values();
+        $employee = $payouts->first()?->employee;
+        $money    = fn ($v) => number_format((float) $v, 0, ',', ' ').' грн';
         $e        = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES);
-        $date     = \Carbon\Carbon::parse($payout->dateString());
-        $weekday  = ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'][$date->dayOfWeek];
-        $slot     = fn ($s) => match ($s) { 'morning' => 'ранок', 'evening' => 'вечір', default => 'день' };
+        $weekdays = ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 
         $lines   = [];
-        $lines[] = '💳 <b>ЗП курʼєр · '.$e($employee?->name).' · '.$weekday.' '.$date->format('d.m').'</b>';
+        $lines[] = '<b>'.$e($employee?->name).'</b> (курʼєр)';
         $card    = $employee?->formattedPayoutCard();
-        $lines[] = $card ? 'Картка: <code>'.$card.'</code>' : '⚠️ Картку не внесено в CRM';
+        $lines[] = $card ? '<code>'.$card.'</code>' : '⚠️ картку не внесено в CRM';
+
+        $marks = collect();
+
+        foreach ($payouts as $payout) {
+            $c    = $payout->components ?? [];
+            $date = \Carbon\Carbon::parse($payout->dateString());
+            $day  = $weekdays[$date->dayOfWeek].' '.$date->format('d.m.y');
+
+            $lines[] = '';
+            $lines[] = 'ЗП + компенсація пальне + амортизація за '.$date->format('d.m.y');
+
+            $trips   = (int) ($c['trips'] ?? 0);
+            $stops   = collect($c['routes'] ?? [])->sum('stops');
+            $zpNote  = $trips ? $trips.($trips === 1 ? ' виїзд' : ' виїзди') : 'ставка';
+            $zpNote .= $stops ? ', '.$stops.' точок' : '';
+            $lines[] = 'за '.$day.' — '.$money($c['booked_rate'] ?? 0).' (ЗП: '.$zpNote.')';
+
+            $km    = collect($c['mileage'] ?? [])->sum('km');
+            $fuel  = collect($c['mileage'] ?? [])->sum('fuel_cost');
+            $amort = collect($c['mileage'] ?? [])->sum('amortization');
+
+            if ($fuel + $amort > 0) {
+                $lines[] = 'за '.$day.' — '.$money($fuel + $amort).' ('.(int) $km.' км: пальне '
+                    .$money($fuel).' + амортизація '.$money($amort).')';
+            }
+
+            foreach ($c['bonuses'] ?? [] as $b) {
+                $lines[] = 'за '.$day.' — +'.$money($b['amount']).' (бонус'.($b['reason'] ? ': '.$e($b['reason']) : '').')';
+            }
+
+            foreach ($c['penalties'] ?? [] as $pen) {
+                $lines[] = 'за '.$day.' — −'.$money($pen['amount']).' (штраф'.($pen['reason'] ? ': '.$e($pen['reason']) : '').')';
+            }
+
+            if ((float) $payout->cash_on_hand > 0) {
+                $lines[] = 'готівка від клієнтів на руках — −'.$money($payout->cash_on_hand);
+            }
+
+            $lines[] = 'До виплати: <b>'.$money($payout->paid_amount ?? $payout->to_pay).'</b>';
+
+            $marks = $marks->merge(
+                \App\Models\CourierShiftReport::where('employee_id', $payout->employee_id)
+                    ->whereDate('date', $payout->dateString())
+                    ->where('status', \App\Models\CourierShiftReport::STATUS_ACCEPTED)
+                    ->get()
+                    ->flatMap(fn ($r) => collect($r->anomalies ?? [])->where('severity', '!=', 'info'))
+                    ->pluck('text'),
+            );
+        }
+
+        $total   = $payouts->sum(fn (CourierPayout $p) => (float) ($p->paid_amount ?? $p->to_pay));
+        $account = $payouts->first()?->account?->name;
+
         $lines[] = '';
+        $lines[] = '<b>ДО ВИПЛАТИ: '.$money($total).'</b> ✅'.($account ? ' · з рахунку «'.$e($account).'»' : '');
 
-        foreach ($c['routes'] ?? [] as $r) {
-            $lines[] = 'Маршрут №'.$e($r['num']).' · '.$slot($r['shift'] ?? null).' · '.(int) $r['stops'].' точ.';
+        foreach ($marks->unique() as $mark) {
+            $lines[] = '⚠️ '.$e($mark).' <i>Перевірено.</i>';
         }
 
-        $km = collect($c['mileage'] ?? [])->sum('km');
-        if ($km > 0) {
-            $lines[] = 'Пробіг: '.(int) $km.' км';
-        }
+        $comment = $payouts->pluck('comment')->filter()->unique()->implode(' · ');
 
-        // ЗП = ставка з Табеля: виїзди + точки понад ліміт + дальні + ручне коригування.
-        $parts = [];
-        $trips = (int) ($c['trips'] ?? 0);
-        $parts[] = 'ставка '.$trips.' × '.$money($c['base_rate'] ?? 0);
-        foreach ($c['routes'] ?? [] as $r) {
-            if (($r['extra_stops_amount'] ?? 0) > 0) {
-                $parts[] = 'понад ліміт +'.(int) $r['extra_stops'].' = '.$money($r['extra_stops_amount']);
-            }
-            if (($r['far_amount'] ?? 0) > 0) {
-                $parts[] = 'дальні '.$money($r['far_amount']);
-            }
-        }
-        if (abs((float) ($c['adjustment'] ?? 0)) >= 0.01) {
-            $parts[] = 'коригування '.($c['adjustment'] > 0 ? '+' : '−').$money(abs($c['adjustment']));
-        }
-        $lines[] = 'ЗП: <b>'.$money($c['booked_rate'] ?? 0).'</b> ('.implode('; ', $parts).')';
-
-        foreach ($c['mileage'] ?? [] as $m) {
-            if (($m['compensation'] ?? 0) <= 0) {
-                continue;
-            }
-            $lines[] = 'Пальне: '.(int) $m['km'].' км × '.rtrim(rtrim(number_format($m['consumption'], 1, '.', ''), '0'), '.')
-                .' л/100 × '.number_format($m['fuel_price'], 2, ',', '').' = <b>'.$money($m['fuel_cost']).'</b>';
-            $lines[] = 'Амортизація: '.(int) $m['km'].' км × '.number_format($m['amort_per_km'], 2, ',', '').' = <b>'.$money($m['amortization']).'</b>';
-        }
-
-        foreach ($c['bonuses'] ?? [] as $b) {
-            $lines[] = 'Бонус: +'.$money($b['amount']).($b['reason'] ? ' — '.$e($b['reason']) : '');
-        }
-        foreach ($c['penalties'] ?? [] as $p) {
-            $lines[] = 'Штраф: −'.$money($p['amount']).($p['reason'] ? ' — '.$e($p['reason']) : '');
-        }
-
-        $lines[] = '';
-        $lines[] = 'Заробив за день: <b>'.$money($payout->total).'</b>';
-
-        if ((float) $payout->cash_on_hand > 0) {
-            $lines[] = 'Готівка від клієнтів на руках: −'.$money($payout->cash_on_hand);
-        }
-
-        $account = $payout->account?->name;
-        $paid    = $payout->paid_amount !== null ? (float) $payout->paid_amount : (float) $payout->to_pay;
-        $lines[] = '<b>До виплати: '.$money($paid).'</b>'.($account ? ' · з рахунку «'.$e($account).'»' : '');
-
-        if ((float) $payout->to_pay < 0) {
-            $lines[] = 'Курʼєр винен компанії '.$money(abs((float) $payout->to_pay)).' — утримати з наступної виплати.';
-        }
-
-        // Позначки зі звітів дня, які адмін бачив і підтвердив.
-        $marks = \App\Models\CourierShiftReport::where('employee_id', $payout->employee_id)
-            ->whereDate('date', $payout->dateString())
-            ->where('status', \App\Models\CourierShiftReport::STATUS_ACCEPTED)
-            ->get()
-            ->flatMap(fn ($r) => collect($r->anomalies ?? [])->where('severity', '!=', 'info'))
-            ->pluck('text');
-
-        foreach ($marks as $t) {
-            $lines[] = '⚠️ '.$e($t).' <i>Перевірено.</i>';
-        }
-
-        if ($payout->comment) {
-            $lines[] = '💬 '.$e($payout->comment);
+        if ($comment !== '') {
+            $lines[] = '💬 '.$e($comment);
         }
 
         return implode("\n", $lines);

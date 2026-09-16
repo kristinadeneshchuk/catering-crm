@@ -160,18 +160,21 @@ class CourierPayoutResource extends Resource
                     ->color('success')
                     ->visible(fn () => static::isAdmin())
                     ->form([static::accountSelect()])
+                    ->modalDescription('Дні одного курʼєра підуть у чат оплат одним повідомленням — як ви платите зараз.')
                     ->action(function (\Illuminate\Support\Collection $records, array $data) {
                         $service = app(CourierPayoutService::class);
-                        $ok = 0;
-                        $errors = [];
+                        $paid    = 0;
+                        $errors  = [];
 
-                        foreach ($records as $r) {
-                            $res = $service->approveAndPay($r, (int) $data['account_id'], null, auth()->id());
-                            $res['ok'] ? $ok++ : $errors[] = $r->employee?->name.' '.$r->dateString().': '.$res['error'];
+                        // Одному курʼєру — одне повідомлення на всі його дні.
+                        foreach ($records->groupBy('employee_id') as $days) {
+                            $res    = $service->approveAndPayMany($days, (int) $data['account_id'], auth()->id());
+                            $paid  += $res['paid'];
+                            $errors = array_merge($errors, $res['errors']);
                         }
 
                         Notification::make()
-                            ->title("Погоджено: {$ok}")
+                            ->title("Погоджено днів: {$paid}")
                             ->body($errors ? implode("\n", $errors) : null)
                             ->{$errors ? 'warning' : 'success'}()
                             ->send();

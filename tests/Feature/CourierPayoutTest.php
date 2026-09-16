@@ -397,6 +397,43 @@ class CourierPayoutTest extends TestCase
         $this->assertNull($courier->telegram_link_code, 'код одноразовий');
     }
 
+    public function test_the_bot_stays_silent_in_groups(): void
+    {
+        // Бот доданий у чат оплат, де люди листуються. На кожну репліку він
+        // відповідав «підключіться за посиланням» і засмічував чат.
+        $this->postJson('/webhooks/telegram-bot', [
+            'update_id' => 2,
+            'message' => [
+                'message_id' => 5,
+                'chat' => ['id' => -100500, 'type' => 'supergroup', 'title' => 'ЗП Курʼєри'],
+                'from' => ['id' => 999],
+                'text' => 'Тут нужно оплатить',
+            ],
+        ], ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();
+
+        Http::assertNothingSent();
+    }
+
+    public function test_the_owner_can_ask_the_bot_for_the_chat_id(): void
+    {
+        $ask = fn (int $fromId) => $this->postJson('/webhooks/telegram-bot', [
+            'update_id' => 3,
+            'message' => [
+                'message_id' => 6,
+                'chat' => ['id' => -100500, 'type' => 'supergroup', 'title' => 'ЗП Курʼєри'],
+                'from' => ['id' => $fromId],
+                'text' => '/id',
+            ],
+        ], ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();
+
+        $ask(999);
+        Http::assertNothingSent();
+
+        $ask(100); // власник — config services.telegram.owner_chat_id
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
+            && str_contains($r['text'], '-100500'));
+    }
+
     public function test_a_report_arrives_through_the_webhook_with_a_photo(): void
     {
         $this->prepareShift();

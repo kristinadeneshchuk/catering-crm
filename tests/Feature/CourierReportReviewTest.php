@@ -197,10 +197,45 @@ class CourierReportReviewTest extends TestCase
         Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
             && $r['chat_id'] === '-100500'
             && str_contains($r['text'], '5375 4141 2222 3333')
-            && str_contains($r['text'], 'Пальне: 140 км')
-            && str_contains($r['text'], 'Амортизація: 140 км')
+            && str_contains($r['text'], 'ЗП + компенсація пальне + амортизація за 12.09.26')
+            && str_contains($r['text'], 'за сб 12.09.26 — 800 грн (ЗП:')
+            && str_contains($r['text'], '140 км: пальне')
+            && str_contains($r['text'], 'ДО ВИПЛАТИ: 500 грн')
             && str_contains($r['text'], 'ФОП Горенко П.')
             && ! isset($r['reply_markup']));
+    }
+
+    public function test_several_days_of_one_courier_go_in_one_message(): void
+    {
+        $this->courier->update(['payout_card' => '5375 4141 2222 3333']);
+        $cash   = Account::create(['name' => 'Готівка', 'type' => 'cash']);
+        $first  = $this->confirmedPayout();
+
+        // Другий день: маршрут, зміна і пробіг без звіту через бота.
+        $this->travelTo(\Carbon\Carbon::parse('2026-09-13 20:00'));
+        $this->date = '2026-09-13';
+        $this->route();
+        $this->shift(800, 'evening');
+        $this->mileage(177640, 177700, 58.9);
+        app(CourierPayoutService::class)->refreshDay($this->date);
+        $second = CourierPayout::where('date', $this->date)->first();
+
+        $res = app(CourierPayoutService::class)->approveAndPayMany(collect([$second, $first]), $cash->id, 1);
+
+        $this->assertSame(2, $res['paid']);
+        $this->assertSame([], $res['errors']);
+        $this->assertSame(CourierPayout::STATUS_PAID, $first->fresh()->status);
+        $this->assertSame(CourierPayout::STATUS_PAID, $second->fresh()->status);
+
+        // Одне повідомлення на обидва дні, дні — за зростанням дати.
+        $messages = Http::recorded(fn ($r) => str_contains($r->url(), 'sendMessage') && $r['chat_id'] === '-100500');
+        $this->assertCount(1, $messages);
+
+        $text = $messages->first()[0]['text'];
+        $this->assertStringContainsString('за 12.09.26', $text);
+        $this->assertStringContainsString('за 13.09.26', $text);
+        $this->assertLessThan(strpos($text, 'за 13.09.26'), strpos($text, 'за 12.09.26'));
+        $this->assertSame($messages->first()[0]['message_id'] ?? null, null);
     }
 
     public function test_pay_cannot_be_approved_while_the_report_is_a_draft(): void

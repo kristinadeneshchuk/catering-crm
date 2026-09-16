@@ -85,6 +85,22 @@ class TelegramBotWebhookController extends Controller
             return;
         }
 
+        // У групах бот мовчить: він там лише для повідомлень про виплати.
+        // Інакше на кожну репліку людей він відповідав би «підключіться за
+        // посиланням» і засмічував чат. Єдиний виняток — /id для власника,
+        // щоб дізнатись chat_id групи для налаштувань.
+        if (($message['chat']['type'] ?? 'private') !== 'private') {
+            $fromId = (string) ($message['from']['id'] ?? '');
+
+            if (preg_match('/^\/id(@\S+)?$/u', trim((string) $text))
+                && in_array($fromId, $this->telegram->approverChatIds(), true)) {
+                $title = (string) ($message['chat']['title'] ?? '');
+                $this->telegram->sendMessage($chatId, 'ID цього чату: <code>'.$chatId.'</code>'.($title ? ' · '.e($title) : ''));
+            }
+
+            return;
+        }
+
         // Підключення: курʼєр відкрив посилання з кодом від менеджера.
         if ($text !== null && preg_match('/^\/start(?:\s+(\S+))?/u', trim($text), $m)) {
             $this->link($chatId, $m[1] ?? null);
