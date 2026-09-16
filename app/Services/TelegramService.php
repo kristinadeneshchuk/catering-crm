@@ -146,6 +146,19 @@ class TelegramService
     }
 
     /** Відповідь на натискання кнопки — інакше в Telegram «годинник» крутиться вічно. */
+    /**
+     * Позначити повідомлення реакцією. У чаті кухні це єдина відповідь бота:
+     * «прийняв», без тексту й питань.
+     */
+    public function reactToMessage(string $chatId, int $messageId, string $emoji = '✅'): void
+    {
+        $this->call('setMessageReaction', [
+            'chat_id'    => $chatId,
+            'message_id' => $messageId,
+            'reaction'   => [['type' => 'emoji', 'emoji' => $emoji]],
+        ]);
+    }
+
     public function answerCallback(string $callbackId, string $text = ''): void
     {
         $this->call('answerCallbackQuery', ['callback_query_id' => $callbackId, 'text' => $text]);

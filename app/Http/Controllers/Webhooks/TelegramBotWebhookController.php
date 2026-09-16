@@ -96,6 +96,14 @@ class TelegramBotWebhookController extends Controller
             return;
         }
 
+        // Чат кухні: фото накладної → чернетка надходження (docs/tz-ops-agent.md §3).
+        // Питань у групі не ставимо, лише реакція ✅ після розбору.
+        if ($chatId === (string) config('services.telegram.kitchen_chat_id') && ! empty($message['photo'])) {
+            $this->kitchenInvoice($message, $chatId);
+
+            return;
+        }
+
         // У групах бот більше нічого не пише: він там лише для повідомлень про
         // виплати. Інакше на кожну репліку людей відповідав би «підключіться за
         // посиланням» і засмічував чат.
@@ -136,6 +144,33 @@ class TelegramBotWebhookController extends Controller
         }
 
         $this->telegram->sendMessage($chatId, $reply);
+    }
+
+    /**
+     * Фото з чату кухні. Альбом приходить кількома оновленнями, тому фото
+     * накопичуються в кеші, а розбір запускається один раз із затримкою.
+     */
+    private function kitchenInvoice(array $message, string $chatId): void
+    {
+        $fileId = (string) end($message['photo'])['file_id'];
+        $path   = $this->telegram->downloadFile($fileId, 'ops/invoices/'.now()->format('Y-m'));
+
+        if (! $path) {
+            return;
+        }
+
+        $group    = (string) ($message['media_group_id'] ?? ('single:'.$message['message_id']));
+        $cacheKey = 'kitchen-invoice:'.$group;
+        $paths    = \Illuminate\Support\Facades\Cache::get($cacheKey, []);
+        $first    = $paths === [];
+
+        $paths[] = $path;
+        \Illuminate\Support\Facades\Cache::put($cacheKey, $paths, now()->addMinutes(10));
+
+        if ($first) {
+            \App\Jobs\ReadKitchenInvoice::dispatch($cacheKey, $chatId, (int) $message['message_id'])
+                ->delay(now()->addSeconds((int) config('services.telegram.kitchen_album_wait', 25)));
+        }
     }
 
     private function link(string $chatId, ?string $code): void

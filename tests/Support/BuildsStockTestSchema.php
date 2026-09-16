@@ -13,9 +13,19 @@ trait BuildsStockTestSchema
 {
     protected function buildStockSchema(): void
     {
-        Schema::create('warehouses', fn (Blueprint $t) => [$t->id(), $t->string('name'), $t->timestamps()]);
-        Schema::create('suppliers', fn (Blueprint $t) => [$t->id(), $t->string('name'), $t->string('inn')->nullable(),
+        $make = function (string $table, \Closure $definition): void {
+            if (! Schema::hasTable($table)) {
+                Schema::create($table, $definition);
+            }
+        };
+
+        $make('warehouses', fn (Blueprint $t) => [$t->id(), $t->string('name'), $t->timestamps()]);
+        $make('suppliers', fn (Blueprint $t) => [$t->id(), $t->string('name'), $t->string('inn')->nullable(),
             $t->string('contact_person')->nullable(), $t->string('phone')->nullable(), $t->timestamps()]);
+
+        // В інших тестових схемах ingredients — мінімальна таблиця під виключення.
+        // Для складу потрібні одиниці, ціни й залишок.
+        Schema::dropIfExists('ingredients');
 
         Schema::create('ingredients', function (Blueprint $t) {
             $t->id();
@@ -31,12 +41,12 @@ trait BuildsStockTestSchema
             $t->timestamps();
         });
 
-        Schema::create('accounts', function (Blueprint $t) {
+        $make('accounts', function (Blueprint $t) {
             $t->id(); $t->string('name')->nullable(); $t->string('type')->nullable();
             $t->boolean('is_default')->default(false); $t->decimal('balance', 12, 2)->default(0); $t->timestamps();
         });
 
-        Schema::create('transactions', function (Blueprint $t) {
+        $make('transactions', function (Blueprint $t) {
             $t->id();
             $t->string('type');
             $t->string('category')->nullable();
@@ -54,7 +64,7 @@ trait BuildsStockTestSchema
         });
 
         // Як на проді після всіх міграцій до 15.09.
-        Schema::create('stock_documents', function (Blueprint $t) {
+        $make('stock_documents', function (Blueprint $t) {
             $t->id();
             $t->string('type');
             $t->unsignedBigInteger('warehouse_id');
@@ -68,7 +78,7 @@ trait BuildsStockTestSchema
             $t->timestamps();
         });
 
-        Schema::create('stock_document_items', function (Blueprint $t) {
+        $make('stock_document_items', function (Blueprint $t) {
             $t->id();
             $t->unsignedBigInteger('stock_document_id');
             $t->morphs('itemable');
@@ -84,6 +94,23 @@ trait BuildsStockTestSchema
             $t->timestamps();
         });
 
-        (require database_path('migrations/2026_09_15_120000_add_stock_document_drafts.php'))->up();
+        $make('packagings', function (Blueprint $t) {
+            $t->id();
+            $t->string('name');
+            $t->string('unit')->default('шт');
+            $t->decimal('stock', 12, 3)->default(0);
+            $t->decimal('price', 10, 2)->default(0);
+            $t->string('project')->nullable();
+            $t->string('packaging_type')->nullable();
+            $t->timestamps();
+        });
+
+        if (! Schema::hasColumn('stock_documents', 'source')) {
+            (require database_path('migrations/2026_09_15_120000_add_stock_document_drafts.php'))->up();
+        }
+
+        if (! Schema::hasTable('ai_runs')) {
+            (require database_path('migrations/2026_09_16_100000_create_ai_runs_table.php'))->up();
+        }
     }
 }

@@ -49,6 +49,17 @@ return [
         'menu_model' => env('OPENAI_MENU_MODEL', 'gpt-5.4'),
     ],
 
+    // Операційний ШІ (docs/tz-ops-agent.md). Ключ — лише в .env сервера.
+    'anthropic' => [
+        'key'            => env('ANTHROPIC_API_KEY'),
+        'model'          => env('ANTHROPIC_MODEL', 'claude-opus-5'),
+        'effort'         => env('ANTHROPIC_EFFORT', 'medium'),
+        'max_tokens'     => (int) env('ANTHROPIC_MAX_TOKENS', 8000),
+        'timeout'        => (int) env('ANTHROPIC_TIMEOUT', 120),
+        // Скільки доларів на добу дозволено всім операційним задачам разом.
+        'daily_cap_usd'  => (float) env('ANTHROPIC_DAILY_CAP_USD', 20),
+    ],
+
     'telegram' => [
         'bot_token'       => env('TELEGRAM_BOT_TOKEN'),
         'owner_chat_id'   => env('TELEGRAM_OWNER_CHAT_ID'),
