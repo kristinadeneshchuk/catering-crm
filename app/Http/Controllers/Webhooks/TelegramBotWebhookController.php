@@ -85,19 +85,21 @@ class TelegramBotWebhookController extends Controller
             return;
         }
 
-        // У групах бот мовчить: він там лише для повідомлень про виплати.
-        // Інакше на кожну репліку людей він відповідав би «підключіться за
-        // посиланням» і засмічував чат. Єдиний виняток — /id для власника,
-        // щоб дізнатись chat_id групи для налаштувань.
+        // /id — щоб дізнатись chat_id для налаштувань (чат оплат, група кухні).
+        // Відповідаємо будь-кому: для учасників чату його id не таємниця, а
+        // перевірка «це власник» не працює, коли пишуть від імені групи
+        // (анонімний адмін) — саме так і сталось у чаті оплат.
+        if (preg_match('/^\/id(@\S+)?$/u', trim((string) $text))) {
+            $title = (string) ($message['chat']['title'] ?? '');
+            $this->telegram->sendMessage($chatId, 'ID цього чату: <code>'.$chatId.'</code>'.($title ? ' · '.e($title) : ''));
+
+            return;
+        }
+
+        // У групах бот більше нічого не пише: він там лише для повідомлень про
+        // виплати. Інакше на кожну репліку людей відповідав би «підключіться за
+        // посиланням» і засмічував чат.
         if (($message['chat']['type'] ?? 'private') !== 'private') {
-            $fromId = (string) ($message['from']['id'] ?? '');
-
-            if (preg_match('/^\/id(@\S+)?$/u', trim((string) $text))
-                && in_array($fromId, $this->telegram->approverChatIds(), true)) {
-                $title = (string) ($message['chat']['title'] ?? '');
-                $this->telegram->sendMessage($chatId, 'ID цього чату: <code>'.$chatId.'</code>'.($title ? ' · '.e($title) : ''));
-            }
-
             return;
         }
 

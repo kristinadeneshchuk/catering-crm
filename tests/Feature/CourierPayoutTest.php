@@ -414,24 +414,24 @@ class CourierPayoutTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_the_owner_can_ask_the_bot_for_the_chat_id(): void
+    public function test_anyone_in_the_chat_can_ask_the_bot_for_the_chat_id(): void
     {
-        $ask = fn (int $fromId) => $this->postJson('/webhooks/telegram-bot', [
+        // Власник пише в групу від імені компанії (анонімний адмін), тож
+        // from.id — не його. Перевірка «це власник» тут не працює, а id чату
+        // для його учасників не таємниця.
+        $this->postJson('/webhooks/telegram-bot', [
             'update_id' => 3,
             'message' => [
                 'message_id' => 6,
                 'chat' => ['id' => -100500, 'type' => 'supergroup', 'title' => 'ЗП Курʼєри'],
-                'from' => ['id' => $fromId],
+                'sender_chat' => ['id' => -100500, 'type' => 'supergroup'],
                 'text' => '/id',
             ],
         ], ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();
 
-        $ask(999);
-        Http::assertNothingSent();
-
-        $ask(100); // власник — config services.telegram.owner_chat_id
         Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
-            && str_contains($r['text'], '-100500'));
+            && str_contains($r['text'], '-100500')
+            && str_contains($r['text'], 'ЗП Курʼєри'));
     }
 
     public function test_a_report_arrives_through_the_webhook_with_a_photo(): void
