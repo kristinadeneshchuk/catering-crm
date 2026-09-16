@@ -104,12 +104,34 @@ class TelegramService
     // -------------------------------------------------------------------------
 
     /** Чати, чиїм кнопкам ми віримо: власник і старший менеджер. */
+    /**
+     * Хто може погоджувати виплати: власник і менеджери.
+     *
+     * У налаштуваннях менеджерів кілька ID через кому — розбираємо їх на
+     * окремі, інакше перевірка `in_array` не збігається ні з ким.
+     */
     public function approverChatIds(): array
     {
-        return array_values(array_filter([
-            (string) ($this->ownerChatId ?? ''),
-            (string) ($this->managerChatId ?? ''),
-        ]));
+        return $this->chatIds($this->ownerChatId, $this->managerChatId);
+    }
+
+    /** Хто може надсилати боту накладні: власник, менеджери, кухня. */
+    public function staffChatIds(): array
+    {
+        return $this->chatIds($this->ownerChatId, $this->managerChatId, $this->cookChatId);
+    }
+
+    /** @return array<int, string> */
+    private function chatIds(?string ...$lists): array
+    {
+        return collect($lists)
+            ->filter()
+            ->flatMap(fn (string $list) => explode(',', $list))
+            ->map(fn (string $id) => trim($id))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

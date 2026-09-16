@@ -98,7 +98,7 @@ class TelegramBotWebhookController extends Controller
 
         // Чат кухні: фото накладної → чернетка надходження (docs/tz-ops-agent.md §3).
         // Питань у групі не ставимо, лише реакція ✅ після розбору.
-        if ($chatId === (string) config('services.telegram.kitchen_chat_id') && ! empty($message['photo'])) {
+        if ($chatId === (string) config('services.telegram.kitchen_chat_id') && $this->invoiceFileId($message)) {
             $this->invoicePhoto($message, $chatId, notifyChatId: null);
 
             return;
@@ -123,8 +123,8 @@ class TelegramBotWebhookController extends Controller
         // Фото курʼєра лишається одометром: у нього відкритий звіт зміни.
         $employee = Employee::where('telegram_chat_id', $chatId)->first();
 
-        if (! empty($message['photo'])
-            && in_array($chatId, $this->telegram->approverChatIds(), true)
+        if ($this->invoiceFileId($message)
+            && in_array($chatId, $this->telegram->staffChatIds(), true)
             && $employee?->position !== 'courier') {
             $this->invoicePhoto($message, $chatId, notifyChatId: $chatId);
             $this->telegram->sendMessage($chatId, '🧾 Прийняв накладну, зчитую. Відпишу за хвилину.');
@@ -166,10 +166,26 @@ class TelegramBotWebhookController extends Controller
      * @param  string|null  $notifyChatId  куди відповісти текстом; null — лише
      *                                     реакція в чаті й повідомлення власнику
      */
+    /** Фото або зображення, надіслане файлом (кухня часто шле саме так). */
+    private function invoiceFileId(array $message): ?string
+    {
+        if (! empty($message['photo'])) {
+            return (string) end($message['photo'])['file_id'];
+        }
+
+        $mime = (string) ($message['document']['mime_type'] ?? '');
+
+        return str_starts_with($mime, 'image/') ? (string) $message['document']['file_id'] : null;
+    }
+
     private function invoicePhoto(array $message, string $chatId, ?string $notifyChatId): void
     {
-        $fileId = (string) end($message['photo'])['file_id'];
-        $path   = $this->telegram->downloadFile($fileId, 'ops/invoices/'.now()->format('Y-m'));
+        $fileId = $this->invoiceFileId($message);
+
+        if (! $fileId) {
+            return;
+        }
+        $path = $this->telegram->downloadFile($fileId, 'ops/invoices/'.now()->format('Y-m'));
 
         if (! $path) {
             return;

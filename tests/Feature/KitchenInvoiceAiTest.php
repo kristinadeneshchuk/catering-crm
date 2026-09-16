@@ -206,6 +206,25 @@ class KitchenInvoiceAiTest extends TestCase
             && str_contains($r['text'], 'Соус невідомий'));
     }
 
+    public function test_a_manager_from_a_comma_separated_list_is_recognised(): void
+    {
+        Queue::fake();
+        config()->set('services.telegram.manager_chat_id', '472274130,290450055,8104984455');
+        $this->app->forgetInstance(\App\Services\TelegramService::class);
+
+        $this->postJson('/webhooks/telegram-bot', [
+            'update_id' => 44,
+            'message' => [
+                'message_id' => 45,
+                'chat'       => ['id' => 290450055, 'type' => 'private'],
+                'from'       => ['id' => 290450055],
+                'photo'      => [['file_id' => 'inv']],
+            ],
+        ], ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();
+
+        Queue::assertPushed(ReadKitchenInvoice::class, 1);
+    }
+
     public function test_a_courier_photo_in_private_is_still_an_odometer(): void
     {
         Queue::fake();
