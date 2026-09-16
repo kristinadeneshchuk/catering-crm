@@ -78,9 +78,9 @@ class KitchenInvoiceAiTest extends TestCase
             'date'          => '2026-09-16',
             'total'         => 3200,
             'items'         => [
-                ['raw_name' => 'Філе куряче охол.', 'match' => 'ING '.$this->chicken->id, 'quantity' => 10, 'unit' => 'кг', 'total_price' => 2200, 'note' => null],
-                ['raw_name' => 'Бокс 500 мл', 'match' => 'PACK '.$this->box->id, 'quantity' => 200, 'unit' => 'шт', 'total_price' => 800, 'note' => null],
-                ['raw_name' => 'Соус невідомий', 'match' => null, 'quantity' => 5, 'unit' => 'шт', 'total_price' => 200, 'note' => 'нерозбірливо'],
+                ['raw_name' => 'Філе куряче охол.', 'match' => 'ING '.$this->chicken->id, 'quantity' => 10, 'unit' => 'кг', 'pack_size' => null, 'pack_unit' => null, 'total_price' => 2200, 'note' => null],
+                ['raw_name' => 'Бокс 500 мл', 'match' => 'PACK '.$this->box->id, 'quantity' => 200, 'unit' => 'шт', 'pack_size' => null, 'pack_unit' => null, 'total_price' => 800, 'note' => null],
+                ['raw_name' => 'Соус невідомий', 'match' => null, 'quantity' => 5, 'unit' => 'шт', 'pack_size' => null, 'pack_unit' => null, 'total_price' => 200, 'note' => 'нерозбірливо'],
             ],
             'issues'     => ['Сума рядків 3 200 ₴ збігається з підсумком'],
             'confidence' => 'high',
@@ -117,6 +117,40 @@ class KitchenInvoiceAiTest extends TestCase
         // Провели — тільки тепер склад змінився.
         $document->post(1);
         $this->assertEquals(14, (float) $this->chicken->fresh()->stock);
+    }
+
+    public function test_pieces_with_a_pack_size_land_as_weight_in_the_draft(): void
+    {
+        $paste = Ingredient::create(['name' => 'Паста томатна', 'unit' => 'kg', 'stock' => 0]);
+        $this->fakeAi($this->answer(['items' => [
+            ['raw_name' => 'Томатна паста 25% 1560гр', 'match' => 'ING '.$paste->id, 'quantity' => 3,
+                'unit' => 'шт', 'pack_size' => 1560, 'pack_unit' => 'г', 'total_price' => 672, 'note' => null],
+        ]]));
+
+        $document = app(InvoiceReader::class)->fromPhotos([$this->photo()]);
+        $item     = $document->items()->first();
+
+        $this->assertEquals(1560 * 3, (float) $item->input_qty, 'у грамах, як у фасуванні');
+        $this->assertSame('г', $item->input_unit);
+        $this->assertEquals(4.68, (float) $item->qty, 'у базовій одиниці товару — кілограмах');
+        $this->assertEquals(3, (float) $item->pack_count);
+
+        $document->post(1);
+        $this->assertEquals(4.68, (float) $paste->fresh()->stock);
+    }
+
+    public function test_an_unknown_pack_size_is_written_into_the_comment(): void
+    {
+        $rice = Ingredient::create(['name' => 'Рис для суші', 'unit' => 'g', 'stock' => 0]);
+        $this->fakeAi($this->answer(['items' => [
+            ['raw_name' => 'Рис "Для суші" 1 кг / 6', 'match' => 'ING '.$rice->id, 'quantity' => 5,
+                'unit' => 'шт', 'pack_size' => null, 'pack_unit' => null, 'total_price' => 725.45, 'note' => null],
+        ]]));
+
+        $document = app(InvoiceReader::class)->fromPhotos([$this->photo()]);
+
+        $this->assertStringContainsString('вкажіть фасування вручну', $document->ai_comment);
+        $this->assertStringContainsString('Рис', $document->ai_comment);
     }
 
     public function test_the_call_is_logged_with_tokens_and_cost(): void

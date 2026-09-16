@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\DB;
  */
 class InvoiceReader
 {
-    public function __construct(private OpsAi $ai)
+    public function __construct(private OpsAi $ai, private InvoiceQuantity $quantity)
     {
     }
 
@@ -69,6 +69,7 @@ class InvoiceReader
         - Бери лише те, що справді видно на фото. Не вигадуй позицій, цін і сум.
         - Кількість і ціну повертай числами. Кому як десятковий роздільник переводь у крапку.
         - `unit` — одна з: кг, г, л, мл, шт. Якщо в накладній «уп.», «ящик», «пач.» — став шт і напиши це в `note`.
+        - Коли рахують штуками, а в назві видно фасування («2500gr», «890мл», «1кг», «250гр/12», «0,9л»), заповни `pack_size` і `pack_unit` — розмір ОДНІЄЇ штуки, яку рахують у `quantity`. Для «Молоко пакет 2,5% / пак. 0,9л», де кількість 15 л, це теж 0.9 і «л». Не видно фасування — став null, не вигадуй.
         - `total_price` — сума рядка з ПДВ, як у накладній.
         - Кожен рядок зістав із довідником нижче: `match` = ING <id> або PACK <id>. Якщо впевненого збігу немає — `match` = null, і це нормально: людина допише сама.
         - Зіставляй за суттю назви (філе куряче = філе курки), не за буквальним збігом. Не приписуй різні товари до одного запису.
@@ -98,10 +99,12 @@ class InvoiceReader
                             'match'       => ['type' => ['string', 'null'], 'description' => 'ING <id> | PACK <id> | null'],
                             'quantity'    => ['type' => 'number'],
                             'unit'        => ['type' => 'string'],
+                            'pack_size'   => ['type' => ['number', 'null'], 'description' => 'розмір однієї упаковки з назви рядка'],
+                            'pack_unit'   => ['type' => ['string', 'null'], 'description' => 'кг | г | л | мл'],
                             'total_price' => ['type' => 'number'],
                             'note'        => ['type' => ['string', 'null']],
                         ],
-                        'required'             => ['raw_name', 'match', 'quantity', 'unit', 'total_price', 'note'],
+                        'required'             => ['raw_name', 'match', 'quantity', 'unit', 'pack_size', 'pack_unit', 'total_price', 'note'],
                         'additionalProperties' => false,
                     ],
                 ],
@@ -118,11 +121,31 @@ class InvoiceReader
         return DB::transaction(function () use ($data, $photoPaths) {
             $matched   = [];
             $unmatched = [];
+            $warnings  = [];
 
             foreach ($data['items'] as $row) {
                 $item = $this->resolve($row['match'] ?? null);
 
-                $item ? $matched[] = [$item, $row] : $unmatched[] = $row;
+                if (! $item) {
+                    $unmatched[] = $row;
+
+                    continue;
+                }
+
+                // Кількість у базовій одиниці рахує код: «3 шт × 1560 г» — це 4,68 кг.
+                $resolved = $this->quantity->resolve(
+                    $item,
+                    (float) $row['quantity'],
+                    (string) ($row['unit'] ?? ''),
+                    isset($row['pack_size']) ? (float) $row['pack_size'] : null,
+                    $row['pack_unit'] ?? null,
+                );
+
+                if (isset($resolved['warning'])) {
+                    $warnings[] = $row['raw_name'].': '.$resolved['warning'];
+                }
+
+                $matched[] = [$item, $row, $resolved];
             }
 
             $document = StockDocument::create([
@@ -135,19 +158,22 @@ class InvoiceReader
                 'is_paid'        => false,
                 'attachments'    => array_map(fn ($p) => ['path' => $p], $photoPaths),
                 'comment'        => trim('Накладна '.($data['number'] ?? '').' '.($data['supplier_name'] ?? '')),
-                'ai_comment'     => $this->comment($data, $unmatched),
+                'ai_comment'     => $this->comment($data, $unmatched, $warnings),
             ]);
 
-            foreach ($matched as [$item, $row]) {
-                $unit = StockDocumentItem::canonUnit($row['unit'] ?? '') ?: StockDocumentItem::canonUnit($item->unit ?? 'шт');
-
+            foreach ($matched as [$item, $row, $resolved]) {
                 $document->items()->create([
                     'itemable_type' => $item::class,
                     'itemable_id'   => $item->id,
-                    'input_qty'     => round((float) $row['quantity'], 3),
-                    'input_unit'    => $unit,
-                    'qty'           => round((float) $row['quantity'], 3), // модель перерахує в базову одиницю
+                    'input_qty'     => $resolved['qty'],
+                    'input_unit'    => $resolved['unit'],
+                    'qty'           => $resolved['qty'], // модель перерахує в базову одиницю
                     'total_price'   => round((float) $row['total_price'], 2),
+                    // Знімок фасування: видно, звідки взялась кількість.
+                    'pack_count'    => $resolved['note'] ? round((float) $row['quantity'], 3) : null,
+                    'pack_price'    => $resolved['note'] && (float) $row['quantity'] > 0
+                        ? round((float) $row['total_price'] / (float) $row['quantity'], 4)
+                        : null,
                 ]);
             }
 
@@ -202,9 +228,13 @@ class InvoiceReader
         }
     }
 
-    private function comment(array $data, array $unmatched): string
+    private function comment(array $data, array $unmatched, array $warnings = []): string
     {
         $parts = [];
+
+        foreach ($warnings as $warning) {
+            $parts[] = '⚠️ '.$warning;
+        }
 
         if (! empty($data['supplier_name'])) {
             $parts[] = 'Постачальник: '.$data['supplier_name'].(empty($data['number']) ? '' : ', накладна №'.$data['number']);
