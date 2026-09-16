@@ -161,6 +161,8 @@ class InvoiceReader
                 'ai_comment'     => $this->comment($data, $unmatched, $warnings),
             ]);
 
+            $pending = [];
+
             foreach ($matched as [$item, $row, $resolved]) {
                 $document->items()->create([
                     'itemable_type' => $item::class,
@@ -175,6 +177,23 @@ class InvoiceReader
                         ? round((float) $row['total_price'] / (float) $row['quantity'], 4)
                         : null,
                 ]);
+
+                // Фасування невідоме — спитаємо один раз і запамʼятаємо в картці товару.
+                if (isset($resolved['warning'])) {
+                    $pending[] = [
+                        'item_type' => $item::class,
+                        'item_id'   => $item->id,
+                        'name'      => $item->name,
+                        'base_unit' => StockDocumentItem::canonUnit($item->unit ?? 'шт'),
+                        'quantity'  => (float) $row['quantity'],
+                        'unit'      => StockDocumentItem::canonUnit((string) ($row['unit'] ?? '')),
+                        'raw_name'  => $row['raw_name'],
+                    ];
+                }
+            }
+
+            if ($pending !== []) {
+                $document->update(['ai_state' => ['pending' => $pending]]);
             }
 
             return $document->fresh();

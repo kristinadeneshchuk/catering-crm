@@ -49,12 +49,21 @@ class InvoiceQuantity
             }
         }
 
+        // Рідини: у накладній мілілітри, на складі кілограми. На кухні рахують
+        // 1 л = 1 кг — інакше кожен соус довелося б зважувати.
+        if ($packSize && $packUnit && ! $this->sameGroup($packUnit, $base)
+            && $this->litreKilo($packUnit, $base)) {
+            [$packSize, $packUnit] = $this->litreKilo($packUnit, $base)($packSize);
+            $bridged = true;
+        }
+
         // Рахують штуками, облік — у вазі чи обʼємі: 3 шт × 1560 г = 4,68 кг.
         if ($rowUnit === 'шт' && $packSize && $packUnit && $this->sameGroup($packUnit, $base)) {
             return [
                 'qty'  => round($quantity * $packSize, 3),
                 'unit' => $packUnit,
-                'note' => $this->num($quantity).' шт × '.$this->num($packSize).' '.$packUnit,
+                'note' => $this->num($quantity).' шт × '.$this->num($packSize).' '.$packUnit
+                    .(($bridged ?? false) ? ' (1 л = 1 кг)' : ''),
             ];
         }
 
@@ -80,6 +89,26 @@ class InvoiceQuantity
             'note' => null,
             'warning' => 'у накладній '.$this->num($quantity).' '.$rowUnit.', а облік у «'.$base.'» — вкажіть фасування вручну',
         ];
+    }
+
+    /**
+     * Переклад обʼєму у вагу й навпаки за щільністю 1. Повертає функцію
+     * перерахунку або null, якщо це не той випадок.
+     */
+    private function litreKilo(string $from, string $base): ?\Closure
+    {
+        $volume = ['л', 'мл'];
+        $mass   = ['кг', 'г'];
+
+        if (in_array($from, $volume, true) && in_array($base, $mass, true)) {
+            return fn (float $size) => [$from === 'мл' ? $size : $size * 1000, 'г'];
+        }
+
+        if (in_array($from, $mass, true) && in_array($base, $volume, true)) {
+            return fn (float $size) => [$from === 'г' ? $size : $size * 1000, 'мл'];
+        }
+
+        return null;
     }
 
     private function sameGroup(string $a, string $b): bool

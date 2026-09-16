@@ -92,7 +92,7 @@ class PortionCalculatorTest extends TestCase
         // Ingredient рахує середню ціну зі складських документів — таблиці
         // потрібні, хоча ціна для ваг не використовується.
         Schema::create('stock_documents', function (Blueprint $t) {
-            $t->id(); $t->string('type')->nullable(); $t->timestamps();
+            $t->id(); $t->string('type')->nullable(); $t->string('status')->default('completed'); $t->timestamps();
         });
 
         Schema::create('stock_document_items', function (Blueprint $t) {

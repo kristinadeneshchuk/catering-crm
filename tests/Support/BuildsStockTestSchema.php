@@ -109,6 +109,10 @@ trait BuildsStockTestSchema
             (require database_path('migrations/2026_09_15_120000_add_stock_document_drafts.php'))->up();
         }
 
+        if (! Schema::hasColumn('stock_documents', 'ai_state')) {
+            (require database_path('migrations/2026_09_16_200000_add_ai_state_to_stock_documents.php'))->up();
+        }
+
         if (! Schema::hasTable('ai_runs')) {
             (require database_path('migrations/2026_09_16_100000_create_ai_runs_table.php'))->up();
         }

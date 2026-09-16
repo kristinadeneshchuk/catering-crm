@@ -117,6 +117,22 @@ class TelegramBotWebhookController extends Controller
             return;
         }
 
+        // Відповідь на питання про фасування: шукаємо чернетку за повідомленням,
+        // на яке відповіли реплаєм.
+        if ($text !== null && ! empty($message['reply_to_message']['message_id'])
+            && in_array($chatId, $this->telegram->staffChatIds(), true)) {
+            $document = \App\Models\StockDocument::query()
+                ->where('ai_state->ask->message_id', (int) $message['reply_to_message']['message_id'])
+                ->first();
+
+            if ($document) {
+                $result = app(\App\Services\Ai\PackSizeResolver::class)->apply($document, $text);
+                $this->telegram->sendMessage($chatId, $result['text']);
+
+                return;
+            }
+        }
+
         // /id — щоб дізнатись chat_id для налаштувань (чат оплат, група кухні).
         // Відповідаємо будь-кому: для учасників чату його id не таємниця, а
         // перевірка «це власник» не працює, коли пишуть від імені групи

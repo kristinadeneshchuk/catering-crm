@@ -25,6 +25,7 @@ class StockDocument extends Model
         'operation_date' => 'datetime',
         'posted_at'      => 'datetime',
         'attachments'    => 'array',
+        'ai_state'       => 'array',
     ];
 
     public static function statusLabels(): array

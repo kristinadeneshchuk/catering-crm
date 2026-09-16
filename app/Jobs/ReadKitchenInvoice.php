@@ -76,8 +76,24 @@ class ReadKitchenInvoice implements ShouldQueue
 
         $chatId = $this->notifyChatId ?: $telegram->ownerChatId();
 
-        if ($chatId) {
-            $telegram->sendMessage($chatId, $text, $keyboard);
+        if (! $chatId) {
+            return;
+        }
+
+        $telegram->sendMessage($chatId, $text, $keyboard);
+
+        // Окремим повідомленням — питання про фасування, щоб відповідь прийшла
+        // реплаєм саме на нього.
+        $question = app(\App\Services\Ai\PackSizeResolver::class)->question($document);
+
+        if ($question) {
+            $askId = $telegram->sendMessage($chatId, $question);
+
+            if ($askId) {
+                $document->update([
+                    'ai_state' => ($document->ai_state ?? []) + ['ask' => ['chat_id' => $chatId, 'message_id' => $askId]],
+                ]);
+            }
         }
     }
 }
