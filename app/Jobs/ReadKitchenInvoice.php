@@ -29,6 +29,7 @@ class ReadKitchenInvoice implements ShouldQueue
         private string $cacheKey,
         private string $chatId,
         private int $messageId,
+        private ?string $notifyChatId = null,
     ) {
     }
 
@@ -43,8 +44,12 @@ class ReadKitchenInvoice implements ShouldQueue
         $document = $reader->fromPhotos($paths, ['chat' => 'kitchen', 'message_id' => $this->messageId]);
 
         if (! $document) {
+            $miss = '🧾 Накладну не вдалося зчитати. Фото збережено, внесіть вручну.';
+
             // У чаті кухні нічого не пишемо — питання йдуть власнику.
-            $telegram->sendToOwner('🧾 Накладна з чату кухні: не вдалося зчитати. Фото збережено, внесіть вручну.');
+            $this->notifyChatId
+                ? $telegram->sendMessage($this->notifyChatId, $miss)
+                : $telegram->sendToOwner($miss.' (з чату кухні)');
 
             return;
         }
@@ -55,12 +60,14 @@ class ReadKitchenInvoice implements ShouldQueue
         $sum   = number_format((float) $document->total_sum, 0, ',', ' ');
         $url   = \App\Filament\Resources\StockDocumentResource::getUrl('edit', ['record' => $document]);
 
-        $telegram->sendToOwner(
-            "🧾 <b>Чернетка накладної</b> з чату кухні\n"
+        $text = "🧾 <b>Чернетка накладної</b>\n"
             .($document->supplier?->name ? $document->supplier->name."\n" : '')
             ."Позицій: {$items} · сума рядків: {$sum} ₴\n"
             .($document->ai_comment ? e(mb_substr($document->ai_comment, 0, 600))."\n" : '')
-            ."Перевірити й провести: {$url}",
-        );
+            ."Перевірити й провести: {$url}";
+
+        $this->notifyChatId
+            ? $telegram->sendMessage($this->notifyChatId, $text)
+            : $telegram->sendToOwner($text);
     }
 }

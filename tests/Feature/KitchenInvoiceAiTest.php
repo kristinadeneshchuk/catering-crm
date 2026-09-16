@@ -173,6 +173,57 @@ class KitchenInvoiceAiTest extends TestCase
         $this->assertCount(2, \Illuminate\Support\Facades\Cache::get('kitchen-invoice:album-1', []), 'обидві сторінки в одній накладній');
     }
 
+    public function test_the_owner_can_send_an_invoice_straight_to_the_bot(): void
+    {
+        Queue::fake();
+
+        $this->postJson('/webhooks/telegram-bot', [
+            'update_id' => 40,
+            'message' => [
+                'message_id' => 41,
+                'chat'       => ['id' => 100, 'type' => 'private'],
+                'from'       => ['id' => 100],
+                'photo'      => [['file_id' => 'small'], ['file_id' => 'big']],
+            ],
+        ], ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();
+
+        Queue::assertPushed(ReadKitchenInvoice::class, 1);
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
+            && (string) $r['chat_id'] === '100'
+            && str_contains($r['text'], 'Прийняв накладну'));
+    }
+
+    public function test_the_answer_comes_back_to_the_same_private_chat(): void
+    {
+        $this->fakeAi($this->answer());
+        \Illuminate\Support\Facades\Cache::put('kitchen-invoice:single:41', [$this->photo()], now()->addMinutes(5));
+
+        app()->call([new ReadKitchenInvoice('kitchen-invoice:single:41', '100', 41, '100'), 'handle']);
+
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
+            && (string) $r['chat_id'] === '100'
+            && str_contains($r['text'], 'Чернетка накладної')
+            && str_contains($r['text'], 'Соус невідомий'));
+    }
+
+    public function test_a_courier_photo_in_private_is_still_an_odometer(): void
+    {
+        Queue::fake();
+        $this->courier->update(['telegram_chat_id' => '100']); // курʼєр і власник в одному чаті — крайній випадок
+
+        $this->postJson('/webhooks/telegram-bot', [
+            'update_id' => 42,
+            'message' => [
+                'message_id' => 43,
+                'chat'       => ['id' => 100, 'type' => 'private'],
+                'from'       => ['id' => 100],
+                'photo'      => [['file_id' => 'odo']],
+            ],
+        ], ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();
+
+        Queue::assertNothingPushed();
+    }
+
     public function test_photos_from_other_chats_are_ignored(): void
     {
         Queue::fake();

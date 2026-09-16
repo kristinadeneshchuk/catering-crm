@@ -99,7 +99,7 @@ class TelegramBotWebhookController extends Controller
         // Чат кухні: фото накладної → чернетка надходження (docs/tz-ops-agent.md §3).
         // Питань у групі не ставимо, лише реакція ✅ після розбору.
         if ($chatId === (string) config('services.telegram.kitchen_chat_id') && ! empty($message['photo'])) {
-            $this->kitchenInvoice($message, $chatId);
+            $this->invoicePhoto($message, $chatId, notifyChatId: null);
 
             return;
         }
@@ -118,7 +118,19 @@ class TelegramBotWebhookController extends Controller
             return;
         }
 
+        // Накладна в особисті боту: власник чи менеджер надсилає фото — бот
+        // розбирає його так само, як у чаті кухні, і відповідає тут же.
+        // Фото курʼєра лишається одометром: у нього відкритий звіт зміни.
         $employee = Employee::where('telegram_chat_id', $chatId)->first();
+
+        if (! empty($message['photo'])
+            && in_array($chatId, $this->telegram->approverChatIds(), true)
+            && $employee?->position !== 'courier') {
+            $this->invoicePhoto($message, $chatId, notifyChatId: $chatId);
+            $this->telegram->sendMessage($chatId, '🧾 Прийняв накладну, зчитую. Відпишу за хвилину.');
+
+            return;
+        }
 
         if (! $employee) {
             $this->telegram->sendMessage($chatId, 'Щоб здавати звіти, підключіться за посиланням, яке дасть менеджер.');
@@ -147,10 +159,14 @@ class TelegramBotWebhookController extends Controller
     }
 
     /**
-     * Фото з чату кухні. Альбом приходить кількома оновленнями, тому фото
-     * накопичуються в кеші, а розбір запускається один раз із затримкою.
+     * Фото накладної (чат кухні або особисті боту). Альбом приходить кількома
+     * оновленнями, тому фото накопичуються в кеші, а розбір запускається один
+     * раз із затримкою.
+     *
+     * @param  string|null  $notifyChatId  куди відповісти текстом; null — лише
+     *                                     реакція в чаті й повідомлення власнику
      */
-    private function kitchenInvoice(array $message, string $chatId): void
+    private function invoicePhoto(array $message, string $chatId, ?string $notifyChatId): void
     {
         $fileId = (string) end($message['photo'])['file_id'];
         $path   = $this->telegram->downloadFile($fileId, 'ops/invoices/'.now()->format('Y-m'));
@@ -168,7 +184,7 @@ class TelegramBotWebhookController extends Controller
         \Illuminate\Support\Facades\Cache::put($cacheKey, $paths, now()->addMinutes(10));
 
         if ($first) {
-            \App\Jobs\ReadKitchenInvoice::dispatch($cacheKey, $chatId, (int) $message['message_id'])
+            \App\Jobs\ReadKitchenInvoice::dispatch($cacheKey, $chatId, (int) $message['message_id'], $notifyChatId)
                 ->delay(now()->addSeconds((int) config('services.telegram.kitchen_album_wait', 25)));
         }
     }
