@@ -33,7 +33,12 @@ class ReadKitchenInvoice implements ShouldQueue
     ) {
     }
 
-    public function handle(InvoiceReader $reader, TelegramService $telegram, \App\Services\Ai\SupplierPicker $suppliers): void
+    public function handle(
+        InvoiceReader $reader,
+        TelegramService $telegram,
+        \App\Services\Ai\SupplierPicker $suppliers,
+        \App\Services\Ai\PriceWatcher $prices,
+    ): void
     {
         $paths = array_values(array_unique(Cache::pull($this->cacheKey, [])));
 
@@ -60,10 +65,17 @@ class ReadKitchenInvoice implements ShouldQueue
         $sum   = number_format((float) $document->total_sum, 0, ',', ' ');
         $url   = \App\Filament\Resources\StockDocumentResource::getUrl('edit', ['record' => $document]);
 
+        $priceNote = $prices->summary($document);
+
+        if ($priceNote) {
+            $document->update(['ai_comment' => trim($document->ai_comment."\n".strip_tags($priceNote))]);
+        }
+
         $text = "🧾 <b>Чернетка накладної</b>\n"
             .($document->supplier?->name ? $document->supplier->name."\n" : '')
             ."Позицій: {$items} · сума рядків: {$sum} ₴\n"
             .($document->ai_comment ? e(mb_substr($document->ai_comment, 0, 600))."\n" : '')
+            .($priceNote ? $priceNote."\n" : '')
             ."Перевірити й провести: {$url}";
 
         // Постачальника в бланку часто немає — питаємо кнопками, а не текстом.

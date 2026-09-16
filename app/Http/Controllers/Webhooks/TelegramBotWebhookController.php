@@ -133,6 +133,18 @@ class TelegramBotWebhookController extends Controller
             }
         }
 
+        // Команди-довідки для своїх: чернетки, залишок, ціни, витрати.
+        if ($text !== null && str_starts_with(trim($text), '/')
+            && in_array($chatId, $this->telegram->staffChatIds(), true)) {
+            $answer = app(\App\Services\Ai\BotQueries::class)->handle($text);
+
+            if ($answer !== null) {
+                $this->telegram->sendMessage($chatId, $answer);
+
+                return;
+            }
+        }
+
         // /id — щоб дізнатись chat_id для налаштувань (чат оплат, група кухні).
         // Відповідаємо будь-кому: для учасників чату його id не таємниця, а
         // перевірка «це власник» не працює, коли пишуть від імені групи
