@@ -65,6 +65,28 @@ class TelegramBotWebhookController extends Controller
         $fromId = (string) ($callback['from']['id'] ?? '');
         $data   = (string) ($callback['data'] ?? '');
 
+        // «Це хто відмітився в кухні» — привʼязка акаунта до співробітника.
+        if (preg_match('/^'.\App\Services\Ai\KitchenAttendance::CALLBACK_LINK.':(\d+):(\d+)$/', $data, $m)) {
+            if (! in_array($fromId, $this->telegram->approverChatIds(), true)) {
+                $this->telegram->answerCallback((string) $callback['id'], 'Тільки для власника.');
+
+                return;
+            }
+
+            $answer = app(\App\Services\Ai\KitchenAttendance::class)->link($m[1], (int) $m[2]);
+            $this->telegram->answerCallback((string) $callback['id'], $answer);
+
+            if ($message = $callback['message'] ?? null) {
+                $this->telegram->editMessage(
+                    (string) $message['chat']['id'],
+                    (int) $message['message_id'],
+                    ($message['text'] ?? '')."\n\n✅ ".e($answer),
+                );
+            }
+
+            return;
+        }
+
         // Хто постачальник цієї накладної — кнопки під чернеткою.
         if (preg_match('/^'.\App\Services\Ai\SupplierPicker::CALLBACK.':(\d+):(\d+)$/', $data, $m)) {
             $this->supplierButton($callback, $fromId, (int) $m[1], (int) $m[2]);
@@ -158,10 +180,27 @@ class TelegramBotWebhookController extends Controller
 
         // Чат кухні: фото накладної → чернетка надходження (docs/tz-ops-agent.md §3).
         // Питань у групі не ставимо, лише реакція ✅ після розбору.
-        if ($chatId === (string) config('services.telegram.kitchen_chat_id') && $this->invoiceFileId($message)) {
-            $this->invoicePhoto($message, $chatId, notifyChatId: null);
+        if ($chatId === (string) config('services.telegram.kitchen_chat_id')) {
+            if ($this->invoiceFileId($message)) {
+                $this->invoicePhoto($message, $chatId, notifyChatId: null);
 
-            return;
+                return;
+            }
+
+            // «+» — відмітка про вихід на зміну.
+            $attendance = app(\App\Services\Ai\KitchenAttendance::class);
+
+            if ($attendance->isCheckIn($text)) {
+                $attendance->checkIn(
+                    (string) $text,
+                    (string) ($message['from']['id'] ?? ''),
+                    trim(($message['from']['first_name'] ?? '').' '.($message['from']['last_name'] ?? '')) ?: 'без імені',
+                    $chatId,
+                    (int) $message['message_id'],
+                );
+
+                return;
+            }
         }
 
         // У групах бот більше нічого не пише: він там лише для повідомлень про

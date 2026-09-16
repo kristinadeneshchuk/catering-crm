@@ -18,7 +18,13 @@ class EmployeeShift extends Model
     public const SLOT_MORNING = 'morning';
     public const SLOT_EVENING = 'evening';
 
-    protected $fillable = ['employee_id', 'date', 'shift_slot', 'rate', 'is_duty', 'is_half', 'is_planned'];
+    protected $fillable = [
+        'employee_id', 'date', 'shift_slot', 'rate', 'is_duty', 'is_half', 'is_planned',
+        'source', 'position_key', 'ai_comment',
+    ];
+
+    /** Відмітка з чату кухні, яку ще не підтвердив менеджер у Табелі. */
+    public const SOURCE_KITCHEN_CHAT = 'kitchen_chat';
 
     // Не кастимо 'date' — щоб keyBy('date') / порівняння залишали формат 'Y-m-d'
     // (Carbon з cast='date' дає ключ '2026-05-25 00:00:00', що ламає пошук по даті).

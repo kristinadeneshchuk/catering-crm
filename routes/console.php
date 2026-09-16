@@ -31,6 +31,9 @@ Schedule::command('telegram:evening-summary')->dailyAt('18:00');
 Schedule::command('telegram:weekly-digest')->weeklyOn(1, '09:00'); // 1 = понеділок
 Schedule::command('telegram:kitchen-daily-summary')->dailyAt('20:00');
 
+// Після ранкових відміток «+»: чи не забагато людей на кухні сьогодні.
+Schedule::command('kitchen:payroll-check')->dailyAt('10:30');
+
 // Instagram polling — для Message Requests (перших звернень нових клієнтів),
 // які не приходять через webhook навіть після публікації app.
 // Увімкнути ПІСЛЯ App Review (зараз у dev mode conversations API повертає порожньо).

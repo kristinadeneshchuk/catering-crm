@@ -17,6 +17,9 @@ return [
         'fuel_price_deviation'=> 0.10,  // ціна пального ±10% від медіани за 7 днів
     ],
 
+    // Поріг власника: фонд оплати кухні на день не більший за 130 ₴ на порцію.
+    'kitchen_fot_per_portion' => (float) env('OPS_KITCHEN_FOT_PER_PORTION', 130),
+
     // Чат оплат: власник і людина, яка платить. Сюди йде повідомлення після «ЗП погоджена».
     'payments_chat_id' => env('TELEGRAM_PAYMENTS_CHAT_ID'),
 
