@@ -65,6 +65,13 @@ class TelegramBotWebhookController extends Controller
         $fromId = (string) ($callback['from']['id'] ?? '');
         $data   = (string) ($callback['data'] ?? '');
 
+        // Хто постачальник цієї накладної — кнопки під чернеткою.
+        if (preg_match('/^'.\App\Services\Ai\SupplierPicker::CALLBACK.':(\d+):(\d+)$/', $data, $m)) {
+            $this->supplierButton($callback, $fromId, (int) $m[1], (int) $m[2]);
+
+            return;
+        }
+
         if (! preg_match('/^payout:(approve|reject):(\d+)$/', $data, $m)) {
             $this->telegram->answerCallback((string) $callback['id'], 'Невідома дія.');
 
@@ -74,6 +81,31 @@ class TelegramBotWebhookController extends Controller
         $answer = $this->payouts->handleButton($fromId, $m[1], (int) $m[2]);
 
         $this->telegram->answerCallback((string) $callback['id'], $answer);
+    }
+
+    private function supplierButton(array $callback, string $fromId, int $documentId, int $supplierId): void
+    {
+        if (! in_array($fromId, $this->telegram->staffChatIds(), true)) {
+            $this->telegram->answerCallback((string) $callback['id'], 'Тільки для своїх.');
+
+            return;
+        }
+
+        $result = app(\App\Services\Ai\SupplierPicker::class)->apply($documentId, $supplierId);
+
+        $this->telegram->answerCallback((string) $callback['id'], $result['message']);
+
+        $message = $callback['message'] ?? null;
+
+        if ($result['ok'] && $message) {
+            // Кнопки прибираємо: вибір уже зроблено.
+            $this->telegram->editMessage(
+                (string) $message['chat']['id'],
+                (int) $message['message_id'],
+                preg_replace('/\n\n<b>Чий це прихід\?<\/b>$/u', '', (string) ($message['text'] ?? ''))
+                    ."\n\n✅ ".e($result['message']),
+            );
+        }
     }
 
     private function onMessage(array $message): void

@@ -277,6 +277,56 @@ class KitchenInvoiceAiTest extends TestCase
         Queue::assertNothingPushed();
     }
 
+    public function test_an_invoice_without_a_supplier_asks_with_buttons(): void
+    {
+        Supplier::create(['name' => 'Столичка']);
+        $this->fakeAi($this->answer(['supplier_name' => null, 'supplier_code' => null]));
+        \Illuminate\Support\Facades\Cache::put('kitchen-invoice:ask', [$this->photo()], now()->addMinutes(5));
+
+        app()->call([new ReadKitchenInvoice('kitchen-invoice:ask', '100', 11, '100'), 'handle']);
+
+        Http::assertSent(function ($r) {
+            if (! str_contains($r->url(), 'sendMessage')) {
+                return false;
+            }
+
+            $keyboard = $r['reply_markup'] ?? [];
+            $keyboard = is_string($keyboard) ? json_decode($keyboard, true) : $keyboard;
+            $labels   = collect($keyboard['inline_keyboard'] ?? [])->flatten(1)->pluck('text');
+
+            return str_contains($r['text'], 'Чий це прихід?')
+                && $labels->contains('Столичка')
+                && $labels->contains('➕ Інший — у CRM');
+        });
+    }
+
+    public function test_pressing_a_supplier_button_fills_the_draft(): void
+    {
+        $supplier = Supplier::create(['name' => 'Столичка']);
+        $this->fakeAi($this->answer(['supplier_name' => null, 'supplier_code' => null]));
+        $document = app(InvoiceReader::class)->fromPhotos([$this->photo()]);
+        $this->assertNull($document->supplier_id);
+
+        $press = fn (int $fromId) => $this->postJson('/webhooks/telegram-bot', [
+            'update_id' => 60,
+            'callback_query' => [
+                'id'      => 'cb-sup',
+                'from'    => ['id' => $fromId],
+                'data'    => "sup:{$document->id}:{$supplier->id}",
+                'message' => ['message_id' => 9, 'chat' => ['id' => 100], 'text' => "🧾 Чернетка накладної\n\nЧий це прихід?"],
+            ],
+        ], ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();
+
+        $press(999); // сторонній
+        $this->assertNull($document->fresh()->supplier_id);
+
+        $press(100); // власник
+        $this->assertSame($supplier->id, $document->fresh()->supplier_id);
+
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'editMessageText')
+            && str_contains($r['text'], 'Столичка'));
+    }
+
     public function test_photos_from_other_chats_are_ignored(): void
     {
         Queue::fake();

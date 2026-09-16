@@ -33,7 +33,7 @@ class ReadKitchenInvoice implements ShouldQueue
     ) {
     }
 
-    public function handle(InvoiceReader $reader, TelegramService $telegram): void
+    public function handle(InvoiceReader $reader, TelegramService $telegram, \App\Services\Ai\SupplierPicker $suppliers): void
     {
         $paths = array_values(array_unique(Cache::pull($this->cacheKey, [])));
 
@@ -66,8 +66,18 @@ class ReadKitchenInvoice implements ShouldQueue
             .($document->ai_comment ? e(mb_substr($document->ai_comment, 0, 600))."\n" : '')
             ."Перевірити й провести: {$url}";
 
-        $this->notifyChatId
-            ? $telegram->sendMessage($this->notifyChatId, $text)
-            : $telegram->sendToOwner($text);
+        // Постачальника в бланку часто немає — питаємо кнопками, а не текстом.
+        $keyboard = null;
+
+        if (! $document->supplier_id) {
+            $text    .= "\n\n<b>Чий це прихід?</b>";
+            $keyboard = $suppliers->keyboard($document);
+        }
+
+        $chatId = $this->notifyChatId ?: $telegram->ownerChatId();
+
+        if ($chatId) {
+            $telegram->sendMessage($chatId, $text, $keyboard);
+        }
     }
 }
