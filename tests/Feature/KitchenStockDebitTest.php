@@ -140,6 +140,17 @@ class KitchenStockDebitTest extends TestCase
         $this->assertEqualsWithDelta(150, $line['price'], 0.001);
     }
 
+    public function test_draft_receipt_is_ignored_in_price(): void
+    {
+        $this->receipt('2026-08-10', $this->chicken, qty: 10, price: 150);
+        $this->receipt('2026-08-11', $this->chicken, qty: 10, price: 160, status: 'draft'); // накладна з фото на перевірці
+        $this->builder->day('2026-09-15', orders: 1, grams: [$this->chicken->id => 1000]);
+
+        $line = $this->debit->plan(Carbon::parse('2026-09-14'))['lines'][0];
+
+        $this->assertEqualsWithDelta(150, $line['price'], 0.001);
+    }
+
     public function test_receipt_price_far_from_card_falls_back_to_card(): void
     {
         $this->receipt('2026-08-10', $this->chicken, qty: 5, price: 1500); // ×10 від картки
@@ -258,9 +269,9 @@ class KitchenStockDebitTest extends TestCase
         return DB::table('settings')->where('key', $key)->where('value', '1')->exists();
     }
 
-    private function receipt(string $date, Ingredient|Packaging $item, float $qty, float $price, int $warehouse = 3): void
+    private function receipt(string $date, Ingredient|Packaging $item, float $qty, float $price, int $warehouse = 3, string $status = 'completed'): void
     {
-        $doc = StockDocument::create(['type' => 'receipt', 'warehouse_id' => $warehouse, 'operation_date' => $date, 'total_sum' => 0]);
+        $doc = StockDocument::create(['type' => 'receipt', 'warehouse_id' => $warehouse, 'operation_date' => $date, 'status' => $status, 'total_sum' => 0]);
         StockDocumentItem::create([
             'stock_document_id' => $doc->id, 'itemable_type' => $item::class, 'itemable_id' => $item->id,
             'qty' => $qty, 'price' => $price, 'total_price' => $qty * $price,

@@ -74,6 +74,9 @@ class StockPriceBook
         $rows = DB::table('stock_document_items as sdi')
             ->join('stock_documents as sd', 'sd.id', '=', 'sdi.stock_document_id')
             ->where('sd.type', 'receipt')
+            // Чернетки (накладна з фото, ще не проведена) складу не рухають —
+            // і в ціну списання не йдуть.
+            ->where('sd.status', '!=', \App\Models\StockDocument::STATUS_DRAFT)
             ->where('sdi.qty', '>', 0)
             ->orderBy('sd.operation_date')
             ->orderBy('sdi.id')

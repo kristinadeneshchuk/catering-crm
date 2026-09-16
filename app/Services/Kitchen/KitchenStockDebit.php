@@ -227,7 +227,7 @@ class KitchenStockDebit
                     'type'           => 'write_off',
                     'warehouse_id'   => self::warehouseFor($class),
                     'operation_date' => $cook->copy()->setTime(23, 59),
-                    'status'         => 'completed',
+                    'status'         => StockDocument::STATUS_POSTED, // не чернетка: списання одразу рухає склад
                     'is_paid'        => false,
                     'total_sum'      => 0,
                     'comment'        => ($kind === 'ingredient' ? 'Списання за нормою' : 'Списання упаковки за нормою')
@@ -329,6 +329,7 @@ class KitchenStockDebit
             ->join('stock_document_items as sdi', 'sdi.stock_document_id', '=', 'sd.id')
             ->where('sdi.itemable_type', $itemableType)
             ->where('sd.type', 'receipt')
+            ->where('sd.status', '!=', StockDocument::STATUS_DRAFT)
             ->groupBy('sd.warehouse_id')
             ->orderByRaw('COUNT(*) DESC')
             ->value('sd.warehouse_id');
