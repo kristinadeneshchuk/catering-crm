@@ -187,6 +187,13 @@ class TelegramBotWebhookController extends Controller
                 return;
             }
 
+            // Голосове — перевитрата понад норму.
+            if (! empty($message['voice']['file_id'])) {
+                $this->kitchenVoice($message, $chatId);
+
+                return;
+            }
+
             // «+» — відмітка про вихід на зміну.
             $attendance = app(\App\Services\Ai\KitchenAttendance::class);
 
@@ -265,6 +272,19 @@ class TelegramBotWebhookController extends Controller
      * @param  string|null  $notifyChatId  куди відповісти текстом; null — лише
      *                                     реакція в чаті й повідомлення власнику
      */
+    /** Голосове з чату кухні: качаємо файл і віддаємо в чергу. */
+    private function kitchenVoice(array $message, string $chatId): void
+    {
+        $path = $this->telegram->downloadFile(
+            (string) $message['voice']['file_id'],
+            'ops/voice/'.now()->format('Y-m'),
+        );
+
+        if ($path) {
+            \App\Jobs\ReadKitchenVoice::dispatch($path, $chatId, (int) $message['message_id']);
+        }
+    }
+
     /** Фото або зображення, надіслане файлом (кухня часто шле саме так). */
     private function invoiceFileId(array $message): ?string
     {

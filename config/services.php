@@ -47,6 +47,10 @@ return [
         // це задовго. gpt-5.4-mini удвічі швидша й дешевша, але меню виходить
         // одноманітнішим.
         'menu_model' => env('OPENAI_MENU_MODEL', 'gpt-5.4'),
+
+        // Розпізнавання голосових з чату кухні (docs/tz-ops-agent.md §4).
+        'transcribe_model'   => env('OPENAI_TRANSCRIBE_MODEL', 'whisper-1'),
+        'transcribe_timeout' => (int) env('OPENAI_TRANSCRIBE_TIMEOUT', 120),
     ],
 
     // Операційний ШІ (docs/tz-ops-agent.md). Ключ — лише в .env сервера.
