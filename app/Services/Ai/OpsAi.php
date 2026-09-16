@@ -29,7 +29,25 @@ class OpsAi
 
     public function enabled(): bool
     {
-        return filled(config('services.anthropic.key'));
+        return filled(config('services.anthropic.key')) && static::switchedOn();
+    }
+
+    /**
+     * Вимикач із телефона: `/ші стоп` у чаті з ботом. Живе в налаштуваннях, а
+     * не в .env, щоб зупинити ШІ можна було без деплою.
+     */
+    public static function switchedOn(): bool
+    {
+        if (! \App\Support\SchemaReady::has('settings')) {
+            return true;
+        }
+
+        return \App\Models\Setting::where('key', 'ops_ai_enabled')->value('value') !== '0';
+    }
+
+    public static function switch(bool $on): void
+    {
+        \App\Models\Setting::updateOrCreate(['key' => 'ops_ai_enabled'], ['value' => $on ? '1' : '0']);
     }
 
     public function model(): string

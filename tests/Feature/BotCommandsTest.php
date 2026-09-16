@@ -146,6 +146,39 @@ class BotCommandsTest extends TestCase
         Http::assertNotSent(fn ($r) => str_contains($r['text'] ?? '', 'Витрати на ШІ'));
     }
 
+    public function test_status_shows_what_the_ai_did_today(): void
+    {
+        AiRun::create(['purpose' => 'invoice', 'model' => 'claude-opus-5', 'status' => 'ok', 'cost_usd' => 0.04]);
+        AiRun::create(['purpose' => 'overuse', 'model' => 'claude-opus-5', 'status' => 'ok', 'cost_usd' => 0.01]);
+        AiRun::create(['purpose' => 'invoice', 'model' => 'claude-opus-5', 'status' => 'failed', 'error' => 'таймаут моделі']);
+        $this->receipt(5, 1000, '2026-09-16', StockDocument::STATUS_DRAFT);
+
+        $answer = $this->ask('/стан');
+
+        $this->assertStringContainsString('накладних: 1', $answer);
+        $this->assertStringContainsString('голосових: 1', $answer);
+        $this->assertStringContainsString('Чернеток чекає: 1', $answer);
+        $this->assertStringContainsString('$0.05', $answer);
+        $this->assertStringContainsString('таймаут моделі', $answer);
+        $this->assertStringContainsString('увімкнений', $answer);
+    }
+
+    public function test_the_ai_can_be_stopped_and_started_from_the_phone(): void
+    {
+        $this->assertTrue(\App\Services\Ai\OpsAi::switchedOn());
+
+        $this->assertStringContainsString('вимкнено', $this->ask('/ші стоп'));
+        $this->assertFalse(\App\Services\Ai\OpsAi::switchedOn());
+        $this->assertStringContainsString('⛔ вимкнений', $this->ask('/стан'));
+
+        // Поки вимкнено, розбір не запускається зовсім.
+        config()->set('services.anthropic.key', 'test-key');
+        $this->assertFalse(app(\App\Services\Ai\OpsAi::class)->enabled());
+
+        $this->assertStringContainsString('увімкнено', $this->ask('/ші пуск'));
+        $this->assertTrue(app(\App\Services\Ai\OpsAi::class)->enabled());
+    }
+
     // --- порівняння цін у новій накладній -------------------------------------
 
     public function test_a_price_jump_is_reported_with_the_impact(): void

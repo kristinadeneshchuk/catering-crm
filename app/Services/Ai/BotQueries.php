@@ -42,6 +42,8 @@ class BotQueries
             '/склад', '/stock'             => $this->stock($argument),
             '/ціни', '/цены', '/prices'    => $this->priceHistory($argument),
             '/витрати', '/costs'           => $this->costs(),
+            '/стан', '/status'             => $this->status(),
+            '/ші', '/ai'                   => $this->switchAi($argument),
             default                        => null,
         };
     }
@@ -54,6 +56,8 @@ class BotQueries
             ."• <b>/склад курка</b> — залишок і середня ціна товару\n"
             ."• <b>/ціни курка</b> — історія закупівель і як змінювалась ціна\n"
             ."• <b>/витрати</b> — скільки коштує ШІ сьогодні й цього місяця\n"
+            ."• <b>/стан</b> — що ШІ зробив сьогодні, черга, помилки\n"
+            ."• <b>/ші стоп</b> і <b>/ші пуск</b> — вимкнути або ввімкнути ШІ\n"
             .'• <b>/id</b> — ID чату (для налаштувань)';
     }
 
@@ -159,6 +163,63 @@ class BotQueries
             .($failed ? " · невдалих {$failed}" : '')."\n"
             .'Цього місяця: '.$this->usd($month->sum('cost_usd')).' · запусків '.$month->count()."\n"
             .($cap > 0 ? 'Денний ліміт: '.$this->usd($cap) : 'Денний ліміт не заданий');
+    }
+
+    /** Коротка панель: що зроблено сьогодні, що застрягло, чи все живе. */
+    public function status(): string
+    {
+        $today = AiRun::whereDate('created_at', now()->toDateString())->get();
+        $byPurpose = $today->where('status', 'ok')->groupBy('purpose')
+            ->map(fn ($runs, $purpose) => match ($purpose) {
+                AiRun::PURPOSE_INVOICE  => 'накладних: '.$runs->count(),
+                AiRun::PURPOSE_OVERUSE  => 'голосових: '.$runs->count(),
+                default                 => $purpose.': '.$runs->count(),
+            })->values()->implode(' · ');
+
+        $failed = $today->where('status', '!=', 'ok');
+        $drafts = StockDocument::where('status', StockDocument::STATUS_DRAFT)->count();
+        $shifts = \App\Models\EmployeeShift::whereDate('date', now()->toDateString())
+            ->where('source', \App\Models\EmployeeShift::SOURCE_KITCHEN_CHAT)->count();
+        $queue  = \App\Support\SchemaReady::has('jobs')
+            ? \Illuminate\Support\Facades\DB::table('jobs')->count()
+            : 0;
+
+        $lines = [
+            '🤖 <b>Стан на '.now()->format('H:i').'</b>',
+            'ШІ: '.(OpsAi::switchedOn() ? 'увімкнений' : '⛔ вимкнений (/ші пуск)'),
+            'Сьогодні: '.($byPurpose ?: 'нічого не розбирав'),
+            'Чернеток чекає: '.$drafts.' · відміток «+» на кухні: '.$shifts,
+            'Черга задач: '.$queue.($queue > 5 ? ' ⚠️ схоже, застрягла' : ''),
+            'Витрати сьогодні: '.$this->usd($today->sum('cost_usd')),
+        ];
+
+        if ($failed->isNotEmpty()) {
+            $last = $failed->last();
+            $lines[] = '⚠️ Невдалих спроб: '.$failed->count().'. Остання: '.mb_substr((string) $last->error, 0, 200);
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /** `/ші стоп` і `/ші пуск` — зупинити або повернути розбір. */
+    public function switchAi(string $argument): string
+    {
+        $argument = mb_strtolower(trim($argument));
+
+        if (in_array($argument, ['стоп', 'stop', 'off', 'вимкни'], true)) {
+            OpsAi::switch(false);
+
+            return '⛔ ШІ вимкнено. Фото й голосові збережу, але розбирати не буду. Увімкнути: /ші пуск';
+        }
+
+        if (in_array($argument, ['пуск', 'start', 'on', 'увімкни'], true)) {
+            OpsAi::switch(true);
+
+            return '✅ ШІ увімкнено.';
+        }
+
+        return 'ШІ зараз '.(OpsAi::switchedOn() ? 'увімкнений' : 'вимкнений')
+            .". Команди: <code>/ші стоп</code>, <code>/ші пуск</code>";
     }
 
     /** @return \Illuminate\Support\Collection<int, Ingredient|Packaging> */
