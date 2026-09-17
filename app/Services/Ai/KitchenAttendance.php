@@ -48,12 +48,25 @@ class KitchenAttendance
     /**
      * @return string|null коротке пояснення для журналу; null — нічого не робили
      */
-    public function checkIn(string $text, string $fromId, string $fromName, string $chatId, int $messageId): ?string
+    public function checkIn(string $text, string $fromId, string $fromName, string $chatId, int $messageId, bool $anonymous = false): string
     {
+        // Повідомлення «від імені групи» (анонімний адмін) не має автора, тож
+        // зарахувати його нікому. Пояснюємо власнику, а не мовчимо.
+        if ($anonymous || $fromId === '') {
+            $this->note('«+» від імені групи — не зараховано');
+            $this->telegram->sendToOwner(
+                '👤 У чаті кухні «+» надіслано від імені групи, тож я не знаю, хто це. '
+                .'Попросіть писати від свого акаунта — або вимкніть «Відправляти анонімно» в правах адміністратора.',
+            );
+
+            return 'анонімний адмін';
+        }
+
         $employee = Employee::where('telegram_chat_id', $fromId)->first();
 
         if (! $employee) {
             $this->askOwnerWhoIsIt($fromId, $fromName);
+            $this->note('«+» від невідомого акаунта '.$fromName.' — питаю власника');
 
             return 'невідомий акаунт';
         }
@@ -61,8 +74,29 @@ class KitchenAttendance
         $shift = $this->markShift($employee, $this->position($text, $employee));
 
         $this->telegram->reactToMessage($chatId, $messageId, '✅');
+        $this->note($employee->name.' · '.($shift->position_key ?: 'зміна'));
 
         return $employee->name.' · '.($shift->position_key ?: 'зміна');
+    }
+
+    /** Остання подія кухні — щоб /стан показував, що саме сталось. */
+    private function note(string $text): void
+    {
+        \Illuminate\Support\Facades\Log::info('[Кухня] '.$text);
+
+        if (\App\Support\SchemaReady::has('settings')) {
+            \App\Models\Setting::updateOrCreate(
+                ['key' => 'ops_last_kitchen_event'],
+                ['value' => now()->format('d.m H:i').' — '.$text],
+            );
+        }
+    }
+
+    public static function lastEvent(): ?string
+    {
+        return \App\Support\SchemaReady::has('settings')
+            ? \App\Models\Setting::where('key', 'ops_last_kitchen_event')->value('value')
+            : null;
     }
 
     /** Створити або оновити чернетку зміни на сьогодні. */

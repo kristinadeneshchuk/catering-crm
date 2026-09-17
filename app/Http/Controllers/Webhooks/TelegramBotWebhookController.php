@@ -198,12 +198,18 @@ class TelegramBotWebhookController extends Controller
             $attendance = app(\App\Services\Ai\KitchenAttendance::class);
 
             if ($attendance->isCheckIn($text)) {
+                // «Від імені групи» шле GroupAnonymousBot — автора в такому
+                // повідомленні немає.
+                $anonymous = ! empty($message['sender_chat'])
+                    || ! empty($message['from']['is_bot']);
+
                 $attendance->checkIn(
                     (string) $text,
                     (string) ($message['from']['id'] ?? ''),
                     trim(($message['from']['first_name'] ?? '').' '.($message['from']['last_name'] ?? '')) ?: 'без імені',
                     $chatId,
                     (int) $message['message_id'],
+                    $anonymous,
                 );
 
                 return;

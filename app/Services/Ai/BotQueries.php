@@ -194,6 +194,7 @@ class BotQueries
             'ШІ: '.(OpsAi::switchedOn() ? 'увімкнений' : '⛔ вимкнений (/ші пуск)'),
             'Сьогодні: '.($byPurpose ?: 'нічого не розбирав'),
             'Чернеток чекає: '.$drafts.' · відміток «+» на кухні: '.$shifts,
+            'Остання подія кухні: '.(\App\Services\Ai\KitchenAttendance::lastEvent() ?: 'ще не було'),
             'Черга задач: '.$queue.($queue > 5 ? ' ⚠️ схоже, застрягла' : ''),
             'Витрати сьогодні: '.$this->usd($today->sum('cost_usd')),
         ];

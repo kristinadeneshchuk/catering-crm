@@ -94,6 +94,29 @@ class KitchenAttendanceTest extends TestCase
         $this->assertSame('chef', EmployeeShift::first()->position_key);
     }
 
+    public function test_a_plus_sent_as_the_group_is_explained_to_the_owner(): void
+    {
+        // Власник пише в групу від імені компанії — автора в повідомленні немає.
+        $this->postJson('/webhooks/telegram-bot', [
+            'update_id' => 77,
+            'message' => [
+                'message_id'  => 78,
+                'chat'        => ['id' => -5116331458, 'type' => 'group', 'title' => 'Авокадо кухня'],
+                'from'        => ['id' => 1087968824, 'is_bot' => true, 'first_name' => 'Group'],
+                'sender_chat' => ['id' => -5116331458, 'type' => 'group'],
+                'text'        => '+',
+            ],
+        ], ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();
+
+        $this->assertSame(0, EmployeeShift::count());
+
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
+            && (string) $r['chat_id'] === '100'
+            && str_contains($r['text'], 'від імені групи'));
+
+        $this->assertStringContainsString('від імені групи', (string) \App\Services\Ai\KitchenAttendance::lastEvent());
+    }
+
     public function test_an_unknown_account_is_asked_about_in_private(): void
     {
         Employee::create(['name' => 'Марія Помічник', 'position' => 'assistant', 'base_rate' => 900, 'is_active' => true]);
