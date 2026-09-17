@@ -86,13 +86,16 @@ class ReadKitchenInvoice implements ShouldQueue
             $keyboard = $suppliers->keyboard($document);
         }
 
+        // З чату кухні відповідь іде власникам, з особистих — тому, хто надіслав.
+        $this->notifyChatId
+            ? $telegram->sendMessage($this->notifyChatId, $text, $keyboard)
+            : $telegram->askOwners($text, $keyboard);
+
         $chatId = $this->notifyChatId ?: $telegram->ownerChatId();
 
         if (! $chatId) {
             return;
         }
-
-        $telegram->sendMessage($chatId, $text, $keyboard);
 
         // Окремим повідомленням — питання про фасування, щоб відповідь прийшла
         // реплаєм саме на нього.

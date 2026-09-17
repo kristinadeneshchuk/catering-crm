@@ -135,6 +135,21 @@ class KitchenAttendanceTest extends TestCase
             && (string) $r['chat_id'] === '-5116331458');
     }
 
+    public function test_two_owners_both_get_the_question(): void
+    {
+        config()->set('services.telegram.owner_chat_id', '100,101');
+        $this->app->forgetInstance(\App\Services\TelegramService::class);
+        Employee::create(['name' => 'Марія Помічник', 'position' => 'assistant', 'base_rate' => 900, 'is_active' => true]);
+
+        $this->say('+', fromId: '999', name: 'Марія');
+
+        foreach (['100', '101'] as $chatId) {
+            Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
+                && (string) $r['chat_id'] === $chatId
+                && str_contains((string) $r['text'], 'не знаю, хто це'));
+        }
+    }
+
     public function test_the_owner_links_the_account_with_a_button(): void
     {
         $maria = Employee::create(['name' => 'Марія Помічник', 'position' => 'assistant', 'base_rate' => 900, 'is_active' => true]);

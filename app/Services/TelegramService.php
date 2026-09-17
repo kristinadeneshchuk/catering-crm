@@ -22,11 +22,37 @@ class TelegramService
         $this->kitchenChatId = config('services.telegram.kitchen_chat_id');
     }
 
+    /**
+     * Власників може бути кілька — ID через кому в TELEGRAM_OWNER_CHAT_ID.
+     * Питання агента й сигнали отримують усі.
+     */
     public function sendToOwner(string $text): void
     {
-        if ($this->ownerChatId) {
-            $this->send($this->ownerChatId, $text);
+        foreach ($this->ownerChatIds() as $chatId) {
+            $this->send($chatId, $text);
         }
+    }
+
+    /**
+     * Питання з кнопками всім власникам. Повертає id першого надісланого
+     * повідомлення — на нього можна відповісти реплаєм.
+     */
+    public function askOwners(string $text, ?array $keyboard = null): ?int
+    {
+        $first = null;
+
+        foreach ($this->ownerChatIds() as $chatId) {
+            $id = $this->sendMessage($chatId, $text, $keyboard);
+            $first ??= $id;
+        }
+
+        return $first;
+    }
+
+    /** @return array<int, string> */
+    public function ownerChatIds(): array
+    {
+        return $this->chatIds($this->ownerChatId);
     }
 
     public function sendToManager(string $text): void
@@ -56,24 +82,18 @@ class TelegramService
         }
     }
 
+    /** Власники + менеджери, без повторів, якщо ID є в обох списках. */
     public function sendToOwnerAndManager(string $text): void
     {
-        $this->sendToOwner($text);
-
-        if ($this->managerChatId && $this->managerChatId !== $this->ownerChatId) {
-            $this->sendToManager($text);
+        foreach ($this->chatIds($this->ownerChatId, $this->managerChatId) as $chatId) {
+            $this->send($chatId, $text);
         }
     }
 
     public function sendToOwnerManagerCook(string $text): void
     {
-        $this->sendToOwnerAndManager($text);
-
-        if ($this->cookChatId
-            && $this->cookChatId !== $this->ownerChatId
-            && $this->cookChatId !== $this->managerChatId
-        ) {
-            $this->sendToCook($text);
+        foreach ($this->chatIds($this->ownerChatId, $this->managerChatId, $this->cookChatId) as $chatId) {
+            $this->send($chatId, $text);
         }
     }
 
@@ -104,9 +124,10 @@ class TelegramService
     // -------------------------------------------------------------------------
 
     /** Чати, чиїм кнопкам ми віримо: власник і старший менеджер. */
+    /** Перший власник — коли відповідь має піти в один чат. */
     public function ownerChatId(): ?string
     {
-        return $this->ownerChatId ?: null;
+        return $this->ownerChatIds()[0] ?? null;
     }
 
     /**

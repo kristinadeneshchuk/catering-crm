@@ -145,12 +145,6 @@ class KitchenAttendance
     /** Незнайомий акаунт: питаємо власника в особисті, не в чаті кухні. */
     private function askOwnerWhoIsIt(string $fromId, string $fromName): void
     {
-        $chatId = $this->telegram->ownerChatId();
-
-        if (! $chatId) {
-            return;
-        }
-
         $candidates = Employee::whereNull('telegram_chat_id')
             ->where('is_active', true)
             ->whereIn('position', ['chef', 'cook', 'assistant', 'packer'])
@@ -159,7 +153,7 @@ class KitchenAttendance
             ->get();
 
         if ($candidates->isEmpty()) {
-            $this->telegram->sendMessage($chatId, "👤 У чаті кухні відмітився «{$fromName}», але всі співробітники вже привʼязані. Перевірте Табель.");
+            $this->telegram->askOwners("👤 У чаті кухні відмітився «{$fromName}», але всі співробітники вже привʼязані. Перевірте Табель.");
 
             return;
         }
@@ -173,8 +167,7 @@ class KitchenAttendance
             ])->values()->all();
         }
 
-        $this->telegram->sendMessage(
-            $chatId,
+        $this->telegram->askOwners(
             "👤 У чаті кухні відмітився <b>".e($fromName)."</b> (Telegram ID <code>{$fromId}</code>), але я не знаю, хто це.\n"
             ."Оберіть співробітника — і далі відмічатиму його сам.",
             $rows,
