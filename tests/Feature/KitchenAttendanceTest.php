@@ -67,6 +67,17 @@ class KitchenAttendanceTest extends TestCase
         Http::assertNotSent(fn ($r) => str_contains($r->url(), 'sendMessage') && (string) $r['chat_id'] === '-5116331458');
     }
 
+    public function test_a_slash_plus_works_when_the_group_still_hides_messages(): void
+    {
+        // У старій групі Telegram віддає боту лише команди, тож «/+» має
+        // працювати так само, як «+».
+        $this->say('/+ пакування');
+
+        $shift = EmployeeShift::first();
+        $this->assertNotNull($shift);
+        $this->assertSame('packer', $shift->position_key);
+    }
+
     public function test_the_position_of_the_day_comes_from_the_message(): void
     {
         $this->say('+ пакування');

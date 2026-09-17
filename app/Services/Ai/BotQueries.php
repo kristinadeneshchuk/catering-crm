@@ -31,6 +31,11 @@ class BotQueries
         [$command, $argument] = array_pad(preg_split('/\s+/u', $text, 2), 2, '');
         $command = mb_strtolower(preg_replace('/@\S+$/', '', $command));
 
+        // «/+» — відмітка кухні, а не довідкова команда.
+        if (in_array($command, ['/+', '/плюс'], true)) {
+            return null;
+        }
+
         // /start з кодом — це підключення курʼєра, не довідка.
         if ($command === '/start' && trim($argument) !== '') {
             return null;

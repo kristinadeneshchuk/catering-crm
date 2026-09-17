@@ -32,12 +32,17 @@ class KitchenAttendance
     {
     }
 
-    /** Це відмітка про вихід? «+», «+ пакування», «плюс». */
+    /**
+     * Це відмітка про вихід? «+», «+ пакування», «плюс».
+     *
+     * Командні форми «/+» і «/плюс» — запасний шлях: у групі, куди бота додали
+     * до вимкнення приватного режиму, Telegram віддає йому лише команди.
+     */
     public function isCheckIn(?string $text): bool
     {
         $text = mb_strtolower(trim((string) $text));
 
-        return $text !== '' && (bool) preg_match('/^(\+|плюс)(\s|$)/u', $text);
+        return $text !== '' && (bool) preg_match('/^(\/?\+|\/?плюс)(\s|$|@)/u', $text);
     }
 
     /**
