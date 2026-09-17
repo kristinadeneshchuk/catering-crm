@@ -66,7 +66,7 @@ class KitchenAttendance
 
         if (! $employee) {
             $this->askOwnerWhoIsIt($fromId, $fromName);
-            $this->note('«+» від невідомого акаунта '.$fromName.' — питаю власника');
+            $this->note('«+» від невідомого акаунта '.$fromName.' (ID '.$fromId.') — питаю власника');
 
             return 'невідомий акаунт';
         }
