@@ -85,6 +85,39 @@ class KitchenAttendanceTest extends TestCase
         $this->assertSame('packer', EmployeeShift::first()->position_key);
     }
 
+    public function test_half_a_shift_is_understood(): void
+    {
+        $this->say('+ 0,5');
+
+        $shift = EmployeeShift::first();
+        $this->assertTrue((bool) $shift->is_half);
+        $this->assertEquals(600, (float) $shift->rate, 'половина ставки 1200');
+        $this->assertStringContainsString('пів зміни', $shift->ai_comment);
+    }
+
+    public function test_words_for_half_work_too(): void
+    {
+        $attendance = app(KitchenAttendance::class);
+
+        $this->assertEquals(0.5, $attendance->share('+ пів зміни'));
+        $this->assertEquals(0.5, $attendance->share('+ половина'));
+        $this->assertEquals(0.5, $attendance->share('+ 0.5 пакування'));
+        $this->assertEquals(1.0, $attendance->share('+'), 'звичайний плюс — повна зміна');
+        $this->assertEquals(1.0, $attendance->share('+ до 15'), 'час — не частка зміни');
+        $this->assertEquals(1.0, $attendance->share('+ 12:00'), 'час — не частка зміни');
+        $this->assertEquals(1.0, $attendance->share('+ 2'), 'більше за зміну не буває');
+    }
+
+    public function test_the_text_of_the_check_in_is_kept_for_the_manager(): void
+    {
+        $this->say('+ пакування до 15');
+
+        $shift = EmployeeShift::first();
+        $this->assertSame('packer', $shift->position_key);
+        $this->assertStringContainsString('+ пакування до 15', $shift->ai_comment);
+        $this->assertEquals(1200, (float) $shift->rate, 'час не ріже ставку');
+    }
+
     public function test_a_second_plus_does_not_double_the_shift(): void
     {
         $this->say('+');

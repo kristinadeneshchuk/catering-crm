@@ -71,7 +71,7 @@ class KitchenAttendance
             return 'невідомий акаунт';
         }
 
-        $shift = $this->markShift($employee, $this->position($text, $employee));
+        $shift = $this->markShift($employee, $this->position($text, $employee), share: $this->share($text), note: $text);
 
         $this->telegram->reactToMessage($chatId, $messageId, '✅');
         $this->note($employee->name.' · '.($shift->position_key ?: 'зміна'));
@@ -99,15 +99,27 @@ class KitchenAttendance
             : null;
     }
 
-    /** Створити або оновити чернетку зміни на сьогодні. */
-    public function markShift(Employee $employee, ?string $positionKey, ?Carbon $date = null): EmployeeShift
-    {
+    /**
+     * Створити або оновити чернетку зміни на сьогодні.
+     *
+     * @param  float  $share  частина зміни: 1 — повна, 0.5 — пів зміни
+     */
+    public function markShift(
+        Employee $employee,
+        ?string $positionKey,
+        ?Carbon $date = null,
+        float $share = 1.0,
+        ?string $note = null,
+    ): EmployeeShift {
         $date  = ($date ?? now())->toDateString();
         $shift = EmployeeShift::where('employee_id', $employee->id)->whereDate('date', $date)->first();
 
         $attributes = [
             'source'       => EmployeeShift::SOURCE_KITCHEN_CHAT,
             'position_key' => $positionKey ?: $employee->position,
+            'is_half'      => abs($share - 0.5) < 0.01,
+            'ai_comment'   => $note === null ? null : 'У чаті кухні: «'.trim($note).'»'
+                .($share < 1 ? ' → '.$this->shareLabel($share) : ''),
         ];
 
         if ($shift) {
@@ -122,9 +134,41 @@ class KitchenAttendance
             'employee_id' => $employee->id,
             'date'        => $date,
             'shift_slot'  => EmployeeShift::SLOT_FULL,
-            'rate'        => (float) $employee->base_rate,
+            'rate'        => round((float) $employee->base_rate * $share, 2),
             'is_planned'  => true, // чернетка: балансу не чіпає
         ]);
+    }
+
+    /**
+     * Частина зміни з тексту: «+ 0,5», «+ пів», «+ половина» — це половина.
+     * Число більше за 1 (наприклад «+ 12:00») — це не частка, а час, і зміна
+     * лишається повною.
+     */
+    public function share(string $text): float
+    {
+        $haystack = mb_strtolower($text);
+
+        if (preg_match('/(пів|пол(овин)?)/u', $haystack)) {
+            return 0.5;
+        }
+
+        // Час («до 15», «з 9 до 14») часткою не вважаємо.
+        if (preg_match('/\d{1,2}\s*:\s*\d{2}/u', $haystack) || preg_match('/(до|з|с|from|до\s)\s*\d{1,2}/u', $haystack)) {
+            return 1.0;
+        }
+
+        if (preg_match('/(\d+[.,]\d+)/u', $haystack, $m)) {
+            $value = (float) str_replace(',', '.', $m[1]);
+
+            return $value > 0 && $value <= 1 ? $value : 1.0;
+        }
+
+        return 1.0;
+    }
+
+    private function shareLabel(float $share): string
+    {
+        return abs($share - 0.5) < 0.01 ? 'пів зміни' : round($share * 100).'% зміни';
     }
 
     public function position(string $text, Employee $employee): ?string
@@ -184,7 +228,7 @@ class KitchenAttendance
         }
 
         $employee->update(['telegram_chat_id' => $telegramId]);
-        $this->markShift($employee, $employee->position);
+        $this->markShift($employee, $employee->position, note: 'привʼязка акаунта');
 
         return $employee->name.' — записав і відмітив зміну.';
     }
