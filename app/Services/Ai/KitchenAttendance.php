@@ -42,7 +42,8 @@ class KitchenAttendance
     {
         $text = mb_strtolower(trim((string) $text));
 
-        return $text !== '' && (bool) preg_match('/^(\/?\+|\/?плюс)(\s|$|@)/u', $text);
+        // Після плюса буває що завгодно: «+(м)», «+ пакування», «+0,5».
+        return $text !== '' && (bool) preg_match('/^\/?(\+|плюс)/u', $text);
     }
 
     /**

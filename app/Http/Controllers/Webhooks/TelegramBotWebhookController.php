@@ -181,9 +181,9 @@ class TelegramBotWebhookController extends Controller
         // Чат кухні: фото накладної → чернетка надходження (docs/tz-ops-agent.md §3).
         // Питань у групі не ставимо, лише реакція ✅ після розбору.
         if ($chatId === (string) config('services.telegram.kitchen_chat_id')) {
+            // Фото з кухні не розбираємо: там ходять графіки, меми й скріншоти.
+            // Накладні приймаємо лише в особистих від власників і менеджерів.
             if ($this->invoiceFileId($message)) {
-                $this->invoicePhoto($message, $chatId, notifyChatId: null);
-
                 return;
             }
 

@@ -186,7 +186,26 @@ class KitchenInvoiceAiTest extends TestCase
         $this->assertStringContainsString('ліміт', AiRun::latest('id')->first()->error);
     }
 
-    public function test_an_album_from_the_kitchen_chat_starts_one_job(): void
+    public function test_photos_in_the_kitchen_chat_are_ignored(): void
+    {
+        // У чаті кухні ходять графіки, меми й скріншоти — накладні приймаємо
+        // лише в особистих від власників і менеджерів.
+        Queue::fake();
+
+        $this->postJson('/webhooks/telegram-bot', [
+            'update_id' => 10,
+            'message' => [
+                'message_id' => 11,
+                'chat'       => ['id' => -5116331458, 'type' => 'group', 'title' => 'Кухня'],
+                'from'       => ['id' => 700],
+                'photo'      => [['file_id' => 'small'], ['file_id' => 'big']],
+            ],
+        ], ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();
+
+        Queue::assertNothingPushed();
+    }
+
+    public function test_an_album_in_private_becomes_one_invoice(): void
     {
         Queue::fake();
 
@@ -196,8 +215,8 @@ class KitchenInvoiceAiTest extends TestCase
                 'message' => [
                     'message_id'     => $messageId,
                     'media_group_id' => 'album-1',
-                    'chat'           => ['id' => -5116331458, 'type' => 'group', 'title' => 'Кухня'],
-                    'from'           => ['id' => 700],
+                    'chat'           => ['id' => 100, 'type' => 'private'],
+                    'from'           => ['id' => 100],
                     'photo'          => [['file_id' => 'small'.$messageId], ['file_id' => 'big'.$messageId]],
                 ],
             ], ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();

@@ -85,6 +85,16 @@ class KitchenAttendanceTest extends TestCase
         $this->assertSame('packer', EmployeeShift::first()->position_key);
     }
 
+    public function test_a_plus_with_a_note_in_brackets_still_counts(): void
+    {
+        // Світлана пише «+(м)» — це теж вихід на зміну.
+        $this->say('+(м)');
+
+        $shift = EmployeeShift::first();
+        $this->assertNotNull($shift);
+        $this->assertStringContainsString('+(м)', $shift->ai_comment);
+    }
+
     public function test_half_a_shift_is_understood(): void
     {
         $this->say('+ 0,5');
