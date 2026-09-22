@@ -114,6 +114,11 @@ return [
     'inbox' => [
         'token' => env('INBOX_API_TOKEN'),
 
+        // Читання чатів для звітів операційного агента: той самий read-only
+        // токен, що в агента продажів (unified-inbox/docs/events-api.md §4).
+        'agent_base_url' => env('INBOX_AGENT_BASE_URL', 'https://inboxs.horenko-production.com'),
+        'agent_token'    => env('INBOX_AGENT_TOKEN'),
+
         // Куди CRM стукає у зворотний бік — про оплату замовлення.
         // Порожньо = вебхуки вимкнені (нічого не ставиться в чергу).
         'webhook_url'    => env('INBOX_WEBHOOK_URL'),

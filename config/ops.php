@@ -20,6 +20,27 @@ return [
     // Поріг власника: фонд оплати кухні на день не більший за 130 ₴ на порцію.
     'kitchen_fot_per_portion' => (float) env('OPS_KITCHEN_FOT_PER_PORTION', 130),
 
+    /*
+     * Менеджери в тижневому звіті. Робочі години й SLA — для часу відповіді;
+     * ваги — для балів 0–100 (стартова формула, власник підправить).
+     */
+    'managers' => [
+        'work_from'          => 8,    // година, з якої рахуємо SLA
+        'work_to'            => 22,
+        'sla_minutes'        => 15,   // перша відповідь у робочий час
+        'unanswered_minutes' => 120,  // «залишив без відповіді»
+        'night_answer_by'    => '09:30', // нічні повідомлення мають отримати відповідь до
+        // Ваги балів: разом 100.
+        'weights' => ['response' => 35, 'coverage' => 15, 'sales' => 30, 'errors' => 20],
+        // Скільки балів знімає один факап (з блоку errors).
+        'penalty_per_error' => 5,
+        // Імʼя менеджера в Inbox → id користувача CRM (щоб зшити чати з продажами).
+        'crm_user_map' => array_filter(array_map(
+            fn ($pair) => array_map('trim', explode('=', $pair)),
+            array_filter(explode(',', (string) env('OPS_MANAGER_MAP', ''))),
+        )),
+    ],
+
     // Чат оплат: власник і людина, яка платить. Сюди йде повідомлення після «ЗП погоджена».
     'payments_chat_id' => env('TELEGRAM_PAYMENTS_CHAT_ID'),
 
