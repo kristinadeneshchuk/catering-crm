@@ -81,4 +81,18 @@ class OpsWeeklyReportTest extends TestCase
 
         $this->assertSame(['472274130'], $chats);
     }
+
+    public function test_the_configured_recipient_replaces_the_owners(): void
+    {
+        config()->set('ops.weekly_report_to', ['472274130']);
+
+        $this->artisan('ops:weekly-report', ['--from' => '2026-09-14'])
+            ->expectsOutputToContain('надіслано 472274130')
+            ->assertSuccessful();
+
+        $chats = Http::recorded(fn ($r) => str_contains($r->url(), 'sendMessage'))
+            ->map(fn ($p) => (string) $p[0]['chat_id'])->unique()->values()->all();
+
+        $this->assertSame(['472274130'], $chats, 'другий власник нічого не отримує');
+    }
 }

@@ -41,6 +41,9 @@ return [
         )),
     ],
 
+    // Кому йде тижневий звіт: Telegram ID через кому. Порожньо — усім власникам.
+    'weekly_report_to' => array_values(array_filter(array_map('trim', explode(',', (string) env('OPS_WEEKLY_REPORT_TO', ''))))),
+
     // Чат оплат: власник і людина, яка платить. Сюди йде повідомлення після «ЗП погоджена».
     'payments_chat_id' => env('TELEGRAM_PAYMENTS_CHAT_ID'),
 

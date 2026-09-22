@@ -27,7 +27,10 @@ class OpsWeeklyReport extends Command
             : now()->subWeek()->startOfWeek();
         $to = $from->copy()->endOfWeek();
 
-        $messages = $report->build($from, $to);
+        $messages   = $report->build($from, $to);
+        $recipients = $this->option('to')
+            ? [(string) $this->option('to')]
+            : config('ops.weekly_report_to', []); // порожньо — усім власникам
 
         foreach ($messages as $text) {
             if ($this->option('dry')) {
@@ -37,13 +40,19 @@ class OpsWeeklyReport extends Command
                 continue;
             }
 
-            $this->option('to')
-                ? $telegram->sendMessage((string) $this->option('to'), $text)
-                : $telegram->sendToOwner($text);
+            if ($recipients === []) {
+                $telegram->sendToOwner($text);
+
+                continue;
+            }
+
+            foreach ($recipients as $chatId) {
+                $telegram->sendMessage($chatId, $text);
+            }
         }
 
         $this->info(count($messages).' повідомлень'.($this->option('dry') ? ' (не відправлено)'
-            : ($this->option('to') ? ' надіслано '.$this->option('to') : ' надіслано власникам')));
+            : ($recipients !== [] ? ' надіслано '.implode(', ', $recipients) : ' надіслано власникам')));
 
         return self::SUCCESS;
     }
