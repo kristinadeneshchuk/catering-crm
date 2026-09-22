@@ -13,7 +13,10 @@ use Illuminate\Console\Command;
  */
 class OpsWeeklyReport extends Command
 {
-    protected $signature = 'ops:weekly-report {--from= : Понеділок тижня, за замовчуванням минулий} {--dry : Показати в консолі}';
+    protected $signature = 'ops:weekly-report
+        {--from= : Понеділок тижня, за замовчуванням минулий}
+        {--to= : Надіслати лише цьому Telegram ID (за замовчуванням — усім власникам)}
+        {--dry : Показати в консолі}';
 
     protected $description = 'Тижневий звіт операційного директора власникам';
 
@@ -34,10 +37,13 @@ class OpsWeeklyReport extends Command
                 continue;
             }
 
-            $telegram->sendToOwner($text);
+            $this->option('to')
+                ? $telegram->sendMessage((string) $this->option('to'), $text)
+                : $telegram->sendToOwner($text);
         }
 
-        $this->info(count($messages).' повідомлень'.($this->option('dry') ? ' (не відправлено)' : ' надіслано власникам'));
+        $this->info(count($messages).' повідомлень'.($this->option('dry') ? ' (не відправлено)'
+            : ($this->option('to') ? ' надіслано '.$this->option('to') : ' надіслано власникам')));
 
         return self::SUCCESS;
     }

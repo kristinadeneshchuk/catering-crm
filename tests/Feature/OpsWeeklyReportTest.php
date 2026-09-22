@@ -69,4 +69,16 @@ class OpsWeeklyReportTest extends TestCase
 
         Http::assertNothingSent();
     }
+
+    public function test_the_report_can_go_to_one_person_only(): void
+    {
+        $this->artisan('ops:weekly-report', ['--from' => '2026-09-14', '--to' => '472274130'])
+            ->expectsOutputToContain('надіслано 472274130')
+            ->assertSuccessful();
+
+        $chats = Http::recorded(fn ($r) => str_contains($r->url(), 'sendMessage'))
+            ->map(fn ($p) => (string) $p[0]['chat_id'])->unique()->values()->all();
+
+        $this->assertSame(['472274130'], $chats);
+    }
 }
