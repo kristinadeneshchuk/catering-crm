@@ -49,6 +49,14 @@ class TelegramService
         return $first;
     }
 
+    /** Власникам — з кнопками (питання, що чекають рішення). */
+    public function sendToOwnerWithKeyboard(string $text, array $keyboard): void
+    {
+        foreach ($this->ownerChatIds() as $chatId) {
+            $this->sendMessage($chatId, $text, $keyboard);
+        }
+    }
+
     /** @return array<int, string> */
     public function ownerChatIds(): array
     {

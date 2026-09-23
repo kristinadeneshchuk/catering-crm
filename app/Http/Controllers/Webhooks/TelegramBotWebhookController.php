@@ -87,6 +87,13 @@ class TelegramBotWebhookController extends Controller
             return;
         }
 
+        // Голосове з кухні: розібрати лише після кнопки, щоб не палити токени даремно.
+        if (preg_match('/^voice:(run|skip):(-?\d+):(\d+)$/', $data, $m)) {
+            $this->voiceButton($callback, $fromId, $m[1], $m[2], (int) $m[3]);
+
+            return;
+        }
+
         // Хто постачальник цієї накладної — кнопки під чернеткою.
         if (preg_match('/^'.\App\Services\Ai\SupplierPicker::CALLBACK.':(\d+):(\d+)$/', $data, $m)) {
             $this->supplierButton($callback, $fromId, (int) $m[1], (int) $m[2]);
@@ -126,6 +133,38 @@ class TelegramBotWebhookController extends Controller
                 (int) $message['message_id'],
                 preg_replace('/\n\n<b>Чий це прихід\?<\/b>$/u', '', (string) ($message['text'] ?? ''))
                     ."\n\n✅ ".e($result['message']),
+            );
+        }
+    }
+
+    private function voiceButton(array $callback, string $fromId, string $action, string $chatId, int $messageId): void
+    {
+        if (! in_array($fromId, $this->telegram->staffChatIds(), true)) {
+            $this->telegram->answerCallback((string) $callback['id'], 'Тільки для своїх.');
+
+            return;
+        }
+
+        $key  = 'kitchen-voice:'.$chatId.':'.$messageId;
+        $path = \Illuminate\Support\Facades\Cache::pull($key);
+        $note = $callback['message'] ?? null;
+
+        if ($action === 'run' && $path) {
+            \App\Jobs\ReadKitchenVoice::dispatch($path, $chatId, $messageId);
+            $answer = 'Розбираю, відпишу за хвилину.';
+        } elseif ($action === 'run') {
+            $answer = 'Файл уже не збережений (минуло понад 7 днів або вже розібрано).';
+        } else {
+            $answer = 'Пропущено.';
+        }
+
+        $this->telegram->answerCallback((string) $callback['id'], $answer);
+
+        if ($note) {
+            $this->telegram->editMessage(
+                (string) $note['chat']['id'],
+                (int) $note['message_id'],
+                ($note['text'] ?? '')."\n\n".($action === 'run' && $path ? '🔎 ' : '➖ ').e($answer),
             );
         }
     }
@@ -278,7 +317,12 @@ class TelegramBotWebhookController extends Controller
      * @param  string|null  $notifyChatId  куди відповісти текстом; null — лише
      *                                     реакція в чаті й повідомлення власнику
      */
-    /** Голосове з чату кухні: качаємо файл і віддаємо в чергу. */
+    /**
+     * Голосове з чату кухні: файл зберігаємо, але розпізнавання й модель не
+     * запускаємо — у кухонному чаті багато голосових не про списання, і кожне
+     * коштувало б токенів. Власнику йде кнопка «Розібрати»; токени витрачаються
+     * лише після натискання.
+     */
     private function kitchenVoice(array $message, string $chatId): void
     {
         $path = $this->telegram->downloadFile(
@@ -286,9 +330,24 @@ class TelegramBotWebhookController extends Controller
             'ops/voice/'.now()->format('Y-m'),
         );
 
-        if ($path) {
-            \App\Jobs\ReadKitchenVoice::dispatch($path, $chatId, (int) $message['message_id']);
+        if (! $path) {
+            return;
         }
+
+        $messageId = (int) $message['message_id'];
+        $key       = 'kitchen-voice:'.$chatId.':'.$messageId;
+        \Illuminate\Support\Facades\Cache::put($key, $path, now()->addDays(7));
+
+        $from     = trim(($message['from']['first_name'] ?? '').' '.($message['from']['last_name'] ?? '')) ?: 'хтось';
+        $duration = (int) ($message['voice']['duration'] ?? 0);
+
+        $this->telegram->sendToOwnerWithKeyboard(
+            '🎙 Голосове в чаті кухні від '.e($from).($duration ? ", {$duration} с" : '').'. Розібрати як списання?',
+            [[
+                ['text' => '🔎 Розібрати', 'callback_data' => "voice:run:{$chatId}:{$messageId}"],
+                ['text' => 'Пропустити', 'callback_data' => "voice:skip:{$chatId}:{$messageId}"],
+            ]],
+        );
     }
 
     /** Фото або зображення, надіслане файлом (кухня часто шле саме так). */

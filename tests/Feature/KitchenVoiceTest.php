@@ -152,20 +152,79 @@ class KitchenVoiceTest extends TestCase
             && str_contains($r['text'], 'Не зрозумів, який це товар'));
     }
 
-    public function test_a_voice_note_in_the_kitchen_chat_starts_the_job(): void
+    protected function voiceMessage(int $messageId = 96): array
+    {
+        return [
+            'update_id' => 95,
+            'message' => [
+                'message_id' => $messageId,
+                'chat'       => ['id' => -5116331458, 'type' => 'group', 'title' => 'Кухня'],
+                'from'       => ['id' => 700, 'first_name' => 'Олена'],
+                'voice'      => ['file_id' => 'voice-1', 'duration' => 7],
+            ],
+        ];
+    }
+
+    protected function press(int $fromId, string $action, int $messageId = 96): void
+    {
+        $this->postJson('/webhooks/telegram-bot', [
+            'update_id' => 97,
+            'callback_query' => [
+                'id'      => 'cb-voice',
+                'from'    => ['id' => $fromId],
+                'data'    => "voice:{$action}:-5116331458:{$messageId}",
+                'message' => ['message_id' => 5, 'chat' => ['id' => 100], 'text' => 'Голосове в чаті кухні'],
+            ],
+        ], ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();
+    }
+
+    public function test_a_voice_note_only_asks_the_owner_and_burns_no_tokens(): void
     {
         Queue::fake();
 
-        $this->postJson('/webhooks/telegram-bot', [
-            'update_id' => 95,
-            'message' => [
-                'message_id' => 96,
-                'chat'       => ['id' => -5116331458, 'type' => 'group', 'title' => 'Кухня'],
-                'from'       => ['id' => 700],
-                'voice'      => ['file_id' => 'voice-1', 'duration' => 7],
-            ],
-        ], ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();
+        $this->postJson('/webhooks/telegram-bot', $this->voiceMessage(), ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();
 
+        Queue::assertNothingPushed();
+        $this->assertSame(0, \App\Models\AiRun::count(), 'без кнопки — жодного звернення до моделі');
+
+        Http::assertSent(function ($r) {
+            if (! str_contains($r->url(), 'sendMessage')) {
+                return false;
+            }
+
+            $keyboard = $r['reply_markup'] ?? [];
+            $keyboard = is_string($keyboard) ? json_decode($keyboard, true) : $keyboard;
+            $labels   = collect($keyboard['inline_keyboard'] ?? [])->flatten(1)->pluck('text');
+
+            return (string) $r['chat_id'] === '100'
+                && str_contains($r['text'], 'Олена')
+                && $labels->contains('🔎 Розібрати');
+        });
+    }
+
+    public function test_the_button_starts_the_job_once(): void
+    {
+        Queue::fake();
+        $this->postJson('/webhooks/telegram-bot', $this->voiceMessage(), ['X-Telegram-Bot-Api-Secret-Token' => 'sec']);
+
+        $this->press(100, 'run');
         Queue::assertPushed(ReadKitchenVoice::class, 1);
+
+        // Друге натискання — файл уже забраний з кешу, повторного розбору немає.
+        $this->press(100, 'run');
+        Queue::assertPushed(ReadKitchenVoice::class, 1);
+    }
+
+    public function test_skip_and_strangers_do_nothing(): void
+    {
+        Queue::fake();
+        $this->postJson('/webhooks/telegram-bot', $this->voiceMessage(), ['X-Telegram-Bot-Api-Secret-Token' => 'sec']);
+
+        $this->press(999, 'run'); // сторонній
+        Queue::assertNothingPushed();
+
+        $this->press(100, 'skip');
+        Queue::assertNothingPushed();
+        $this->assertNull(\Illuminate\Support\Facades\Cache::get('kitchen-voice:-5116331458:96'), 'після пропуску файл не чекає');
     }
 }
