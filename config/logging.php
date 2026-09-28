@@ -65,6 +65,16 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Журнал безпеки: невдалі входи з IP. Його читає fail2ban на сервері
+        // (jail crm-login) і банить IP після серії спроб — формат рядка не міняти
+        // без оновлення фільтра /etc/fail2ban/filter.d/crm-login.conf.
+        'security' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/security.log'),
+            'level' => 'info',
+            'replace_placeholders' => true,
+        ],
+
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),

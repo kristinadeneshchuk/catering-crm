@@ -1,0 +1,24 @@
+# Підбір пароля до CRM (crm.horenko-production.com/admin/login).
+# 10 невдалих входів за 10 хв з одного IP → бан на добу для 80/443 + повідомлення власнику.
+# Розбан: fail2ban-client set crm-login unbanip <IP>
+[crm-login]
+enabled  = true
+filter   = crm-login
+logpath  = /var/www/horenko/storage/logs/security.log
+backend  = polling
+maxretry = 10
+findtime = 10m
+bantime  = 24h
+# кухня і сам сервер — ніколи
+ignoreip = 127.0.0.1/8 ::1 88.99.169.99 195.20.154.162
+action   = ufw[application="", blocktype=reject]
+           crm-telegram
+
+# Повторні порушники (двічі забанені за добу будь-яким jail) → на тиждень, усі порти.
+[recidive]
+enabled  = true
+logpath  = /var/log/fail2ban.log
+banaction = ufw
+bantime  = 1w
+findtime = 1d
+maxretry = 2
