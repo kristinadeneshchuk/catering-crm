@@ -81,10 +81,11 @@ class CatalogSeeder extends Seeder
         // Дерево і тексти лежать у data/subcategories.php: контент каталогу
         // редагують контент-менеджери, а не програмісти.
         foreach (require __DIR__.'/data/subcategories.php' as $parent => $children) {
-            foreach ($children as $i => [$slug, $name, $count, $seo]) {
+            foreach ($children as $i => [$slug, $name, $count, $genitive, $seo]) {
                 $made[$slug] = Category::create([
                     'parent_id' => $cats[$parent]->id,
-                    'slug' => $slug, 'name' => $name,
+                    // Без родового H1 склеювався в «Оренда Відбійні молотки у Києві».
+                    'slug' => $slug, 'name' => $name, 'name_genitive' => $genitive,
                     'products_count' => $count, 'position' => $i,
                     'seo_text' => $seo,
                 ]);

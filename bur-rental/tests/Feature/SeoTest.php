@@ -274,6 +274,23 @@ class SeoTest extends TestCase
      * підставляє у видачу що заманеться. Так і було з підкатегоріями: без
      * lead вони всі отримували загальний опис сайту.
      */
+    /**
+     * H1 і title категорії — це «Оренда <кого/чого> у Києві». Без родового
+     * відмінка виходило «Оренда Відбійні молотки», що не збігається з тим,
+     * як люди шукають («оренда відбійного молотка»), і читається як помилка.
+     */
+    public function test_every_category_heading_reads_as_a_search_query(): void
+    {
+        $missing = Category::whereNull('name_genitive')->orWhere('name_genitive', '')->pluck('slug');
+        $this->assertEmpty($missing, 'Без родового відмінка: '.$missing->implode(', '));
+
+        $category = Category::where('slug', 'vidbiyni')->firstOrFail();
+
+        $this->get(route('category', $category, false))
+            ->assertSee('Оренда відбійних молотків у Києві')
+            ->assertDontSee('Оренда Відбійні молотки');
+    }
+
     public function test_every_category_has_its_own_description(): void
     {
         $descriptions = Category::all()->mapWithKeys(function (Category $category) {
