@@ -291,6 +291,27 @@ class SeoTest extends TestCase
             ->assertDontSee('Оренда Відбійні молотки');
     }
 
+    /**
+     * Кореневі категорії — головні комерційні сторінки. Текст на 40–100 слів
+     * там програє будь-якому конкуренту з розгорнутою відповіддю на «що брати
+     * і скільки коштує», тож тримаємо нижню межу.
+     */
+    public function test_root_categories_carry_a_full_text_with_subheadings(): void
+    {
+        foreach (Category::whereNull('parent_id')->get() as $category) {
+            $words = count(preg_split('/\s+/u', trim(str_replace('## ', '', $category->seo_text))));
+
+            $this->assertGreaterThanOrEqual(250, $words, "{$category->slug}: лише {$words} слів");
+        }
+
+        $html = $this->get(route('category', Category::where('slug', 'perforatory')->firstOrFail(), false))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('>Скільки коштує</h3>', $html);
+        $this->assertStringNotContainsString('## ', $html);
+    }
+
     public function test_every_category_has_its_own_description(): void
     {
         $descriptions = Category::all()->mapWithKeys(function (Category $category) {
