@@ -1,7 +1,9 @@
 @extends('layouts.app')
 
 @section('title', 'Оренда: '.$product->brand->name.' '.$product->name.' — '.$city->name_locative)
-@section('description', Str::limit(strip_tags($product->lead), 155))
+{{-- Лід буває в пів рядка — тоді добираємо до повного опису першими реченнями
+     тексту, інакше Google підставляє у видачу що заманеться. --}}
+@section('description', Str::limit(trim(strip_tags($product->lead).' '.Str::before((string) $product->description, "\n")), 155))
 
 @section('content')
     @php
@@ -323,9 +325,9 @@
 
                     <div x-show="tab === 'desc'" x-cloak class="max-w-[760px] space-y-3 text-[15px] leading-[26px] text-text-2">
                         <p>{{ $product->lead }}</p>
-                        @if ($product->description)
-                            <p>{{ $product->description }}</p>
-                        @endif
+                        @foreach (preg_split('/\n\s*\n/', trim((string) $product->description), -1, PREG_SPLIT_NO_EMPTY) as $paragraph)
+                            <p>{{ $paragraph }}</p>
+                        @endforeach
                     </div>
 
                     <div x-show="tab === 'kit'" x-cloak>

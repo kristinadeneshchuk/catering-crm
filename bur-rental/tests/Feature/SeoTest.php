@@ -330,6 +330,35 @@ class SeoTest extends TestCase
         }
     }
 
+    /**
+     * Картка товару — сторінка, на яку приходять із запиту «оренда <модель>».
+     * Опис на 40 слів нічого не додає до таблиці характеристик. Цін в описі
+     * бути не може: картка показує тариф наживо, а число в тексті розійдеться
+     * з ним при першій зміні.
+     */
+    public function test_every_product_has_a_full_description_without_prices(): void
+    {
+        foreach (Product::all() as $product) {
+            $words = count(preg_split('/\s+/u', trim((string) $product->description)));
+
+            $this->assertGreaterThanOrEqual(120, $words, "{$product->slug}: лише {$words} слів");
+            $this->assertStringNotContainsString('₴', $product->description, "{$product->slug}: ціна в описі");
+        }
+    }
+
+    public function test_product_page_renders_description_paragraphs_and_a_full_meta_description(): void
+    {
+        $product = Product::where('slug', 'bosch-glm-50')->firstOrFail();   // найкоротший лід у каталозі
+        $html = $this->get(route('product', $product, false))->assertOk()->getContent();
+
+        $paragraphs = preg_split('/\n\s*\n/', trim($product->description));
+        $this->assertGreaterThan(1, count($paragraphs));
+        $this->assertStringContainsString(e($paragraphs[1]), $html);
+
+        preg_match('~<meta name="description" content="([^"]*)"~', $html, $m);
+        $this->assertGreaterThanOrEqual(100, mb_strlen(html_entity_decode($m[1])));
+    }
+
     public function test_every_category_has_its_own_description(): void
     {
         $descriptions = Category::all()->mapWithKeys(function (Category $category) {

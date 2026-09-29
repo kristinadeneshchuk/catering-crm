@@ -99,6 +99,9 @@ class CatalogSeeder extends Seeder
     private function products($brands, $cats, $subs): array
     {
         $made = [];
+        // Описи окремо: вони довгі, і в одному масиві з цінами й
+        // характеристиками їх неможливо читати.
+        $descriptions = require database_path('seeders/data/product-descriptions.php');
 
         foreach (require database_path('seeders/data/products.php') as $row) {
             $category = $row['sub'] ? $subs[$row['sub']] : $cats[$row['category']];
@@ -107,7 +110,7 @@ class CatalogSeeder extends Seeder
                 'brand_id' => $brands[$row['brand']]->id,
                 'category_id' => $category->id,
                 'slug' => $row['slug'], 'name' => $row['name'], 'sku' => $row['sku'],
-                'lead' => $row['lead'], 'description' => $row['description'],
+                'lead' => $row['lead'], 'description' => $descriptions[$row['slug']],
                 'specs' => $row['specs'], 'key_specs' => $row['key'],
                 'kit' => $row['kit'], 'not_included' => $row['not_included'],
                 'deposit' => $row['deposit'], 'base_price' => $row['base'],
