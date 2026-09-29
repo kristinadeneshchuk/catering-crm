@@ -3,10 +3,12 @@
  | Багатосторінковий чекаут тут коштував би конверсії — половина трафіку
  | оформлює замовлення з телефона, стоячи на об'єкті.
  */
-export default function bookingForm({ zones = [], deposit = 0, discountPercent = 0, client = null }) {
+export default function bookingForm({ zones = [], heavyIds = [], heavyKg = 100, deposit = 0, discountPercent = 0, client = null }) {
     return {
         step: 1,
         zones,
+        heavyIds,
+        heavyKg,
         deposit,
 
         // Відсоток приходить із сервера і тут тільки показується. Порахувати
@@ -35,6 +37,11 @@ export default function bookingForm({ zones = [], deposit = 0, discountPercent =
             const digits = this.phone.replace(/\D/g, '').replace(/^380/, '').slice(0, 9);
             const p = [digits.slice(0, 2), digits.slice(2, 5), digits.slice(5, 7), digits.slice(7, 9)];
             this.phone = '+380 ' + p.filter(Boolean).join(' ');
+        },
+
+        /** Назви позицій, які самовивозом не видаються. Сервер перевіряє те саме. */
+        get heavyInCart() {
+            return [...new Set(this.$store.booking.cart.filter((i) => this.heavyIds.includes(i.id)).map((i) => i.name))];
         },
 
         get deliveryPrice() {

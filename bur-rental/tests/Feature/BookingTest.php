@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Booking;
 use App\Models\Branch;
+use App\Models\DeliveryZone;
 use App\Models\Lead;
 use App\Models\Product;
 use App\Services\Availability;
@@ -180,5 +181,56 @@ class BookingTest extends TestCase
         ])->assertRedirect();
 
         $this->assertSame('Світлана', Lead::where('phone', '+380 67 245 80 80')->firstOrFail()->name);
+    }
+
+    /**
+     * Самовивіз важкої техніки. Поріг — RentalPricing::HEAVY_KG (100 кг):
+     * реверсивну плиту на 160 кг удвох у причіп не завантажити. Форма цей
+     * варіант вимикає, але кошик у localStorage, і запит можна зібрати руками.
+     */
+    public function test_heavy_equipment_is_not_released_for_self_pickup(): void
+    {
+        $plate = Product::where('slug', 'wacker-dpu-2540')->firstOrFail();   // 160 кг
+        $before = Booking::count();
+
+        $this->post('/booking', $this->payload(['items' => [['product_id' => $plate->id]]]))
+            ->assertSessionHasErrors('fulfilment');
+
+        $this->assertSame($before, Booking::count());
+    }
+
+    public function test_heavy_equipment_goes_by_delivery_free_from_seven_days(): void
+    {
+        $plate = Product::where('slug', 'wacker-dpu-2540')->firstOrFail();
+        $zone = DeliveryZone::where('slug', 'city')->firstOrFail();
+
+        $this->post('/booking', $this->payload([
+            'items' => [['product_id' => $plate->id, 'to' => Carbon::today()->addDays(6)->toDateString()]],
+            'fulfilment' => 'delivery',
+            'delivery_zone_id' => $zone->id,
+            'address' => 'вул. Садова, 12',
+        ]))->assertSessionHasNoErrors();
+
+        $this->assertSame(0, Booking::latest('id')->firstOrFail()->delivery_total);
+    }
+
+    public function test_light_plate_below_the_threshold_can_still_be_picked_up(): void
+    {
+        $plate = Product::where('slug', 'wacker-bp-1050')->firstOrFail();   // 90 кг
+
+        $this->post('/booking', $this->payload(['items' => [['product_id' => $plate->id]]]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('self', Booking::latest('id')->firstOrFail()->fulfilment);
+    }
+
+    public function test_product_card_does_not_promise_pickup_for_heavy_equipment(): void
+    {
+        $this->get(route('product', Product::where('slug', 'wacker-dpu-2540')->firstOrFail(), false))
+            ->assertSee('Тільки доставка з гідробортом')
+            ->assertDontSee('Самовивіз ·', false);
+
+        $this->get(route('product', Product::where('slug', 'wacker-bp-1050')->firstOrFail(), false))
+            ->assertSee('Самовивіз ·', false);
     }
 }

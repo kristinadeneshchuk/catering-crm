@@ -245,10 +245,19 @@
                         <span class="font-mono font-semibold" x-text="money(extrasSum)"></span>
                     </div>
 
-                    <div class="mt-1.5 flex justify-between text-sm">
-                        <span class="text-text-2">Самовивіз · <span x-text="branch.name"></span></span>
-                        <span class="font-mono font-semibold">0 ₴</span>
-                    </div>
+                    @if ($product->weight_kg >= \App\Services\RentalPricing::HEAVY_KG)
+                        {{-- Від HEAVY_KG самовивозу немає — обіцяти його в чеку означає
+                             відмову на оформленні. --}}
+                        <div class="mt-1.5 flex justify-between gap-3 text-sm">
+                            <span class="text-text-2">Тільки доставка з гідробортом</span>
+                            <span class="shrink-0 text-right text-text-2">від 7 днів — 0 ₴</span>
+                        </div>
+                    @else
+                        <div class="mt-1.5 flex justify-between text-sm">
+                            <span class="text-text-2">Самовивіз · <span x-text="branch.name"></span></span>
+                            <span class="font-mono font-semibold">0 ₴</span>
+                        </div>
+                    @endif
 
                     {{-- Застава відділена бордером: це не витрата, вона повертається --}}
                     <div class="mt-3 flex justify-between border-t border-border-1 pt-3 text-sm">

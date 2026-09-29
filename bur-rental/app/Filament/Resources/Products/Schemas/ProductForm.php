@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Products\Schemas;
 
+use App\Services\RentalPricing;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -65,7 +66,7 @@ class ProductForm
                             ->label('Вага, кг')
                             ->numeric()
                             ->step(0.1)
-                            ->helperText('Від 200 кг самовивіз недоступний — тільки доставка.'),
+                            ->helperText('Від '.RentalPricing::HEAVY_KG.' кг самовивіз недоступний — тільки доставка.'),
 
                         Toggle::make('published')
                             ->label('Опубліковано')

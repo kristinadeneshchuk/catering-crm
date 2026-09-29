@@ -2,9 +2,12 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Product;
 use App\Rules\UkrainianPhone;
+use App\Services\RentalPricing;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreBookingRequest extends FormRequest
 {
@@ -35,6 +38,32 @@ class StoreBookingRequest extends FormRequest
             'deposit_way' => ['required', Rule::in(['card-hold', 'cash', 'none'])],
             'comment' => ['nullable', 'string', 'max:1000'],
         ];
+    }
+
+    /**
+     * Важку техніку не видаємо самовивозом. Форма вже ховає цей варіант,
+     * але кошик живе в localStorage, і запит можна зібрати руками — тому
+     * останнє слово тут.
+     */
+    public function after(): array
+    {
+        return [function (Validator $validator) {
+            if ($this->input('fulfilment') !== 'self') {
+                return;
+            }
+
+            $heavy = Product::whereIn('id', collect($this->input('items', []))->pluck('product_id'))
+                ->where('weight_kg', '>=', RentalPricing::HEAVY_KG)
+                ->pluck('name');
+
+            if ($heavy->isNotEmpty()) {
+                $validator->errors()->add(
+                    'fulfilment',
+                    'Техніку від '.RentalPricing::HEAVY_KG.' кг самовивозом не видаємо: '.$heavy->implode(', ')
+                    .'. Оберіть доставку — привеземо з гідробортом.'
+                );
+            }
+        }];
     }
 
     public function messages(): array

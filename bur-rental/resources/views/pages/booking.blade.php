@@ -4,7 +4,7 @@
 @section('description', 'Оформлення оренди: склад, дати, філія, доставка й оплата — одним екраном.')
 
 @section('content')
-    <div class="container-bur" x-data="bookingForm({ zones: {{ Js::from($zones->map->only(['slug', 'name', 'price', 'eta'])) }}, deposit: 0, discountPercent: {{ $discountPercent }}, client: {{ Js::from($client ? ['phone' => $client->display_phone, 'name' => $client->name, 'company' => $client->company, 'edrpou' => $client->edrpou, 'email' => $client->email] : null) }} })">
+    <div class="container-bur" x-data="bookingForm({ zones: {{ Js::from($zones->map->only(['slug', 'name', 'price', 'eta'])) }}, heavyIds: {{ Js::from($heavyIds) }}, heavyKg: {{ \App\Services\RentalPricing::HEAVY_KG }}, deposit: 0, discountPercent: {{ $discountPercent }}, client: {{ Js::from($client ? ['phone' => $client->display_phone, 'name' => $client->name, 'company' => $client->company, 'edrpou' => $client->edrpou, 'email' => $client->email] : null) }} })">
         <x-breadcrumbs :items="['Головна' => route('home'), 'Бронювання' => null]" />
 
         <h1 class="t-h1">Бронювання</h1>
@@ -173,10 +173,14 @@
 
                     <div x-show="step === 3" x-collapse x-cloak>
                         <div class="border-t border-border-1 p-5">
-                            <div class="flex gap-2">
-                                <label class="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-[6px] border text-sm font-medium"
-                                       :class="pickup === 'self' ? 'border-2 border-brand bg-brand-tint' : 'border-border-1'">
-                                    <input type="radio" name="fulfilment" value="self" x-model="pickup" class="sr-only">
+                            <div class="flex gap-2" x-effect="if (heavyInCart.length && pickup === 'self') pickup = 'delivery'">
+                                <label class="flex min-h-11 flex-1 items-center justify-center rounded-[6px] border text-sm font-medium"
+                                       :class="[
+                                           pickup === 'self' ? 'border-2 border-brand bg-brand-tint' : 'border-border-1',
+                                           heavyInCart.length ? 'cursor-not-allowed text-text-3' : 'cursor-pointer',
+                                       ]">
+                                    <input type="radio" name="fulfilment" value="self" x-model="pickup" class="sr-only"
+                                           :disabled="heavyInCart.length > 0">
                                     Самовивіз
                                 </label>
                                 <label class="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-[6px] border text-sm font-medium"
@@ -185,6 +189,12 @@
                                     Доставка
                                 </label>
                             </div>
+
+                            <p class="mt-2 text-[13px] text-text-2" x-show="heavyInCart.length" x-cloak>
+                                Тільки доставка: <span x-text="heavyInCart.join(', ')"></span> —
+                                техніка від <span x-text="heavyKg"></span> кг, без гідроборта її не завантажити.
+                                При оренді від 7 днів привеземо й заберемо безкоштовно.
+                            </p>
 
                             <template x-if="pickup === 'delivery'">
                                 <div class="mt-4 space-y-3">

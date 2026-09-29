@@ -57,9 +57,15 @@ class RentalPricing
     }
 
     /**
-     * Доставка. Важка техніка від 200 кг самовивозом не видається взагалі —
-     * її або привозимо ми, або клієнт не отримає нічого і поїде даремно.
+     * Від цієї ваги техніка важка: самовивозом не видається (без гідроборта
+     * її вдвох у причіп не завантажити — або травма, або побита плита), а
+     * доставка при оренді від 7 днів безкоштовна. Перевіряє StoreBookingRequest.
      */
+    public const HEAVY_KG = 100;
+
+    /** Від цієї ваги потрібна окрема машина, а не бус із гідробортом. */
+    public const TRUCK_KG = 200;
+
     public function delivery(?DeliveryZone $zone, Collection $items, int $days): int
     {
         if (! $zone) {
@@ -69,23 +75,18 @@ class RentalPricing
         $heaviest = $items->max(fn ($i) => $i['product']->weight_kg) ?? 0;
 
         // Важку техніку при оренді від 7 днів веземо безкоштовно.
-        if ($heaviest >= 100 && $days >= 7) {
+        if ($heaviest >= self::HEAVY_KG && $days >= 7) {
             return 0;
         }
 
         $price = $zone->price;
 
-        if ($heaviest >= 200) {
+        if ($heaviest >= self::TRUCK_KG) {
             $price += 400;   // окрема машина з гідробортом
-        } elseif ($heaviest >= 100) {
+        } elseif ($heaviest >= self::HEAVY_KG) {
             $price += 150;   // гідроборт
         }
 
         return $price;
-    }
-
-    public function requiresDelivery(Collection $items): bool
-    {
-        return $items->contains(fn ($i) => $i['product']->weight_kg >= 200);
     }
 }
