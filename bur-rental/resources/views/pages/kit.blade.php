@@ -82,9 +82,11 @@
                                 </li>
                             @endforeach
                         </ol>
-                        <a href="{{ $kit->guide_url }}" class="mt-3 inline-block text-sm font-semibold text-brand">
-                            Повний гайд з розрахунком матеріалів →
-                        </a>
+                        @if ($kit->guide_url)
+                            <a href="{{ $kit->guide_url }}" class="mt-3 inline-block text-sm font-semibold text-brand">
+                                Детальніше у статті →
+                            </a>
+                        @endif
                     </x-section>
                 @endif
 

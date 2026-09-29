@@ -116,7 +116,9 @@ class CatalogSeeder extends Seeder
                 'rating' => 0, 'reviews_count' => 0,
                 'popularity' => $row['popularity'],
                 'seo_text' => $row['seo'] ?? null,
-                'manual_url' => '/files/manuals/'.$row['slug'].'.pdf',
+                // Інструкцій у PDF поки немає: з вигаданою адресою на кожній
+                // картці висіло посилання на 404. З'являться — додаються в адмінці.
+                'manual_url' => null,
             ]);
 
             // Сходинка: базовий рівень, −17% від 3 днів, −31% від 7.
@@ -274,7 +276,10 @@ class CatalogSeeder extends Seeder
             $kit = Kit::create([
                 'slug' => $row['slug'], 'name' => $row['name'], 'task' => $row['task'],
                 'lead' => $row['lead'], 'discount_percent' => $row['discount'],
-                'guide' => $row['guide'] ?? null, 'guide_url' => '/blog/'.$row['slug'],
+                // Посилання тільки на статтю, яка реально існує: slug комплекту
+                // і slug статті різні, і склеєна з першого адреса вела на 404.
+                'guide' => $row['guide'] ?? null,
+                'guide_url' => isset($row['article']) ? '/blog/'.$row['article'] : null,
                 'position' => $i,
             ]);
 

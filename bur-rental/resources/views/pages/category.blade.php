@@ -1,7 +1,9 @@
 @extends('layouts.app')
 
 @section('title', 'Оренда '.($category->name_genitive ?? $category->name).' '.$city->name_locative.' — БУР')
-@section('description', Str::limit($category->lead, 155))
+{{-- У підкатегорій немає lead — беремо перший абзац їхнього тексту, інакше
+     всі вони отримують однаковий загальний опис сайту, а це дублі для Google. --}}
+@section('description', Str::limit($category->lead ?: Str::before((string) $category->seo_text, "\n"), 155))
 
 @section('content')
     <div class="container-bur"
@@ -17,7 +19,9 @@
         ]" />
 
         <h1 class="t-h1">Оренда {{ $category->name_genitive ?? $category->name }} {{ $city->name_locative }}</h1>
-        <p class="mt-2 max-w-[760px] text-[15px] leading-[26px] text-text-2">{{ $category->lead }}</p>
+        @if ($category->lead)
+            <p class="mt-2 max-w-[760px] text-[15px] leading-[26px] text-text-2">{{ $category->lead }}</p>
+        @endif
 
         @if ($category->children->isNotEmpty())
             <div class="mt-5 flex flex-wrap gap-2">

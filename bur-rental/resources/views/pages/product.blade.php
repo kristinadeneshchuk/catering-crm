@@ -289,7 +289,14 @@
         <x-section id="details">
             <div x-data="{ tab: 'specs' }" class="overflow-hidden rounded-[12px] border border-border-1 bg-surface-0">
                 <div class="flex overflow-x-auto border-b border-border-1">
-                    @foreach (['specs' => 'Характеристики', 'desc' => 'Опис', 'kit' => 'Комплектація', 'manual' => 'Інструкція'] as $key => $label)
+                    @php
+                        $tabs = ['specs' => 'Характеристики', 'desc' => 'Опис', 'kit' => 'Комплектація'];
+                        // Вкладку показуємо, лише коли в ній є що відкрити.
+                        if ($product->manual_url || $product->video_url) {
+                            $tabs['manual'] = 'Інструкція';
+                        }
+                    @endphp
+                    @foreach ($tabs as $key => $label)
                         <button type="button" @click="tab = '{{ $key }}'"
                                 :class="tab === '{{ $key }}'
                                     ? 'border-brand font-semibold text-text-1'
@@ -337,9 +344,11 @@
                     </div>
 
                     <div x-show="tab === 'manual'" x-cloak class="space-y-2 text-sm">
-                        <a href="{{ $product->manual_url }}" class="flex items-center gap-2">
-                            <x-ui-icon name="file" class="size-4" /> Інструкція PDF · 2,4 МБ
-                        </a>
+                        @if ($product->manual_url)
+                            <a href="{{ $product->manual_url }}" class="flex items-center gap-2">
+                                <x-ui-icon name="file" class="size-4" /> Інструкція PDF
+                            </a>
+                        @endif
                         @if ($product->video_url)
                             <a href="{{ $product->video_url }}" class="flex items-center gap-2">
                                 <x-ui-icon name="play" class="size-4" /> Відео: перші 5 хвилин роботи

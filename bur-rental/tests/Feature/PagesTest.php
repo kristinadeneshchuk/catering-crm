@@ -96,4 +96,51 @@ class PagesTest extends TestCase
             ->assertSee('Makita')
             ->assertDontSee('GBH 2-26 DRE');
     }
+
+    /**
+     * Краулер Google ходить по кожному href. Посилання на 404 з картки
+     * товару чи комплекту — це мінус до якості сайту ще до першого відвідувача.
+     * Так уже було: 48 вигаданих PDF-інструкцій і 8 статей за неіснуючими адресами.
+     */
+    public function test_catalog_pages_have_no_internal_links_to_404(): void
+    {
+        $pages = Product::pluck('slug')->map(fn ($s) => "/instrument/$s")
+            ->merge(Kit::all()->map(fn ($k) => route('kit', $k, false)));
+
+        $checked = [];
+
+        foreach ($pages as $page) {
+            $html = $this->get($page)->assertOk()->getContent();
+
+            // Тільки справжні href: Alpine-овий :href підставляється в браузері.
+            preg_match_all('~(?<![:\w-])href="(/[^"#]*)"~', $html, $m);
+
+            foreach (array_unique($m[1]) as $href) {
+                if (isset($checked[$href]) || preg_match('~^/(build|fonts|livewire|admin|storage)/~', $href)) {
+                    continue;
+                }
+
+                $checked[$href] = true;
+                $status = $this->get($href)->getStatusCode();
+
+                $this->assertNotSame(404, $status, "$page посилається на $href, а там 404");
+            }
+        }
+
+        $this->assertNotEmpty($checked);
+    }
+
+    public function test_product_without_manual_has_no_manual_tab(): void
+    {
+        $product = Product::where('slug', 'bosch-gbh-2-26-dre')->firstOrFail();
+
+        $this->get(route('product', $product, false))
+            ->assertOk()
+            ->assertDontSee('Інструкція PDF');
+
+        $product->update(['manual_url' => 'https://example.com/gbh.pdf']);
+
+        $this->get(route('product', $product, false))
+            ->assertSee('https://example.com/gbh.pdf', false);
+    }
 }

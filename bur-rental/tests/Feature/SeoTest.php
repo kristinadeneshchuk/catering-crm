@@ -242,4 +242,25 @@ class SeoTest extends TestCase
 
         $this->assertNull(Lead::latest('id')->firstOrFail()->campaign_label);
     }
+
+    /**
+     * Однаковий description на десятку сторінок Google читає як дублі й
+     * підставляє у видачу що заманеться. Так і було з підкатегоріями: без
+     * lead вони всі отримували загальний опис сайту.
+     */
+    public function test_every_category_has_its_own_description(): void
+    {
+        $descriptions = Category::all()->mapWithKeys(function (Category $category) {
+            preg_match('~<meta name="description" content="([^"]*)"~', $this->get(route('category', $category, false))->assertOk()->getContent(), $m);
+
+            return [$category->slug => $m[1] ?? ''];
+        });
+
+        $this->assertNotContains('', $descriptions->all());
+        $this->assertSame(
+            $descriptions->count(),
+            $descriptions->unique()->count(),
+            'Спільний опис у: '.$descriptions->duplicates()->keys()->implode(', ')
+        );
+    }
 }
