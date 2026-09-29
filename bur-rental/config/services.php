@@ -44,4 +44,12 @@ return [
         'chat_id' => env('TELEGRAM_MANAGER_CHAT_ID'),
     ],
 
+    /*
+    | Google Tag Manager: GA4, Google Ads і пікселі налаштовуються вже в ньому,
+    | без правок коду. Порожній або кривий ID — скрипт не вставляється зовсім.
+    */
+    'gtm' => [
+        'id' => preg_match('/^GTM-[A-Z0-9]{4,12}$/', (string) env('GTM_ID')) ? env('GTM_ID') : null,
+    ],
+
 ];

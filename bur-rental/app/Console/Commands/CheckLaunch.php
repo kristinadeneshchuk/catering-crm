@@ -155,9 +155,18 @@ class CheckLaunch extends Command
         );
 
         $this->check(
-            (bool) config('services.telegram.token'),
+            // Ті самі ключі, що читає NotifyManagerInTelegram: без chat_id бот
+            // є, а писати йому нікуди.
+            config('services.telegram.bot_token') && config('services.telegram.chat_id'),
             'Telegram-сповіщення налаштовані',
             'менеджер не дізнається про нову бронь, доки не відкриє адмінку',
+            warning: true,
+        );
+
+        $this->check(
+            (bool) config('services.gtm.id'),
+            'аналітика підключена (Google Tag Manager)',
+            'GTM_ID порожній: після запуску не буде видно, звідки приходять замовлення',
             warning: true,
         );
 

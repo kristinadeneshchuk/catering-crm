@@ -75,9 +75,17 @@
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @stack('head')
+
+    @if ($gtm = config('services.gtm.id'))
+        <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','{{ $gtm }}');</script>
+    @endif
 </head>
 {{-- padding-bottom тримає місце під нижню навігацію, щоб вона не накривала контент --}}
 <body class="pb-[88px] nav:pb-0" x-data x-init="$store.booking.init()">
+
+@if ($gtm)
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={{ $gtm }}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+@endif
 
 <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:z-100 focus:m-2 focus:rounded-[6px] focus:bg-brand focus:px-4 focus:py-2 focus:text-white">
     До змісту

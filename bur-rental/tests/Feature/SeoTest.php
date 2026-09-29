@@ -213,6 +213,32 @@ class SeoTest extends TestCase
         $this->artisan('check:launch')->assertFailed();
     }
 
+    public function test_launch_check_sees_telegram_and_analytics_once_configured(): void
+    {
+        config([
+            'services.telegram.bot_token' => '123:abc',
+            'services.telegram.chat_id' => '111222',
+            'services.gtm.id' => 'GTM-ABC1234',
+        ]);
+
+        // Перевірка читала неіснуючий ключ і лаялась на Telegram навіть
+        // після підключення бота.
+        $this->artisan('check:launch')
+            ->expectsOutputToContain('Telegram-сповіщення налаштовані')
+            ->expectsOutputToContain('аналітика підключена');
+    }
+
+    public function test_tag_manager_is_rendered_only_with_a_valid_id(): void
+    {
+        $this->get('/')->assertOk()->assertDontSee('googletagmanager', false);
+
+        config(['services.gtm.id' => 'GTM-ABC1234']);
+
+        $this->get('/')
+            ->assertSee("'dataLayer','GTM-ABC1234'", false)
+            ->assertSee('ns.html?id=GTM-ABC1234', false);
+    }
+
     public function test_campaign_from_the_first_visit_reaches_the_lead(): void
     {
         // Клієнт прийшов з оголошення на категорію, поблукав і лише потім
