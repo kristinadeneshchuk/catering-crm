@@ -335,7 +335,7 @@ resources/
   js/stores/booking.js    кошик, місто, дати — localStorage
   views/components/       ~20 Blade-компонентів
   views/pages/            екрани
-tests/                    140 тестів
+tests/                    143 тести
 ```
 
 Детальніше — у `README.md`: там розписані дизайн-рішення, ринкові орієнтири цін
