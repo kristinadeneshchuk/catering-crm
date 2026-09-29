@@ -26,6 +26,12 @@ class ManagerAlerts
             ? '🚚 Доставка: '.e($booking->address ?? '')
             : '🏠 Самовивіз: '.e($booking->branch?->name ?? '');
 
+        // Зона «за домовленістю»: у сумі до сплати доставки немає, клієнт
+        // чекає дзвінка з ціною — без цього рядка про це легко забути.
+        if ($booking->fulfilment === 'delivery' && $booking->deliveryZone?->isQuote()) {
+            $fulfilment .= "\n⚠️ Вартість доставки уточнити з клієнтом (".e($booking->deliveryZone->name).')';
+        }
+
         $this->send(
             "🟢 <b>Нова бронь {$booking->number}</b>\n\n".
             "{$client}\n📞 {$booking->phone}\n\n".

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Booking;
 use App\Models\Branch;
+use App\Models\DeliveryZone;
 use App\Models\Product;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -29,9 +30,9 @@ class TelegramAlertsTest extends TestCase
         Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
     }
 
-    private function makeBooking(): Booking
+    private function makeBooking(array $overrides = []): Booking
     {
-        $this->post('/booking', [
+        $this->post('/booking', $overrides + [
             'items' => [[
                 'product_id' => Product::where('slug', 'bosch-gbh-2-26-dre')->value('id'),
                 'qty' => 1,
@@ -85,5 +86,16 @@ class TelegramAlertsTest extends TestCase
         // Бронь створена, а в Telegram ніхто не стукав.
         $this->assertSame('new', $booking->status);
         Http::assertNothingSent();
+    }
+
+    public function test_manager_is_told_to_quote_delivery_for_the_region_zone(): void
+    {
+        $this->makeBooking([
+            'fulfilment' => 'delivery',
+            'delivery_zone_id' => DeliveryZone::where('slug', 'region')->value('id'),
+            'address' => 'Обухів, вул. Київська, 5',
+        ]);
+
+        Http::assertSent(fn (Request $request) => str_contains($request['text'], 'Вартість доставки уточнити'));
     }
 }

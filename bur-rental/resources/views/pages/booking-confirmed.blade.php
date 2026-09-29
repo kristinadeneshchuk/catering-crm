@@ -101,7 +101,12 @@
                         <span class="font-mono font-semibold">−{{ number_format($booking->discount_total, 0, ',', ' ') }} ₴</span>
                     </div>
                 @endif
-                @if ($booking->delivery_total)
+                @if ($booking->fulfilment === 'delivery' && $booking->deliveryZone?->isQuote())
+                    <div class="flex justify-between gap-3">
+                        <span class="text-text-2">Доставка</span>
+                        <span class="text-right text-text-2">уточнить менеджер, у суму не входить</span>
+                    </div>
+                @elseif ($booking->delivery_total)
                     <div class="flex justify-between">
                         <span class="text-text-2">Доставка</span>
                         <span class="font-mono font-semibold">{{ number_format($booking->delivery_total, 0, ',', ' ') }} ₴</span>

@@ -251,10 +251,46 @@ class BookingTest extends TestCase
             $html
         );
 
-        foreach (DeliveryZone::whereHas('city', fn ($q) => $q->where('slug', 'kyiv'))->get() as $zone) {
+        foreach (DeliveryZone::bookable()->whereHas('city', fn ($q) => $q->where('slug', 'kyiv'))->get() as $zone) {
             $this->assertStringContainsString('<option value="'.$zone->id.'">', $html);
             // Js::from кодує лапки як \u0022 — зона має приходити у форму з id.
             $this->assertStringContainsString('\\u0022id\\u0022:'.$zone->id.',', $html);
         }
+    }
+
+    /**
+     * «Далі по області» рахується кілометражем, якого сайт не знає. Раніше
+     * ціна зони 15 (₴/км) записувалась як уся доставка — 15 ₴ до Обухова.
+     */
+    public function test_region_delivery_is_left_for_the_manager_to_quote(): void
+    {
+        $zone = DeliveryZone::where('slug', 'region')->firstOrFail();
+
+        $this->post('/booking', $this->payload([
+            'fulfilment' => 'delivery',
+            'delivery_zone_id' => $zone->id,
+            'address' => 'Обухів, вул. Київська, 5',
+        ]))->assertSessionHasNoErrors();
+
+        $booking = Booking::latest('id')->firstOrFail();
+        $this->assertSame(0, $booking->delivery_total);
+
+        $this->get(route('booking.show', $booking))->assertSee('уточнить менеджер');
+    }
+
+    /** Рядок «Важка техніка» — правило, а не зона: інакше доставка дрилі безкоштовна. */
+    public function test_info_row_cannot_be_picked_as_a_delivery_zone(): void
+    {
+        $heavy = DeliveryZone::where('slug', 'heavy')->firstOrFail();
+
+        $this->post('/booking', $this->payload([
+            'fulfilment' => 'delivery',
+            'delivery_zone_id' => $heavy->id,
+            'address' => 'вул. Садова, 12',
+        ]))->assertSessionHasErrors('delivery_zone_id');
+
+        $this->get('/booking')
+            ->assertDontSee('<option value="'.$heavy->id.'">', false)
+            ->assertSee('Далі по області — ціну уточнить менеджер');
     }
 }

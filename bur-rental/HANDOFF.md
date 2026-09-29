@@ -39,7 +39,7 @@ npm run build
 php artisan serve
 ```
 
-Тести: `php artisan test` — **150 тестів, усі зелені**. Стиль: `./vendor/bin/pint`.
+Тести: `php artisan test` — **153 тести, усі зелені**. Стиль: `./vendor/bin/pint`.
 Адмінка: `/admin`, доступи з `.env` (`ADMIN_EMAIL` / `ADMIN_PASSWORD`).
 
 ## 3. Що вже зроблено
@@ -335,7 +335,7 @@ resources/
   js/stores/booking.js    кошик, місто, дати — localStorage
   views/components/       ~20 Blade-компонентів
   views/pages/            екрани
-tests/                    150 тестів
+tests/                    153 тести
 ```
 
 Детальніше — у `README.md`: там розписані дизайн-рішення, ринкові орієнтири цін

@@ -35,7 +35,7 @@ class BookingController extends Controller
             // Знижка показується до оформлення: інакше вона не мотивує
             // повертатися, а просто робить приємний сюрприз у чеку.
             'discountPercent' => $this->loyalty->percentFor(auth('client')->user()),
-            'zones' => $city->deliveryZones,
+            'zones' => $city->deliveryZones()->bookable()->orderBy('position')->get(),
             // Вага кожної позиції й правила доставки: форма рахує доставку
             // до відправлення так само, як RentalPricing::delivery(), і
             // вимикає самовивіз важкої техніки ще до відмови сервера.
@@ -156,7 +156,7 @@ class BookingController extends Controller
         });
 
         // Після коміту транзакції: якщо бронь не записалась, сповіщення не буде.
-        app(ManagerAlerts::class)->bookingCreated($booking->load(['items', 'branch']));
+        app(ManagerAlerts::class)->bookingCreated($booking->load(['items', 'branch', 'deliveryZone']));
 
         return redirect()
             ->route('booking.show', $booking)

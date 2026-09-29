@@ -79,13 +79,19 @@ export default function bookingForm({ zones = [], weights = {}, rules = {}, depo
             return 0;
         },
 
+        /** Зона «за домовленістю»: суму називає менеджер, у «До сплати» її немає. */
+        get deliveryByQuote() {
+            return this.deliveryZone?.price_mode === 'quote';
+        },
+
         get deliveryPrice() {
-            if (this.pickup === 'self' || !this.deliveryZone || this.deliveryFree) return 0;
+            if (this.pickup === 'self' || !this.deliveryZone || this.deliveryByQuote || this.deliveryFree) return 0;
             return this.deliveryZone.price + this.deliverySurcharge;
         },
 
-        /** Пояснення під сумою: чому безкоштовно або за що доплата. */
+        /** Пояснення під сумою: чому безкоштовно, за що доплата або хто назве ціну. */
         get deliveryNote() {
+            if (this.deliveryByQuote) return 'вартість назве менеджер, коли підтверджуватиме бронь';
             if (this.deliveryFree) return `безкоштовно: техніка від ${this.rules.heavyKg} кг на ${this.rules.freeDays}+ днів`;
             if (this.heaviest >= this.rules.truckKg) return `з них ${this.rules.truckFee} ₴ — окрема машина`;
             if (this.heaviest >= this.rules.heavyKg) return `з них ${this.rules.hoistFee} ₴ — гідроборт`;

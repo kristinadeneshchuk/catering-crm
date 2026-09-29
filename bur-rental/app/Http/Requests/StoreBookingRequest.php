@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\DeliveryZone;
 use App\Models\Product;
 use App\Rules\UkrainianPhone;
 use App\Services\RentalPricing;
@@ -32,7 +33,12 @@ class StoreBookingRequest extends FormRequest
             'email' => ['required_if:client_type,company', 'nullable', 'email', 'max:160'],
 
             'fulfilment' => ['required', Rule::in(['self', 'delivery'])],
-            'delivery_zone_id' => ['required_if:fulfilment,delivery', 'nullable', 'exists:delivery_zones,id'],
+            // Рядок-правило «Важка техніка» зоною не є: вибравши його, будь-який
+            // кошик отримував би безкоштовну доставку.
+            'delivery_zone_id' => [
+                'required_if:fulfilment,delivery', 'nullable',
+                Rule::exists('delivery_zones', 'id')->whereNot('price_mode', DeliveryZone::INFO),
+            ],
             'address' => ['required_if:fulfilment,delivery', 'nullable', 'string', 'max:250'],
             'payment' => ['required', Rule::in(['card', 'cash', 'invoice', 'parts'])],
             'deposit_way' => ['required', Rule::in(['card-hold', 'cash', 'none'])],

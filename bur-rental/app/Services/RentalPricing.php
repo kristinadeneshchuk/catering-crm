@@ -90,7 +90,9 @@ class RentalPricing
 
     public function delivery(?DeliveryZone $zone, Collection $items, int $days): int
     {
-        if (! $zone) {
+        // Без зони — самовивіз. Зона «за домовленістю» — суму назве менеджер
+        // при підтвердженні, тут вона 0, а бронь позначена як «уточнити».
+        if (! $zone || $zone->isQuote()) {
             return 0;
         }
 

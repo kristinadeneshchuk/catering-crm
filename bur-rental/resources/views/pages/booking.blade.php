@@ -4,7 +4,7 @@
 @section('description', 'Оформлення оренди: склад, дати, філія, доставка й оплата — одним екраном.')
 
 @section('content')
-    <div class="container-bur" x-data="bookingForm({ zones: {{ Js::from($zones->map->only(['id', 'slug', 'name', 'price', 'eta'])) }}, weights: {{ Js::from($weights) }}, rules: {{ Js::from($deliveryRules) }}, deposit: 0, discountPercent: {{ $discountPercent }}, client: {{ Js::from($client ? ['phone' => $client->display_phone, 'name' => $client->name, 'company' => $client->company, 'edrpou' => $client->edrpou, 'email' => $client->email] : null) }} })">
+    <div class="container-bur" x-data="bookingForm({ zones: {{ Js::from($zones->map->only(['id', 'slug', 'name', 'price', 'price_mode', 'eta'])) }}, weights: {{ Js::from($weights) }}, rules: {{ Js::from($deliveryRules) }}, deposit: 0, discountPercent: {{ $discountPercent }}, client: {{ Js::from($client ? ['phone' => $client->display_phone, 'name' => $client->name, 'company' => $client->company, 'edrpou' => $client->edrpou, 'email' => $client->email] : null) }} })">
         <x-breadcrumbs :items="['Головна' => route('home'), 'Бронювання' => null]" />
 
         <h1 class="t-h1">Бронювання</h1>
@@ -203,7 +203,7 @@
                                         <select id="zone" name="delivery_zone_id" x-model="zone"
                                                 class="h-11 w-full rounded-[6px] border border-border-1 px-3 text-[15px]">
                                             @foreach ($zones as $zone)
-                                                <option value="{{ $zone->id }}">{{ $zone->name }} — {{ $zone->price }} ₴ · {{ $zone->eta }}</option>
+                                                <option value="{{ $zone->id }}">{{ $zone->name }} — {{ $zone->isQuote() ? 'ціну уточнить менеджер' : $zone->price.' ₴' }} · {{ $zone->eta }}</option>
                                             @endforeach
                                         </select>
                                     </div>
@@ -276,7 +276,8 @@
                         <div x-show="pickup === 'delivery'">
                             <div class="flex justify-between">
                                 <span class="text-text-2">Доставка</span>
-                                <span class="font-mono font-semibold" x-text="deliveryPrice.toLocaleString('uk-UA') + ' ₴'"></span>
+                                <span class="font-mono font-semibold" x-show="!deliveryByQuote" x-text="deliveryPrice.toLocaleString('uk-UA') + ' ₴'"></span>
+                                <span class="text-text-2" x-show="deliveryByQuote" x-cloak>уточнимо</span>
                             </div>
                             <p class="text-right text-[12px] text-text-3" x-show="deliveryNote" x-text="deliveryNote"></p>
                         </div>

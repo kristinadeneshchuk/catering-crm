@@ -26,7 +26,7 @@
                             @foreach ($zones->take(2) as $zone)
                                 <li class="flex justify-between gap-4">
                                     <span class="text-text-2">{{ $zone->name }}</span>
-                                    <span class="font-mono font-semibold">{{ $zone->price }} ₴</span>
+                                    <span class="font-mono font-semibold">{{ $zone->isQuote() ? 'за домовленістю' : number_format($zone->price, 0, ',', ' ').' ₴' }}</span>
                                 </li>
                             @endforeach
                         </ul>

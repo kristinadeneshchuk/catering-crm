@@ -37,7 +37,7 @@
                                         <span class="block text-[13px] font-normal text-text-3">{{ $zone->note }}</span>
                                     @endif
                                 </th>
-                                <td class="p-4 font-mono font-bold">{{ $zone->price ? number_format($zone->price, 0, ',', ' ').' ₴' : '0 ₴' }}</td>
+                                <td class="p-4 font-mono font-bold">{{ $zone->isQuote() ? 'за домовленістю' : number_format($zone->price, 0, ',', ' ').' ₴' }}</td>
                                 <td class="p-4 text-text-2">{{ $zone->eta }}</td>
                             </tr>
                         @endforeach
