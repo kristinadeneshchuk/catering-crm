@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\Review;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -310,6 +311,23 @@ class SeoTest extends TestCase
 
         $this->assertStringContainsString('>Скільки коштує</h3>', $html);
         $this->assertStringNotContainsString('## ', $html);
+    }
+
+    /**
+     * Підкатегорії: перший абзац тексту стає meta description, тому він мусить
+     * бути звичайним вступом і вміщатися в 155 символів разом із ціною —
+     * обрізана ціна у видачі гірша, ніж її відсутність.
+     */
+    public function test_subcategories_open_with_a_description_sized_intro(): void
+    {
+        foreach (Category::whereNotNull('parent_id')->get() as $category) {
+            $intro = Str::before($category->seo_text, "\n");
+            $words = count(preg_split('/\s+/u', trim(str_replace('## ', '', $category->seo_text))));
+
+            $this->assertGreaterThanOrEqual(230, $words, "{$category->slug}: лише {$words} слів");
+            $this->assertFalse(str_starts_with($intro, '## '), "{$category->slug}: текст починається з підзаголовка");
+            $this->assertLessThanOrEqual(155, mb_strlen($intro), "{$category->slug}: вступ не влізе в опис");
+        }
     }
 
     public function test_every_category_has_its_own_description(): void
