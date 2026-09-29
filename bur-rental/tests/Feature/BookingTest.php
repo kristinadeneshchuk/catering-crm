@@ -8,9 +8,11 @@ use App\Models\DeliveryZone;
 use App\Models\Lead;
 use App\Models\Product;
 use App\Services\Availability;
+use App\Services\RentalPricing;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Js;
 use Tests\TestCase;
 
 class BookingTest extends TestCase
@@ -232,5 +234,27 @@ class BookingTest extends TestCase
 
         $this->get(route('product', Product::where('slug', 'wacker-bp-1050')->firstOrFail(), false))
             ->assertSee('Самовивіз ·', false);
+    }
+
+    /**
+     * Форма показує доставку до відправлення, і ця сума мусить збігатися з
+     * серверною. Раніше вона розходилась двічі: без доплат за гідроборт і
+     * безкоштовної доставки від 7 днів, а після вибору зони — 0 ₴, бо
+     * <select> віддавав id, а JS шукав зону за slug.
+     */
+    public function test_booking_form_gets_the_same_delivery_rules_as_the_server(): void
+    {
+        $html = $this->get('/booking')->assertOk()->getContent();
+
+        $this->assertStringContainsString(
+            'rules: '.Js::from(RentalPricing::deliveryRules()),
+            $html
+        );
+
+        foreach (DeliveryZone::whereHas('city', fn ($q) => $q->where('slug', 'kyiv'))->get() as $zone) {
+            $this->assertStringContainsString('<option value="'.$zone->id.'">', $html);
+            // Js::from кодує лапки як \u0022 — зона має приходити у форму з id.
+            $this->assertStringContainsString('\\u0022id\\u0022:'.$zone->id.',', $html);
+        }
     }
 }

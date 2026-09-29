@@ -4,7 +4,7 @@
 @section('description', 'Оформлення оренди: склад, дати, філія, доставка й оплата — одним екраном.')
 
 @section('content')
-    <div class="container-bur" x-data="bookingForm({ zones: {{ Js::from($zones->map->only(['slug', 'name', 'price', 'eta'])) }}, heavyIds: {{ Js::from($heavyIds) }}, heavyKg: {{ \App\Services\RentalPricing::HEAVY_KG }}, deposit: 0, discountPercent: {{ $discountPercent }}, client: {{ Js::from($client ? ['phone' => $client->display_phone, 'name' => $client->name, 'company' => $client->company, 'edrpou' => $client->edrpou, 'email' => $client->email] : null) }} })">
+    <div class="container-bur" x-data="bookingForm({ zones: {{ Js::from($zones->map->only(['id', 'slug', 'name', 'price', 'eta'])) }}, weights: {{ Js::from($weights) }}, rules: {{ Js::from($deliveryRules) }}, deposit: 0, discountPercent: {{ $discountPercent }}, client: {{ Js::from($client ? ['phone' => $client->display_phone, 'name' => $client->name, 'company' => $client->company, 'edrpou' => $client->edrpou, 'email' => $client->email] : null) }} })">
         <x-breadcrumbs :items="['Головна' => route('home'), 'Бронювання' => null]" />
 
         <h1 class="t-h1">Бронювання</h1>
@@ -192,8 +192,8 @@
 
                             <p class="mt-2 text-[13px] text-text-2" x-show="heavyInCart.length" x-cloak>
                                 Тільки доставка: <span x-text="heavyInCart.join(', ')"></span> —
-                                техніка від <span x-text="heavyKg"></span> кг, без гідроборта її не завантажити.
-                                При оренді від 7 днів привеземо й заберемо безкоштовно.
+                                техніка від <span x-text="rules.heavyKg"></span> кг, без гідроборта її не завантажити.
+                                При оренді від <span x-text="rules.freeDays"></span> днів привеземо й заберемо безкоштовно.
                             </p>
 
                             <template x-if="pickup === 'delivery'">
@@ -273,9 +273,12 @@
                             <span>Знижка постійного клієнта <span class="font-mono" x-text="'−' + discountPercent + '%'"></span></span>
                             <span class="font-mono font-semibold" x-text="'−' + discountAmount.toLocaleString('uk-UA') + ' ₴'"></span>
                         </div>
-                        <div class="flex justify-between" x-show="pickup === 'delivery'">
-                            <span class="text-text-2">Доставка</span>
-                            <span class="font-mono font-semibold" x-text="deliveryPrice.toLocaleString('uk-UA') + ' ₴'"></span>
+                        <div x-show="pickup === 'delivery'">
+                            <div class="flex justify-between">
+                                <span class="text-text-2">Доставка</span>
+                                <span class="font-mono font-semibold" x-text="deliveryPrice.toLocaleString('uk-UA') + ' ₴'"></span>
+                            </div>
+                            <p class="text-right text-[12px] text-text-3" x-show="deliveryNote" x-text="deliveryNote"></p>
                         </div>
                         <div class="flex justify-between border-t border-border-1 pt-2">
                             <span class="text-text-2">Застава <span class="text-text-3">(повертається)</span></span>

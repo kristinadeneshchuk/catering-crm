@@ -38,7 +38,12 @@
 
         <x-section title="Доплати за важку техніку" lead="Ціни фіксовані — на видачі сюрпризів не буде.">
             <div class="grid gap-3 sm:grid-cols-3">
-                @foreach (['Гідроборт' => '+150 ₴', 'Техніка від 200 кг' => '+400 ₴', 'Підйом на поверх' => '50 ₴/поверх'] as $label => $price)
+                @php($pricing = \App\Services\RentalPricing::class)
+                @foreach ([
+                    'Гідроборт, техніка від '.$pricing::HEAVY_KG.' кг' => '+'.$pricing::HOIST_FEE.' ₴',
+                    'Окрема машина, техніка від '.$pricing::TRUCK_KG.' кг' => '+'.$pricing::TRUCK_FEE.' ₴',
+                    'Підйом на поверх' => '50 ₴/поверх',
+                ] as $label => $price)
                     <div class="rounded-[12px] border border-border-1 bg-surface-0 p-5">
                         <div class="t-price">{{ $price }}</div>
                         <div class="mt-1 text-sm text-text-2">{{ $label }}</div>
@@ -47,7 +52,7 @@
             </div>
             <p class="mt-3 text-[13px] text-text-3">
                 Техніку від {{ \App\Services\RentalPricing::HEAVY_KG }} кг — реверсивну віброплиту, змішувач на 300 л —
-                самовивозом не видаємо: без гідроборта її не завантажити. При оренді від 7 днів
+                самовивозом не видаємо: без гідроборта її не завантажити. При оренді від {{ \App\Services\RentalPricing::FREE_DELIVERY_DAYS }} днів
                 привозимо й забираємо її безкоштовно.
             </p>
         </x-section>

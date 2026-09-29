@@ -3,12 +3,12 @@
  | Багатосторінковий чекаут тут коштував би конверсії — половина трафіку
  | оформлює замовлення з телефона, стоячи на об'єкті.
  */
-export default function bookingForm({ zones = [], heavyIds = [], heavyKg = 100, deposit = 0, discountPercent = 0, client = null }) {
+export default function bookingForm({ zones = [], weights = {}, rules = {}, deposit = 0, discountPercent = 0, client = null }) {
     return {
         step: 1,
         zones,
-        heavyIds,
-        heavyKg,
+        weights,
+        rules,
         deposit,
 
         // Відсоток приходить із сервера і тут тільки показується. Порахувати
@@ -28,7 +28,8 @@ export default function bookingForm({ zones = [], heavyIds = [], heavyKg = 100, 
         company: client?.company ?? '',
         edrpou: client?.edrpou ?? '',
         email: client?.email ?? '',
-        zone: zones[0]?.slug ?? null,
+        // id, а не slug: саме id іде значенням у <select> і на сервер.
+        zone: zones[0] ? String(zones[0].id) : null,
         address: '',
         errors: {},
 
@@ -39,14 +40,56 @@ export default function bookingForm({ zones = [], heavyIds = [], heavyKg = 100, 
             this.phone = '+380 ' + p.filter(Boolean).join(' ');
         },
 
+        weightOf(item) {
+            return Number(this.weights[item.id] ?? 0);
+        },
+
         /** Назви позицій, які самовивозом не видаються. Сервер перевіряє те саме. */
         get heavyInCart() {
-            return [...new Set(this.$store.booking.cart.filter((i) => this.heavyIds.includes(i.id)).map((i) => i.name))];
+            const heavy = this.$store.booking.cart.filter((i) => this.weightOf(i) >= this.rules.heavyKg);
+            return [...new Set(heavy.map((i) => i.name))];
+        },
+
+        /*
+         | Доставка — дзеркало RentalPricing::delivery(). Найважча позиція кошика
+         | і найдовший строк: від heavyKg на freeDays+ днів — безкоштовно, інакше
+         | тариф зони плюс гідроборт або окрема машина. Остаточну суму все одно
+         | рахує сервер; тут головне, щоб клієнт до відправлення бачив ту саму.
+         */
+        get heaviest() {
+            return Math.max(0, ...this.$store.booking.cart.map((i) => this.weightOf(i)));
+        },
+
+        get longestDays() {
+            return Math.max(0, ...this.$store.booking.cart.map((i) => Number(i.days) || 0));
+        },
+
+        get deliveryZone() {
+            return this.zones.find((z) => String(z.id) === String(this.zone)) ?? null;
+        },
+
+        get deliveryFree() {
+            return this.heaviest >= this.rules.heavyKg && this.longestDays >= this.rules.freeDays;
+        },
+
+        get deliverySurcharge() {
+            if (this.deliveryFree) return 0;
+            if (this.heaviest >= this.rules.truckKg) return this.rules.truckFee;
+            if (this.heaviest >= this.rules.heavyKg) return this.rules.hoistFee;
+            return 0;
         },
 
         get deliveryPrice() {
-            if (this.pickup === 'self') return 0;
-            return this.zones.find((z) => z.slug === this.zone)?.price ?? 0;
+            if (this.pickup === 'self' || !this.deliveryZone || this.deliveryFree) return 0;
+            return this.deliveryZone.price + this.deliverySurcharge;
+        },
+
+        /** Пояснення під сумою: чому безкоштовно або за що доплата. */
+        get deliveryNote() {
+            if (this.deliveryFree) return `безкоштовно: техніка від ${this.rules.heavyKg} кг на ${this.rules.freeDays}+ днів`;
+            if (this.heaviest >= this.rules.truckKg) return `з них ${this.rules.truckFee} ₴ — окрема машина`;
+            if (this.heaviest >= this.rules.heavyKg) return `з них ${this.rules.hoistFee} ₴ — гідроборт`;
+            return '';
         },
 
         /** Знижка діє тільки на оренду — так само, як на сервері. */

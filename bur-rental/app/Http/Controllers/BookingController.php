@@ -36,9 +36,11 @@ class BookingController extends Controller
             // повертатися, а просто робить приємний сюрприз у чеку.
             'discountPercent' => $this->loyalty->percentFor(auth('client')->user()),
             'zones' => $city->deliveryZones,
-            // Самовивіз важкої техніки форма вимикає одразу, а не після
-            // відмови сервера на останньому кроці.
-            'heavyIds' => Product::where('weight_kg', '>=', RentalPricing::HEAVY_KG)->pluck('id'),
+            // Вага кожної позиції й правила доставки: форма рахує доставку
+            // до відправлення так само, як RentalPricing::delivery(), і
+            // вимикає самовивіз важкої техніки ще до відмови сервера.
+            'weights' => Product::pluck('weight_kg', 'id'),
+            'deliveryRules' => RentalPricing::deliveryRules(),
             // Кошик живе в localStorage, тому сторінка вміє дістати товар
             // за slug'ом і показати актуальну ціну, а не збережену торік.
             'catalog' => Product::with('tiers')->get()
