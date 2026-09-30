@@ -37,17 +37,18 @@ php artisan test          # має бути зелено
 php artisan serve         # http://127.0.0.1:8000, адмінка на /admin
 ```
 
-## 4. Домен
+## 4. Домен — tekhpark.com.ua
 
-1. **Купити** у реєстратора з акредитацією Hostmaster (зони `.com.ua`,
-   `.kyiv.ua`, `.kiev.ua`) — Imena, NIC.UA, ukraine.com.ua тощо. Власником
-   записати клієнта або його ФОП, а не підрядника: домен — це актив бізнесу.
+1. **Власник домену** — клієнт або його ФОП, а не підрядник: домен — це
+   актив бізнесу. Перевірте це в кабінеті реєстратора.
 2. **Автопродовження** увімкнути одразу. Прострочений домен за кілька днів
    перехоплюють, і разом з ним — усю накопичену видачу.
-3. **DNS:** у FastPanel додати сайт на цей домен, потім у реєстратора або
+3. **Захисний домен** `tehpark.com.ua` (як набирають «на слух») — купити
+   й налаштувати 301-переадресацію на `https://tekhpark.com.ua`.
+4. **DNS:** у FastPanel додати сайт `tekhpark.com.ua`, потім у реєстратора або
    прописати NS хостингу, або A-запис `@` і `www` на IP сервера.
-   Перевірка: `dig +short ваш-домен` показує IP сервера (оновлюється до кількох годин).
-4. **SSL:** у FastPanel випустити Let's Encrypt для домену і `www`,
+   Перевірка: `dig +short tekhpark.com.ua` показує IP сервера (оновлюється до кількох годин).
+5. **SSL:** у FastPanel випустити Let's Encrypt для домену і `www`,
    увімкнути редирект HTTP → HTTPS і `www` → без `www` (або навпаки —
    головне, одна адреса). Без HTTPS `check:launch` не пропустить.
 
@@ -58,10 +59,10 @@ php artisan serve         # http://127.0.0.1:8000, адмінка на /admin
 1. **Додати свій SSH-ключ** користувачу сайту. Перевірити:
    `ssh -p 22 користувач@хост` — має пустити без пароля.
 2. **Створити базу MySQL** і записати доступи.
-3. **Корінь сайту** вказати на `bur_app/public`.
+3. **Корінь сайту** вказати на `tekhpark_app/public`.
    Якщо панель не дозволяє винести корінь за межі `public_html` —
    візьміть `deploy/shared-hosting/index-alt.php`, перейменуйте в `index.php`
-   і покладіть у `public_html` разом із вмістом `bur_app/public/`.
+   і покладіть у `public_html` разом із вмістом `tekhpark_app/public/`.
 4. **PHP 8.4**, розширення: `pdo_mysql`, `mbstring`, `gd`, `zip`, `intl`.
 
 ## 6. Покласти `.env` на сервер
@@ -72,7 +73,8 @@ php artisan serve         # http://127.0.0.1:8000, адмінка на /admin
 ```dotenv
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=https://ваш-домен
+APP_NAME=Техпарк
+APP_URL=https://tekhpark.com.ua
 APP_KEY=            # php artisan key:generate --show
 
 DB_CONNECTION=mysql
@@ -89,6 +91,11 @@ ADMIN_PASSWORD=…    # не словниковий, check:launch це пере�
 # Аналітика: контейнер створити на tagmanager.google.com, у ньому — тег GA4.
 GTM_ID=GTM-…
 
+# Продавець — показується в футері й на контактах, без нього check:launch червоний.
+COMPANY_LEGAL_NAME="ФОП … або ТОВ «…»"
+COMPANY_EDRPOU=…
+COMPANY_LEGAL_ADDRESS="…"
+
 # З'являться пізніше:
 # SMS_DRIVER=…
 # TELEGRAM_BOT_TOKEN=
@@ -98,9 +105,9 @@ GTM_ID=GTM-…
 ## 7. Задеплоїти
 
 ```bash
-BUR_SSH=користувач@хост \
-BUR_PATH=/var/www/користувач/data/bur_app \
-BUR_PHP=php8.4 \
+DEPLOY_SSH=користувач@хост \
+DEPLOY_PATH=/var/www/користувач/data/tekhpark_app \
+DEPLOY_PHP=php8.4 \
 ./deploy/deploy.sh
 ```
 
@@ -112,7 +119,7 @@ BUR_PHP=php8.4 \
 створить структуру:
 
 ```bash
-ssh користувач@хост "cd /var/www/…/bur_app && php8.4 artisan db:seed --force"
+ssh користувач@хост "cd /var/www/…/tekhpark_app && php8.4 artisan db:seed --force"
 ```
 
 Сиди наливають каталог, категорії, тексти й статті. **Демо-відгуки в них
@@ -123,8 +130,8 @@ ssh користувач@хост "cd /var/www/…/bur_app && php8.4 artisan db:
 Без них не працюють Telegram-сповіщення і нагадування клієнтам:
 
 ```
-* * * * * cd /var/www/…/bur_app && php8.4 artisan queue:work --stop-when-empty --max-time=50
-* * * * * cd /var/www/…/bur_app && php8.4 artisan schedule:run >> /dev/null 2>&1
+* * * * * cd /var/www/…/tekhpark_app && php8.4 artisan queue:work --stop-when-empty --max-time=50
+* * * * * cd /var/www/…/tekhpark_app && php8.4 artisan schedule:run >> /dev/null 2>&1
 ```
 
 ## 9. Перед відкриттям для Google
@@ -167,7 +174,7 @@ php artisan check:launch
 
 > Проєкт `bur-rental` у цьому репозиторії, гілка `claude/service-deployment-fvcr4g`.
 > Треба задеплоїти на хостинг за інструкцією `deploy/LOCAL-DEPLOY.md`.
-> Мій SSH: `користувач@хост`, папка застосунку `/var/www/…/bur_app`, PHP `php8.4`,
-> домен `https://…`. Спершу переконайся, що `ssh` проходить і тести зелені,
+> Мій SSH: `користувач@хост`, папка застосунку `/var/www/…/tekhpark_app`, PHP `php8.4`,
+> домен `https://tekhpark.com.ua`. Спершу переконайся, що `ssh` проходить і тести зелені,
 > потім `./deploy/deploy.sh`, у кінці `check:launch` і скажи, що лишилось
 > червоним. `.env` на сервері я вже поклав — не перезаписуй його.

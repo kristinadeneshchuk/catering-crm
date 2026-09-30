@@ -11,7 +11,7 @@
     <div class="container-bur flex h-18 flex-wrap items-center gap-5 nav:h-18 max-nav:h-auto max-nav:py-[10px]">
         <a href="{{ route('home') }}"
            class="font-display text-2xl font-bold tracking-[0.02em] text-text-1 uppercase no-underline hover:no-underline">
-            БУР<span class="text-brand">.</span>
+            Техпарк<span class="text-brand">.</span>
         </a>
 
         {{-- Селектор міста: змінює телефони, філії та доставку на всіх сторінках --}}

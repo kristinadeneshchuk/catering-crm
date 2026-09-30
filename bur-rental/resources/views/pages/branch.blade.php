@@ -140,7 +140,7 @@
         $branchSchema = array_filter([
             '@context' => 'https://schema.org',
             '@type' => 'LocalBusiness',
-            'name' => 'БУР — '.$branch->name,
+            'name' => 'Техпарк — '.$branch->name,
             'url' => route('branch', [$city, $branch]),
             'telephone' => $city->phone,
             'openingHours' => $branch->hours,

@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Оренда '.($category->name_genitive ?? $category->name).' '.$city->name_locative.' — БУР')
+@section('title', 'Оренда '.($category->name_genitive ?? $category->name).' '.$city->name_locative.' — Техпарк')
 {{-- У підкатегорій немає lead — беремо перший абзац їхнього тексту, інакше
      всі вони отримують однаковий загальний опис сайту, а це дублі для Google. --}}
 @section('description', Str::limit($category->lead ?: Str::before((string) $category->seo_text, "\n"), 155))

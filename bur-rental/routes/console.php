@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schedule;
 | яким нагадування вже пішло, тому зайвий запуск нічого не зіпсує.
 |
 | На шаред-хостингу планувальник заводиться одним крон-рядком:
-| * * * * * cd ~/bur_app && php artisan schedule:run >> /dev/null 2>&1
+| * * * * * cd ~/tekhpark_app && php artisan schedule:run >> /dev/null 2>&1
 */
 Schedule::command('reminders:returns')->dailyAt('18:00')->withoutOverlapping();
 

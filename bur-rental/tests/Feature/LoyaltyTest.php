@@ -29,7 +29,7 @@ class LoyaltyTest extends TestCase
 
         for ($i = 0; $i < $completedRentals; $i++) {
             Booking::create([
-                'number' => 'BUR-TEST-'.$client->id.'-'.$i,
+                'number' => 'TP-TEST-'.$client->id.'-'.$i,
                 'client_id' => $client->id,
                 'branch_id' => Branch::first()->id,
                 'client_type' => 'person',

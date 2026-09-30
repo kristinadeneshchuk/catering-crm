@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Обране — БУР')
+@section('title', 'Обране — Техпарк')
 
 @section('content')
     <div class="container-bur">

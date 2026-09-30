@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Оренда інструменту '.$brand->name.' '.$city->name_locative.' — БУР')
+@section('title', 'Оренда інструменту '.$brand->name.' '.$city->name_locative.' — Техпарк')
 @section('description', Str::limit($brand->about, 155))
 
 @section('content')

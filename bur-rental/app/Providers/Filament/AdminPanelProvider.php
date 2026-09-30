@@ -30,7 +30,7 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->login()
-            ->brandName('БУР · керування')
+            ->brandName('Техпарк · керування')
             // Той самий «Смерековий» зелений, що й на сайті: адмінка має
             // виглядати частиною продукту, а не сторонньою панеллю.
             ->colors([

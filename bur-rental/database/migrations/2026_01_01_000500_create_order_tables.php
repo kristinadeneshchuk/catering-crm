@@ -16,7 +16,7 @@ return new class extends Migration
     {
         Schema::create('bookings', function (Blueprint $table) {
             $table->id();
-            $table->string('number')->unique();          // BUR-26-000123
+            $table->string('number')->unique();          // TP-26-000123
             $table->foreignId('branch_id')->nullable()->constrained()->nullOnDelete();
             $table->string('status')->default('new');    // new | confirmed | issued | closed | cancelled
             $table->string('client_type')->default('person'); // person | company

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Деплой БУР на хостинг із SSH.
+# Деплой Техпарк на хостинг із SSH.
 #
 # Запускати з машини, де є доступ до сервера, — з локальної сесії Claude Code
 # або руками. У хмарній пісочниці не працює: там закриті 22 і 21 порти.
 #
-#   BUR_SSH=user@host BUR_PATH=/var/www/user/data/bur_app ./deploy/deploy.sh
+#   DEPLOY_SSH=user@host DEPLOY_PATH=/var/www/user/data/tekhpark_app ./deploy/deploy.sh
 #
 # Що робить:ганяє тести, збирає збірку начисто, синхронізує файли, і вже на
 # сервері виконує міграції, кеші й передстартову перевірку.
@@ -18,11 +18,11 @@
 
 set -euo pipefail
 
-: "${BUR_SSH:?вкажіть BUR_SSH, напр. bur_new_hor__usr@hor-hosting.top}"
-: "${BUR_PATH:?вкажіть BUR_PATH — папку застосунку на сервері}"
+: "${DEPLOY_SSH:?вкажіть DEPLOY_SSH, напр. user@host}"
+: "${DEPLOY_PATH:?вкажіть DEPLOY_PATH — папку застосунку на сервері}"
 
-PHP_REMOTE="${BUR_PHP:-php}"          # на деяких хостингах це php8.4
-SSH_PORT="${BUR_SSH_PORT:-22}"
+PHP_REMOTE="${DEPLOY_PHP:-php}"          # на деяких хостингах це php8.4
+SSH_PORT="${DEPLOY_SSH_PORT:-22}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cd "$ROOT"
@@ -39,7 +39,7 @@ npm run build
 # --no-dev: на сервері не потрібні ні PHPUnit, ні Pint. -o: пришвидшує автозавантаження.
 composer install --no-dev --optimize-autoloader --no-interaction
 
-say "Синхронізація на $BUR_SSH:$BUR_PATH"
+say "Синхронізація на $DEPLOY_SSH:$DEPLOY_PATH"
 rsync -az --delete --human-readable \
   -e "ssh -p $SSH_PORT" \
   --exclude '.git' \
@@ -52,11 +52,11 @@ rsync -az --delete --human-readable \
   --exclude 'storage/framework/views' \
   --exclude 'database/database.sqlite' \
   --exclude 'tests' \
-  ./ "$BUR_SSH:$BUR_PATH/"
+  ./ "$DEPLOY_SSH:$DEPLOY_PATH/"
 
 say "Міграції й кеші на сервері"
 # shellcheck disable=SC2029
-ssh -p "$SSH_PORT" "$BUR_SSH" "cd '$BUR_PATH' && \
+ssh -p "$SSH_PORT" "$DEPLOY_SSH" "cd '$DEPLOY_PATH' && \
   $PHP_REMOTE artisan down --render=errors::503 || true; \
   $PHP_REMOTE artisan migrate --force && \
   $PHP_REMOTE artisan search:reindex && \
@@ -68,9 +68,9 @@ ssh -p "$SSH_PORT" "$BUR_SSH" "cd '$BUR_PATH' && \
 
 say "Передстартова перевірка"
 # Ненульовий код тут означає «є блокери» — саме тому він не гаситься.
-ssh -p "$SSH_PORT" "$BUR_SSH" "cd '$BUR_PATH' && $PHP_REMOTE artisan check:launch"
+ssh -p "$SSH_PORT" "$DEPLOY_SSH" "cd '$DEPLOY_PATH' && $PHP_REMOTE artisan check:launch"
 
 say "Готово"
 echo "Не забудьте два крон-рядки на сервері:"
-echo "  * * * * * cd $BUR_PATH && $PHP_REMOTE artisan queue:work --stop-when-empty --max-time=50"
-echo "  * * * * * cd $BUR_PATH && $PHP_REMOTE artisan schedule:run >> /dev/null 2>&1"
+echo "  * * * * * cd $DEPLOY_PATH && $PHP_REMOTE artisan queue:work --stop-when-empty --max-time=50"
+echo "  * * * * * cd $DEPLOY_PATH && $PHP_REMOTE artisan schedule:run >> /dev/null 2>&1"

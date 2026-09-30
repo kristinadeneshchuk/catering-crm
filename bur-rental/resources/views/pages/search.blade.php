@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', $term ? 'Пошук: '.$term.' — БУР' : 'Пошук — БУР')
+@section('title', $term ? 'Пошук: '.$term.' — Техпарк' : 'Пошук — Техпарк')
 
 @section('content')
     <div class="container-bur">

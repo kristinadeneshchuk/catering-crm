@@ -175,6 +175,6 @@ class BookingController extends Controller
         $year = now()->format('y');
         $seq = Booking::whereYear('created_at', now()->year)->count() + 1;
 
-        return sprintf('BUR-%s-%06d', $year, $seq);
+        return sprintf('TP-%s-%06d', $year, $seq);
     }
 }

@@ -49,7 +49,7 @@ class WinBackTest extends TestCase
         $client = Client::create(['phone' => $phone]);
 
         Booking::create([
-            'number' => 'BUR-WB-'.$client->id,
+            'number' => 'TP-WB-'.$client->id,
             'client_id' => $client->id,
             'branch_id' => Branch::first()->id,
             'client_type' => 'person',
@@ -89,7 +89,7 @@ class WinBackTest extends TestCase
         $client = $this->lapsed();
 
         Booking::create([
-            'number' => 'BUR-WB-ACTIVE',
+            'number' => 'TP-WB-ACTIVE',
             'client_id' => $client->id,
             'branch_id' => Branch::first()->id,
             'client_type' => 'person',

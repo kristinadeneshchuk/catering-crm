@@ -81,7 +81,7 @@ class ImportCatalog extends Command
             } else {
                 $product = Product::create($payload + [
                     'slug' => $this->uniqueSlug($row['name']),
-                    'sku' => 'BUR-IMP-'.str_pad((string) (Product::withoutGlobalScopes()->count() + 1), 5, '0', STR_PAD_LEFT),
+                    'sku' => 'TP-IMP-'.str_pad((string) (Product::withoutGlobalScopes()->count() + 1), 5, '0', STR_PAD_LEFT),
                 ]);
                 $created++;
             }

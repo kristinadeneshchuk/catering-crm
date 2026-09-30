@@ -53,6 +53,7 @@ class BookingTest extends TestCase
 
         $booking = Booking::latest('id')->firstOrFail();
         $response->assertRedirect(route('booking.show', $booking));
+        $this->assertStringStartsWith('TP-', $booking->number);
 
         // 5 днів → тариф «3–6 днів» = 210 ₴, а не базові 250.
         $this->assertSame(5 * 210, $booking->rent_total);

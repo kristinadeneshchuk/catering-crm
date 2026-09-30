@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
-@section('title', 'Вхід у кабінет — БУР')
-@section('description', 'Вхід у кабінет БУР за номером телефону: історія оренд, строки повернення, обране.')
+@section('title', 'Вхід у кабінет — Техпарк')
+@section('description', 'Вхід у кабінет Техпарку за номером телефону: історія оренд, строки повернення, обране.')
 
 @section('content')
     <div class="container-bur max-w-[480px]">

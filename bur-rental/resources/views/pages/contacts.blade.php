@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Контакти — БУР')
+@section('title', 'Контакти — Техпарк')
 @section('description', 'Філії, телефони, менеджери, форма зв\'язку.')
 
 @section('content')
@@ -30,14 +30,21 @@
                     </div>
                 </x-section>
 
-                <x-section title="Реквізити">
-                    <div class="rounded-[12px] border border-border-1 bg-surface-0 p-5 text-sm leading-[24px] text-text-2">
-                        ТОВ «БУР Прокат»<br>
-                        ЄДРПОУ 43215678<br>
-                        вул. Здолбунівська 7Г, Київ, 02081<br>
-                        <a href="{{ route('terms') }}">Договір оферти</a>
-                    </div>
-                </x-section>
+                {{-- Реквізити тільки справжні, з .env (config/company.php). --}}
+                @if (config('company.legal_name'))
+                    <x-section title="Реквізити">
+                        <div class="rounded-[12px] border border-border-1 bg-surface-0 p-5 text-sm leading-[24px] text-text-2">
+                            {{ config('company.legal_name') }}<br>
+                            @if (config('company.edrpou'))
+                                ЄДРПОУ {{ config('company.edrpou') }}<br>
+                            @endif
+                            @if (config('company.legal_address'))
+                                {{ config('company.legal_address') }}<br>
+                            @endif
+                            <a href="{{ route('terms') }}">Договір оферти</a>
+                        </div>
+                    </x-section>
+                @endif
             </div>
 
             <aside class="md:sticky md:top-[88px] md:self-start">

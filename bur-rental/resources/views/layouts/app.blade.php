@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>@yield('title', 'БУР — прокат будівельного інструменту')</title>
+    <title>@yield('title', 'Техпарк — прокат будівельного інструменту')</title>
     <meta name="description" content="@yield('description', 'Подобова оренда будівельного, садового та вимірювального інструменту. Реальна наявність по датах і філіях.')">
 
     <link rel="canonical" href="{{ url()->current() }}">
@@ -36,10 +36,10 @@
         рядком. og:image з'явиться разом із реальними фото.
     --}}
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="БУР">
+    <meta property="og:site_name" content="Техпарк">
     <meta property="og:locale" content="uk_UA">
     <meta property="og:url" content="{{ url()->current() }}">
-    <meta property="og:title" content="@yield('title', 'БУР — прокат будівельного інструменту')">
+    <meta property="og:title" content="@yield('title', 'Техпарк — прокат будівельного інструменту')">
     <meta property="og:description" content="@yield('description', 'Подобова оренда будівельного, садового та вимірювального інструменту. Реальна наявність по датах і філіях.')">
     <meta name="twitter:card" content="summary">
 

@@ -3,7 +3,7 @@
         <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
             <div>
                 <div class="font-display text-2xl font-bold tracking-[0.02em] text-white uppercase">
-                    БУР<span class="text-brand-bright">.</span>
+                    Техпарк<span class="text-brand-bright">.</span>
                 </div>
                 <p class="mt-3 max-w-[280px] text-sm">
                     Прокат будівельного, садового та вимірювального інструменту.
@@ -63,7 +63,14 @@
         </div>
 
         <div class="mt-10 flex flex-wrap gap-x-6 gap-y-2 border-t border-white/10 pt-6 text-xs">
-            <span>© {{ date('Y') }} ТОВ «БУР Прокат» · ЄДРПОУ 43215678 · вул. Здолбунівська 7Г, Київ, 02081</span>
+            <span>
+                © {{ date('Y') }} {{ config('company.brand') }}
+                @if (config('company.legal_name'))
+                    · {{ config('company.legal_name') }}
+                    @if (config('company.edrpou')) · ЄДРПОУ {{ config('company.edrpou') }} @endif
+                    @if (config('company.legal_address')) · {{ config('company.legal_address') }} @endif
+                @endif
+            </span>
             <a href="{{ route('terms') }}" class="text-text-on-dark underline">Договір оферти</a>
             <a href="{{ route('terms') }}" class="text-text-on-dark underline">Політика конфіденційності</a>
         </div>

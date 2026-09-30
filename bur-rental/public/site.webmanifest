@@ -1,6 +1,6 @@
 {
-    "name": "БУР — прокат інструменту",
-    "short_name": "БУР",
+    "name": "Техпарк — прокат інструменту",
+    "short_name": "Техпарк",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#f4f6f5",

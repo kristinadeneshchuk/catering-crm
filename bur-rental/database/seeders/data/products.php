@@ -17,7 +17,7 @@ return [
 
     [
         'brand' => 'bosch', 'category' => 'perforatory', 'sub' => 'sds-plus',
-        'name' => 'Перфоратор GBH 2-26 DRE, SDS-plus', 'slug' => 'bosch-gbh-2-26-dre', 'sku' => 'BUR-01254',
+        'name' => 'Перфоратор GBH 2-26 DRE, SDS-plus', 'slug' => 'bosch-gbh-2-26-dre', 'sku' => 'TP-01254',
         'base' => 250, 'deposit' => 1500, 'retail' => 8000, 'weight' => 2.7,
         'rating' => 4.8, 'reviews' => 23, 'popularity' => 100,
         'lead' => 'Робочий стандарт серед перфораторів для квартирного ремонту: свердлить бетон до 26 мм, довбає штроби, працює як дриль по дереву й металу. Три режими, реверс, обмежувач глибини.',
@@ -28,7 +28,7 @@ return [
     ],
     [
         'brand' => 'bosch', 'category' => 'perforatory', 'sub' => 'sds-plus',
-        'name' => 'Перфоратор GBH 2-28 F, SDS-plus', 'slug' => 'bosch-gbh-2-28-f', 'sku' => 'BUR-01261',
+        'name' => 'Перфоратор GBH 2-28 F, SDS-plus', 'slug' => 'bosch-gbh-2-28-f', 'sku' => 'TP-01261',
         'base' => 290, 'deposit' => 1800, 'retail' => 9600, 'weight' => 3.1,
         'rating' => 4.7, 'reviews' => 14, 'popularity' => 80,
         'lead' => 'Потужніший брат 2-26: більша енергія удару і швидкозмінний патрон у комплекті.',
@@ -38,7 +38,7 @@ return [
     ],
     [
         'brand' => 'makita', 'category' => 'perforatory', 'sub' => 'sds-plus',
-        'name' => 'Перфоратор HR2470, SDS-plus', 'slug' => 'makita-hr2470', 'sku' => 'BUR-01288',
+        'name' => 'Перфоратор HR2470, SDS-plus', 'slug' => 'makita-hr2470', 'sku' => 'TP-01288',
         'base' => 230, 'deposit' => 1400, 'retail' => 7200, 'weight' => 2.6,
         'rating' => 4.6, 'reviews' => 31, 'popularity' => 92,
         'lead' => 'Легший за конкурентів при тій самій роботі — помітно на стелі й на довгій зміні.',
@@ -48,7 +48,7 @@ return [
     ],
     [
         'brand' => 'makita', 'category' => 'perforatory', 'sub' => 'akumulyatorni-perforatory',
-        'name' => 'Акумуляторний перфоратор DHR243, 18 В', 'slug' => 'makita-dhr243', 'sku' => 'BUR-01295',
+        'name' => 'Акумуляторний перфоратор DHR243, 18 В', 'slug' => 'makita-dhr243', 'sku' => 'TP-01295',
         'base' => 300, 'deposit' => 2000, 'retail' => 11500, 'weight' => 3.3,
         'rating' => 4.7, 'reviews' => 9, 'popularity' => 64,
         'lead' => 'Там, де немає світла: новобудова без електрики, дах, вулиця. Два акумулятори в комплекті.',
@@ -58,7 +58,7 @@ return [
     ],
     [
         'brand' => 'makita', 'category' => 'perforatory', 'sub' => 'sds-max',
-        'name' => 'Перфоратор HR4013C, SDS-max', 'slug' => 'makita-hr4013c', 'sku' => 'BUR-01301',
+        'name' => 'Перфоратор HR4013C, SDS-max', 'slug' => 'makita-hr4013c', 'sku' => 'TP-01301',
         'base' => 420, 'deposit' => 2500, 'retail' => 19000, 'weight' => 6.8,
         'rating' => 4.8, 'reviews' => 11, 'popularity' => 70,
         'lead' => 'Важкий клас SDS-max: отвори до 40 мм і зняття стяжки. Ще свердлить, на відміну від відбійника.',
@@ -68,7 +68,7 @@ return [
     ],
     [
         'brand' => 'makita', 'category' => 'perforatory', 'sub' => 'vidbiyni',
-        'name' => 'Відбійний молоток HM1203C', 'slug' => 'makita-hm1203c', 'sku' => 'BUR-01312',
+        'name' => 'Відбійний молоток HM1203C', 'slug' => 'makita-hm1203c', 'sku' => 'TP-01312',
         'base' => 520, 'deposit' => 3500, 'retail' => 26000, 'weight' => 9.7,
         'rating' => 4.9, 'reviews' => 12, 'popularity' => 74,
         'lead' => 'Демонтаж стін і стяжки. 19,9 Дж — бере армований бетон.',
@@ -78,7 +78,7 @@ return [
     ],
     [
         'brand' => 'bosch', 'category' => 'perforatory', 'sub' => 'betonolomy',
-        'name' => 'Бетонолом GSH 16-30, 16 кг', 'slug' => 'bosch-gsh-16-30', 'sku' => 'BUR-01320',
+        'name' => 'Бетонолом GSH 16-30, 16 кг', 'slug' => 'bosch-gsh-16-30', 'sku' => 'TP-01320',
         'base' => 690, 'deposit' => 6000, 'retail' => 42000, 'weight' => 16.5,
         'rating' => 4.9, 'reviews' => 7, 'popularity' => 58,
         'lead' => 'Важкий демонтаж: фундаменти, бетонні підлоги, зрізання стін. 41 Дж.',
@@ -91,7 +91,7 @@ return [
 
     [
         'brand' => 'makita', 'category' => 'dryli', 'sub' => null,
-        'name' => 'Шурупокрут акумуляторний DHP484, 18 В', 'slug' => 'makita-dhp484', 'sku' => 'BUR-05021',
+        'name' => 'Шурупокрут акумуляторний DHP484, 18 В', 'slug' => 'makita-dhp484', 'sku' => 'TP-05021',
         'base' => 180, 'deposit' => 900, 'retail' => 6800, 'weight' => 1.6,
         'rating' => 4.8, 'reviews' => 42, 'popularity' => 88,
         'lead' => 'Безщітковий, з ударом. Два акумулятори — працює зміну без паузи.',
@@ -101,7 +101,7 @@ return [
     ],
     [
         'brand' => 'bosch', 'category' => 'dryli', 'sub' => null,
-        'name' => 'Ударна дриль GSB 21-2 RE', 'slug' => 'bosch-gsb-21-2-re', 'sku' => 'BUR-05033',
+        'name' => 'Ударна дриль GSB 21-2 RE', 'slug' => 'bosch-gsb-21-2-re', 'sku' => 'TP-05033',
         'base' => 200, 'deposit' => 1000, 'retail' => 7400, 'weight' => 2.9,
         'rating' => 4.6, 'reviews' => 17, 'popularity' => 60,
         'lead' => 'Дві швидкості, 1 100 Вт — цегла, газоблок, дерево, метал.',
@@ -111,7 +111,7 @@ return [
     ],
     [
         'brand' => 'collomix', 'category' => 'dryli', 'sub' => null,
-        'name' => 'Міксер будівельний Xo 4', 'slug' => 'collomix-xo-4', 'sku' => 'BUR-05007',
+        'name' => 'Міксер будівельний Xo 4', 'slug' => 'collomix-xo-4', 'sku' => 'TP-05007',
         'base' => 280, 'deposit' => 1200, 'retail' => 11000, 'weight' => 5.1,
         'rating' => 4.8, 'reviews' => 16, 'popularity' => 72,
         'lead' => 'Дві швидкості, плавний пуск. Замішує клей і стяжку до однорідності за 5 хвилин.',
@@ -124,7 +124,7 @@ return [
 
     [
         'brand' => 'bosch', 'category' => 'shlifuvalni', 'sub' => null,
-        'name' => 'Болгарка GWS 22-230 JH, 230 мм', 'slug' => 'bosch-gws-22-230', 'sku' => 'BUR-09002',
+        'name' => 'Болгарка GWS 22-230 JH, 230 мм', 'slug' => 'bosch-gws-22-230', 'sku' => 'TP-09002',
         'base' => 220, 'deposit' => 1200, 'retail' => 7400, 'weight' => 5.8,
         'rating' => 4.6, 'reviews' => 21, 'popularity' => 66,
         'lead' => 'Велика кутова шліфмашина під різання бетону, цегли й металу.',
@@ -134,7 +134,7 @@ return [
     ],
     [
         'brand' => 'makita', 'category' => 'shlifuvalni', 'sub' => null,
-        'name' => 'Болгарка 9558HN, 125 мм', 'slug' => 'makita-9558hn', 'sku' => 'BUR-09010',
+        'name' => 'Болгарка 9558HN, 125 мм', 'slug' => 'makita-9558hn', 'sku' => 'TP-09010',
         'base' => 150, 'deposit' => 700, 'retail' => 3200, 'weight' => 2.1,
         'rating' => 4.7, 'reviews' => 24, 'popularity' => 62,
         'lead' => 'Мала болгарка для підрізки плитки, металу й зачистки швів.',
@@ -144,7 +144,7 @@ return [
     ],
     [
         'brand' => 'flex', 'category' => 'shlifuvalni', 'sub' => null,
-        'name' => 'Шліфмашина для стін і стель GE 5 R «жираф»', 'slug' => 'flex-ge-5-r', 'sku' => 'BUR-09021',
+        'name' => 'Шліфмашина для стін і стель GE 5 R «жираф»', 'slug' => 'flex-ge-5-r', 'sku' => 'TP-09021',
         'base' => 420, 'deposit' => 2500, 'retail' => 24000, 'weight' => 4.2,
         'rating' => 4.9, 'reviews' => 13, 'popularity' => 76,
         'lead' => 'Шліфування шпаклівки на стінах і стелі зі штангою і підключенням до пилососа.',
@@ -154,7 +154,7 @@ return [
     ],
     [
         'brand' => 'bosch', 'category' => 'shlifuvalni', 'sub' => null,
-        'name' => 'Фреза зачисна по бетону GBR 15 CAG', 'slug' => 'bosch-gbr-15-cag', 'sku' => 'BUR-09030',
+        'name' => 'Фреза зачисна по бетону GBR 15 CAG', 'slug' => 'bosch-gbr-15-cag', 'sku' => 'TP-09030',
         'base' => 380, 'deposit' => 2500, 'retail' => 21000, 'weight' => 4.6,
         'rating' => 4.7, 'reviews' => 6, 'popularity' => 52,
         'lead' => 'Знімає напливи бетону, залишки клею й старої фарби з бетонних стін і підлоги.',
@@ -167,7 +167,7 @@ return [
 
     [
         'brand' => 'makita', 'category' => 'pyly', 'sub' => null,
-        'name' => 'Штроборіз SG1251J з відсосом пилу', 'slug' => 'makita-sg1251j', 'sku' => 'BUR-02104',
+        'name' => 'Штроборіз SG1251J з відсосом пилу', 'slug' => 'makita-sg1251j', 'sku' => 'TP-02104',
         'base' => 450, 'deposit' => 2500, 'retail' => 21000, 'weight' => 4.6,
         'rating' => 4.8, 'reviews' => 19, 'popularity' => 86,
         'lead' => 'Два диски, регульована глибина, патрубок під пилосос. Штроба виходить рівна з першого проходу.',
@@ -177,7 +177,7 @@ return [
     ],
     [
         'brand' => 'husqvarna', 'category' => 'pyly', 'sub' => null,
-        'name' => 'Бензоріз K 770, диск 350 мм', 'slug' => 'husqvarna-k770', 'sku' => 'BUR-02118',
+        'name' => 'Бензоріз K 770, диск 350 мм', 'slug' => 'husqvarna-k770', 'sku' => 'TP-02118',
         'base' => 620, 'deposit' => 4000, 'retail' => 34000, 'weight' => 10.1,
         'rating' => 4.8, 'reviews' => 10, 'popularity' => 68,
         'lead' => 'Різання бетону, асфальту й бруківки на вулиці, без прив\'язки до розетки.',
@@ -187,7 +187,7 @@ return [
     ],
     [
         'brand' => 'makita', 'category' => 'pyly', 'sub' => null,
-        'name' => 'Циркулярна пила HS7601, 190 мм', 'slug' => 'makita-hs7601', 'sku' => 'BUR-02125',
+        'name' => 'Циркулярна пила HS7601, 190 мм', 'slug' => 'makita-hs7601', 'sku' => 'TP-02125',
         'base' => 200, 'deposit' => 1200, 'retail' => 5200, 'weight' => 4.0,
         'rating' => 4.6, 'reviews' => 15, 'popularity' => 55,
         'lead' => 'Розкрій дощок, фанери, ламінату й OSB.',
@@ -197,7 +197,7 @@ return [
     ],
     [
         'brand' => 'bosch', 'category' => 'pyly', 'sub' => null,
-        'name' => 'Шабельна пила GSA 1300 PCE', 'slug' => 'bosch-gsa-1300', 'sku' => 'BUR-02131',
+        'name' => 'Шабельна пила GSA 1300 PCE', 'slug' => 'bosch-gsa-1300', 'sku' => 'TP-02131',
         'base' => 210, 'deposit' => 1200, 'retail' => 6900, 'weight' => 3.5,
         'rating' => 4.5, 'reviews' => 8, 'popularity' => 48,
         'lead' => 'Демонтаж дерева, металу й пластику там, куди не заходить болгарка.',
@@ -207,7 +207,7 @@ return [
     ],
     [
         'brand' => 'husqvarna', 'category' => 'pyly', 'sub' => null,
-        'name' => 'Установка алмазного буріння DM 220', 'slug' => 'husqvarna-dm220', 'sku' => 'BUR-02140',
+        'name' => 'Установка алмазного буріння DM 220', 'slug' => 'husqvarna-dm220', 'sku' => 'TP-02140',
         'base' => 850, 'deposit' => 8000, 'retail' => 62000, 'weight' => 12.0,
         'rating' => 4.9, 'reviews' => 9, 'popularity' => 62,
         'lead' => 'Наскрізні отвори в бетоні під вентиляцію, каналізацію й кондиціонер — до 250 мм.',
@@ -220,7 +220,7 @@ return [
 
     [
         'brand' => 'limex', 'category' => 'betonozmishuvachi', 'sub' => null,
-        'name' => 'Бетонозмішувач 125 л', 'slug' => 'limex-125', 'sku' => 'BUR-08001',
+        'name' => 'Бетонозмішувач 125 л', 'slug' => 'limex-125', 'sku' => 'TP-08001',
         'base' => 250, 'deposit' => 1200, 'retail' => 9000, 'weight' => 52,
         'rating' => 4.5, 'reviews' => 11, 'popularity' => 58,
         'lead' => 'Кладка, дрібна стяжка, ремонтні суміші. Заходить у легковий причіп.',
@@ -230,7 +230,7 @@ return [
     ],
     [
         'brand' => 'limex', 'category' => 'betonozmishuvachi', 'sub' => null,
-        'name' => 'Бетонозмішувач 165 л', 'slug' => 'limex-165', 'sku' => 'BUR-08004',
+        'name' => 'Бетонозмішувач 165 л', 'slug' => 'limex-165', 'sku' => 'TP-08004',
         'base' => 300, 'deposit' => 1500, 'retail' => 12000, 'weight' => 62,
         'rating' => 4.5, 'reviews' => 13, 'popularity' => 68,
         'lead' => 'Вінцевий привід, 165 літрів — стяжка на кімнату за підхід.',
@@ -240,7 +240,7 @@ return [
     ],
     [
         'brand' => 'altrad', 'category' => 'betonozmishuvachi', 'sub' => null,
-        'name' => 'Бетонозмішувач 300 л, редукторний', 'slug' => 'altrad-300', 'sku' => 'BUR-08010',
+        'name' => 'Бетонозмішувач 300 л, редукторний', 'slug' => 'altrad-300', 'sku' => 'TP-08010',
         'base' => 450, 'deposit' => 3000, 'retail' => 32000, 'weight' => 145,
         'rating' => 4.7, 'reviews' => 6, 'popularity' => 50,
         'lead' => 'Фундамент і великі об\'єми. Редукторний привід витримує безперервну роботу.',
@@ -253,7 +253,7 @@ return [
 
     [
         'brand' => 'wacker', 'category' => 'vibroplyty', 'sub' => 'vibroplyty-lehki',
-        'name' => 'Віброплита BP 1050, 90 кг', 'slug' => 'wacker-bp-1050', 'sku' => 'BUR-06011',
+        'name' => 'Віброплита BP 1050, 90 кг', 'slug' => 'wacker-bp-1050', 'sku' => 'TP-06011',
         'base' => 350, 'deposit' => 4000, 'retail' => 42000, 'weight' => 90,
         'rating' => 4.7, 'reviews' => 14, 'popularity' => 78,
         'lead' => 'Однонаправлена плита під доріжки, засипку траншей і основу під плитку.',
@@ -263,7 +263,7 @@ return [
     ],
     [
         'brand' => 'wacker', 'category' => 'vibroplyty', 'sub' => 'vibroplyty-reversyvni',
-        'name' => 'Віброплита реверсивна DPU 2540, 160 кг', 'slug' => 'wacker-dpu-2540', 'sku' => 'BUR-06003',
+        'name' => 'Віброплита реверсивна DPU 2540, 160 кг', 'slug' => 'wacker-dpu-2540', 'sku' => 'TP-06003',
         'base' => 620, 'deposit' => 6000, 'retail' => 98000, 'weight' => 160,
         'rating' => 4.9, 'reviews' => 11, 'popularity' => 82,
         'lead' => 'Реверсивна плита під заїзд і основу під бруківку. 25 кН доцентрової сили.',
@@ -273,7 +273,7 @@ return [
     ],
     [
         'brand' => 'wacker', 'category' => 'vibroplyty', 'sub' => 'trambovky',
-        'name' => 'Вібротрамбовка BS 60-2 «жаба»', 'slug' => 'wacker-bs-60-2', 'sku' => 'BUR-06020',
+        'name' => 'Вібротрамбовка BS 60-2 «жаба»', 'slug' => 'wacker-bs-60-2', 'sku' => 'TP-06020',
         'base' => 480, 'deposit' => 5000, 'retail' => 76000, 'weight' => 68,
         'rating' => 4.8, 'reviews' => 8, 'popularity' => 64,
         'lead' => 'Траншеї, пазухи фундаменту, вузькі місця, куди плита не заходить.',
@@ -283,7 +283,7 @@ return [
     ],
     [
         'brand' => 'enar', 'category' => 'vibroplyty', 'sub' => 'hlybynni-vibratory',
-        'name' => 'Глибинний вібратор для бетону M5 AFP', 'slug' => 'enar-m5', 'sku' => 'BUR-06031',
+        'name' => 'Глибинний вібратор для бетону M5 AFP', 'slug' => 'enar-m5', 'sku' => 'TP-06031',
         'base' => 200, 'deposit' => 2000, 'retail' => 16000, 'weight' => 6.0,
         'rating' => 4.6, 'reviews' => 7, 'popularity' => 54,
         'lead' => 'Виганяє повітря із залитої конструкції — без нього у фундаменті лишаються порожнини.',
@@ -296,7 +296,7 @@ return [
 
     [
         'brand' => 'honda', 'category' => 'generatory', 'sub' => null,
-        'name' => 'Генератор інверторний EU22i, 2,2 кВт', 'slug' => 'honda-eu22i', 'sku' => 'BUR-07001',
+        'name' => 'Генератор інверторний EU22i, 2,2 кВт', 'slug' => 'honda-eu22i', 'sku' => 'TP-07001',
         'base' => 450, 'deposit' => 5000, 'retail' => 46000, 'weight' => 21.1,
         'rating' => 4.9, 'reviews' => 34, 'popularity' => 96,
         'lead' => 'Чиста синусоїда — можна вмикати котел, ноутбук і холодильник. 48 дБ, сусіди не проклянуть.',
@@ -306,7 +306,7 @@ return [
     ],
     [
         'brand' => 'hyundai', 'category' => 'generatory', 'sub' => null,
-        'name' => 'Генератор бензиновий HHY 7020FE, 5 кВт', 'slug' => 'hyundai-hhy-7020fe', 'sku' => 'BUR-07008',
+        'name' => 'Генератор бензиновий HHY 7020FE, 5 кВт', 'slug' => 'hyundai-hhy-7020fe', 'sku' => 'TP-07008',
         'base' => 550, 'deposit' => 6000, 'retail' => 39000, 'weight' => 78,
         'rating' => 4.6, 'reviews' => 21, 'popularity' => 84,
         'lead' => 'Будинок зі свердловиною, об\'єкт без підключення, зварювальні роботи.',
@@ -316,7 +316,7 @@ return [
     ],
     [
         'brand' => 'fubag', 'category' => 'generatory', 'sub' => null,
-        'name' => 'Компресор поршневий 50 л, 260 л/хв', 'slug' => 'fubag-b3600-50', 'sku' => 'BUR-07020',
+        'name' => 'Компресор поршневий 50 л, 260 л/хв', 'slug' => 'fubag-b3600-50', 'sku' => 'TP-07020',
         'base' => 280, 'deposit' => 2000, 'retail' => 14000, 'weight' => 38,
         'rating' => 4.5, 'reviews' => 9, 'popularity' => 56,
         'lead' => 'Фарбування, продування, пневмоінструмент, підкачка коліс.',
@@ -329,7 +329,7 @@ return [
 
     [
         'brand' => 'paton', 'category' => 'zvaryuvalne', 'sub' => null,
-        'name' => 'Зварювальний інвертор ВДІ-250 E', 'slug' => 'paton-vdi-250', 'sku' => 'BUR-12001',
+        'name' => 'Зварювальний інвертор ВДІ-250 E', 'slug' => 'paton-vdi-250', 'sku' => 'TP-12001',
         'base' => 250, 'deposit' => 2000, 'retail' => 12000, 'weight' => 5.4,
         'rating' => 4.7, 'reviews' => 18, 'popularity' => 60,
         'lead' => 'Універсальний MMA-інвертор: ворота, каркаси, огорожі. Працює від побутової мережі.',
@@ -339,7 +339,7 @@ return [
     ],
     [
         'brand' => 'paton', 'category' => 'zvaryuvalne', 'sub' => null,
-        'name' => 'Зварювальний напівавтомат ProMIG-250', 'slug' => 'paton-promig-250', 'sku' => 'BUR-12008',
+        'name' => 'Зварювальний напівавтомат ProMIG-250', 'slug' => 'paton-promig-250', 'sku' => 'TP-12008',
         'base' => 380, 'deposit' => 3000, 'retail' => 26000, 'weight' => 12.5,
         'rating' => 4.8, 'reviews' => 7, 'popularity' => 46,
         'lead' => 'Тонкий метал і кузовні роботи, де електрод пропалює наскрізь.',
@@ -349,7 +349,7 @@ return [
     ],
     [
         'brand' => 'vitals', 'category' => 'zvaryuvalne', 'sub' => null,
-        'name' => 'Маска зварювальна «хамелеон»', 'slug' => 'vitals-mask', 'sku' => 'BUR-12015',
+        'name' => 'Маска зварювальна «хамелеон»', 'slug' => 'vitals-mask', 'sku' => 'TP-12015',
         'base' => 60, 'deposit' => 400, 'retail' => 1600, 'weight' => 0.5,
         'rating' => 4.4, 'reviews' => 12, 'popularity' => 40,
         'lead' => 'Автоматичне затемнення, регулювання чутливості. Своя маска не потрібна.',
@@ -362,7 +362,7 @@ return [
 
     [
         'brand' => 'krause', 'category' => 'ryshtuvannia', 'sub' => null,
-        'name' => 'Драбина-трансформер 3×9, до 7 м', 'slug' => 'krause-3x9', 'sku' => 'BUR-04002',
+        'name' => 'Драбина-трансформер 3×9, до 7 м', 'slug' => 'krause-3x9', 'sku' => 'TP-04002',
         'base' => 130, 'deposit' => 600, 'retail' => 5200, 'weight' => 15.2,
         'rating' => 4.6, 'reviews' => 9, 'popularity' => 60,
         'lead' => 'Три секції по 9 щаблів, EN 131, до 150 кг.',
@@ -372,7 +372,7 @@ return [
     ],
     [
         'brand' => 'krause', 'category' => 'ryshtuvannia', 'sub' => null,
-        'name' => 'Вишка-тура, робоча висота 6 м', 'slug' => 'vyshka-tura-6', 'sku' => 'BUR-04010',
+        'name' => 'Вишка-тура, робоча висота 6 м', 'slug' => 'vyshka-tura-6', 'sku' => 'TP-04010',
         'base' => 350, 'deposit' => 3000, 'retail' => 34000, 'weight' => 92,
         'rating' => 4.8, 'reviews' => 11, 'popularity' => 72,
         'lead' => 'Стійкий майданчик для стелі й фасаду: працюєте двома руками, інструмент лежить поруч.',
@@ -382,7 +382,7 @@ return [
     ],
     [
         'brand' => 'krause', 'category' => 'ryshtuvannia', 'sub' => null,
-        'name' => 'Секція рамного риштування, 2×3 м', 'slug' => 'ryshtuvannia-sektsiia', 'sku' => 'BUR-04020',
+        'name' => 'Секція рамного риштування, 2×3 м', 'slug' => 'ryshtuvannia-sektsiia', 'sku' => 'TP-04020',
         'base' => 45, 'deposit' => 500, 'retail' => 4200, 'weight' => 34,
         'rating' => 4.5, 'reviews' => 5, 'popularity' => 44,
         'lead' => 'Рахується секціями: скажіть розміри фасаду — порахуємо комплект і привеземо в зборі.',
@@ -395,7 +395,7 @@ return [
 
     [
         'brand' => 'husqvarna', 'category' => 'sadova', 'sub' => null,
-        'name' => 'Бензопила 236, шина 35 см', 'slug' => 'husqvarna-236', 'sku' => 'BUR-10003',
+        'name' => 'Бензопила 236, шина 35 см', 'slug' => 'husqvarna-236', 'sku' => 'TP-10003',
         'base' => 300, 'deposit' => 2000, 'retail' => 9800, 'weight' => 4.7,
         'rating' => 4.6, 'reviews' => 18, 'popularity' => 70,
         'lead' => 'Легка пила під сад: гілки, дрова, невеликі дерева.',
@@ -405,7 +405,7 @@ return [
     ],
     [
         'brand' => 'husqvarna', 'category' => 'sadova', 'sub' => null,
-        'name' => 'Мотокоса 128R', 'slug' => 'husqvarna-128r', 'sku' => 'BUR-10010',
+        'name' => 'Мотокоса 128R', 'slug' => 'husqvarna-128r', 'sku' => 'TP-10010',
         'base' => 280, 'deposit' => 2000, 'retail' => 11000, 'weight' => 5.0,
         'rating' => 4.7, 'reviews' => 22, 'popularity' => 74,
         'lead' => 'Висока трава, бур\'яни, узбіччя. Ліска і ніж у комплекті.',
@@ -415,7 +415,7 @@ return [
     ],
     [
         'brand' => 'alko', 'category' => 'sadova', 'sub' => null,
-        'name' => 'Аератор-скарифікатор Combi Care 38 E', 'slug' => 'alko-combi-care-38', 'sku' => 'BUR-10018',
+        'name' => 'Аератор-скарифікатор Combi Care 38 E', 'slug' => 'alko-combi-care-38', 'sku' => 'TP-10018',
         'base' => 350, 'deposit' => 2500, 'retail' => 15000, 'weight' => 12.5,
         'rating' => 4.8, 'reviews' => 14, 'popularity' => 66,
         'lead' => 'Прочісує газон навесні: знімає повсть, відкриває доступ повітря до коріння.',
@@ -425,7 +425,7 @@ return [
     ],
     [
         'brand' => 'bosch', 'category' => 'sadova', 'sub' => null,
-        'name' => 'Подрібнювач гілок AXT 25 TC', 'slug' => 'bosch-axt-25-tc', 'sku' => 'BUR-10025',
+        'name' => 'Подрібнювач гілок AXT 25 TC', 'slug' => 'bosch-axt-25-tc', 'sku' => 'TP-10025',
         'base' => 420, 'deposit' => 3000, 'retail' => 24000, 'weight' => 30.5,
         'rating' => 4.7, 'reviews' => 10, 'popularity' => 62,
         'lead' => 'Перетворює обрізані гілки на мульчу — замість того, щоб возити їх на смітник.',
@@ -435,7 +435,7 @@ return [
     ],
     [
         'brand' => 'hyundai', 'category' => 'sadova', 'sub' => null,
-        'name' => 'Культиватор бензиновий T 700', 'slug' => 'hyundai-t700', 'sku' => 'BUR-10032',
+        'name' => 'Культиватор бензиновий T 700', 'slug' => 'hyundai-t700', 'sku' => 'TP-10032',
         'base' => 480, 'deposit' => 3500, 'retail' => 28000, 'weight' => 48,
         'rating' => 4.6, 'reviews' => 8, 'popularity' => 58,
         'lead' => 'Обробка городу й підготовка ґрунту під газон. Ширина 60 см.',
@@ -448,7 +448,7 @@ return [
 
     [
         'brand' => 'karcher', 'category' => 'klimat', 'sub' => 'pylososy',
-        'name' => 'Будівельний пилосос WD 6 P Premium', 'slug' => 'karcher-wd-6', 'sku' => 'BUR-03011',
+        'name' => 'Будівельний пилосос WD 6 P Premium', 'slug' => 'karcher-wd-6', 'sku' => 'TP-03011',
         'base' => 200, 'deposit' => 900, 'retail' => 6400, 'weight' => 8.4,
         'rating' => 4.7, 'reviews' => 27, 'popularity' => 80,
         'lead' => 'Сухе і вологе прибирання, розетка для синхронного запуску з інструментом.',
@@ -458,7 +458,7 @@ return [
     ],
     [
         'brand' => 'starmix', 'category' => 'klimat', 'sub' => 'pylososy',
-        'name' => 'Промисловий пилосос класу M, 35 л', 'slug' => 'starmix-ism-m', 'sku' => 'BUR-03018',
+        'name' => 'Промисловий пилосос класу M, 35 л', 'slug' => 'starmix-ism-m', 'sku' => 'TP-03018',
         'base' => 320, 'deposit' => 2500, 'retail' => 22000, 'weight' => 14.0,
         'rating' => 4.9, 'reviews' => 12, 'popularity' => 68,
         'lead' => 'Клас M — для бетонного й кварцового пилу, який побутовий фільтр пропускає назад у кімнату.',
@@ -468,7 +468,7 @@ return [
     ],
     [
         'brand' => 'trotec', 'category' => 'klimat', 'sub' => 'osushuvachi',
-        'name' => 'Осушувач повітря TTK 75 E', 'slug' => 'trotec-ttk-75', 'sku' => 'BUR-03024',
+        'name' => 'Осушувач повітря TTK 75 E', 'slug' => 'trotec-ttk-75', 'sku' => 'TP-03024',
         'base' => 260, 'deposit' => 2000, 'retail' => 24000, 'weight' => 22,
         'rating' => 4.9, 'reviews' => 15, 'popularity' => 88,
         'lead' => 'До 20 л вологи на добу. Після затоплення сушить стяжку і стіни.',
@@ -478,7 +478,7 @@ return [
     ],
     [
         'brand' => 'trotec', 'category' => 'klimat', 'sub' => 'obihriv',
-        'name' => 'Теплова гармата електрична, 5 кВт', 'slug' => 'trotec-tds-30', 'sku' => 'BUR-03030',
+        'name' => 'Теплова гармата електрична, 5 кВт', 'slug' => 'trotec-tds-30', 'sku' => 'TP-03030',
         'base' => 220, 'deposit' => 1500, 'retail' => 9000, 'weight' => 9.5,
         'rating' => 4.6, 'reviews' => 11, 'popularity' => 64,
         'lead' => 'Сушіння приміщень і робота взимку в неопалюваних будинках.',
@@ -491,7 +491,7 @@ return [
 
     [
         'brand' => 'bosch', 'category' => 'vymiryuvalni', 'sub' => null,
-        'name' => 'Лазерний рівень GLL 3-80 + штатив', 'slug' => 'bosch-gll-3-80', 'sku' => 'BUR-11002',
+        'name' => 'Лазерний рівень GLL 3-80 + штатив', 'slug' => 'bosch-gll-3-80', 'sku' => 'TP-11002',
         'base' => 200, 'deposit' => 1200, 'retail' => 11500, 'weight' => 1.1,
         'rating' => 4.9, 'reviews' => 26, 'popularity' => 86,
         'lead' => 'Три площини 360°, точність 0,2 мм/м. Розмітка під плитку і гіпсокартон за хвилини.',
@@ -501,7 +501,7 @@ return [
     ],
     [
         'brand' => 'bosch', 'category' => 'vymiryuvalni', 'sub' => null,
-        'name' => 'Лазерний далекомір GLM 50-27 C', 'slug' => 'bosch-glm-50', 'sku' => 'BUR-11010',
+        'name' => 'Лазерний далекомір GLM 50-27 C', 'slug' => 'bosch-glm-50', 'sku' => 'TP-11010',
         'base' => 90, 'deposit' => 800, 'retail' => 4600, 'weight' => 0.1,
         'rating' => 4.8, 'reviews' => 19, 'popularity' => 58,
         'lead' => 'Заміри приміщень для кошторису й замовлення матеріалів.',
@@ -511,7 +511,7 @@ return [
     ],
     [
         'brand' => 'flir', 'category' => 'vymiryuvalni', 'sub' => null,
-        'name' => 'Тепловізор C5', 'slug' => 'flir-c5', 'sku' => 'BUR-11018',
+        'name' => 'Тепловізор C5', 'slug' => 'flir-c5', 'sku' => 'TP-11018',
         'base' => 450, 'deposit' => 6000, 'retail' => 32000, 'weight' => 0.2,
         'rating' => 4.9, 'reviews' => 13, 'popularity' => 72,
         'lead' => 'Містки холоду, протікання теплої підлоги, місця, де не працює утеплення.',
@@ -521,7 +521,7 @@ return [
     ],
     [
         'brand' => 'bosch', 'category' => 'vymiryuvalni', 'sub' => null,
-        'name' => 'Детектор проводки й арматури D-tect 120', 'slug' => 'bosch-d-tect-120', 'sku' => 'BUR-11025',
+        'name' => 'Детектор проводки й арматури D-tect 120', 'slug' => 'bosch-d-tect-120', 'sku' => 'TP-11025',
         'base' => 350, 'deposit' => 3000, 'retail' => 19000, 'weight' => 0.5,
         'rating' => 4.7, 'reviews' => 9, 'popularity' => 54,
         'lead' => 'Обов\'язковий перед штробленням у чужій стіні: покаже проводку, труби й арматуру до 120 мм.',

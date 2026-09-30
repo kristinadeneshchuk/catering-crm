@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Мої дані — БУР')
+@section('title', 'Мої дані — Техпарк')
 
 @section('content')
     <div class="container-bur max-w-[560px]">

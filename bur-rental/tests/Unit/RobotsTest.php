@@ -44,8 +44,8 @@ class RobotsTest extends TestCase
     public function test_our_own_group_wins_over_the_common_one(): void
     {
         $robots = Robots::parse(
-            "User-agent: *\nDisallow: /\n\nUser-agent: BurCatalogResearch/1.0\nDisallow: /ua/cart\n",
-            'BurCatalogResearch/1.0'
+            "User-agent: *\nDisallow: /\n\nUser-agent: TekhparkCatalogResearch/1.0\nDisallow: /ua/cart\n",
+            'TekhparkCatalogResearch/1.0'
         );
 
         // Персональне правило для нас каже «можна все, крім кошика».

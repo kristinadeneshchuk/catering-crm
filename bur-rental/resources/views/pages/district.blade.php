@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Оренда інструменту на '.$district->name.' — БУР '.$city->name)
+@section('title', 'Оренда інструменту на '.$district->name.' — Техпарк '.$city->name)
 @section('description', 'Прокат будівельного інструменту в районі '.$district->name.': найближча філія, доставка, популярні позиції.')
 
 @section('content')

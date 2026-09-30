@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'БУР — прокат будівельного інструменту '.$city->name_locative)
+@section('title', 'Техпарк — прокат будівельного інструменту '.$city->name_locative)
 @section('description', 'Подобова оренда інструменту '.$city->name_locative.'. Реальна наявність по датах і філіях, застава повертається, доставка щодня.')
 
 @section('content')

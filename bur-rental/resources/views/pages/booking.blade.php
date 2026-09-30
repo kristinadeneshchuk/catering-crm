@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Бронювання — БУР')
+@section('title', 'Бронювання — Техпарк')
 @section('description', 'Оформлення оренди: склад, дати, філія, доставка й оплата — одним екраном.')
 
 @section('content')

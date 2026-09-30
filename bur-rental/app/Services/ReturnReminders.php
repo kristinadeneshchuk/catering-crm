@@ -84,7 +84,7 @@ class ReturnReminders
             : 'здати на '.($booking->branch?->name ?? 'філію');
 
         $compose = fn (string $what) => sprintf(
-            'БУР: завтра %s повертати %s (%s), %s. Продовжити — %s',
+            'Техпарк: завтра %s повертати %s (%s), %s. Продовжити — %s',
             $booking->date_to->format('d.m'),
             $what,
             $booking->number,

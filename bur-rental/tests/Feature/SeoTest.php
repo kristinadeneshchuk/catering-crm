@@ -374,4 +374,26 @@ class SeoTest extends TestCase
             'Спільний опис у: '.$descriptions->duplicates()->keys()->implode(', ')
         );
     }
+
+    public function test_site_carries_the_tekhpark_brand(): void
+    {
+        $this->get('/')
+            ->assertSee('<title>Техпарк — прокат будівельного інструменту', false)
+            ->assertSee('<meta property="og:site_name" content="Техпарк">', false)
+            ->assertSee('"name":"Техпарк"', false)
+            ->assertDontSee('БУР');
+    }
+
+    /**
+     * У футері й на контактах стояла вигадана юрособа з вигаданим ЄДРПОУ.
+     * Тепер реквізити тільки з .env, а без них блок не показується.
+     */
+    public function test_legal_details_are_shown_only_when_configured(): void
+    {
+        $this->get('/contacts')->assertDontSee('ЄДРПОУ')->assertDontSee('43215678');
+
+        config(['company.legal_name' => 'ФОП Коваль І. П.', 'company.edrpou' => '3012345678']);
+
+        $this->get('/contacts')->assertSee('ФОП Коваль І. П.')->assertSee('ЄДРПОУ 3012345678');
+    }
 }

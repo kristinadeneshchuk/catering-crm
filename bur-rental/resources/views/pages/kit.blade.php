@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Комплект «'.$kit->name.'» в оренду — БУР')
+@section('title', 'Комплект «'.$kit->name.'» в оренду — Техпарк')
 @section('description', Str::limit($kit->lead, 155))
 
 @section('content')

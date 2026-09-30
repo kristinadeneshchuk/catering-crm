@@ -46,7 +46,7 @@ class BookingSeeder extends Seeder
             $days = $pricing->days($from->toDateString(), $to->toDateString());
 
             $booking = Booking::create([
-                'number' => sprintf('BUR-%s-%06d', $today->format('y'), $i + 1),
+                'number' => sprintf('TP-%s-%06d', $today->format('y'), $i + 1),
                 'branch_id' => $branch->id,
                 'status' => $status,
                 'client_type' => $type,

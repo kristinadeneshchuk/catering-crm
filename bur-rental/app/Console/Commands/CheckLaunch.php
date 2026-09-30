@@ -85,6 +85,13 @@ class CheckLaunch extends Command
         );
 
         $this->check(
+            str_contains((string) config('app.url'), (string) config('company.domain')),
+            'APP_URL на '.config('company.domain'),
+            'APP_URL не на '.config('company.domain').': canonical і sitemap вказуватимуть на інший домен',
+            warning: true,
+        );
+
+        $this->check(
             ! str_contains((string) config('app.url'), 'localhost'),
             'APP_URL не localhost',
             'у canonical і мапі сайту піде localhost — Google проіндексує адреси, яких немає',
@@ -101,6 +108,14 @@ class CheckLaunch extends Command
     private function content(): void
     {
         $this->section('Контент');
+
+        // Продавець на сайті — вимога закону про електронну комерцію; раніше
+        // в футері стояла вигадана юрособа з вигаданим ЄДРПОУ.
+        $this->check(
+            config('company.legal_name') && config('company.edrpou'),
+            'реквізити продавця вказані',
+            'COMPANY_LEGAL_NAME і COMPANY_EDRPOU порожні: сайт не називає продавця, а цього вимагає закон',
+        );
 
         $this->check(
             ! config('content.demo_reviews'),

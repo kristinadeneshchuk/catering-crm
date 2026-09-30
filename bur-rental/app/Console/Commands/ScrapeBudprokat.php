@@ -31,7 +31,7 @@ class ScrapeBudprokat extends Command
      * Представляємося чесно. Маскуватися під браузер, щоб обійти обмеження, —
      * це вже не дослідження ринку, а те, за що банять по справі.
      */
-    private const AGENT = 'BurCatalogResearch/1.0 (+https://bur.ua/about-crawler)';
+    private const AGENT = 'TekhparkCatalogResearch/1.0 (+https://tekhpark.com.ua)';
 
     private Robots $robots;
 

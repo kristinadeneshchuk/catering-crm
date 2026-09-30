@@ -12,7 +12,7 @@
             [
                 '@type' => 'Organization',
                 '@id' => url('/').'#organization',
-                'name' => 'БУР',
+                'name' => 'Техпарк',
                 'description' => 'Подобова оренда будівельного, садового та вимірювального інструменту.',
                 'url' => url('/'),
                 'telephone' => $city->phone ?? null,
@@ -22,7 +22,7 @@
                 '@type' => 'WebSite',
                 '@id' => url('/').'#website',
                 'url' => url('/'),
-                'name' => 'БУР',
+                'name' => 'Техпарк',
                 'inLanguage' => 'uk-UA',
                 'publisher' => ['@id' => url('/').'#organization'],
                 'potentialAction' => [
