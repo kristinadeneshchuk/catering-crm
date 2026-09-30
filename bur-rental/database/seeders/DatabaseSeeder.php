@@ -14,7 +14,12 @@ class DatabaseSeeder extends Seeder
             AvailabilitySeeder::class,
             ContentSeeder::class,
             StaffSeeder::class,
-            BookingSeeder::class,
         ]);
+
+        // Демо-броні — вигадані люди з реальними на вигляд телефонами, які ще й
+        // займають техніку в календарі. На бойовому сайті їм не місце.
+        if (! app()->isProduction()) {
+            $this->call(BookingSeeder::class);
+        }
     }
 }

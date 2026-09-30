@@ -46,7 +46,14 @@ class AvailabilitySeeder extends Seeder
         /*
          | Зайнятість. Детермінована формула замість random(): сид має бути
          | відтворюваним, інакше тести на конфлікт дат «мигають».
+         |
+         | На бойовому сайті — ні: вигадані «зайнято» і «сервіс» ховають від
+         | клієнта вільну техніку, тобто просто з'їдають замовлення.
          */
+        if (app()->isProduction()) {
+            return;
+        }
+
         foreach ($products as $product) {
             foreach ($product->branches as $branch) {
                 $offsets = $this->busyOffsets($product->id, $branch->id);
