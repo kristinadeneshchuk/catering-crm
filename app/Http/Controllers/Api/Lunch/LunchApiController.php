@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Lunch;
 use App\Http\Controllers\Controller;
 use App\Models\Dish;
 use App\Models\Ingredient;
+use App\Models\MenuPlan;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -66,6 +67,67 @@ class LunchApiController extends Controller
             ]);
 
         return response()->json(['data' => $dishes]);
+    }
+
+    /**
+     * Склад дня циклу раціонів на дату — для формату «До 20 обідів».
+     *
+     * Малій команді кухня готує рівно те, що вже стоїть у циклі, тож Lunch Hub
+     * має знати, які страви припадають на дату. День циклу рахує
+     * MenuPlan::globalDayFor() — та сама логіка, що й для замовлень; формулу
+     * тут не дублюємо, інакше через півроку цикл поїхав би лише в обідах.
+     *
+     * 404 означає «на цю дату циклу немає» (день не заповнений або планів
+     * узагалі немає) — Lunch Hub трактує це як «показувати нічого».
+     */
+    public function cycleMenu(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'date' => ['required', 'date'],
+        ]);
+
+        $date = \Carbon\Carbon::parse($data['date']);
+        $plan = MenuPlan::default();
+
+        if (! $plan) {
+            return response()->json(['message' => 'Немає жодного плану меню'], 404);
+        }
+
+        $menu = $plan->menuFor($date);
+
+        if (! $menu) {
+            return response()->json([
+                'message'    => 'День циклу не заповнений',
+                'day_number' => $plan->globalDayFor($date),
+            ], 404);
+        }
+
+        // Порядок прийомів — з довідника (sort_order), а не з порядку рядків:
+        // страви в день додають як прийдеться, а Lunch Hub показує їх списком
+        // зверху вниз, і сніданок має бути сніданком.
+        $items = $menu->menuItems()
+            ->with(['dish', 'mealType'])
+            ->get()
+            ->filter(fn ($item) => $item->dish !== null)
+            ->sortBy(fn ($item) => $item->mealType?->sort_order ?? 999)
+            ->values()
+            ->map(fn ($item, $index) => [
+                'dish_id'   => (int) $item->dish_id,
+                'dish_name' => $item->dish->name,
+                'meal_type' => (string) ($item->mealType?->name ?? ''),
+                'meal_sort' => $index + 1,
+            ]);
+
+        return response()->json([
+            'date'       => $date->toDateString(),
+            'plan'       => [
+                'id'         => $plan->id,
+                'name'       => $plan->name,
+                'cycle_days' => (int) $plan->cycle_days,
+            ],
+            'day_number' => $plan->globalDayFor($date),
+            'items'      => $items,
+        ]);
     }
 
     /**

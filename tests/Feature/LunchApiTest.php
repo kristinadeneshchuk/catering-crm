@@ -78,6 +78,44 @@ class LunchApiTest extends TestCase
             $t->id(); $t->string('type')->nullable(); $t->string('status')->default('completed'); $t->timestamps();
         });
 
+        Schema::create('menu_plans', function (Blueprint $t) {
+            $t->id();
+            $t->string('name');
+            $t->text('description')->nullable();
+            $t->unsignedInteger('cycle_days')->default(28);
+            $t->date('cycle_start_date')->nullable();
+            $t->boolean('is_default')->default(false);
+            $t->unsignedInteger('sort_order')->default(0);
+            $t->timestamps();
+        });
+
+        Schema::create('daily_menus', function (Blueprint $t) {
+            $t->id();
+            $t->unsignedBigInteger('menu_plan_id')->nullable();
+            $t->unsignedInteger('day_number')->nullable();
+            $t->unsignedInteger('target_kcal')->default(1500);
+            $t->unsignedInteger('target_protein_g')->default(113);
+            $t->unsignedInteger('target_fat_g')->default(50);
+            $t->unsignedInteger('target_carb_g')->default(150);
+            $t->timestamps();
+        });
+
+        Schema::create('daily_menu_dishes', function (Blueprint $t) {
+            $t->id();
+            $t->unsignedBigInteger('daily_menu_id');
+            $t->unsignedBigInteger('dish_id');
+            $t->unsignedBigInteger('meal_type_id')->nullable();
+            $t->float('custom_energy_percent')->nullable();
+        });
+
+        Schema::create('meal_types', function (Blueprint $t) {
+            $t->id();
+            $t->string('name');
+            $t->unsignedInteger('sort_order')->default(0);
+            $t->float('energy_percent')->default(0);
+            $t->timestamps();
+        });
+
         Schema::create('stock_document_items', function (Blueprint $t) {
             $t->id();
             $t->unsignedBigInteger('stock_document_id')->nullable();
@@ -290,5 +328,71 @@ class LunchApiTest extends TestCase
             'date' => '2026-09-10',
             'lines' => [['dish_id' => 1, 'qty' => 1]],
         ])->assertStatus(401);
+    }
+
+    // --- цикл раціонів --------------------------------------------------------
+
+    /** План на 28 днів зі стартом 25.03.2026 — як на проді. */
+    private function makeCycle(): array
+    {
+        \App\Models\MenuPlan::forgetDefault();
+
+        $plan = \App\Models\MenuPlan::create([
+            'name' => 'Стандарт', 'cycle_days' => 28,
+            'cycle_start_date' => '2026-03-25', 'is_default' => true,
+        ]);
+
+        $breakfast = \App\Models\MealType::create(['name' => 'Сніданок', 'sort_order' => 1]);
+        $snack     = \App\Models\MealType::create(['name' => 'Перекус 1', 'sort_order' => 2]);
+        $lunch     = \App\Models\MealType::create(['name' => 'Обід', 'sort_order' => 3]);
+
+        $menu = \App\Models\DailyMenu::create(['menu_plan_id' => $plan->id, 'day_number' => 23]);
+
+        // Порядок рядків навмисно не збігається з порядком прийомів.
+        foreach ([[$lunch, 'Плов'], [$breakfast, 'Омлет'], [$snack, 'Чіа пудинг']] as [$type, $name]) {
+            \App\Models\DailyMenuDish::create([
+                'daily_menu_id' => $menu->id,
+                'dish_id'       => $this->makeDish(['name' => $name])->id,
+                'meal_type_id'  => $type->id,
+            ]);
+        }
+
+        return [$plan, $menu];
+    }
+
+    public function test_the_cycle_menu_gives_the_day_that_falls_on_the_date(): void
+    {
+        $this->makeCycle();
+
+        // 01.10.2026 — 23-й день циклу від 25.03.2026.
+        $response = $this->ask('/api/lunch/cycle-menu?date=2026-10-01')->assertOk();
+
+        $this->assertSame(23, $response->json('day_number'));
+        $this->assertSame(28, $response->json('plan.cycle_days'));
+
+        // Прийоми йдуть у порядку довідника, а не в порядку додавання страв:
+        // Lunch Hub показує їх списком зверху вниз.
+        $this->assertSame(
+            ['Сніданок', 'Перекус 1', 'Обід'],
+            array_column($response->json('items'), 'meal_type'),
+        );
+        $this->assertSame(['Омлет', 'Чіа пудинг', 'Плов'], array_column($response->json('items'), 'dish_name'));
+        $this->assertSame([1, 2, 3], array_column($response->json('items'), 'meal_sort'));
+    }
+
+    public function test_an_unfilled_cycle_day_answers_404_not_an_empty_menu(): void
+    {
+        $this->makeCycle();
+
+        // Наступна дата — 24-й день, його не заповнювали. Порожній список
+        // Lunch Hub показав би як меню без страв, тож тут саме 404.
+        $this->ask('/api/lunch/cycle-menu?date=2026-10-02')
+            ->assertStatus(404)
+            ->assertJsonPath('day_number', 24);
+    }
+
+    public function test_the_cycle_menu_needs_a_token_too(): void
+    {
+        $this->ask('/api/lunch/cycle-menu?date=2026-10-01', null)->assertStatus(401);
     }
 }

@@ -63,5 +63,6 @@ Route::prefix('lunch')
     ->group(function () {
         Route::get('dishes', [LunchApiController::class, 'dishes']);
         Route::get('ingredients', [LunchApiController::class, 'ingredients']);
+        Route::get('cycle-menu', [LunchApiController::class, 'cycleMenu']);
         Route::post('kitchen-plan', [LunchApiController::class, 'kitchenPlan']);
     });
