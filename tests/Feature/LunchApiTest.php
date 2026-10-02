@@ -395,4 +395,55 @@ class LunchApiTest extends TestCase
     {
         $this->ask('/api/lunch/cycle-menu?date=2026-10-01', null)->assertStatus(401);
     }
+
+    // --- продукти в грамах ---------------------------------------------------
+
+    /** Страва зі 100 г продукту з одиницею «г». */
+    private function gramDish(float $pricePerKg, ?array $receipt = null): Dish
+    {
+        Ingredient::clearAveragePriceCache();
+
+        $ing = Ingredient::create(['name' => 'рис для суші', 'unit' => 'г', 'price_per_kg' => $pricePerKg, 'yield_percent' => 100]);
+
+        if ($receipt) {
+            $doc = DB::table('stock_documents')->insertGetId(['type' => 'receipt', 'status' => 'completed']);
+            DB::table('stock_document_items')->insert([
+                'stock_document_id' => $doc, 'itemable_id' => $ing->id,
+                'itemable_type' => Ingredient::class, 'qty' => $receipt[0], 'price' => $receipt[1],
+            ]);
+        }
+
+        $dish = Dish::create(['name' => 'Онігірі', 'group' => 'Обід', 'base_weight_g' => 100, 'is_semi_finished' => false]);
+        DB::table('dish_ingredients')->insert([
+            'dish_id' => $dish->id, 'ingredient_id' => $ing->id, 'type' => 'product', 'net_weight_g' => 100,
+        ]);
+
+        return $dish;
+    }
+
+    public function test_a_gram_unit_price_is_still_per_kilogram(): void
+    {
+        // Склад читає price_per_kg як ціну за кг і для «г». Собівартість брала
+        // її за грам — і 100 г рису по 117 грн/кг коштували 11 700 грн.
+        $this->gramDish(117);
+
+        $this->assertEquals(11.7, $this->ask('/api/lunch/dishes')->json('data.0.cost'));
+        $this->assertEquals(117.0, $this->ask('/api/lunch/ingredients')->json('data.0.price_per_kg'));
+    }
+
+    public function test_a_receipt_entered_in_grams_is_read_per_gram(): void
+    {
+        // Прошуто: прихід 500 г по 1,12 грн за грам.
+        $this->gramDish(1120, [500, 1.12]);
+
+        $this->assertEquals(112.0, $this->ask('/api/lunch/dishes')->json('data.0.cost'));
+    }
+
+    public function test_a_receipt_entered_in_kilograms_is_read_per_kilogram(): void
+    {
+        // Рис: той самий продукт у грамах, але прихід внесли як 2 кг по 145.
+        $this->gramDish(117, [2, 145]);
+
+        $this->assertEquals(14.5, $this->ask('/api/lunch/dishes')->json('data.0.cost'));
+    }
 }

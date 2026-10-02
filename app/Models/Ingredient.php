@@ -105,6 +105,40 @@ class Ingredient extends Model
         }
     }
 
+    /**
+     * Ціна за грам — те, чим рахується собівартість страви.
+     *
+     * price_per_kg — завжди за кілограм, навіть коли одиниця «г» чи «мл»:
+     * так його читає склад (KitchenStockDebit ділить на 1000). А от середня
+     * з приходів у таких позицій буває в різних одиницях: один прихід внесли
+     * грамами (500 г по 1,12), інший кілограмами (2 кг по 145). Тому для
+     * «грамових» беремо середню, лише якщо вона в межах 5 разів від картки —
+     * як за грам або як за кілограм; інакше картку. Те саме правило,
+     * що KitchenStockDebit::pickPrice.
+     */
+    public function costPerGram(): float
+    {
+        $card = (float) $this->price_per_kg / 1000;
+        $avg  = (float) $this->average_price;
+        $unit = StockDocumentItem::canonUnit((string) $this->unit);
+
+        if (! in_array($unit, ['г', 'мл'], true)) {
+            return ($avg > 0 ? $avg : (float) $this->price_per_kg) / 1000;
+        }
+
+        if ($card <= 0) {
+            return $avg > 0 ? $avg / 1000 : 0.0;
+        }
+
+        foreach ([$avg, $avg / 1000] as $candidate) {
+            if ($candidate > 0 && $candidate <= $card * 5 && $candidate >= $card / 5) {
+                return $candidate;
+            }
+        }
+
+        return $card;
+    }
+
     public static function clearAveragePriceCache(): void
     {
         self::$avgPriceCache = [];

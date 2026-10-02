@@ -146,12 +146,11 @@ class LunchApiController extends Controller
             ->orderBy('name')
             ->get()
             ->map(function (Ingredient $ing) {
-                $effective = (float) $ing->average_price;
-
                 return [
                     'id'           => $ing->id,
                     'name'         => $ing->name,
-                    'price_per_kg' => round($effective > 0 ? $effective : (float) $ing->price_per_kg, 2),
+                    // Та сама ціна, що в собівартості страви, перерахована на кг.
+                    'price_per_kg' => round($ing->costPerGram() * 1000, 2),
 
                     // Одиниця виміру — не косметика. У 20 позицій це «шт», і
                     // тоді ціна вище означає «за штуку», а не за кілограм.
