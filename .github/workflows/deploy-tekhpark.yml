@@ -1,0 +1,160 @@
+# Деплой Техпарку (bur-rental/) на tekhpark.com.ua.
+#
+# Хмарна сесія Claude Code не має мережевого доступу до хостингу, а раннер
+# GitHub має. Тому Claude пушить коміт — а заливає раннер.
+#
+# Коли спрацьовує:
+#   · push у гілку розробки, якщо в повідомленні коміту є [deploy];
+#   · вручну: Actions → «Deploy Техпарк» → Run workflow.
+#
+# Що потрібно в Settings → Secrets and variables → Actions:
+#   secrets.TEKHPARK_SSH_KEY — приватний ключ, публічна пара якого додана
+#                              користувачу сайту у FastPanel;
+#   secrets.TEKHPARK_ENV     — повний бойовий .env. Кладеться на сервер ТІЛЬКИ
+#                              якщо там .env ще немає; наявний не перезаписується.
+# Необов'язкові змінні (vars.*), якщо щось на сервері інакше, ніж за замовчуванням:
+#   TEKHPARK_HOST, TEKHPARK_SSH_USER, TEKHPARK_SSH_PORT, TEKHPARK_APP_PATH, TEKHPARK_PHP.
+#
+# Що свідомо НЕ робить: не чіпає .env і storage/ на сервері, не запускає
+# db:seed на базі, де вже є каталог (catalog:seed-if-empty), не вмикає індексацію.
+
+name: Deploy Техпарк
+
+on:
+  push:
+    branches: [claude/service-deployment-fvcr4g]
+    paths: ['bur-rental/**', '.github/workflows/deploy-tekhpark.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-tekhpark
+  cancel-in-progress: false
+
+env:
+  HOST: ${{ vars.TEKHPARK_HOST || 'tekhpark.com.ua' }}
+  SSH_USER: ${{ vars.TEKHPARK_SSH_USER || 'tekhpark_com_usr' }}
+  SSH_PORT: ${{ vars.TEKHPARK_SSH_PORT || '22' }}
+  APP_PATH: ${{ vars.TEKHPARK_APP_PATH || '/var/www/tekhpark_com_usr/data/www/tekhpark_app' }}
+  REMOTE_PHP: ${{ vars.TEKHPARK_PHP || '/opt/php84/bin/php' }}
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[deploy]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: bur-rental
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Секрети на місці
+        env:
+          KEY: ${{ secrets.TEKHPARK_SSH_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::Немає секрету TEKHPARK_SSH_KEY. Settings → Secrets and variables → Actions → New repository secret."
+            exit 1
+          fi
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, intl, gd, zip, pdo_sqlite, pdo_mysql
+          tools: composer:v2
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: bur-rental/package-lock.json
+
+      - name: Тести — червоні тести не їдуть на сервер
+        run: |
+          composer install --no-interaction --no-progress
+          cp .env.example .env
+          php artisan key:generate
+          php artisan test --compact
+
+      - name: Збірка
+        run: |
+          npm ci
+          npm run build
+          composer install --no-dev --optimize-autoloader --no-interaction --no-progress
+          rm -f .env
+
+      - name: SSH до сервера
+        env:
+          KEY: ${{ secrets.TEKHPARK_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          ssh-keyscan -p "$SSH_PORT" "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          echo "SSH_CMD=ssh -i $HOME/.ssh/deploy -p $SSH_PORT -o BatchMode=yes -o ConnectTimeout=20" >> "$GITHUB_ENV"
+          ssh -i ~/.ssh/deploy -p "$SSH_PORT" -o BatchMode=yes -o ConnectTimeout=20 \
+            "$SSH_USER@$HOST" "mkdir -p '$APP_PATH' && echo 'SSH ок, папка: $APP_PATH'"
+
+      - name: Заливка файлів (.env і storage/ на сервері не чіпаються)
+        run: |
+          if $SSH_CMD "$SSH_USER@$HOST" 'command -v rsync' >/dev/null 2>&1; then
+            rsync -az --delete --human-readable --stats -e "$SSH_CMD" \
+              --filter='P /.env' --filter='P /storage/***' --filter='P /public/storage' \
+              --exclude='/.env' --exclude='/node_modules' --exclude='/tests' \
+              --exclude='/database/database.sqlite' --exclude='/public/storage' \
+              --exclude='/bootstrap/cache/*.php' \
+              ./ "$SSH_USER@$HOST:$APP_PATH/"
+          else
+            echo "::notice::На сервері немає rsync — заливаю архівом (застарілі файли не видаляються)."
+            tar -czf - --exclude='./.env' --exclude='./node_modules' --exclude='./tests' \
+              --exclude='./database/database.sqlite' --exclude='./storage/logs/*' \
+              --exclude='./storage/framework/sessions/*' --exclude='./storage/framework/views/*' \
+              --exclude='./storage/framework/cache/data/*' --exclude='./bootstrap/cache/*.php' . \
+            | $SSH_CMD "$SSH_USER@$HOST" "tar -xzf - -C '$APP_PATH'"
+          fi
+
+      - name: .env — тільки якщо на сервері його ще немає
+        env:
+          ENV_FILE: ${{ secrets.TEKHPARK_ENV }}
+        run: |
+          if $SSH_CMD "$SSH_USER@$HOST" "test -f '$APP_PATH/.env'"; then
+            echo ".env на сервері є — не чіпаю."
+          elif [ -n "$ENV_FILE" ]; then
+            printf '%s\n' "$ENV_FILE" | $SSH_CMD "$SSH_USER@$HOST" "umask 077 && cat > '$APP_PATH/.env'"
+            echo ".env покладено з секрету TEKHPARK_ENV."
+          else
+            echo "::error::На сервері немає .env, і секрет TEKHPARK_ENV порожній."
+            exit 1
+          fi
+
+      - name: Міграції, каталог, кеші
+        run: |
+          $SSH_CMD "$SSH_USER@$HOST" sh -s <<EOF
+          set -e
+          cd '$APP_PATH'
+          PHP='$REMOTE_PHP'
+          command -v "\$PHP" >/dev/null 2>&1 || PHP=php
+          "\$PHP" -v | head -n 1
+          chmod -R ug+rwX storage bootstrap/cache
+          "\$PHP" artisan down --retry=15 || true
+          trap '"\$PHP" artisan up' EXIT
+          "\$PHP" artisan migrate --force
+          "\$PHP" artisan catalog:seed-if-empty
+          "\$PHP" artisan search:reindex
+          "\$PHP" artisan storage:link 2>/dev/null || true
+          "\$PHP" artisan optimize
+          EOF
+
+      - name: Передстартова перевірка
+        run: |
+          $SSH_CMD "$SSH_USER@$HOST" "cd '$APP_PATH' && '$REMOTE_PHP' artisan check:launch" \
+            || echo "::warning::check:launch знайшов блокери (вище). Сайт працює, але індексацію не вмикати."
+
+      - name: Сайт відповідає
+        run: |
+          for path in / /catalog /admin/login; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://$HOST$path" || echo 000)
+            echo "$code  https://$HOST$path"
+          done
