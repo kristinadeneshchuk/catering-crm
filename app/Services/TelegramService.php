@@ -104,19 +104,65 @@ class TelegramService
             return;
         }
 
-        $response = Http::post("https://api.telegram.org/bot{$this->token}/sendMessage", [
-            'chat_id'    => $chatId,
-            'text'       => $text,
-            'parse_mode' => 'HTML',
-        ]);
-
-        if (!$response->successful()) {
-            Log::error('TelegramService: failed to send message', [
-                'chat_id' => $chatId,
-                'status'  => $response->status(),
-                'body'    => $response->body(),
+        foreach (self::chunks($text) as $part) {
+            $response = Http::post("https://api.telegram.org/bot{$this->token}/sendMessage", [
+                'chat_id'    => $chatId,
+                'text'       => $part,
+                'parse_mode' => 'HTML',
             ]);
+
+            if (!$response->successful()) {
+                Log::error('TelegramService: failed to send message', [
+                    'chat_id' => $chatId,
+                    'status'  => $response->status(),
+                    'body'    => $response->body(),
+                ]);
+            }
         }
+    }
+
+    /**
+     * Telegram приймає до 4096 символів на повідомлення, довше відхиляє цілком
+     * («message is too long») — так 28.09 нікому не дійшли нестандартні оплати
+     * з тижневого дайджесту. Ріжемо по рядках, щоб не розірвати HTML-тег
+     * усередині рядка; рядок, довший за ліміт, — по символах.
+     *
+     * @return array<int, string>
+     */
+    public static function chunks(string $text, int $limit = 4000): array
+    {
+        if (mb_strlen($text) <= $limit) {
+            return [$text];
+        }
+
+        $parts = [];
+        $current = '';
+
+        foreach (explode("\n", $text) as $line) {
+            while (mb_strlen($line) > $limit) {
+                if ($current !== '') {
+                    $parts[] = $current;
+                    $current = '';
+                }
+                $parts[] = mb_substr($line, 0, $limit);
+                $line = mb_substr($line, $limit);
+            }
+
+            $candidate = $current === '' ? $line : $current."\n".$line;
+
+            if (mb_strlen($candidate) > $limit) {
+                $parts[] = $current;
+                $current = $line;
+            } else {
+                $current = $candidate;
+            }
+        }
+
+        if (trim($current) !== '') {
+            $parts[] = $current;
+        }
+
+        return $parts;
     }
 
     // -------------------------------------------------------------------------
@@ -167,15 +213,23 @@ class TelegramService
      */
     public function sendMessage(string $chatId, string $text, ?array $keyboard = null): ?int
     {
-        $payload = ['chat_id' => $chatId, 'text' => $text, 'parse_mode' => 'HTML'];
+        // Довге ділимо на частини; кнопки — під останньою, її id і повертаємо,
+        // бо саме це повідомлення потім редагують після натискання.
+        $parts = self::chunks($text);
+        $id = null;
 
-        if ($keyboard !== null) {
-            $payload['reply_markup'] = ['inline_keyboard' => $keyboard];
+        foreach ($parts as $i => $part) {
+            $payload = ['chat_id' => $chatId, 'text' => $part, 'parse_mode' => 'HTML'];
+
+            if ($keyboard !== null && $i === array_key_last($parts)) {
+                $payload['reply_markup'] = ['inline_keyboard' => $keyboard];
+            }
+
+            $response = $this->call('sendMessage', $payload);
+            $id = $response['result']['message_id'] ?? $id;
         }
 
-        $response = $this->call('sendMessage', $payload);
-
-        return $response['result']['message_id'] ?? null;
+        return $id;
     }
 
     /** Оновити вже надіслане: після правки чи погодження — те саме повідомлення. */
