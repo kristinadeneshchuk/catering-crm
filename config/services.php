@@ -72,10 +72,10 @@ return [
         'kitchen_chat_id' => env('TELEGRAM_KITCHEN_CHAT_ID'),
         // Група «Бухгалтерія»: накладні й квитанції. Підтверджують кнопками лише
         // ці люди (через кому; порожньо — власники). Непрофільні оплати бот
-        // питає в особистих лише в accounting_owner_id.
+        // питає в особистих лише власників (accounting_owner_ids; порожньо — усіх).
         'accounting_chat_id'   => env('TELEGRAM_ACCOUNTING_CHAT_ID'),
         'accounting_approvers' => env('TELEGRAM_ACCOUNTING_APPROVER_IDS', ''),
-        'accounting_owner_id'  => env('TELEGRAM_ACCOUNTING_OWNER_ID'),
+        'accounting_owner_ids' => env('TELEGRAM_ACCOUNTING_OWNER_IDS', ''),
 
         // Вебхук бота сповіщень: звіти курʼєрів і кнопки погодження виплат.
         // Порожній секрет — вебхук не приймає нічого (503).

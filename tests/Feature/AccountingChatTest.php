@@ -46,7 +46,7 @@ class AccountingChatTest extends TestCase
         config()->set('services.anthropic.key', 'test-key');
         config()->set('services.telegram.accounting_chat_id', self::GROUP);
         config()->set('services.telegram.accounting_approvers', '300');
-        config()->set('services.telegram.accounting_owner_id', '100');
+        config()->set('services.telegram.owner_chat_id', '100,101'); // двоє власників
 
         DB::table('warehouses')->insert(['name' => 'Продукти']);
         $this->atabekov = Supplier::create(['name' => 'Атабеков (Сергій Столичний)', 'inn' => '3011223344']);
@@ -285,6 +285,15 @@ class AccountingChatTest extends TestCase
         $this->assertEqualsWithDelta(4200, (float) $t->amount, 0.01);
         $this->assertSame($this->fop->id, (int) $t->account_id);
         $this->assertSame('recorded', $item->fresh()->status);
+
+        // Другий власник теж отримав питання — після відповіді першого кнопки в нього зникли.
+        $this->assertTrue($this->sent('101', 'Непрофільна оплата'));
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'editMessageText') && (string) $r['chat_id'] === '101'
+            && str_contains((string) $r['text'], 'Комунальні'));
+
+        // А натиснути вдруге — нічого не задвоїть.
+        $this->press("acc:cat:{$item->id}:2", from: 101, chat: '101');
+        $this->assertSame(1, Transaction::count());
     }
 
     public function test_marking_not_supplier_payment_hands_over_to_owner(): void

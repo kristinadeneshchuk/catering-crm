@@ -29,7 +29,7 @@ use Illuminate\Support\Facades\DB;
  *   інше       — мовчки пропускає.
  *
  * Натискати кнопки в групі можуть лише accountingApproverIds(), відповідати на
- * непрофільні — лише accounting_owner_id.
+ * непрофільні — лише власники (accounting_owner_ids, за замовчуванням — усі власники).
  */
 class AccountingDesk
 {
@@ -287,11 +287,6 @@ class AccountingDesk
     private function toOwner(AccountingItem $item, ?string $note = null): void
     {
         $item->update(['status' => 'needs_owner']);
-        $owner = (string) config('services.telegram.accounting_owner_id');
-
-        if ($owner === '') {
-            return; // кому питати — ще не налаштовано; запис чекає в CRM
-        }
 
         $pay = $item->extracted['payment'] ?? [];
         $account = $this->matcher->accountId($pay['payer_name'] ?? null);
@@ -310,7 +305,35 @@ class AccountingDesk
         ])->chunk(2)->map(fn ($row) => $row->values()->all())->values()->all();
         $buttons[] = [['text' => '🚫 Не заносити', 'callback_data' => self::CALLBACK.":skip:{$item->id}"]];
 
-        $this->telegram->sendMessage($owner, $text, $buttons);
+        // Обом власникам; хто перший відповів — у другого кнопки зникнуть.
+        $sent = [];
+        foreach ($this->ownerIds() as $owner) {
+            if ($id = $this->telegram->sendMessage($owner, $text, $buttons)) {
+                $sent[] = [$owner, $id];
+            }
+        }
+
+        $item->update(['extracted' => ($item->extracted ?? []) + ['owner_ask' => ['text' => $text, 'messages' => $sent]]]);
+    }
+
+    /** Хто вирішує непрофільні оплати: окремий список або всі власники. */
+    private function ownerIds(): array
+    {
+        $ids = array_filter(array_map('trim', explode(',', (string) config('services.telegram.accounting_owner_ids'))));
+
+        return $ids !== [] ? array_values($ids) : $this->telegram->ownerChatIds();
+    }
+
+    /** Другий власник бачить, що питання вже закрите, і не натисне вдруге. */
+    private function closeOwnerAsk(AccountingItem $item, string $fromId, string $label): void
+    {
+        $ask = $item->fresh()->extracted['owner_ask'] ?? null;
+
+        foreach ($ask['messages'] ?? [] as [$chat, $id]) {
+            if ((string) $chat !== $fromId) {
+                $this->telegram->editMessage((string) $chat, (int) $id, $ask['text']."\n\n".$label);
+            }
+        }
     }
 
     // ── Кнопки ──────────────────────────────────────────────────────────────
@@ -328,7 +351,7 @@ class AccountingDesk
 
         $ownerOnly = in_array($action, ['cat', 'cacc', 'skip'], true);
         $allowed = $ownerOnly
-            ? $fromId !== '' && $fromId === (string) config('services.telegram.accounting_owner_id')
+            ? $fromId !== '' && in_array($fromId, $this->ownerIds(), true)
             : in_array($fromId, $this->telegram->accountingApproverIds(), true);
 
         if (! $allowed) {
@@ -342,7 +365,7 @@ class AccountingDesk
             'other' => $this->otherDocs($item),
             'np'    => $this->notSupplier($item, $fromId),
             'cat'   => $this->record($item, $fromId, (int) ($parts[3] ?? -1), isset($parts[4]) ? (int) $parts[4] : null),
-            'skip'  => $this->decide($item, $fromId, 'skipped', '🚫 Не заносимо'),
+            'skip'  => $this->skip($item, $fromId),
             default => ['answer' => 'Невідома дія.'],
         };
     }
@@ -362,6 +385,17 @@ class AccountingDesk
         ReadKitchenInvoice::dispatch($key, $item->chat_id, (int) $item->message_id, $item->chat_id, $item->id);
 
         return ['answer' => 'Додаю, звіт за хвилину.', 'text' => '✅ Додаю в CRM — звіт нижче'];
+    }
+
+    private function skip(AccountingItem $item, string $fromId): array
+    {
+        $result = $this->decide($item, $fromId, 'skipped', '🚫 Не заносимо');
+
+        if (isset($result['text'])) {
+            $this->closeOwnerAsk($item, $fromId, $result['text']);
+        }
+
+        return $result;
     }
 
     private function decide(AccountingItem $item, string $fromId, string $status, string $label): array
@@ -482,11 +516,11 @@ class AccountingDesk
             return $transaction;
         });
 
-        return [
-            'answer' => 'Записав.',
-            'text'   => '✅ Витрата «'.self::CATEGORIES[$category].'» '.$this->money($transaction->amount)
-                .' ₴ з «'.e(Account::find($accountId)->name).'»',
-        ];
+        $label = '✅ Витрата «'.self::CATEGORIES[$category].'» '.$this->money($transaction->amount)
+            .' ₴ з «'.e(Account::find($accountId)->name).'»';
+        $this->closeOwnerAsk($item, $fromId, $label);
+
+        return ['answer' => 'Записав.', 'text' => $label];
     }
 
     // ── Дрібниці ────────────────────────────────────────────────────────────
