@@ -87,6 +87,13 @@ class TelegramBotWebhookController extends Controller
             return;
         }
 
+        // «Бухгалтерія»: додати накладну, закрити оплату, непрофільні витрати.
+        if (str_starts_with($data, \App\Services\Accounting\AccountingDesk::CALLBACK.':')) {
+            $this->accountingButton($callback, $fromId, $data);
+
+            return;
+        }
+
         // Хто постачальник цієї накладної — кнопки під чернеткою.
         if (preg_match('/^'.\App\Services\Ai\SupplierPicker::CALLBACK.':(\d+):(\d+)$/', $data, $m)) {
             $this->supplierButton($callback, $fromId, (int) $m[1], (int) $m[2]);
@@ -105,9 +112,38 @@ class TelegramBotWebhookController extends Controller
         $this->telegram->answerCallback((string) $callback['id'], $answer);
     }
 
+    private function accountingButton(array $callback, string $fromId, string $data): void
+    {
+        $result = app(\App\Services\Accounting\AccountingDesk::class)->button($fromId, $data);
+
+        $this->telegram->answerCallback((string) $callback['id'], $result['answer']);
+
+        $message = $callback['message'] ?? null;
+
+        if (! $message) {
+            return;
+        }
+
+        $chatId = (string) $message['chat']['id'];
+        $original = e((string) ($message['text'] ?? ''));
+
+        // Наступний крок (вибір рахунку чи іншої накладної) — лише нові кнопки.
+        if (! empty($result['keep'])) {
+            $this->telegram->editMessage($chatId, (int) $message['message_id'], $original, $result['keyboard'] ?? null);
+
+            return;
+        }
+
+        // Вирішено — дописуємо результат і прибираємо кнопки.
+        if (! empty($result['text'])) {
+            $this->telegram->editMessage($chatId, (int) $message['message_id'], $original."\n\n".$result['text']);
+        }
+    }
+
     private function supplierButton(array $callback, string $fromId, int $documentId, int $supplierId): void
     {
-        if (! in_array($fromId, $this->telegram->staffChatIds(), true)) {
+        if (! in_array($fromId, $this->telegram->staffChatIds(), true)
+            && ! in_array($fromId, $this->telegram->accountingApproverIds(), true)) {
             $this->telegram->answerCallback((string) $callback['id'], 'Тільки для своїх.');
 
             return;
@@ -141,8 +177,11 @@ class TelegramBotWebhookController extends Controller
 
         // Відповідь на питання про фасування: шукаємо чернетку за повідомленням,
         // на яке відповіли реплаєм.
+        $accounting = \App\Services\Accounting\AccountingDesk::isAccountingChat($chatId);
+
         if ($text !== null && ! empty($message['reply_to_message']['message_id'])
-            && in_array($chatId, $this->telegram->staffChatIds(), true)) {
+            && (in_array($chatId, $this->telegram->staffChatIds(), true)
+                || ($accounting && in_array((string) ($message['from']['id'] ?? ''), $this->telegram->accountingApproverIds(), true)))) {
             $document = \App\Models\StockDocument::query()
                 ->where('ai_state->ask->message_id', (int) $message['reply_to_message']['message_id'])
                 ->first();
@@ -174,6 +213,14 @@ class TelegramBotWebhookController extends Controller
         if (preg_match('/^\/id(@\S+)?$/u', trim((string) $text))) {
             $title = (string) ($message['chat']['title'] ?? '');
             $this->telegram->sendMessage($chatId, 'ID цього чату: <code>'.$chatId.'</code>'.($title ? ' · '.e($title) : ''));
+
+            return;
+        }
+
+        // «Бухгалтерія»: кожне фото/PDF — накладна, квитанція чи щось інше.
+        // Решту розмов у групі не чіпаємо.
+        if ($accounting) {
+            app(\App\Services\Accounting\AccountingDesk::class)->collect($message);
 
             return;
         }

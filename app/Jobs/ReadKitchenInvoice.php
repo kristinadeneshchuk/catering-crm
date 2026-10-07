@@ -30,6 +30,7 @@ class ReadKitchenInvoice implements ShouldQueue
         private string $chatId,
         private int $messageId,
         private ?string $notifyChatId = null,
+        private ?int $accountingItemId = null,
     ) {
     }
 
@@ -52,6 +53,10 @@ class ReadKitchenInvoice implements ShouldQueue
             $miss = '🧾 Накладну не вдалося зчитати. Фото збережено, внесіть вручну.';
 
             // У чаті кухні нічого не пишемо — питання йдуть власнику.
+            if ($this->accountingItemId) {
+                \App\Models\AccountingItem::whereKey($this->accountingItemId)->update(['status' => 'failed']);
+            }
+
             $this->notifyChatId
                 ? $telegram->sendMessage($this->notifyChatId, $miss)
                 : $telegram->sendToOwner($miss.' (з чату кухні)');
@@ -60,6 +65,11 @@ class ReadKitchenInvoice implements ShouldQueue
         }
 
         $telegram->reactToMessage($this->chatId, $this->messageId, '✅');
+
+        // Накладна з «Бухгалтерії»: запамʼятати, яку чернетку з неї зроблено.
+        if ($this->accountingItemId) {
+            \App\Models\AccountingItem::whereKey($this->accountingItemId)->update(['stock_document_id' => $document->id]);
+        }
 
         $items = $document->items()->count();
         $sum   = number_format((float) $document->total_sum, 0, ',', ' ');

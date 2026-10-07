@@ -188,7 +188,16 @@ class TelegramService
     }
 
     /** Хто може надсилати боту накладні: власник, менеджери, кухня. */
-    public function staffChatIds(): array
+    /** Хто підтверджує документи в «Бухгалтерії»: власники + окремий список. */
+    public function accountingApproverIds(): array
+    {
+        return array_values(array_unique(array_merge(
+            $this->ownerChatIds(),
+            $this->chatIds((string) config('services.telegram.accounting_approvers', '')),
+        )));
+    }
+
+        public function staffChatIds(): array
     {
         return $this->chatIds($this->ownerChatId, $this->managerChatId, $this->cookChatId);
     }
@@ -211,7 +220,7 @@ class TelegramService
      *
      * @param  array<int, array<int, array<string, string>>>|null  $keyboard  inline_keyboard
      */
-    public function sendMessage(string $chatId, string $text, ?array $keyboard = null): ?int
+    public function sendMessage(string $chatId, string $text, ?array $keyboard = null, ?int $replyTo = null): ?int
     {
         // Довге ділимо на частини; кнопки — під останньою, її id і повертаємо,
         // бо саме це повідомлення потім редагують після натискання.
@@ -220,6 +229,11 @@ class TelegramService
 
         foreach ($parts as $i => $part) {
             $payload = ['chat_id' => $chatId, 'text' => $part, 'parse_mode' => 'HTML'];
+
+            // Відповідь саме на документ у групі; якщо його видалили — шлемо просто так.
+            if ($replyTo && $i === 0) {
+                $payload['reply_parameters'] = ['message_id' => $replyTo, 'allow_sending_without_reply' => true];
+            }
 
             if ($keyboard !== null && $i === array_key_last($parts)) {
                 $payload['reply_markup'] = ['inline_keyboard' => $keyboard];

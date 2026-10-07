@@ -116,5 +116,9 @@ trait BuildsStockTestSchema
         if (! Schema::hasTable('ai_runs')) {
             (require database_path('migrations/2026_09_16_100000_create_ai_runs_table.php'))->up();
         }
+
+        if (! Schema::hasTable('accounting_items')) {
+            (require database_path('migrations/2026_10_07_120000_create_accounting_inbox.php'))->up();
+        }
     }
 }

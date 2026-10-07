@@ -133,12 +133,16 @@ class OpsAi
         $content = [];
 
         foreach ($imagePaths as $path) {
-            $content[] = ImageBlockParam::with(
-                source: Base64ImageSource::with(
-                    data: base64_encode(\Illuminate\Support\Facades\Storage::disk('local')->get($path)),
-                    mediaType: $this->mediaType($path),
-                ),
-            );
+            $data = base64_encode(\Illuminate\Support\Facades\Storage::disk('local')->get($path));
+
+            // Накладні й квитанції часто приходять PDF-файлом — модель читає його сама.
+            $content[] = $this->isPdf($path)
+                ? \Anthropic\Messages\DocumentBlockParam::with(
+                    source: \Anthropic\Messages\Base64PDFSource::with(data: $data),
+                )
+                : ImageBlockParam::with(
+                    source: Base64ImageSource::with(data: $data, mediaType: $this->mediaType($path)),
+                );
         }
 
         $content[] = ['type' => 'text', 'text' => $prompt];
@@ -189,6 +193,11 @@ class OpsAi
         $data = json_decode(trim($text), true);
 
         return is_array($data) ? $data : null;
+    }
+
+    protected function isPdf(string $path): bool
+    {
+        return strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'pdf';
     }
 
     private function mediaType(string $path): string

@@ -158,6 +158,9 @@ class InvoiceReader
                 'is_paid'        => false,
                 'attachments'    => array_map(fn ($p) => ['path' => $p], $photoPaths),
                 'comment'        => trim('Накладна '.($data['number'] ?? '').' '.($data['supplier_name'] ?? '')),
+                // Номер і дата з бланка — щоб ловити повторне внесення тієї самої накладної.
+                'invoice_number' => ! empty($data['number']) ? mb_substr(trim((string) $data['number']), 0, 64) : null,
+                'invoice_date'   => ! empty($data['date']) ? $this->date($data['date'])->toDateString() : null,
                 'ai_comment'     => $this->comment($data, $unmatched, $warnings),
             ]);
 
@@ -214,28 +217,7 @@ class InvoiceReader
     /** Постачальника не заводимо автоматично — лише звʼязуємо з наявним. */
     private function supplierId(array $data): ?int
     {
-        $name = trim((string) ($data['supplier_name'] ?? ''));
-        $code = trim((string) ($data['supplier_code'] ?? ''));
-
-        if ($code !== '' && ($byCode = Supplier::where('inn', $code)->value('id'))) {
-            return (int) $byCode;
-        }
-
-        if ($name === '') {
-            return null;
-        }
-
-        $needle = mb_strtolower(preg_replace('/[^\p{L}\p{N}]+/u', '', $name));
-
-        foreach (Supplier::get(['id', 'name']) as $supplier) {
-            $hay = mb_strtolower(preg_replace('/[^\p{L}\p{N}]+/u', '', (string) $supplier->name));
-
-            if ($hay !== '' && (str_contains($hay, $needle) || str_contains($needle, $hay))) {
-                return (int) $supplier->id;
-            }
-        }
-
-        return null;
+        return app(SupplierMatcher::class)->supplierId($data['supplier_name'] ?? null, $data['supplier_code'] ?? null);
     }
 
     private function date(?string $raw): \Carbon\Carbon
