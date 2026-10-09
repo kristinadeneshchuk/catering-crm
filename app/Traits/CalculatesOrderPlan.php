@@ -622,4 +622,46 @@ trait CalculatesOrderPlan
             'text'     => implode('; ', $changes),
         ];
     }
+
+    /**
+     * Скільки нетто кожного рядка техкарти забирає «червоний» клієнт (path c:
+     * страву отримує, але з заміною інгредієнта). Прибране чи замінене — 0:
+     * замінник іде з його картки, а не з цього рядка.
+     *
+     * @return array<int, float> dish_ingredient_id => грами нетто
+     */
+    protected function customRowNet($order, $dish, float $scale): array
+    {
+        $out = [];
+        foreach ($dish->dishIngredients as $di) {
+            $net = (float) ($di->net_weight_g ?? 0) * $scale;
+
+            if ($di->type !== 'pf' && $di->ingredient_id) {
+                $rep = $order->replacements
+                    ->where('dish_id', $dish->id)
+                    ->where('original_product_id', $di->ingredient_id)
+                    ->first();
+                $approved = $rep && $rep->force_approved;
+
+                if (($rep && !$approved)
+                    || (!$approved && $order->effectiveExcludedIngredients()->contains('id', $di->ingredient_id))) {
+                    $net = 0.0;
+                }
+            }
+
+            $out[$di->id] = $net;
+        }
+
+        return $out;
+    }
+
+    /** Брутто з нетто: продукт — з урахуванням виходу (yield_percent), [НФ] береться готовим. */
+    protected function rowBruttoFactor($di): float
+    {
+        if ($di->type === 'pf' || !$di->ingredient) {
+            return 1.0;
+        }
+
+        return 100.0 / max((float) ($di->ingredient->yield_percent ?: 100), 1.0);
+    }
 }

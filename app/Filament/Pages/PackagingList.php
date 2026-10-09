@@ -400,6 +400,7 @@ class PackagingList extends Page implements HasForms
                 'columns' => [],
                 'rows' => [],
                 'individual_notes' => [],
+                'custom_net'       => [], // dish_ingredient_id => нетто «червоних» порцій
             ];
 
             foreach ($orders as $order) {
@@ -514,6 +515,10 @@ class PackagingList extends Page implements HasForms
                     }
 
                     // (c) інгредієнтний свап / force-approved / невирішений конфлікт
+                    foreach ($this->customRowNet($order, $dish, $dishScale) as $diId => $g) {
+                        $tableData['custom_net'][$diId] = ($tableData['custom_net'][$diId] ?? 0) + $g;
+                    }
+
                     $oid = $order->id;
                     if (!isset($customClientData[$oid])) {
                         $customClientData[$oid] = [
@@ -580,9 +585,14 @@ class PackagingList extends Page implements HasForms
                     $cells[$key] = round($netWeight * $onePortionScale);
                 }
 
+                // Скільки взяти: усі порції, що отримують цей рядок (стандарт + «червоні»), у брутто.
+                $netAll = $netWeight * collect($tableData['columns'])->sum('sum_scale')
+                    + ($tableData['custom_net'][$di->id] ?? 0);
+
                 $tableData['rows'][] = [
                     'original_name' => $name,
                     'cells' => $cells,
+                    'brutto' => round($netAll * $this->rowBruttoFactor($di)),
                 ];
             }
 

@@ -692,6 +692,7 @@ class PrintController extends Controller
                 'columns' => [],
                 'rows' => [],
                 'individual_notes' => [],
+                'custom_net' => [], // dish_ingredient_id => нетто «червоних» порцій
             ];
 
             foreach ($orders as $order) {
@@ -788,6 +789,10 @@ class PrintController extends Controller
                         continue;
                     }
 
+                    foreach ($this->customRowNet($order, $dish, $dishScale) as $diId => $g) {
+                        $tableData['custom_net'][$diId] = ($tableData['custom_net'][$diId] ?? 0) + $g;
+                    }
+
                     $oid = $order->id;
                     if (!isset($customClientData[$oid])) {
                         $customClientData[$oid] = [
@@ -851,9 +856,14 @@ class PrintController extends Controller
                     ];
                 }
 
+                // Скільки взяти: усі порції, що отримують цей рядок (стандарт + «червоні»), у брутто.
+                $netAll = (float)($di->net_weight_g ?? 0) * collect($tableData['columns'])->sum('sum_scale')
+                    + ($tableData['custom_net'][$di->id] ?? 0);
+
                 $tableData['rows'][] = [
                     'original_name' => $originalName,
                     'cells' => $cells,
+                    'brutto' => round($netAll * $this->rowBruttoFactor($di)),
                 ];
             }
 
