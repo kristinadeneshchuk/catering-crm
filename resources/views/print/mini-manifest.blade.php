@@ -492,12 +492,18 @@
 }
 </style>
 
-@foreach(collect($manifests)->groupBy('date') as $dayDate => $dayManifests)
 @if(count($targets) > 1)
-    <div class="no-print" style="text-align:center;font-size:18px;font-weight:900;text-transform:uppercase;margin:18px 0 6px;">{{ \Carbon\Carbon::parse($dayDate)->locale('uk')->translatedFormat('l d.m') }} — {{ count($dayManifests) }} шт.</div>
+    <div class="no-print" style="font-size:16px;font-weight:900;text-transform:uppercase;">
+        @foreach(collect($manifests)->groupBy('date') as $dayDate => $dayManifests)
+            {{ \Carbon\Carbon::parse($dayDate)->locale('uk')->translatedFormat('l d.m') }} — {{ count($dayManifests) }} шт.@if(! $loop->last) · @endif
+        @endforeach
+        <div style="font-size:12px;font-weight:600;text-transform:none;color:#64748b;margin-top:4px;">Неділя починається з нового аркуша</div>
+    </div>
 @endif
+{{-- Один аркуш на все: наліпки, що не влазять, перетікають на наступні сторінки.
+     Окремі аркуші на кожен день налазили б один на одного. --}}
 <div class="label-sheet">
-    @foreach($dayManifests as $man)
+    @foreach($manifests as $man)
         @php
             $project = \App\Models\Project::where('slug', $man['project'])->first();
 
@@ -517,7 +523,7 @@
             $deliveryDate = \Carbon\Carbon::parse($man['date'])->format('d.m.Y');
         @endphp
 
-        <div class="sticker" style="--brand-color: {{ $brandColor }};" data-slot="{{ $man['is_evening'] ? 'evening' : 'morning' }}" data-individual="{{ $man['is_individual'] ? '1' : '0' }}">
+        <div class="sticker" data-day="{{ $man['date'] }}" style="--brand-color: {{ $brandColor }};" data-slot="{{ $man['is_evening'] ? 'evening' : 'morning' }}" data-individual="{{ $man['is_individual'] ? '1' : '0' }}">
             <div class="sticker-border"></div>
 
             {{-- Маршрут зверху (перевернутий) — тільки великий формат --}}
@@ -647,13 +653,34 @@
         </div>
     @endforeach
 </div>
-@endforeach
 
 <script>
 var currentFormat = 'small';
 
+// Наступний день — з нового аркуша: доповнюємо попередній порожніми клітинками.
+function padDays() {
+    document.querySelectorAll('.sticker.filler').forEach(function (f) { f.remove(); });
+    var perSheet = currentFormat === 'large' ? 9 : 21;
+    var lastByDay = {}, countByDay = {}, days = [];
+    document.querySelectorAll('.sticker[data-day]').forEach(function (s) {
+        var d = s.dataset.day;
+        if (!(d in countByDay)) { countByDay[d] = 0; days.push(d); }
+        if (s.style.display !== 'none') { countByDay[d]++; lastByDay[d] = s; }
+    });
+    days.slice(0, -1).forEach(function (d) {
+        var last = lastByDay[d];
+        if (!last) return;
+        var gap = (perSheet - countByDay[d] % perSheet) % perSheet;
+        for (var i = 0; i < gap; i++) {
+            var f = document.createElement('div');
+            f.className = 'sticker filler';
+            last.after(f);
+        }
+    });
+}
+
 function filterSlot(slot) {
-    var stickers = document.querySelectorAll('.sticker');
+    var stickers = document.querySelectorAll('.sticker[data-day]');
     var visible = 0;
     stickers.forEach(function(s) {
         var show = slot === 'all' || s.dataset.slot === slot;
@@ -661,6 +688,7 @@ function filterSlot(slot) {
         if (show) visible++;
     });
     document.getElementById('print-count').textContent = visible;
+    padDays();
     document.querySelectorAll('.filter-btn:not([id^="btn-fmt"])').forEach(function(b) { b.classList.remove('active'); });
     document.getElementById('btn-' + slot).classList.add('active');
 }
@@ -692,6 +720,7 @@ function switchFormat(fmt) {
     }
     document.getElementById('btn-fmt-small').classList.toggle('active', fmt === 'small');
     document.getElementById('btn-fmt-large').classList.toggle('active', fmt === 'large');
+    padDays();
     setTimeout(fitClientNames, 50);
 }
 
@@ -716,6 +745,7 @@ window.addEventListener('load', function () {
         if (!url) return;
         new QRCode(el, { text: url, width: 50, height: 50, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
     });
+    padDays();
     fitClientNames();
 });
 
