@@ -60,7 +60,34 @@ class AccountResource extends Resource
                         ->onColor('success')
                         ->offColor('gray')
                         ->columnSpanFull(),
-                ])->columns(2)
+                ])->columns(2),
+
+                // Банк — лише супер адмін. Збережений токен у браузер не віддаємо:
+                // поле завжди порожнє, порожнє при збереженні = «не міняти».
+                Forms\Components\Section::make('monobank')
+                    ->description('Автозвірка оплат з банком. Токен: api.monobank.ua → «Отримати токен».')
+                    ->visible(fn () => auth()->user()?->isSuperAdmin())
+                    ->schema([
+                        TextInput::make('mono_token')
+                            ->label('Токен monobank')
+                            ->password()
+                            ->autocomplete('new-password')
+                            ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
+                            ->dehydrated(fn ($state) => filled($state))
+                            ->placeholder(fn (?Account $record) => $record?->maskedMonoToken() ?? 'не задано')
+                            ->helperText(fn (?Account $record) => $record?->hasMonoToken()
+                                ? 'Токен збережено ' . $record->maskedMonoToken() . '. Щоб замінити — вставте новий.'
+                                : 'Зберігається зашифрованим, у логи не потрапляє.')
+                            ->columnSpanFull(),
+                        TextInput::make('mono_account_id')
+                            ->label('id рахунку в monobank')
+                            ->helperText('Порожньо — візьмемо гривневий рахунок ФОП автоматично.'),
+                        Forms\Components\Placeholder::make('mono_status')
+                            ->label('Стан')
+                            ->content(fn (?Account $record) => $record?->mono_synced_at
+                                ? 'IBAN ' . ($record->mono_iban ?? '—') . ' · підтягнуто ' . $record->mono_synced_at->format('d.m H:i')
+                                : 'ще не підтягувалось'),
+                    ])->columns(2),
             ]);
     }
 
@@ -108,6 +135,18 @@ class AccountResource extends Resource
             ])
             ->defaultSort('id', 'asc')
             ->actions([
+                Tables\Actions\Action::make('mono_sync')
+                    ->label('')
+                    ->tooltip('Підтягнути виписку monobank за 31 день')
+                    ->icon('heroicon-o-arrow-path')
+                    ->visible(fn (Account $record) => auth()->user()?->isSuperAdmin() && $record->hasMonoToken())
+                    ->requiresConfirmation()
+                    ->modalHeading('Підтягнути виписку з monobank?')
+                    ->modalDescription('Займе 1–3 хвилини: банк дозволяє один запит на хвилину. Операції зʼявляться в «Банк».')
+                    ->action(function (Account $record) {
+                        \App\Jobs\SyncMonobankAccount::dispatch($record->id);
+                        \Filament\Notifications\Notification::make()->title('Запит у банк поставлено в чергу')->success()->send();
+                    }),
                 Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
                 Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
             ])

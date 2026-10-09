@@ -64,6 +64,15 @@ return [
         'daily_cap_usd'  => (float) env('ANTHROPIC_DAILY_CAP_USD', 20),
     ],
 
+    // Гроші бізнесу (банк, звірка) бачить лише супер адмін.
+    'finance' => [
+        'super_admin_ids' => env('FINANCE_SUPER_ADMIN_IDS', '7'),
+    ],
+
+    'monobank' => [
+        'base_url' => env('MONOBANK_API_URL', 'https://api.monobank.ua'),
+    ],
+
     'telegram' => [
         'bot_token'       => env('TELEGRAM_BOT_TOKEN'),
         'owner_chat_id'   => env('TELEGRAM_OWNER_CHAT_ID'),

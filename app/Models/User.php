@@ -55,6 +55,14 @@ class User extends Authenticatable implements FilamentUser
     public function isManager() { return $this->role === self::ROLE_MANAGER; }
     public function isCook() { return $this->role === self::ROLE_COOK; }
 
+    /** Супер адмін — бачить гроші бізнесу (банк, звірка). Список id у FINANCE_SUPER_ADMIN_IDS. */
+    public function isSuperAdmin(): bool
+    {
+        $ids = array_filter(array_map('intval', explode(',', (string) config('services.finance.super_admin_ids'))));
+
+        return $this->isAdmin() && in_array((int) $this->id, $ids, true);
+    }
+
     /**
      * Прочитати персональне UI-налаштування (dot-нотація: 'payroll.start').
      */
