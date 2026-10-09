@@ -176,6 +176,18 @@ trait BuildsInboxTestSchema
             $t->timestamps();
         });
 
+        Schema::create('order_replacements', function (Blueprint $t) {
+            $t->id();
+            $t->unsignedBigInteger('order_id');
+            $t->unsignedBigInteger('dish_id');
+            $t->unsignedBigInteger('original_product_id')->nullable();
+            $t->unsignedBigInteger('replacement_product_id')->nullable();
+            $t->unsignedBigInteger('replacement_dish_id')->nullable();
+            $t->boolean('force_approved')->default(false);
+            $t->string('comment')->nullable();
+            $t->timestamps();
+        });
+
         Schema::create('order_days', function (Blueprint $t) {
             $t->id();
             $t->unsignedBigInteger('order_id');

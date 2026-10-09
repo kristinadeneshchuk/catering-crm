@@ -272,6 +272,7 @@ class Order extends Model
 
         static::created(function ($o) {
             self::syncClient($o);
+            app(\App\Services\Orders\ReplacementInheritance::class)->inherit($o);
             Transaction::create([
                 'type'     => 'income',
                 'category' => 'Нове замовлення',
