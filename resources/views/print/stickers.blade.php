@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <title>Друк стікерів — {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y') }}</title>
+    <title>Друк стікерів — {{ collect($targets)->map(fn ($d) => \Carbon\Carbon::parse($d)->format('d.m.Y'))->implode(' + ') }}</title>
     <style>
         * {
             -webkit-print-color-adjust: exact !important;
@@ -301,6 +301,7 @@
             padding: 8px 14px; border-radius: 8px; white-space: nowrap;
         }
         .toolbar a.opt.active { background: #f97316; color: #fff; }
+        .day-title { text-align: center; font-size: 18px; font-weight: 900; color: #0f172a; margin: 18px 0 6px; text-transform: uppercase; }
         .toolbar .hint { width: 100%; font-size: 12px; color: #475569; margin-top: 8px; }
 
         /* ===== ВЕЛИКИЙ ФОРМАТ 70×99мм (3×3 = 9/аркуш) — як «На пакет» ===== */
@@ -363,14 +364,25 @@
     // Посилання зберігають дату й інший перемикач — сторінка перебудовується
     // на сервері, щоб аркуші ділились під формат (21 чи 9) і лічильник був чесним.
     $link = fn (array $change) => route('print.stickers', array_merge(
-        ['date' => $date, 'format' => $format, 'no_ind' => $hideIndividual ? 1 : 0],
+        ['date' => $date, 'format' => $format, 'no_ind' => $hideIndividual ? 1 : 0, 'weekend' => $weekend ? 1 : 0],
         $change,
     ));
     $perSheet = $format === 'large' ? 9 : 21;
-    $chunks = array_chunk($stickers, $perSheet);
+
+    // Кожен день — з нового аркуша: сб і нд пакуються окремо.
+    $days = collect($stickers)->groupBy('date')->map(fn ($day) => array_chunk($day->all(), $perSheet));
+    $sheetCount = $days->sum(fn ($sheets) => count($sheets));
+    $dayName = fn ($d) => \Carbon\Carbon::parse($d)->locale('uk')->translatedFormat('l d.m');
 @endphp
 
 <div class="no-print toolbar">
+    @if($isFriday)
+        {{-- Пʼятниця: кухня готує на суботу й неділю — друк одним разом. --}}
+        <div class="group">
+            <a class="opt {{ $weekend ? '' : 'active' }}" href="{{ $link(['weekend' => 0]) }}">Лише субота</a>
+            <a class="opt {{ $weekend ? 'active' : '' }}" href="{{ $link(['weekend' => 1]) }}">🗓 Субота + неділя</a>
+        </div>
+    @endif
     <div class="group">
         <a class="opt {{ $hideIndividual ? '' : 'active' }}" href="{{ $link(['no_ind' => 0]) }}">Усі клієнти</a>
         <a class="opt {{ $hideIndividual ? 'active' : '' }}" href="{{ $link(['no_ind' => 1]) }}">Без індивідуальних</a>
@@ -380,13 +392,17 @@
         <a class="opt {{ $format === 'large' ? 'active' : '' }}" href="{{ $link(['format' => 'large']) }}" title="70×99 мм — 9 шт/аркуш, як «На пакет»">▬▬ Великий 70×99</a>
     </div>
     <button onclick="window.print()">
-        РОЗДРУКУВАТИ ({{ count($stickers) }} шт. · {{ count($chunks) }} арк.)
+        РОЗДРУКУВАТИ ({{ count($stickers) }} шт. · {{ $sheetCount }} арк.)
     </button>
     @if($hideIndividual && $hiddenIndividual)
         <div class="hint">Приховано стікерів індивідуальних клієнтів: {{ $hiddenIndividual }}</div>
     @endif
 </div>
 
+@foreach($days as $dayDate => $chunks)
+@if(count($targets) > 1)
+    <div class="no-print day-title">{{ $dayName($dayDate) }} — {{ collect($chunks)->sum(fn ($c) => count($c)) }} стікерів</div>
+@endif
 @foreach($chunks as $sheetIndex => $sheet)
     <div class="label-sheet">
         @foreach($sheet as $sticker)
@@ -425,7 +441,7 @@
 
                     <div class="meal-row">
                         <span class="meal-type" style="color: {{ $brandColor }};">{{ $sticker['meal'] }}</span>
-                        <span class="meal-date">{{ \Carbon\Carbon::parse($date)->addDay()->format('d.m') }}</span>
+                        <span class="meal-date">{{ \Carbon\Carbon::parse($sticker['date'])->format('d.m') }}</span>
                         @if(isset($sticker['is_evening']))
                             <span class="meal-slot {{ $sticker['is_evening'] ? 'evening' : 'morning' }}">{{ $sticker['delivery_slot'] }}</span>
                         @endif
@@ -466,6 +482,7 @@
             </div>
         @endforeach
     </div>
+@endforeach
 @endforeach
 
 <script>

@@ -340,9 +340,98 @@ class PrintController extends Controller
 
     public function stickers(Request $request)
     {
-        $inputDate  = $request->input('date', now()->format('Y-m-d'));
-        $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
+        $inputDate = $request->input('date', now()->format('Y-m-d'));
+        $cookDate  = Carbon::parse($inputDate);
 
+        // У пʼятницю кухня готує на суботу й неділю — щоб не відкривати сторінку
+        // двічі, обидва дні можна надрукувати разом (кожен з нового аркуша).
+        $isFriday = $cookDate->isFriday();
+        $weekend  = $isFriday && $request->boolean('weekend');
+        $targets  = $weekend
+            ? [$cookDate->copy()->addDay()->format('Y-m-d'), $cookDate->copy()->addDays(2)->format('Y-m-d')]
+            : [$cookDate->copy()->addDay()->format('Y-m-d')];
+
+        $stickers = [];
+        $anyOrders = false;
+
+        foreach ($targets as $targetDate) {
+            $day = $this->stickersFor($targetDate);
+            $anyOrders = $anyOrders || $day !== null;
+            $stickers = array_merge($stickers, $day ?? []);
+        }
+
+        if (! $anyOrders) {
+            return 'Немає активних замовлень на '.implode(' і ', array_map(
+                fn ($d) => Carbon::parse($d)->format('d.m.Y'), $targets)).'.';
+        }
+
+        // Завантажуємо кольори та літери прямо з БД
+        $mealPalette = \App\Models\MealType::all()->keyBy('sort_order')->map(fn ($mt) => [
+            'color'  => $mt->color ?: '#94a3b8',
+            'letter' => $mt->short_letter ?: '?',
+        ])->toArray();
+
+        // Збираємо унікальні sort_order прийомів їжі із замінами для кожного клієнта
+        $clientMealSortOrders = [];
+        foreach ($stickers as $s) {
+            $cid = $s['client_id'].'|'.$s['date']; // сб і нд — окремі пакети
+            $so  = $s['meal_sort_order'];
+            if ($so && !in_array($so, $clientMealSortOrders[$cid] ?? [], true)) {
+                $clientMealSortOrders[$cid][] = $so;
+            }
+        }
+
+        // Додаємо кружечки до кожного стікера
+        foreach ($stickers as &$s) {
+            $circles = [];
+            $sortOrders = $clientMealSortOrders[$s['client_id'].'|'.$s['date']] ?? [];
+            sort($sortOrders);
+            foreach ($sortOrders as $so) {
+                $circles[] = $mealPalette[$so] ?? ['color' => '#94a3b8', 'letter' => '?'];
+            }
+            $s['circles'] = $circles;
+        }
+        unset($s);
+
+        usort($stickers, function ($a, $b) {
+            // 0. Спершу субота, потім неділя
+            $dateCmp = strcmp($a['date'], $b['date']);
+            if ($dateCmp !== 0) return $dateCmp;
+            // 1. За порядком прийому їжі
+            $timeCmp = $a['time'] <=> $b['time'];
+            if ($timeCmp !== 0) return $timeCmp;
+            // 2. За проєктом
+            $projectCmp = strcmp($a['project'] ?? '', $b['project'] ?? '');
+            if ($projectCmp !== 0) return $projectCmp;
+            // 3. За калоріями
+            return $a['calories'] <=> $b['calories'];
+        });
+
+        // Кухня просила друкувати без індивідуальних — у них окремий процес.
+        // Лічимо скільки сховали, щоб на екрані було видно, що це фільтр, а не збій.
+        $hideIndividual = $request->boolean('no_ind');
+        $hiddenIndividual = 0;
+
+        if ($hideIndividual) {
+            $before = count($stickers);
+            $stickers = array_values(array_filter($stickers, fn ($s) => empty($s['is_individual'])));
+            $hiddenIndividual = $before - count($stickers);
+        }
+
+        // Формат паперу: малий 68×42 (21 на аркуші) або великий 70×99 (9) — той
+        // самий, що для стікерів на пакети, коли малий папір закінчився.
+        $format = $request->input('format') === 'large' ? 'large' : 'small';
+
+        // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату
+        $date = $inputDate;
+        return view('print.stickers', compact('stickers', 'date', 'format', 'hideIndividual', 'hiddenIndividual', 'isFriday', 'weekend', 'targets'));
+    }
+
+    /**
+     * Стікери замін на один день їжі. null — на цей день немає жодного замовлення.
+     */
+    private function stickersFor(string $targetDate): ?array
+    {
         $orders = Order::feedingOn($targetDate)
             ->with([
                 'client.mealTypes',
@@ -360,7 +449,7 @@ class PrintController extends Controller
             ->get();
 
         if ($orders->isEmpty()) {
-            return "Немає активних замовлень на завтра ({$targetDate}).";
+            return null;
         }
 
         // Меню кешуємо по plan_id — кожен план має свій день циклу
@@ -491,63 +580,7 @@ class PrintController extends Controller
             }
         }
 
-        // Завантажуємо кольори та літери прямо з БД
-        $mealPalette = \App\Models\MealType::all()->keyBy('sort_order')->map(fn ($mt) => [
-            'color'  => $mt->color ?: '#94a3b8',
-            'letter' => $mt->short_letter ?: '?',
-        ])->toArray();
-
-        // Збираємо унікальні sort_order прийомів їжі із замінами для кожного клієнта
-        $clientMealSortOrders = [];
-        foreach ($stickers as $s) {
-            $cid = $s['client_id'];
-            $so  = $s['meal_sort_order'];
-            if ($so && !in_array($so, $clientMealSortOrders[$cid] ?? [], true)) {
-                $clientMealSortOrders[$cid][] = $so;
-            }
-        }
-
-        // Додаємо кружечки до кожного стікера
-        foreach ($stickers as &$s) {
-            $circles = [];
-            $sortOrders = $clientMealSortOrders[$s['client_id']] ?? [];
-            sort($sortOrders);
-            foreach ($sortOrders as $so) {
-                $circles[] = $mealPalette[$so] ?? ['color' => '#94a3b8', 'letter' => '?'];
-            }
-            $s['circles'] = $circles;
-        }
-        unset($s);
-
-        usort($stickers, function ($a, $b) {
-            // 1. За порядком прийому їжі
-            $timeCmp = $a['time'] <=> $b['time'];
-            if ($timeCmp !== 0) return $timeCmp;
-            // 2. За проєктом
-            $projectCmp = strcmp($a['project'] ?? '', $b['project'] ?? '');
-            if ($projectCmp !== 0) return $projectCmp;
-            // 3. За калоріями
-            return $a['calories'] <=> $b['calories'];
-        });
-
-        // Кухня просила друкувати без індивідуальних — у них окремий процес.
-        // Лічимо скільки сховали, щоб на екрані було видно, що це фільтр, а не збій.
-        $hideIndividual = $request->boolean('no_ind');
-        $hiddenIndividual = 0;
-
-        if ($hideIndividual) {
-            $before = count($stickers);
-            $stickers = array_values(array_filter($stickers, fn ($s) => empty($s['is_individual'])));
-            $hiddenIndividual = $before - count($stickers);
-        }
-
-        // Формат паперу: малий 68×42 (21 на аркуші) або великий 70×99 (9) — той
-        // самий, що для стікерів на пакети, коли малий папір закінчився.
-        $format = $request->input('format') === 'large' ? 'large' : 'small';
-
-        // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату
-        $date = $inputDate;
-        return view('print.stickers', compact('stickers', 'date', 'format', 'hideIndividual', 'hiddenIndividual'));
+        return $stickers;
     }
 
     public function packagingList(Request $request)
