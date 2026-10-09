@@ -239,9 +239,9 @@
                         </div>
                         @if(!empty($table['individual_notes']))
                             <div class="replacements-container">
-                                <div style="font-weight:900;text-transform:uppercase;margin-bottom:5px;font-size:11px;">Індивідуальні заміни:</div>
-                                @foreach($table['individual_notes'] as $note)
-                                    <div style="margin-bottom:2px;font-weight:700;">• #{{ $note['id'] }} {{ $note['name'] }} ({{ $note['project'] }}, {{ $note['calories'] }} ккал): {{ $note['text'] }}</div>
+                                <div style="font-weight:900;text-transform:uppercase;margin-bottom:5px;font-size:11px;color:#dc2626;">Заміни в цій страві ({{ count($table['individual_notes']) }}):</div>
+                                @foreach(collect($table['individual_notes'])->sortBy('calories') as $note)
+                                    <div style="margin-bottom:2px;">• <b>{{ $note['project'] }} · {{ $note['calories'] }} ккал</b> — #{{ $note['id'] }} {{ $note['name'] }}: <b style="color:#dc2626;">{{ $note['text'] }}</b></div>
                                 @endforeach
                             </div>
                         @endif

@@ -729,6 +729,11 @@ class PrintController extends Controller
                     }
                     $tableData['columns'][$cKey]['projects'][$cSlug]['custom_count'] = ($tableData['columns'][$cKey]['projects'][$cSlug]['custom_count'] ?? 0) + 1;
 
+                    // Хто саме в червоній цифрі і що йому класти — одразу під таблицею.
+                    if ($note = $this->individualNote($order, $dish)) {
+                        $tableData['individual_notes'][] = $note;
+                    }
+
                     $dishReplacement = $order->replacements
                         ->where('dish_id', $dish->id)
                         ->whereNull('original_product_id')
@@ -1770,42 +1775,6 @@ class PrintController extends Controller
         return $byPlan;
     }
 
-    private function findIngredientChanges($dishOrChildDish, $order, $rootDishId)
-    {
-        $changes = [];
-
-        if (!$dishOrChildDish || !$dishOrChildDish->dishIngredients) {
-            return $changes;
-        }
-
-        foreach ($dishOrChildDish->dishIngredients as $di) {
-            if ($di->ingredient) {
-                // Заміну менеджер може внести й без виключення в картці клієнта
-                // («курку → лосось» лише в цій страві). Раніше такі стікер пропускав:
-                // фасувальний показував зміну, а кухня не знала, що класти.
-                $ingRep = $order->replacements
-                    ->where('dish_id', $rootDishId)
-                    ->where('original_product_id', $di->ingredient->id)
-                    ->first();
-                $excluded = $order->effectiveExcludedIngredients()->contains('id', $di->ingredient->id);
-
-                if ($ingRep && $ingRep->force_approved) {
-                    // одобрено примусово — не показуємо як виключення
-                } elseif ($ingRep && $ingRep->replacementProduct) {
-                    $changes[] = $di->ingredient->name . " → " . $ingRep->replacementProduct->name;
-                } elseif ($ingRep || $excluded) {
-                    $changes[] = "БЕЗ: " . $di->ingredient->name;
-                }
-            }
-
-            if ($di->childDish) {
-                $subChanges = $this->findIngredientChanges($di->childDish, $order, $rootDishId);
-                $changes = array_merge($changes, $subChanges);
-            }
-        }
-
-        return $changes;
-    }
 
     /**
      * Ноутки для картки одного кастомного клієнта на одну страву:

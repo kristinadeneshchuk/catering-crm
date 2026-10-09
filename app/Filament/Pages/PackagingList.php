@@ -446,6 +446,11 @@ class PackagingList extends Page implements HasForms
                     }
                     $tableData['columns'][$cKey]['projects'][$cSlug]['custom_count'] = ($tableData['columns'][$cKey]['projects'][$cSlug]['custom_count'] ?? 0) + 1;
 
+                    // Хто саме в червоній цифрі і що йому класти — одразу під таблицею.
+                    if ($note = $this->individualNote($order, $dish)) {
+                        $tableData['individual_notes'][] = $note;
+                    }
+
                     // (a) є оформлена заміна страви — незалежно від dishExclusion,
                     // клієнт отримує саме страву-замінник (у виробничому це та ж лінія коду).
                     $dishReplacement = $order->replacements
@@ -687,60 +692,10 @@ class PackagingList extends Page implements HasForms
 
     private function collectOrderNotes(Order $order, $dish): array
     {
-        $notes = [];
-        if (!$order->client) return $notes;
+        $note = $this->individualNote($order, $dish);
+        if (!$note) return [];
 
-        $clientMeta = [
-            'id'           => $order->client->id,
-            'name'         => $order->client->name,
-            'project'      => $order->projectData?->name ?? ucfirst($order->project ?? ''),
-            'project_slug' => $order->project ?? 'none',
-            'calories'     => (int)($order->calories ?? 0),
-        ];
-
-        // 1. Виключення цілої страви — з урахуванням force-approved.
-        if ($order->client->dishExclusions->contains('id', $dish->id)) {
-            $dishRep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
-            if ($dishRep && $dishRep->replacementDish) {
-                $notes[] = array_merge($clientMeta, ['text' => "Страву повністю замінено на «{$dishRep->replacementDish->name}»"]);
-                return $notes;
-            }
-            if ($dishRep && $dishRep->force_approved) {
-                // Конфлікт зафіксовано, але клієнт їсть як усі — інгредієнтні заміни ще можливі,
-                // тому НЕ повертаємось, а продовжуємо перевіряти інгредієнти нижче.
-            } else {
-                $notes[] = array_merge($clientMeta, ['text' => "Страву повністю ВИКЛЮЧЕНО"]);
-                return $notes;
-            }
-        }
-
-        // 3. Виключення інгредієнтів (рекурсивно)
-        $this->checkIngredientsForNotes($dish, $order, $dish->id, $clientMeta, $notes);
-
-        return $notes;
-    }
-
-    private function checkIngredientsForNotes($dish, $order, $rootDishId, array $clientMeta, array &$notes): void
-    {
-        if (!$dish || !$dish->dishIngredients) return;
-
-        foreach ($dish->dishIngredients as $di) {
-            // Звичайний продукт
-            if ($di->ingredient_id && $order->effectiveExcludedIngredients()->contains('id', $di->ingredient_id)) {
-                $rep = $order->replacements->where('dish_id', $rootDishId)->where('original_product_id', $di->ingredient_id)->first();
-                if ($rep && $rep->force_approved) {
-                    // Одобрено — нічого не показуємо
-                } elseif ($rep && $rep->replacementProduct) {
-                    $notes[] = array_merge($clientMeta, ['text' => "«{$di->ingredient->name}» замінено на «{$rep->replacementProduct->name}»"]);
-                } else {
-                    $notes[] = array_merge($clientMeta, ['text' => "Без «{$di->ingredient->name}»"]);
-                }
-            }
-            // Якщо це ПФ - йдемо вглиб
-            if ($di->child_dish_id && $di->childDish) {
-                $this->checkIngredientsForNotes($di->childDish, $order, $rootDishId, $clientMeta, $notes);
-            }
-        }
+        return array_map(fn ($text) => ['text' => $text] + $note, $note['changes']);
     }
 
     // =========================================================

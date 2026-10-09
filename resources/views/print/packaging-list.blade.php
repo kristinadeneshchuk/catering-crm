@@ -204,10 +204,11 @@
         </table>
 
         @if(!empty($table['individual_notes']))
-            <div class="notes-box">
-                <div class="notes-header">Індивідуальні заміни:</div>
-                @foreach($table['individual_notes'] as $note)
-                    <div class="note-row">• #{{ $note['id'] }} {{ $note['name'] }} ({{ $note['project'] }}, {{ $note['calories'] }} ккал): {{ $note['text'] }}</div>
+            {{-- Хто в червоних цифрах і що саме йому класти. --}}
+            <div class="notes-box" style="border:2px solid #dc2626;background:#fef2f2;">
+                <div class="notes-header" style="color:#dc2626;">Заміни в цій страві ({{ count($table['individual_notes']) }}):</div>
+                @foreach(collect($table['individual_notes'])->sortBy('calories') as $note)
+                    <div class="note-row"><b>{{ $note['project'] }} · {{ $note['calories'] }} ккал</b> — #{{ $note['id'] }} {{ $note['name'] }}: <b style="color:#dc2626;">{{ $note['text'] }}</b></div>
                 @endforeach
             </div>
         @endif

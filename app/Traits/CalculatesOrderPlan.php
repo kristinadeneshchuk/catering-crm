@@ -552,4 +552,74 @@ trait CalculatesOrderPlan
         }
         return $rows;
     }
+
+    protected function findIngredientChanges($dishOrChildDish, $order, $rootDishId)
+    {
+        $changes = [];
+
+        if (!$dishOrChildDish || !$dishOrChildDish->dishIngredients) {
+            return $changes;
+        }
+
+        foreach ($dishOrChildDish->dishIngredients as $di) {
+            if ($di->ingredient) {
+                // Заміну менеджер може внести й без виключення в картці клієнта
+                // («курку → лосось» лише в цій страві). Раніше такі стікер пропускав:
+                // фасувальний показував зміну, а кухня не знала, що класти.
+                $ingRep = $order->replacements
+                    ->where('dish_id', $rootDishId)
+                    ->where('original_product_id', $di->ingredient->id)
+                    ->first();
+                $excluded = $order->effectiveExcludedIngredients()->contains('id', $di->ingredient->id);
+
+                if ($ingRep && $ingRep->force_approved) {
+                    // одобрено примусово — не показуємо як виключення
+                } elseif ($ingRep && $ingRep->replacementProduct) {
+                    $changes[] = $di->ingredient->name . " → " . $ingRep->replacementProduct->name;
+                } elseif ($ingRep || $excluded) {
+                    $changes[] = "БЕЗ: " . $di->ingredient->name;
+                }
+            }
+
+            if ($di->childDish) {
+                $subChanges = $this->findIngredientChanges($di->childDish, $order, $rootDishId);
+                $changes = array_merge($changes, $subChanges);
+            }
+        }
+
+        return $changes;
+    }
+
+    /**
+     * Що саме змінено в страві для клієнта — тими ж словами, що на стікері.
+     * Порожньо, якщо клієнт їсть стандарт (зокрема «Примусово одобрено»).
+     */
+    protected function dishChangeTexts($order, $dish): array
+    {
+        $dishRep = $order->replacements->where('dish_id', $dish->id)->whereNull('original_product_id')->first();
+        if ($dishRep && !$dishRep->force_approved && $dishRep->replacementDish) {
+            return ['ЗАМІНА СТРАВИ → ' . $dishRep->replacementDish->name];
+        }
+        if (!($dishRep && $dishRep->force_approved) && $order->client?->dishExclusions?->contains('id', $dish->id)) {
+            return ['НЕ ЇСТЬ ЦЮ СТРАВУ'];
+        }
+
+        return array_values(array_unique($this->findIngredientChanges($dish, $order, $dish->id)));
+    }
+
+    /** Рядок «бренд · ккал · клієнт: зміни» для блоку під таблицею фасування. */
+    protected function individualNote($order, $dish): ?array
+    {
+        $changes = $this->dishChangeTexts($order, $dish);
+        if (!$changes || !$order->client) return null;
+
+        return [
+            'id'       => $order->client->id,
+            'name'     => $order->client->name,
+            'project'  => $order->projectData?->name ?? ucfirst($order->project ?? ''),
+            'calories' => (int) ($order->calories ?? 0),
+            'changes'  => $changes,
+            'text'     => implode('; ', $changes),
+        ];
+    }
 }
