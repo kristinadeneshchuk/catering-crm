@@ -387,7 +387,10 @@
         }
 
         /* ===== ВЕЛИКИЙ ФОРМАТ 70×99мм (3×3 = 9/аркуш) ===== */
+        /* 3×70 = 210 і 3×99 = 297 — рівно A4, тож без відступів малого формату:
+           інакше сторінка ширша за аркуш і браузер стискає весь друк. */
         body.fmt-large .label-sheet {
+            padding: 0;
             grid-template-columns: repeat(3, 70mm);
             grid-template-rows: repeat(3, 99mm);
         }
@@ -466,6 +469,7 @@
     <button onclick="window.print()" style="background:#334155;color:white;border:none;padding:14px 36px;border-radius:12px;font-size:15px;font-weight:900;cursor:pointer;letter-spacing:2px;text-transform:uppercase;">
         ДРУКУВАТИ (<span id="print-count">{{ count($manifests) }}</span> шт.)
     </button>
+    <div style="width:100%;font-size:12px;color:#475569;">У вікні друку: «Розмір паперу» — <b>A4</b>, «Масштаб» — <b>100</b>, «Поля» — <b>Немає</b>. Інакше наліпки друкуються дрібніше й з'їжджають.</div>
 </div>
 
 <style>

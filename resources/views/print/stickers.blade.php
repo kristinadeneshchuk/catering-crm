@@ -305,7 +305,10 @@
         .toolbar .hint { width: 100%; font-size: 12px; color: #475569; margin-top: 8px; }
 
         /* ===== ВЕЛИКИЙ ФОРМАТ 70×99мм (3×3 = 9/аркуш) — як «На пакет» ===== */
+        /* 3×70 = 210 і 3×99 = 297 — рівно A4, тож без відступів малого формату:
+           інакше сторінка ширша за аркуш і браузер стискає весь друк. */
         body.fmt-large .label-sheet {
+            padding: 0;
             grid-template-columns: repeat(3, 70mm);
             grid-template-rows: repeat(3, 99mm);
         }
@@ -397,6 +400,7 @@
     @if($hideIndividual && $hiddenIndividual)
         <div class="hint">Приховано стікерів індивідуальних клієнтів: {{ $hiddenIndividual }}</div>
     @endif
+    <div class="hint">У вікні друку: «Розмір паперу» — <b>A4</b>, «Масштаб» — <b>100</b>, «Поля» — <b>Немає</b>. Інакше стікери друкуються дрібніше й з'їжджають.</div>
 </div>
 
 @foreach($days as $dayDate => $chunks)
