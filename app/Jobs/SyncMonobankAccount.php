@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Account;
 use App\Services\Bank\MonobankSync;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -19,14 +20,22 @@ class SyncMonobankAccount implements ShouldQueue
     public int $timeout = 900;
     public int $tries = 1;
 
-    public function __construct(public int $accountId, public int $days = MonobankSync::MAX_DAYS) {}
+    /** $from/$to (Y-m-d) — довільний період; без них — останні $days діб. */
+    public function __construct(
+        public int $accountId,
+        public int $days = MonobankSync::MAX_DAYS,
+        public ?string $from = null,
+        public ?string $to = null,
+    ) {}
 
     public function handle(MonobankSync $sync): void
     {
         $account = Account::find($this->accountId);
         if (!$account) return;
 
-        $result = $sync->sync($account, $this->days);
+        $result = $this->from
+            ? $sync->syncRange($account, Carbon::parse($this->from)->startOfDay(), Carbon::parse($this->to ?? 'now')->endOfDay())
+            : $sync->sync($account, $this->days);
         Log::info('monobank: виписку підтягнуто', ['account_id' => $account->id] + $result);
     }
 }

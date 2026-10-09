@@ -5,6 +5,7 @@ namespace App\Services\Bank;
 use App\Models\Account;
 use App\Models\BankOperation;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Closure;
 use RuntimeException;
 
@@ -41,6 +42,17 @@ class MonobankSync
      */
     public function sync(Account $account, int $days = self::MAX_DAYS): array
     {
+        return $this->syncRange($account, now()->subDays(max($days, 1)), now());
+    }
+
+    /**
+     * Довільний період. Банк віддає не більше 31 доби за запит —
+     * довший період ріжемо на вікна, кожне ще й сторінками по 500.
+     *
+     * @return array{inserted: int, fetched: int}
+     */
+    public function syncRange(Account $account, CarbonInterface $from, CarbonInterface $to): array
+    {
         $client = $this->client($account);
         $requested = false;
 
@@ -49,25 +61,37 @@ class MonobankSync
             $requested = true;
         }
 
-        $to = now()->timestamp;
-        $from = now()->subDays(min(max($days, 1), self::MAX_DAYS))->timestamp;
+        $fromTs = $from->timestamp;
+        $toTs = min($to->timestamp, now()->timestamp);
+        if ($fromTs >= $toTs) {
+            throw new RuntimeException('Дата «з» має бути раніше за «по»');
+        }
 
         $fetched = 0;
         $inserted = 0;
 
-        while (true) {
-            if ($requested) ($this->pause)();
-            $items = $client->statement($account->mono_account_id, $from, $to);
-            $requested = true;
+        // Від нових до старих: вікно [winFrom, winTo] ≤ 31 доби.
+        $winTo = $toTs;
+        while ($winTo > $fromTs) {
+            $winFrom = max($fromTs, $winTo - self::MAX_DAYS * 86400);
+            $pageTo = $winTo;
 
-            $fetched += count($items);
-            $inserted += $this->store($account, $items);
+            while (true) {
+                if ($requested) ($this->pause)();
+                $items = $client->statement($account->mono_account_id, $winFrom, $pageTo);
+                $requested = true;
 
-            // Повна сторінка — у вікні є ще старіші операції.
-            if (count($items) < self::PAGE) break;
-            $oldest = min(array_column($items, 'time'));
-            if ($oldest <= $from) break;
-            $to = $oldest - 1;
+                $fetched += count($items);
+                $inserted += $this->store($account, $items);
+
+                // Повна сторінка — у вікні є ще старіші операції.
+                if (count($items) < self::PAGE) break;
+                $oldest = min(array_column($items, 'time'));
+                if ($oldest <= $winFrom) break;
+                $pageTo = $oldest - 1;
+            }
+
+            $winTo = $winFrom - 1;
         }
 
         $account->forceFill(['mono_synced_at' => now()])->save();

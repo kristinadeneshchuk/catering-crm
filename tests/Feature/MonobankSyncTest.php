@@ -184,4 +184,64 @@ class MonobankSyncTest extends TestCase
 
         $this->assertSame(['2026-10', '2026-09', '2026-08'], array_keys(BankOperationResource::monthOptions()));
     }
+
+    public function test_an_arbitrary_past_period_is_fetched(): void
+    {
+        Http::fake(['*/personal/statement/*' => Http::response([
+            $this->op('old1', \Carbon\Carbon::parse('2026-08-28 12:00')->timestamp, 600000, ['counterName' => 'Лазутіна О.']),
+        ])]);
+
+        $account = $this->account();
+        $account->forceFill(['mono_account_id' => 'fopUAH'])->save();
+
+        $from = \Carbon\Carbon::parse('2026-08-20')->startOfDay();
+        $to = \Carbon\Carbon::parse('2026-09-08')->endOfDay();
+        $r = $this->sync()->syncRange($account, $from, $to);
+
+        $this->assertSame(1, $r['inserted']);
+        Http::assertSentCount(1);
+        Http::assertSent(fn (Request $req) => str_ends_with($req->url(), "/fopUAH/{$from->timestamp}/{$to->timestamp}"));
+    }
+
+    public function test_a_period_longer_than_31_days_is_split_into_windows(): void
+    {
+        Http::fake(['*/personal/statement/*' => Http::response([])]);
+
+        $account = $this->account();
+        $account->forceFill(['mono_account_id' => 'fopUAH'])->save();
+
+        $from = \Carbon\Carbon::parse('2026-07-01')->startOfDay();
+        $to = \Carbon\Carbon::parse('2026-09-08')->endOfDay(); // ~70 діб → 3 вікна
+
+        $this->sync()->syncRange($account, $from, $to);
+
+        $windows = [];
+        Http::recorded(function (Request $req) use (&$windows) {
+            [$f, $t] = array_slice(explode('/', $req->url()), -2);
+            $windows[] = [(int) $f, (int) $t];
+        });
+
+        $this->assertCount(3, $windows);
+        foreach ($windows as [$f, $t]) {
+            $this->assertLessThanOrEqual(31 * 86400, $t - $f);
+        }
+        $this->assertSame($to->timestamp, $windows[0][1]);
+        $this->assertSame($from->timestamp, end($windows)[0]);
+        // Вікна стикуються без дір.
+        $this->assertSame($windows[0][0] - 1, $windows[1][1]);
+        $this->assertSame($windows[1][0] - 1, $windows[2][1]);
+    }
+
+    public function test_the_command_accepts_a_period(): void
+    {
+        Http::fake(['*/personal/statement/*' => Http::response([])]);
+        $account = $this->account();
+        $account->forceFill(['mono_account_id' => 'fopUAH'])->save();
+
+        $this->artisan('bank:sync', ['--account' => $account->id, '--from' => '2026-08-20', '--to' => '2026-09-08'])
+            ->assertSuccessful();
+
+        $from = \Carbon\Carbon::parse('2026-08-20')->startOfDay()->timestamp;
+        Http::assertSent(fn (Request $req) => str_contains($req->url(), "/fopUAH/{$from}/"));
+    }
 }

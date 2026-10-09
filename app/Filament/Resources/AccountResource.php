@@ -137,15 +137,30 @@ class AccountResource extends Resource
             ->actions([
                 Tables\Actions\Action::make('mono_sync')
                     ->label('')
-                    ->tooltip('Підтягнути виписку monobank за 31 день')
+                    ->tooltip('Підтягнути виписку monobank')
                     ->icon('heroicon-o-arrow-path')
                     ->visible(fn (Account $record) => auth()->user()?->isSuperAdmin() && $record->hasMonoToken())
-                    ->requiresConfirmation()
-                    ->modalHeading('Підтягнути виписку з monobank?')
-                    ->modalDescription('Займе 1–3 хвилини: банк дозволяє один запит на хвилину. Операції зʼявляться в «Банк».')
-                    ->action(function (Account $record) {
-                        \App\Jobs\SyncMonobankAccount::dispatch($record->id);
-                        \Filament\Notifications\Notification::make()->title('Запит у банк поставлено в чергу')->success()->send();
+                    ->modalHeading('Підтягнути виписку з monobank')
+                    ->modalDescription('Банк дозволяє один запит на хвилину і до 31 доби за запит: кожні 31 день періоду — приблизно хвилина. Вже завантажені операції не дублюються.')
+                    ->modalSubmitActionLabel('Підтягнути')
+                    ->form([
+                        Forms\Components\DatePicker::make('from')->label('З')->native(false)->displayFormat('d.m.Y')
+                            ->default(now()->subDays(31)->toDateString())->maxDate(now())->required(),
+                        Forms\Components\DatePicker::make('to')->label('По')->native(false)->displayFormat('d.m.Y')
+                            ->default(now()->toDateString())->maxDate(now())->required()->afterOrEqual('from')
+                            // Пауза між запитами займає чергу: в адмінці — до 3 місяців, довше — командою bank:sync.
+                            ->rule(fn (Forms\Get $get) => function ($attr, $value, $fail) use ($get) {
+                                if ($get('from') && \Carbon\Carbon::parse($get('from'))->diffInDays(\Carbon\Carbon::parse($value)) > 93) {
+                                    $fail('Не більше 3 місяців за раз.');
+                                }
+                            }),
+                    ])
+                    ->action(function (Account $record, array $data) {
+                        \App\Jobs\SyncMonobankAccount::dispatch($record->id, from: $data['from'], to: $data['to']);
+                        \Filament\Notifications\Notification::make()
+                            ->title('Запит у банк поставлено в чергу')
+                            ->body('Період ' . \Carbon\Carbon::parse($data['from'])->format('d.m.Y') . ' – ' . \Carbon\Carbon::parse($data['to'])->format('d.m.Y') . '. Операції зʼявляться у «Фінанси → Банк».')
+                            ->success()->send();
                     }),
                 Tables\Actions\EditAction::make()->label('')->tooltip('Змінити'),
                 Tables\Actions\DeleteAction::make()->label('')->tooltip('Видалити'),
