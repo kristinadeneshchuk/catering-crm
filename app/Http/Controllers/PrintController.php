@@ -1780,19 +1780,21 @@ class PrintController extends Controller
 
         foreach ($dishOrChildDish->dishIngredients as $di) {
             if ($di->ingredient) {
-                if ($order->effectiveExcludedIngredients()->contains('id', $di->ingredient->id)) {
-                    $ingRep = $order->replacements
-                        ->where('dish_id', $rootDishId)
-                        ->where('original_product_id', $di->ingredient->id)
-                        ->first();
+                // Заміну менеджер може внести й без виключення в картці клієнта
+                // («курку → лосось» лише в цій страві). Раніше такі стікер пропускав:
+                // фасувальний показував зміну, а кухня не знала, що класти.
+                $ingRep = $order->replacements
+                    ->where('dish_id', $rootDishId)
+                    ->where('original_product_id', $di->ingredient->id)
+                    ->first();
+                $excluded = $order->effectiveExcludedIngredients()->contains('id', $di->ingredient->id);
 
-                    if ($ingRep && $ingRep->force_approved) {
-                        // одобрено примусово — не показуємо як виключення
-                    } elseif ($ingRep && $ingRep->replacementProduct) {
-                        $changes[] = $di->ingredient->name . " → " . $ingRep->replacementProduct->name;
-                    } else {
-                        $changes[] = "БЕЗ: " . $di->ingredient->name;
-                    }
+                if ($ingRep && $ingRep->force_approved) {
+                    // одобрено примусово — не показуємо як виключення
+                } elseif ($ingRep && $ingRep->replacementProduct) {
+                    $changes[] = $di->ingredient->name . " → " . $ingRep->replacementProduct->name;
+                } elseif ($ingRep || $excluded) {
+                    $changes[] = "БЕЗ: " . $di->ingredient->name;
                 }
             }
 

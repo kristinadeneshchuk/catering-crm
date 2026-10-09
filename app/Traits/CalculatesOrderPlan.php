@@ -465,11 +465,27 @@ trait CalculatesOrderPlan
      *     інгредієнт, який клієнт вилучив (незалежно від того, чи
      *     оформлена заміна).
      */
+    /**
+     * Чи готується страва для клієнта не за стандартом.
+     *
+     * «Примусово одобрено» — це якраз стандарт: страва чи інгредієнт лишаються,
+     * попри виключення. Раніше такі записи рахувались як зміна — у фасувальному
+     * зʼявлялась червона цифра, а на стікерах (правильно) нічого не було.
+     */
     private function isCustomForDish($order, $dish): bool
     {
-        if ($order->replacements->where('dish_id', $dish->id)->isNotEmpty()) return true;
-        if ($order->client->dishExclusions->contains('id', $dish->id)) return true;
-        return $this->dishHasClientExclusion($dish, $order->effectiveExcludedIngredients());
+        $reps = $order->replacements->where('dish_id', $dish->id);
+        if ($reps->where('force_approved', false)->isNotEmpty()) return true;
+
+        $dishApproved = $reps->whereNull('original_product_id')->where('force_approved', true)->isNotEmpty();
+        if (!$dishApproved && $order->client->dishExclusions->contains('id', $dish->id)) return true;
+
+        $approvedIngredients = $reps->whereNotNull('original_product_id')->where('force_approved', true)
+            ->pluck('original_product_id')->map(fn ($id) => (int) $id)->all();
+        $exclusions = $order->effectiveExcludedIngredients()
+            ->reject(fn ($ing) => in_array((int) $ing->id, $approvedIngredients, true));
+
+        return $this->dishHasClientExclusion($dish, $exclusions);
     }
 
     private function dishHasClientExclusion($dish, $exclusions, array $visited = []): bool
