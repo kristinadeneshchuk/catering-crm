@@ -291,4 +291,31 @@ class MonobankSyncTest extends TestCase
         $this->expectExceptionMessage('немає гривневого рахунку «Чорна картка»');
         $this->sync()->sync($acc);
     }
+
+    public function test_transfers_between_own_accounts_are_marked_internal(): void
+    {
+        $fop = $this->account();
+        $fop->forceFill(['mono_iban' => 'UA11fop'])->save();
+        $white = Account::create(['name' => 'Біла', 'bank_only' => true, 'mono_iban' => 'UA22white']);
+        $other = Account::create(['name' => 'ФОП Горенко', 'mono_iban' => 'UA33gor']);
+
+        $mk = fn ($acc, $id, $at, $amount, $iban = null) => BankOperation::create([
+            'account_id' => $acc->id, 'bank_id' => $id, 'operated_at' => $at, 'amount' => $amount, 'counter_iban' => $iban,
+        ]);
+
+        $out = $mk($fop, 'out', '2026-10-01 10:00:00', -10000);       // ФОП → своя картка
+        $in = $mk($white, 'in', '2026-10-01 10:01:30', 10000);          // зустрічна на картці
+        $supplier = $mk($fop, 'sup', '2026-10-01 10:00:30', -5000);     // постачальник
+        $late = $mk($other, 'late', '2026-10-01 13:00:00', 10000);      // та сама сума, але через 3 год
+        $byIban = $mk($other, 'iban', '2026-10-02 09:00:00', -3000, 'UA22white'); // на IBAN своєї картки
+        $wages = $mk($white, 'wage', '2026-10-02 12:00:00', -8000);     // з картки людям
+
+        $internal = BankOperation::internal()->pluck('bank_id')->sort()->values()->all();
+        $this->assertSame(['iban', 'in', 'out'], $internal);
+
+        // Без переказів між своїми — лише реальні гроші бізнесу.
+        $real = BankOperation::internal(false)->pluck('bank_id')->sort()->values()->all();
+        $this->assertSame(['late', 'sup', 'wage'], $real);
+        $this->assertSame(-13000.0, (float) BankOperation::internal(false)->where('amount', '<', 0)->sum('amount'));
+    }
 }

@@ -47,6 +47,13 @@ class BankOperationResource extends Resource
             ->columns([
                 TextColumn::make('operated_at')->label('Час')->dateTime('d.m.Y H:i')->sortable(),
                 TextColumn::make('account.name')->label('Рахунок')->badge()->color('gray'),
+                Tables\Columns\IconColumn::make('is_internal')
+                    ->label('Між своїми')
+                    ->tooltip('Переказ між своїми рахунками — не витрата бізнесу')
+                    ->state(fn (BankOperation $r) => in_array($r->id, static::internalIds(), true))
+                    ->boolean()
+                    ->trueIcon('heroicon-o-arrows-right-left')->trueColor('info')
+                    ->falseIcon('')->alignCenter(),
                 TextColumn::make('amount')
                     ->label('Сума')
                     ->money('UAH')
@@ -85,7 +92,16 @@ class BankOperationResource extends Resource
                 SelectFilter::make('account_id')
                     ->label('Рахунок')
                     ->options(fn () => Account::withBankOnly()->whereNotNull('mono_token')->pluck('name', 'id')),
-                SelectFilter::make('direction')
+                SelectFilter::make('internal')
+                    ->label('Перекази між своїми')
+                    ->options(['hide' => 'Без переказів між своїми', 'only' => 'Лише перекази між своїми'])
+                    ->placeholder('Усі операції')
+                    ->query(fn (Builder $q, array $data) => match ($data['value'] ?? null) {
+                        'hide'  => $q->internal(false),
+                        'only'  => $q->internal(),
+                        default => $q,
+                    }),
+                                SelectFilter::make('direction')
                     ->label('Напрям')
                     ->options(['in' => 'Надходження', 'out' => 'Витрати'])
                     ->query(fn (Builder $q, array $data) => match ($data['value'] ?? null) {
@@ -94,12 +110,18 @@ class BankOperationResource extends Resource
                         default => $q,
                     }),
             ], layout: Tables\Enums\FiltersLayout::AboveContent)
-            ->filtersFormColumns(3)
+            ->filtersFormColumns(4)
             ->paginated([50, 100, 250])
             ->defaultPaginationPageOption(100);
     }
 
-    /** Місяці, за які є операції, плюс поточний — нові першими. */
+    /** id переказів між своїми — один запит на сторінку, а не на кожен рядок. */
+    public static function internalIds(): array
+    {
+        return once(fn () => BankOperation::query()->internal()->pluck('id')->all());
+    }
+
+        /** Місяці, за які є операції, плюс поточний — нові першими. */
     public static function monthOptions(): array
     {
         $first = BankOperation::min('operated_at');
