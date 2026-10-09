@@ -410,4 +410,31 @@ class AccountingChatTest extends TestCase
         $this->assertSame('XB00128602', $n::fromPurpose('Оплата товару №ХВ00128602 від 07.10.2026'));
         $this->assertNull($n::fromPurpose('Оплата за електроенергію'));
     }
+
+    public function test_payment_before_invoice_is_added_waits_and_then_proposes(): void
+    {
+        // Накладна №ХВ00128602 лежить у групі, «Додати» ще не натиснули.
+        $invoice = $this->classify($this->invoiceAnswer(['number' => 'ХВ00128602', 'total' => 24767.95]), 10, 'inv');
+        $this->assertSame('proposed', $invoice->status);
+
+        // Старі неоплачені накладні Атабекова не мають підсовуватись.
+        $this->draft(31762.99, '2026-09-16');
+
+        $payment = $this->classify($this->paymentAnswer([
+            'amount' => 24767.95, 'purpose' => 'Оплата товару №ХВ00128602 від 07.10.2026',
+        ]), 11, 'pay');
+
+        $this->assertSame('waiting_invoice', $payment->status);
+        $this->assertTrue($this->sent(self::GROUP, 'ще не в CRM'));
+
+        // Накладну внесли (як робить ReadKitchenInvoice після «Додати»).
+        $doc = $this->draft(24767.95, '2026-10-07');
+        $doc->update(['invoice_number' => 'XB00128602']);
+        app(AccountingDesk::class)->invoiceAdded($doc);
+
+        $this->assertSame('proposed', $payment->fresh()->status);
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
+            && str_contains((string) $r['text'], 'Підходить накладна №XB00128602')
+            && str_contains(json_encode($r['reply_markup'] ?? []), "acc:pay:{$payment->id}:{$doc->id}"));
+    }
 }

@@ -71,6 +71,7 @@ class ReadKitchenInvoice implements ShouldQueue
             \App\Models\AccountingItem::whereKey($this->accountingItemId)->update(['stock_document_id' => $document->id]);
         }
 
+
         $items = $document->items()->count();
         $sum   = number_format((float) $document->total_sum, 0, ',', ' ');
         $url   = \App\Filament\Resources\StockDocumentResource::getUrl('edit', ['record' => $document]);
@@ -100,6 +101,11 @@ class ReadKitchenInvoice implements ShouldQueue
         $this->notifyChatId
             ? $telegram->sendMessage($this->notifyChatId, $text, $keyboard)
             : $telegram->askOwners($text, $keyboard);
+
+        // Оплата цієї накладної могла прийти раніше — тепер її можна закрити.
+        if ($this->accountingItemId) {
+            app(\App\Services\Accounting\AccountingDesk::class)->invoiceAdded($document);
+        }
 
         $chatId = $this->notifyChatId ?: $telegram->ownerChatId();
 

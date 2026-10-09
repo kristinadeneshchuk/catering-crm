@@ -243,6 +243,21 @@ class AccountingDesk
             return;
         }
 
+        // Оплату часто скидають раніше, ніж накладну внесли: накладна з цим
+        // номером уже є в групі, але «➕ Додати» ще не натиснули. Тоді чекаємо
+        // її, а не пропонуємо чужі старі накладні.
+        if ($number && ! $this->unpaidByNumber($number)->count() && ($invoice = $this->pendingInvoice($number))) {
+            $item->update([
+                'status'    => 'waiting_invoice',
+                'extracted' => ($item->extracted ?? []) + ['wait_number' => $number],
+            ]);
+            $this->reply($item, '💳 Оплата '.$this->money($amount).' ₴ за накладну №'.e($number)
+                .' — вона є в групі, але ще не в CRM.'
+                ."\nНатисніть «➕ Додати» під накладною — і я одразу запропоную закрити цю оплату.", null);
+
+            return;
+        }
+
         $candidates = $this->unpaid($supplierId, $amount, $pay['date'] ?? null, $number);
 
         if ($candidates->isEmpty()) {
@@ -289,14 +304,48 @@ class AccountingDesk
     {
         $until = ($this->date($date) ?? now())->copy()->addDays(3);
 
-        $byNumber = $number
-            ? StockDocument::where('type', 'receipt')->where('is_paid', false)
-                ->where('invoice_number', $number)->with('supplier')->get()
-            : collect();
+        $byNumber = $number ? $this->unpaidByNumber($number) : collect();
 
         return $byNumber->concat($this->unpaidBySupplier($supplierId, $amount, $until)
             ->reject(fn ($d) => $byNumber->contains('id', $d->id)))
             ->take(6)->values();
+    }
+
+    private function unpaidByNumber(string $number)
+    {
+        return StockDocument::where('type', 'receipt')->where('is_paid', false)
+            ->where('invoice_number', $number)->with('supplier')->get();
+    }
+
+    /** Накладна з цим номером, що лежить у групі й ще не стала чернеткою в CRM. */
+    private function pendingInvoice(string $number): ?AccountingItem
+    {
+        return AccountingItem::where('kind', AccountingItem::KIND_INVOICE)
+            ->whereIn('status', ['proposed', 'added'])
+            ->whereNull('stock_document_id')
+            ->latest('id')
+            ->get()
+            ->first(fn (AccountingItem $i) => InvoiceNumber::normalize($i->extracted['invoice']['number'] ?? null) === $number);
+    }
+
+    /**
+     * Накладну з групи щойно внесли в CRM — якщо на неї вже чекає оплата,
+     * пропонуємо закрити її (викликає ReadKitchenInvoice).
+     */
+    public function invoiceAdded(StockDocument $document): void
+    {
+        $number = InvoiceNumber::normalize($document->invoice_number);
+
+        if (! $number) {
+            return;
+        }
+
+        $waiting = AccountingItem::where('status', 'waiting_invoice')->get()
+            ->filter(fn (AccountingItem $i) => ($i->extracted['wait_number'] ?? null) === $number);
+
+        foreach ($waiting as $payment) {
+            $this->proposePayment($payment, $payment->extracted['payment'] ?? []);
+        }
     }
 
     private function unpaidBySupplier(?int $supplierId, float $amount, Carbon $until)
