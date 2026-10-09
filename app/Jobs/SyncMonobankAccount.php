@@ -30,7 +30,7 @@ class SyncMonobankAccount implements ShouldQueue
 
     public function handle(MonobankSync $sync): void
     {
-        $account = Account::find($this->accountId);
+        $account = Account::withBankOnly()->find($this->accountId);
         if (!$account) return;
 
         $result = $this->from

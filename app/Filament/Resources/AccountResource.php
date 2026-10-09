@@ -79,9 +79,21 @@ class AccountResource extends Resource
                                 ? 'Токен збережено ' . $record->maskedMonoToken() . '. Щоб замінити — вставте новий.'
                                 : 'Зберігається зашифрованим, у логи не потрапляє.')
                             ->columnSpanFull(),
+                        Select::make('mono_account_type')
+                            ->label('Який рахунок у моно')
+                            ->options(Account::MONO_TYPES)
+                            ->placeholder('ФОП (гривня)')
+                            ->live()
+                            // Змінили тип — рахунок у банку визначимо заново при підтягуванні.
+                            ->afterStateUpdated(fn (Forms\Set $set) => $set('mono_account_id', null))
+                            ->helperText('Токен — на людину: з токена Строї видно і ФОП, і її білу/чорну картку.'),
                         TextInput::make('mono_account_id')
                             ->label('id рахунку в monobank')
-                            ->helperText('Порожньо — візьмемо гривневий рахунок ФОП автоматично.'),
+                            ->helperText('Порожньо — визначимо автоматично за типом.'),
+                        Toggle::make('bank_only')
+                            ->label('Лише для банку')
+                            ->helperText('Операції видно в «Банк», але менеджерам у виборі рахунку для оплат, ЗП і накладних його немає.')
+                            ->columnSpanFull(),
                         Forms\Components\Placeholder::make('mono_status')
                             ->label('Стан')
                             ->content(fn (?Account $record) => $record?->mono_synced_at
@@ -103,7 +115,8 @@ class AccountResource extends Resource
                     ->label('Назва рахунку')
                     ->searchable()
                     ->sortable()
-                    ->weight('bold'),
+                    ->weight('bold')
+                    ->description(fn (Account $record) => $record->bank_only ? 'лише для банку' : null),
 
                 TextColumn::make('type')
                     ->label('Тип')
@@ -170,7 +183,15 @@ class AccountResource extends Resource
             ]);
     }
 
-    public static function canCreate(): bool
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        // Рахунки «лише для банку» в довіднику бачить тільки супер адмін.
+        return auth()->user()?->isSuperAdmin()
+            ? parent::getEloquentQuery()->withoutGlobalScope('payable')
+            : parent::getEloquentQuery();
+    }
+
+        public static function canCreate(): bool
     {
         return auth()->user()->role === 'admin';
     }

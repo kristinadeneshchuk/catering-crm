@@ -99,19 +99,25 @@ class MonobankSync
         return ['inserted' => $inserted, 'fetched' => $fetched];
     }
 
-    /** Рахунок ФОП у гривні з client-info (якщо id не задано вручну). */
+    /**
+     * Рахунок з client-info за типом (ФОП / біла / чорна), у гривні.
+     * Один токен — одна людина, тож з токена Строї видно і ФОП, і її картки.
+     */
     private function resolveAccount(Account $account, MonobankClient $client): void
     {
-        $accounts = collect($client->clientInfo()['accounts'] ?? []);
+        $type = $account->mono_account_type ?: 'fop';
+        $accounts = collect($client->clientInfo()['accounts'] ?? [])
+            ->filter(fn ($a) => (int) ($a['currencyCode'] ?? 0) === 980);
 
-        $fop = $accounts->first(fn ($a) => ($a['type'] ?? null) === 'fop' && (int) ($a['currencyCode'] ?? 0) === 980)
-            ?? $accounts->first(fn ($a) => (int) ($a['currencyCode'] ?? 0) === 980);
+        $found = $accounts->first(fn ($a) => ($a['type'] ?? null) === $type)
+            ?? ($type === 'fop' ? $accounts->first() : null);
 
-        if (!$fop) {
-            throw new RuntimeException("Рахунок «{$account->name}»: у monobank немає гривневого рахунку");
+        if (!$found) {
+            $label = Account::MONO_TYPES[$type] ?? $type;
+            throw new RuntimeException("Рахунок «{$account->name}»: у monobank немає гривневого рахунку «{$label}»");
         }
 
-        $account->forceFill(['mono_account_id' => $fop['id'], 'mono_iban' => $fop['iban'] ?? null])->save();
+        $account->forceFill(['mono_account_id' => $found['id'], 'mono_iban' => $found['iban'] ?? null])->save();
     }
 
     private function store(Account $account, array $items): int

@@ -44,6 +44,7 @@ class MonobankSyncTest extends TestCase
         });
 
         (require database_path('migrations/2026_10_09_200000_create_bank_operations.php'))->up();
+        (require database_path('migrations/2026_10_10_090000_add_bank_only_to_accounts.php'))->up();
 
         config(['services.finance.super_admin_ids' => '7']);
     }
@@ -243,5 +244,51 @@ class MonobankSyncTest extends TestCase
 
         $from = \Carbon\Carbon::parse('2026-08-20')->startOfDay()->timestamp;
         Http::assertSent(fn (Request $req) => str_contains($req->url(), "/fopUAH/{$from}/"));
+    }
+
+    public function test_a_bank_only_white_card_is_synced_but_hidden_from_payments(): void
+    {
+        Http::fake([
+            '*/personal/client-info' => Http::response(['accounts' => [
+                ['id' => 'fopUAH', 'type' => 'fop', 'currencyCode' => 980, 'iban' => 'UA11fop'],
+                ['id' => 'whiteUAH', 'type' => 'white', 'currencyCode' => 980, 'iban' => 'UA22white'],
+                ['id' => 'whiteUSD', 'type' => 'white', 'currencyCode' => 840, 'iban' => 'UA33usd'],
+            ]]),
+            '*/personal/statement/whiteUAH/*' => Http::response([
+                $this->op('w1', now()->timestamp - 600, -250000, ['description' => 'Банкомат']),
+            ]),
+        ]);
+
+        $fop = $this->account();
+        $white = Account::create([
+            'name' => 'Біла картка Строї', 'type' => 'card', 'bank_only' => true,
+            'mono_token' => 'uTestToken-abcd1234', 'mono_account_type' => 'white',
+        ]);
+
+        // Для решти CRM рахунку немає: вибір рахунку для оплат, каса, find().
+        $this->assertSame([$fop->id], Account::pluck('id')->all());
+        $this->assertNull(Account::find($white->id));
+        $this->assertCount(2, Account::withBankOnly()->get());
+
+        // Синхронізація його бачить і бере саме гривневу білу картку.
+        $this->artisan('bank:sync', ['--account' => $white->id])->assertSuccessful();
+
+        $white = Account::withBankOnly()->find($white->id);
+        $this->assertSame('whiteUAH', $white->mono_account_id);
+        $op = BankOperation::with('account')->where('bank_id', 'w1')->first();
+        $this->assertSame('-2500.00', $op->amount);
+        $this->assertSame('Біла картка Строї', $op->account->name);
+    }
+
+    public function test_a_missing_card_type_is_a_clear_error(): void
+    {
+        Http::fake(['*/personal/client-info' => Http::response(['accounts' => [
+            ['id' => 'fopUAH', 'type' => 'fop', 'currencyCode' => 980],
+        ]])]);
+
+        $acc = Account::create(['name' => 'Чорна', 'mono_token' => 'x', 'mono_account_type' => 'black', 'bank_only' => true]);
+
+        $this->expectExceptionMessage('немає гривневого рахунку «Чорна картка»');
+        $this->sync()->sync($acc);
     }
 }

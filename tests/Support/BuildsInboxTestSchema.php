@@ -239,6 +239,7 @@ trait BuildsInboxTestSchema
             $t->string('type')->nullable();
             $t->boolean('is_default')->default(false);
             $t->decimal('balance', 12, 2)->default(0);
+            $t->boolean('bank_only')->default(false);
             $t->timestamps();
         });
 

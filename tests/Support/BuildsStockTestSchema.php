@@ -43,7 +43,7 @@ trait BuildsStockTestSchema
 
         $make('accounts', function (Blueprint $t) {
             $t->id(); $t->string('name')->nullable(); $t->string('type')->nullable();
-            $t->boolean('is_default')->default(false); $t->decimal('balance', 12, 2)->default(0); $t->timestamps();
+            $t->boolean('is_default')->default(false); $t->decimal('balance', 12, 2)->default(0); $t->boolean('bank_only')->default(false); $t->timestamps();
         });
 
         $make('transactions', function (Blueprint $t) {

@@ -84,7 +84,7 @@ class BankOperationResource extends Resource
                     }),
                 SelectFilter::make('account_id')
                     ->label('Рахунок')
-                    ->options(fn () => Account::whereNotNull('mono_token')->pluck('name', 'id')),
+                    ->options(fn () => Account::withBankOnly()->whereNotNull('mono_token')->pluck('name', 'id')),
                 SelectFilter::make('direction')
                     ->label('Напрям')
                     ->options(['in' => 'Надходження', 'out' => 'Витрати'])

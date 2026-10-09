@@ -23,7 +23,7 @@ class BankSync extends Command
 
     public function handle(MonobankSync $sync): int
     {
-        $accounts = Account::query()
+        $accounts = Account::withBankOnly()
             ->whereNotNull('mono_token')
             ->when($this->option('account'), fn ($q, $id) => $q->whereKey($id))
             ->get();
