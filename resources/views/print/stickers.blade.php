@@ -293,6 +293,49 @@
             flex-shrink: 0;
         }
 
+        /* Панель над аркушами: фільтр і формат (як у стікерах на пакети). */
+        .toolbar { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
+        .toolbar .group { display: flex; gap: 6px; background: #1e293b; padding: 6px; border-radius: 12px; }
+        .toolbar a.opt {
+            color: #cbd5e1; text-decoration: none; font-size: 13px; font-weight: 800;
+            padding: 8px 14px; border-radius: 8px; white-space: nowrap;
+        }
+        .toolbar a.opt.active { background: #f97316; color: #fff; }
+        .toolbar .hint { width: 100%; font-size: 12px; color: #475569; margin-top: 8px; }
+
+        /* ===== ВЕЛИКИЙ ФОРМАТ 70×99мм (3×3 = 9/аркуш) — як «На пакет» ===== */
+        body.fmt-large .label-sheet {
+            grid-template-columns: repeat(3, 70mm);
+            grid-template-rows: repeat(3, 99mm);
+        }
+        body.fmt-large .sticker {
+            width: 70mm;
+            height: 99mm;
+            max-height: 99mm;
+            padding: 4mm 4mm 3mm 4mm;
+        }
+        body.fmt-large .client-name    { font-size: 15px; white-space: normal; max-width: 100%; }
+        body.fmt-large .sticker-header > div:first-child { flex: 1; min-width: 0; padding-right: 2mm; }
+        body.fmt-large .client-bundles { font-size: 10px; }
+        body.fmt-large .client-id,
+        body.fmt-large .sticker.has-changes .client-id { font-size: 15px; padding: 3px 8px; }
+        body.fmt-large .ind-tag,
+        body.fmt-large .sticker.has-changes .ind-tag   { font-size: 13px; padding: 3px 7px; }
+        body.fmt-large .calories       { font-size: 14px; padding: 3px 7px; }
+        body.fmt-large .meal-type      { font-size: 13px; }
+        body.fmt-large .meal-date,
+        body.fmt-large .meal-slot      { font-size: 11px; padding: 2px 6px; }
+        body.fmt-large .meal-row       { gap: 6px; margin-bottom: 2mm; }
+        body.fmt-large .dish-name      { font-size: 15px; -webkit-line-clamp: 3; }
+        body.fmt-large .missing-title  { font-size: 16px; }
+        body.fmt-large .changes-box    { max-height: none; padding: 2mm 3mm; margin-top: 2mm; }
+        body.fmt-large .change-item    { font-size: 12px; line-height: 1.3; }
+        body.fmt-large .meal-circle    { width: 20px; height: 20px; font-size: 9px; }
+        body.fmt-large .circles-row    { gap: 4px; margin-top: 2mm; }
+        body.fmt-large .weight-value   { font-size: 24px; }
+        body.fmt-large .weight-unit    { font-size: 12px; }
+        body.fmt-large .brand-logo     { height: 12mm; max-width: 22mm; }
+
         @media print {
             .no-print { display: none !important; }
             body { background: white !important; }
@@ -314,17 +357,35 @@
         }
     </style>
 </head>
-<body>
-
-<div class="no-print">
-    <button onclick="window.print()">
-        РОЗДРУКУВАТИ ВСІ СТІКЕРИ ({{ count($stickers) }} шт.)
-    </button>
-</div>
+<body class="{{ $format === 'large' ? 'fmt-large' : '' }}">
 
 @php
-    $chunks = array_chunk($stickers, 21);
+    // Посилання зберігають дату й інший перемикач — сторінка перебудовується
+    // на сервері, щоб аркуші ділились під формат (21 чи 9) і лічильник був чесним.
+    $link = fn (array $change) => route('print.stickers', array_merge(
+        ['date' => $date, 'format' => $format, 'no_ind' => $hideIndividual ? 1 : 0],
+        $change,
+    ));
+    $perSheet = $format === 'large' ? 9 : 21;
+    $chunks = array_chunk($stickers, $perSheet);
 @endphp
+
+<div class="no-print toolbar">
+    <div class="group">
+        <a class="opt {{ $hideIndividual ? '' : 'active' }}" href="{{ $link(['no_ind' => 0]) }}">Усі клієнти</a>
+        <a class="opt {{ $hideIndividual ? 'active' : '' }}" href="{{ $link(['no_ind' => 1]) }}">Без індивідуальних</a>
+    </div>
+    <div class="group">
+        <a class="opt {{ $format === 'small' ? 'active' : '' }}" href="{{ $link(['format' => 'small']) }}" title="68×42 мм — 21 шт/аркуш">▪▪▪ Малий 68×42</a>
+        <a class="opt {{ $format === 'large' ? 'active' : '' }}" href="{{ $link(['format' => 'large']) }}" title="70×99 мм — 9 шт/аркуш, як «На пакет»">▬▬ Великий 70×99</a>
+    </div>
+    <button onclick="window.print()">
+        РОЗДРУКУВАТИ ({{ count($stickers) }} шт. · {{ count($chunks) }} арк.)
+    </button>
+    @if($hideIndividual && $hiddenIndividual)
+        <div class="hint">Приховано стікерів індивідуальних клієнтів: {{ $hiddenIndividual }}</div>
+    @endif
+</div>
 
 @foreach($chunks as $sheetIndex => $sheet)
     <div class="label-sheet">
@@ -411,9 +472,11 @@
     // Автоматично зменшує шрифт стікера якщо контент не влізає
     document.addEventListener('DOMContentLoaded', function () {
         const PX_PER_MM = 3.7795;
-        const maxHeightPx = 42 * PX_PER_MM;
+        const maxHeightPx = ({{ $format === 'large' ? 99 : 42 }}) * PX_PER_MM;
 
         document.querySelectorAll('.sticker > div').forEach(function (inner) {
+            // На великому форматі шрифти задає CSS — тут лише ужимаємо, якщо не влізло.
+            if (document.body.classList.contains('fmt-large') && inner.scrollHeight <= maxHeightPx) return;
             let fontSize = 10; // початковий розмір в px
             inner.style.fontSize = fontSize + 'px';
 
@@ -431,6 +494,8 @@
             var parent = el.parentElement;
             var maxW = parent ? parent.offsetWidth : 0;
             if (!maxW) return;
+            // На великому імʼя переноситься на другий рядок — не зменшуємо.
+            if (document.body.classList.contains('fmt-large')) return;
             var sizeNum = 9;
             var minSize = 5;
             while (el.scrollWidth > maxW && sizeNum > minSize) {

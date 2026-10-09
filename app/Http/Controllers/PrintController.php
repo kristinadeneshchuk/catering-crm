@@ -530,9 +530,24 @@ class PrintController extends Controller
             return $a['calories'] <=> $b['calories'];
         });
 
+        // Кухня просила друкувати без індивідуальних — у них окремий процес.
+        // Лічимо скільки сховали, щоб на екрані було видно, що це фільтр, а не збій.
+        $hideIndividual = $request->boolean('no_ind');
+        $hiddenIndividual = 0;
+
+        if ($hideIndividual) {
+            $before = count($stickers);
+            $stickers = array_values(array_filter($stickers, fn ($s) => empty($s['is_individual'])));
+            $hiddenIndividual = $before - count($stickers);
+        }
+
+        // Формат паперу: малий 68×42 (21 на аркуші) або великий 70×99 (9) — той
+        // самий, що для стікерів на пакети, коли малий папір закінчився.
+        $format = $request->input('format') === 'large' ? 'large' : 'small';
+
         // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату
-        $date = $inputDate; 
-        return view('print.stickers', compact('stickers', 'date'));
+        $date = $inputDate;
+        return view('print.stickers', compact('stickers', 'date', 'format', 'hideIndividual', 'hiddenIndividual'));
     }
 
     public function packagingList(Request $request)
