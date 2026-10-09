@@ -71,6 +71,30 @@ class KitchenStockDebit
     }
 
     /**
+     * Очікуване списання за нормою для кухні: що й скільки піде зі складу
+     * за цю дату готування. Без цін — кухні гроші не показуємо.
+     *
+     * @return array{food_dates: string[], lines: array<int, array{kind: string, name: string, qty: float, unit: string}>, skipped: array<int, array{name: string, grams: float, reason: string}>}
+     */
+    public function expected(CarbonInterface $cookDate): array
+    {
+        $plan = $this->plan($cookDate, self::foodDatesFor($cookDate));
+
+        $lines = collect($plan['lines'])
+            // «шт» з вагою упаковки склад веде в кг (див. gramsToPieces) — так і показуємо.
+            ->map(fn ($l) => ['kind' => $l['kind'], 'name' => trim($l['name']), 'qty' => (float) $l['qty'],
+                'unit' => str_contains((string) ($l['note'] ?? ''), 'склад у кг') ? 'кг' : ($l['unit'] ?: 'шт')])
+            ->sortBy(fn ($l) => [$l['kind'] === 'ingredient' ? 0 : 1, mb_strtolower($l['name'])])
+            ->values()->all();
+
+        return [
+            'food_dates' => $plan['food_dates'],
+            'lines'      => $lines,
+            'skipped'    => array_map(fn ($s) => ['name' => trim($s['name']), 'grams' => (float) $s['grams'], 'reason' => $s['reason']], $plan['skipped']),
+        ];
+    }
+
+    /**
      * Розрахунок без запису.
      *
      * @return array{

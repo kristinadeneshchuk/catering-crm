@@ -160,6 +160,8 @@
             <div class="bg-white p-6 rounded-xl border text-black">
                 <h3 class="font-bold text-lg mb-6">Попередній перегляд на екрані:</h3>
 
+                @include('print.partials.expected-writeoff', ['writeoff' => $writeoff])
+
                 {{-- Коментарі клієнтів приховано на прохання кухні (09.10.2026): заміни тепер під кожною стравою. --}}
                 @if(false && !empty($clientComments))
                     <div class="replacements-container" style="margin-bottom: 24px; background:#fefce8; border:1px dashed #ca8a04;">
@@ -200,7 +202,6 @@
                                     <th rowspan="2" class="row-label">{{ $table['dish_name'] }}</th>
                                     <th colspan="{{ count($table['columns']) }}">Програма (ккал / Клієнт)</th>
                                     <th rowspan="2" style="font-size:13px;font-weight:900;width:80px;vertical-align:middle;">ЗАГАЛОМ</th>
-                                    <th rowspan="2" style="font-size:13px;font-weight:900;width:100px;vertical-align:middle;background:#fde68a;color:#78350f;">БРУТТО<br><span style="font-size:10px;font-weight:600;">взяти, з замінами</span></th>
                                 </tr>
                                 <tr class="header-kcal">
                                     @foreach($table['columns'] as $label => $info)
@@ -222,7 +223,6 @@
                                         </td>
                                     @endforeach
                                     <td style="font-size:16px;font-weight:900;">{{ collect($table['columns'])->sum(fn($c) => ($c['count'] ?? 0) + ($c['custom_count'] ?? 0)) }}</td>
-                                    <td style="background:#fef3c7;"></td>
                                 </tr>
                             </thead>
                             <tbody>
@@ -235,7 +235,6 @@
                                             <td><span style="font-weight:800;">@if(($info['count'] ?? 0) > 0){{ $val }} г@else—@endif</span></td>
                                         @endforeach
                                         <td style="font-size:14px;font-weight:900;">{{ round($rowTotal) }} г</td>
-                                        <td style="font-size:14px;font-weight:900;background:#fef3c7;color:#78350f;">@isset($row['brutto']){{ $row['brutto'] }} г@endisset</td>
                                     </tr>
                                 @endforeach
                             </tbody>

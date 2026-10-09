@@ -44,6 +44,8 @@ class PackagingList extends Page implements HasForms
     /** Замовлення, для калоражу яких немає рядка в сітці порцій. */
     public array $missingGrids = [];
     public array $clientComments = [];
+    /** Очікуване списання за нормою (без цін) — перелік зверху листа. */
+    public array $writeoff = [];
     public array $missingPlans = []; // плани з замовленнями, у яких немає меню на цей день циклу
     public ?string $debugMessage = null;
 
@@ -322,6 +324,13 @@ class PackagingList extends Page implements HasForms
 
         $this->buildVersionTwo($orders, $targetDate);
 
+        try {
+            $this->writeoff = app(\App\Services\Kitchen\KitchenStockDebit::class)->expected(Carbon::parse($selectedDate));
+        } catch (\Throwable $e) {
+            report($e);
+            $this->writeoff = [];
+        }
+
         // Збираємо глобальні коментарі клієнтів — один блок зверху
         $this->clientComments = [];
         $seenClients = [];
@@ -400,7 +409,6 @@ class PackagingList extends Page implements HasForms
                 'columns' => [],
                 'rows' => [],
                 'individual_notes' => [],
-                'custom_net'       => [], // dish_ingredient_id => нетто «червоних» порцій
             ];
 
             foreach ($orders as $order) {
@@ -515,10 +523,6 @@ class PackagingList extends Page implements HasForms
                     }
 
                     // (c) інгредієнтний свап / force-approved / невирішений конфлікт
-                    foreach ($this->customRowNet($order, $dish, $dishScale) as $diId => $g) {
-                        $tableData['custom_net'][$diId] = ($tableData['custom_net'][$diId] ?? 0) + $g;
-                    }
-
                     $oid = $order->id;
                     if (!isset($customClientData[$oid])) {
                         $customClientData[$oid] = [
@@ -585,14 +589,9 @@ class PackagingList extends Page implements HasForms
                     $cells[$key] = round($netWeight * $onePortionScale);
                 }
 
-                // Скільки взяти: усі порції, що отримують цей рядок (стандарт + «червоні»), у брутто.
-                $netAll = $netWeight * collect($tableData['columns'])->sum('sum_scale')
-                    + ($tableData['custom_net'][$di->id] ?? 0);
-
                 $tableData['rows'][] = [
                     'original_name' => $name,
                     'cells' => $cells,
-                    'brutto' => round($netAll * $this->rowBruttoFactor($di)),
                 ];
             }
 

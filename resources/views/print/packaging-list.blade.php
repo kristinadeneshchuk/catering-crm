@@ -132,6 +132,8 @@
         </div>
     @endif
 
+    @include('print.partials.expected-writeoff', ['writeoff' => $writeoff ?? []])
+
     {{-- ОБХІД ПО ПЛАНАХ МЕНЮ --}}
     @foreach($reportByPlan as $planId => $planBlock)
         @php
@@ -166,7 +168,6 @@
                     <th rowspan="2" style="width:200px;vertical-align:middle;">{{ $table['dish_name'] }}</th>
                     <th colspan="{{ count($table['columns']) }}" class="header-green">ПРОГРАМА (ККАЛ / КЛІЄНТ)</th>
                     <th rowspan="2" style="width:80px;vertical-align:middle;font-size:12px;font-weight:bold;">ЗАГАЛОМ</th>
-                    <th rowspan="2" style="width:90px;vertical-align:middle;font-size:12px;font-weight:bold;background:#fde68a;">БРУТТО<br><span style="font-size:9px;font-weight:600;">взяти, з замінами</span></th>
                 </tr>
                 <tr>
                     @foreach($table['columns'] as $colKey => $colData)
@@ -188,7 +189,6 @@
                         </td>
                     @endforeach
                     <td style="font-size:16px;font-weight:bold;">{{ collect($table['columns'])->sum(fn($c) => ($c['count'] ?? 0) + ($c['custom_count'] ?? 0)) }}</td>
-                    <td style="background:#fef3c7;"></td>
                 </tr>
             </thead>
             <tbody>
@@ -201,7 +201,6 @@
                             <td style="font-weight:bold;font-size:13px;">@if(($colData['count'] ?? 0) > 0){{ $val }} г@else—@endif</td>
                         @endforeach
                         <td style="font-size:14px;font-weight:bold;">{{ round($rowTotal) }} г</td>
-                        <td style="font-size:14px;font-weight:900;background:#fef3c7;">@isset($row['brutto']){{ $row['brutto'] }} г@endisset</td>
                     </tr>
                 @endforeach
             </tbody>
