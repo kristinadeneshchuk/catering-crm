@@ -201,7 +201,8 @@ public function form(Form $form): Form
                 OrderReplacement::where('order_id', $arguments['order_id'])
                     ->where('dish_id', $arguments['dish_id'])
                     ->where('original_product_id', $arguments['product_id'])
-                    ->delete();
+                    ->get()
+                    ->each->delete(); // по одній — щоб скидання дійшло й до інших замовлень клієнта
 
                 Notification::make()->title('Заміну скасовано')->success()->send();
                 $this->calculate();

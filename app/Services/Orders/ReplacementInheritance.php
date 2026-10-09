@@ -4,6 +4,7 @@ namespace App\Services\Orders;
 
 use App\Models\Order;
 use App\Models\OrderReplacement;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -17,6 +18,10 @@ use Illuminate\Support\Facades\DB;
  * її заміни чужі. Дочірні замовлення не успадковують і не є джерелом.
  * Якщо в останньому замовленні замін немає — не копіюємо нічого:
  * менеджер міг прибрати їх свідомо.
+ *
+ * Правка заміни в живому замовленні (new/active/paused) дзеркалиться в інші
+ * живі замовлення клієнта: у поточне, якщо правили вже створене продовження,
+ * і навпаки. Якщо серед них є паралельні (сімʼя) — не синхронізуємо нічого.
  */
 class ReplacementInheritance
 {
@@ -52,6 +57,17 @@ class ReplacementInheritance
             return 0;
         }
 
+        // Копія — не правка менеджера, дзеркалити її нікуди не треба.
+        self::$syncing = true;
+        try {
+            return $this->copy($order, $source);
+        } finally {
+            self::$syncing = false;
+        }
+    }
+
+    private function copy(Order $order, Order $source): int
+    {
         return DB::transaction(function () use ($order, $source) {
             $copied = 0;
             foreach ($source->replacements()->get() as $rep) {
@@ -63,5 +79,74 @@ class ReplacementInheritance
 
             return $copied;
         });
+    }
+
+    private const LIVE = ['new', 'active', 'paused'];
+
+    private static bool $syncing = false;
+
+    /** Інші живі замовлення тієї ж людини. Порожньо, якщо незрозуміло, чия це заміна. */
+    public function liveSiblings(Order $order): Collection
+    {
+        if ($order->parent_order_id || ! in_array($order->status, self::LIVE, true)) {
+            return collect();
+        }
+
+        $live = Order::query()
+            ->where('client_id', $order->client_id)
+            ->whereNull('parent_order_id')
+            ->whereIn('status', self::LIVE)
+            ->get();
+
+        $overlaps = fn (Order $a, Order $b) => ! $a->start_date || ! $a->end_date || ! $b->start_date || ! $b->end_date
+            || ($a->start_date->lte($b->end_date) && $b->start_date->lte($a->end_date));
+
+        foreach ($live as $i => $a) {
+            foreach ($live->slice($i + 1) as $b) {
+                if ($overlaps($a, $b)) {
+                    return collect();
+                }
+            }
+        }
+
+        return $live->where('id', '!=', $order->id)->values();
+    }
+
+    public function syncSaved(OrderReplacement $rep): void
+    {
+        $this->mirror($rep, fn (Order $target) => OrderReplacement::updateOrCreate(
+            ['order_id' => $target->id, 'dish_id' => $rep->dish_id, 'original_product_id' => $rep->original_product_id],
+            [
+                'replacement_product_id' => $rep->replacement_product_id,
+                'replacement_dish_id'    => $rep->replacement_dish_id,
+                'force_approved'         => (bool) $rep->force_approved,
+                'comment'                => $rep->comment,
+            ],
+        ));
+    }
+
+    public function syncDeleted(OrderReplacement $rep): void
+    {
+        $this->mirror($rep, fn (Order $target) => OrderReplacement::query()
+            ->where('order_id', $target->id)
+            ->where('dish_id', $rep->dish_id)
+            ->where('original_product_id', $rep->original_product_id)
+            ->delete());
+    }
+
+    private function mirror(OrderReplacement $rep, callable $apply): void
+    {
+        if (self::$syncing || ! $rep->order) {
+            return;
+        }
+
+        self::$syncing = true;
+        try {
+            foreach ($this->liveSiblings($rep->order) as $target) {
+                $apply($target);
+            }
+        } finally {
+            self::$syncing = false;
+        }
     }
 }

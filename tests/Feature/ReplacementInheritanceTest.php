@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Order;
+use App\Models\OrderReplacement;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\BuildsInboxTestSchema;
 use Tests\TestCase;
@@ -125,5 +126,62 @@ class ReplacementInheritanceTest extends TestCase
 
         $this->artisan('orders:inherit-replacements --apply')->assertSuccessful();
         $this->assertCount(1, $this->replacementsOf($new));
+    }
+
+    // --- правка в одному живому замовленні доходить до іншого ---------------
+
+    protected function edit(Order $order, int $dishId, ?int $to): OrderReplacement
+    {
+        return OrderReplacement::updateOrCreate(
+            ['order_id' => $order->id, 'dish_id' => $dishId, 'original_product_id' => 10],
+            ['replacement_product_id' => $to, 'comment' => 'правка'],
+        );
+    }
+
+    public function test_an_edit_in_the_renewal_reaches_the_current_order(): void
+    {
+        $current = $this->order('2026-10-05', '2026-10-09');
+        $renewal = $this->order('2026-10-12', '2026-10-16');
+
+        $this->edit($renewal, 3, 30);
+
+        $this->assertSame([30], array_column($this->replacementsOf($current), 'replacement_product_id'));
+    }
+
+    public function test_an_edit_and_a_reset_in_the_current_order_reach_the_renewal(): void
+    {
+        $current = $this->order('2026-10-05', '2026-10-09');
+        $renewal = $this->order('2026-10-12', '2026-10-16');
+
+        $rep = $this->edit($current, 3, 30);
+        $this->edit($current, 3, 31);
+        $this->assertSame([31], array_column($this->replacementsOf($renewal), 'replacement_product_id'));
+
+        $rep->delete();
+        $this->assertSame([], $this->replacementsOf($renewal));
+    }
+
+    public function test_family_orders_are_not_synced(): void
+    {
+        $mine  = $this->order('2026-10-05', '2026-10-15');
+        $wifes = $this->order('2026-10-06', '2026-10-10');
+
+        $this->edit($mine, 3, 30);
+
+        $this->assertSame([], $this->replacementsOf($wifes));
+    }
+
+    public function test_finished_orders_are_left_alone(): void
+    {
+        $past = $this->order('2026-09-01', '2026-09-05');
+        $past->update(['status' => 'finished']);
+        $current = $this->order('2026-10-05', '2026-10-09');
+
+        $this->edit($current, 3, 30);
+        $this->assertSame([], $this->replacementsOf($past));
+
+        // І правка в завершеному не тягнеться в живі.
+        $this->edit($past, 4, 40);
+        $this->assertSame([3], array_column($this->replacementsOf($current), 'dish_id'));
     }
 }

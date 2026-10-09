@@ -12,6 +12,13 @@ class OrderReplacement extends Model
 
     protected $guarded = [];
 
+    protected static function booted(): void
+    {
+        // Правка заміни доходить до інших живих замовлень клієнта.
+        static::saved(fn (self $rep) => app(\App\Services\Orders\ReplacementInheritance::class)->syncSaved($rep));
+        static::deleted(fn (self $rep) => app(\App\Services\Orders\ReplacementInheritance::class)->syncDeleted($rep));
+    }
+
     // Зв'язок із замовленням
     public function order(): BelongsTo
     {
