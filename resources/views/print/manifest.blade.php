@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <title>Маніфести — {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y') }}</title>
+    <title>Маніфести — {{ collect($targets)->map(fn ($d) => \Carbon\Carbon::parse($d)->format('d.m.Y'))->implode(' + ') }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* ЗАГАЛЬНІ СТИЛІ */
@@ -64,10 +64,12 @@
     <div class="flex items-center gap-3">
         <label class="font-bold text-gray-500 uppercase text-xs">Розмір:</label>
         <select onchange="window.location.href=this.value" class="bg-gray-50 border border-gray-300 text-slate-800 font-bold px-4 py-3 rounded-xl outline-none focus:border-slate-900 cursor-pointer transition">
-            <option value="?date={{ $date }}&layout=default" {{ $layout === 'default' ? 'selected' : '' }}>Стандартний вигляд (А4)</option>
-            <option value="?date={{ $date }}&layout=105x99" {{ $layout === '105x99' ? 'selected' : '' }}>Фіксований: 105 x 99 мм</option>
+            <option value="?date={{ $date }}&weekend={{ (int) $weekend }}&layout=default" {{ $layout === 'default' ? 'selected' : '' }}>Стандартний вигляд (А4)</option>
+            <option value="?date={{ $date }}&weekend={{ (int) $weekend }}&layout=105x99" {{ $layout === '105x99' ? 'selected' : '' }}>Фіксований: 105 x 99 мм</option>
         </select>
     </div>
+
+    @include('print.partials.weekend-toggle', ['href' => fn ($w) => route('print.manifest', ['date' => $date, 'layout' => $layout, 'weekend' => $w])])
 
     <div style="display:flex;gap:6px;background:#1e293b;padding:6px;border-radius:12px;">
         <button onclick="filterSlot('all')"     id="btn-all"     class="mf-filter active">Всі (<span id="count-all">{{ count($manifests) }}</span>)</button>
@@ -86,8 +88,12 @@
 .mf-filter.evening-btn.active { background:#1e3a5f;color:#94a3b8; }
 </style>
 
-<div class="sticker-grid">
-    @foreach($manifests as $man)
+@foreach(collect($manifests)->groupBy('date') as $dayDate => $dayManifests)
+@if(count($targets) > 1)
+    <div class="no-print text-center text-lg font-black uppercase mt-6 mb-2">{{ \Carbon\Carbon::parse($dayDate)->locale('uk')->translatedFormat('l d.m') }} — {{ count($dayManifests) }} шт.</div>
+@endif
+<div class="sticker-grid" @if(! $loop->first) style="break-before: page; page-break-before: always;" @endif>
+    @foreach($dayManifests as $man)
         @php 
             $project = \App\Models\Project::where('slug', $man['project'])->first();
             
@@ -118,7 +124,7 @@
                 <div>
                     <div class="flex justify-between items-start mb-1.5">
                         <span class="text-xs font-black bg-yellow-300 px-2 py-0.5 rounded shadow-sm inline-block text-black">
-                            {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y') }}
+                            {{ \Carbon\Carbon::parse($man['date'])->format('d.m.Y') }}
                         </span>
                         <div class="w-24 logo-wrap min-h-[35px] flex items-center justify-end">
                             @if($projectLogo)
@@ -193,6 +199,7 @@
         </div>
     @endforeach
 </div>
+@endforeach
 <script>
 function filterSlot(slot) {
     var boxes = document.querySelectorAll('.sticker-box');

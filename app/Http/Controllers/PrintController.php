@@ -17,10 +17,27 @@ class PrintController extends Controller
     use CalculatesOrderPlan;
     public function manifest(Request $request)
     {
-        $inputDate  = $request->input('date', now()->format('Y-m-d'));
-        $layout     = $request->input('layout', 'default');
-        $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
+        $layout = $request->input('layout', 'default');
+        [$date, $isFriday, $weekend, $targets] = $this->cookTargets($request);
 
+        $manifests = [];
+        $anyOrders = false;
+        foreach ($targets as $targetDate) {
+            $day = $this->manifestsFor($targetDate);
+            $anyOrders = $anyOrders || $day !== null;
+            $manifests = array_merge($manifests, $day ?? []);
+        }
+
+        if (! $anyOrders) {
+            return 'Немає активних замовлень на '.implode(' і ', $targets).'.';
+        }
+
+        return view('print.manifest', compact('manifests', 'date', 'layout', 'isFriday', 'weekend', 'targets'));
+    }
+
+    /** Маніфести «в пакет» на один день їжі. null — на цей день немає замовлень. */
+    private function manifestsFor(string $targetDate): ?array
+    {
         $orders = Order::feedingOn($targetDate)
             ->with([
                 'client.mealTypes',
@@ -37,7 +54,7 @@ class PrintController extends Controller
             ->get();
 
         if ($orders->isEmpty()) {
-            return "Немає активних замовлень на {$targetDate}.";
+            return null;
         }
 
         // Меню кешуємо по plan_id — кожен план може мати свій день циклу
@@ -165,16 +182,24 @@ class PrintController extends Controller
             return $a['calories'] <=> $b['calories'];
         });
 
-        // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату, щоб уникнути "+2 дні" в шаблоні
-        $date = $inputDate; 
-        return view('print.manifest', compact('manifests', 'date', 'layout'));
+        return $manifests;
     }
 
     public function miniManifest(Request $request)
     {
-        $inputDate  = $request->input('date', now()->format('Y-m-d'));
-        $targetDate = Carbon::parse($inputDate)->addDay()->format('Y-m-d');
+        [$date, $isFriday, $weekend, $targets] = $this->cookTargets($request);
 
+        $manifests = [];
+        foreach ($targets as $targetDate) {
+            $manifests = array_merge($manifests, $this->miniManifestsFor($targetDate));
+        }
+
+        return view('print.mini-manifest', compact('manifests', 'date', 'isFriday', 'weekend', 'targets'));
+    }
+
+    /** Наліпки «на пакет» на один день їжі. */
+    private function miniManifestsFor(string $targetDate): array
+    {
         $orders = Order::feedingOn($targetDate)
             ->with([
                 'client.dishExclusions',
@@ -266,6 +291,7 @@ class PrintController extends Controller
                 'is_individual'      => $order->menu_type === 'individual',
                 'delivery_slot'      => $isEvening ? 'Вечір' : 'Ранок',
                 'menu_token'         => $order->menu_token,
+                'date'               => $targetDate,
                 'ant_route_num'      => $orderDay?->ant_route_num,
                 'ant_route_pos'      => $orderDay?->ant_route_pos,
                 'ant_driver'         => $orderDay?->ant_driver,
@@ -333,23 +359,35 @@ class PrintController extends Controller
             return $a['calories'] <=> $b['calories'];
         });
 
-        // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату
-        $date = $inputDate; 
-        return view('print.mini-manifest', compact('manifests', 'date'));
+        return $manifests;
+    }
+
+    /**
+     * Дата готування і дні їжі, на які друкуємо.
+     *
+     * У пʼятницю кухня готує на суботу й неділю — з ?weekend=1 друкуємо
+     * обидва дні разом (кожен з нового аркуша).
+     *
+     * @return array{0: string, 1: bool, 2: bool, 3: string[]}
+     */
+    private function cookTargets(Request $request): array
+    {
+        $date     = $request->input('date', now()->format('Y-m-d'));
+        $cookDate = Carbon::parse($date);
+        $isFriday = $cookDate->isFriday();
+        $weekend  = $isFriday && $request->boolean('weekend');
+
+        $targets = [$cookDate->copy()->addDay()->format('Y-m-d')];
+        if ($weekend) {
+            $targets[] = $cookDate->copy()->addDays(2)->format('Y-m-d');
+        }
+
+        return [$date, $isFriday, $weekend, $targets];
     }
 
     public function stickers(Request $request)
     {
-        $inputDate = $request->input('date', now()->format('Y-m-d'));
-        $cookDate  = Carbon::parse($inputDate);
-
-        // У пʼятницю кухня готує на суботу й неділю — щоб не відкривати сторінку
-        // двічі, обидва дні можна надрукувати разом (кожен з нового аркуша).
-        $isFriday = $cookDate->isFriday();
-        $weekend  = $isFriday && $request->boolean('weekend');
-        $targets  = $weekend
-            ? [$cookDate->copy()->addDay()->format('Y-m-d'), $cookDate->copy()->addDays(2)->format('Y-m-d')]
-            : [$cookDate->copy()->addDay()->format('Y-m-d')];
+        [$date, $isFriday, $weekend, $targets] = $this->cookTargets($request);
 
         $stickers = [];
         $anyOrders = false;
@@ -423,7 +461,6 @@ class PrintController extends Controller
         $format = $request->input('format') === 'large' ? 'large' : 'small';
 
         // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату
-        $date = $inputDate;
         return view('print.stickers', compact('stickers', 'date', 'format', 'hideIndividual', 'hiddenIndividual', 'isFriday', 'weekend', 'targets'));
     }
 

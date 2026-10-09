@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <title>На пакет — {{ \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y') }}</title>
+    <title>На пакет — {{ collect($targets)->map(fn ($d) => \Carbon\Carbon::parse($d)->format('d.m.Y'))->implode(' + ') }}</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         * {
@@ -447,6 +447,7 @@
 <body>
 
 <div class="no-print" style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
+    @include('print.partials.weekend-toggle', ['href' => fn ($w) => route('print.mini-manifest', ['date' => $date, 'weekend' => $w])])
     {{-- Фільтр за слотом --}}
     <div style="display:flex;gap:6px;background:#1e293b;padding:6px;border-radius:12px;">
         <button onclick="filterSlot('all')"     id="btn-all"     class="filter-btn active">Всі (<span id="count-all">{{ count($manifests) }}</span>)</button>
@@ -491,8 +492,12 @@
 }
 </style>
 
+@foreach(collect($manifests)->groupBy('date') as $dayDate => $dayManifests)
+@if(count($targets) > 1)
+    <div class="no-print" style="text-align:center;font-size:18px;font-weight:900;text-transform:uppercase;margin:18px 0 6px;">{{ \Carbon\Carbon::parse($dayDate)->locale('uk')->translatedFormat('l d.m') }} — {{ count($dayManifests) }} шт.</div>
+@endif
 <div class="label-sheet">
-    @foreach($manifests as $man)
+    @foreach($dayManifests as $man)
         @php
             $project = \App\Models\Project::where('slug', $man['project'])->first();
 
@@ -509,7 +514,7 @@
                 ? 'data:image/png;base64,' . base64_encode(file_get_contents(storage_path('app/public/' . $project->logo)))
                 : null;
 
-            $deliveryDate = \Carbon\Carbon::parse($date)->addDay()->format('d.m.Y');
+            $deliveryDate = \Carbon\Carbon::parse($man['date'])->format('d.m.Y');
         @endphp
 
         <div class="sticker" style="--brand-color: {{ $brandColor }};" data-slot="{{ $man['is_evening'] ? 'evening' : 'morning' }}" data-individual="{{ $man['is_individual'] ? '1' : '0' }}">
@@ -642,6 +647,7 @@
         </div>
     @endforeach
 </div>
+@endforeach
 
 <script>
 var currentFormat = 'small';
