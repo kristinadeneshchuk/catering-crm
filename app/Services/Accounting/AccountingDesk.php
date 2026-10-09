@@ -14,6 +14,9 @@ use App\Services\TelegramService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use App\Support\Documents\InvoiceNumber;
+use App\Support\Documents\SignedPdf;
 
 /**
  * Група «Бухгалтерія»: накладні й квитанції про оплату.
@@ -97,6 +100,15 @@ class AccountingDesk
 
         // Telegram шле PDF з розширенням .pdf, а фото без опису — тримаємо тип.
         $entry = ['path' => $path, 'unique_id' => $file['unique_id'], 'mime' => $file['mime']];
+
+        // Квитанція з КЕП (monobank тощо): PDF загорнутий у підписаний контейнер.
+        // Модель читає лише чистий PDF — вирізаємо його, оригінал лишаємо поруч.
+        if ($file['mime'] === 'application/pdf'
+            && ($pdf = SignedPdf::unwrap((string) Storage::disk('local')->get($path)))) {
+            $plain = preg_replace('/\.pdf$/i', '', $path).'.unsigned.pdf';
+            Storage::disk('local')->put($plain, $pdf);
+            $entry = ['path' => $plain, 'signed' => $path] + $entry;
+        }
         $chatId = (string) $message['chat']['id'];
         $group = $message['media_group_id'] ?? null;
 
@@ -153,6 +165,7 @@ class AccountingDesk
     private function proposeInvoice(AccountingItem $item, array $inv): void
     {
         $supplierId = $this->matcher->supplierId($inv['supplier_name'] ?? null, $inv['supplier_code'] ?? null);
+        $this->rememberCode($supplierId, $inv['supplier_code'] ?? null);
 
         if ($existing = $this->existingInvoice($supplierId, $inv)) {
             $item->update(['status' => 'duplicate', 'stock_document_id' => $existing->id]);
@@ -185,7 +198,7 @@ class AccountingDesk
     private function existingInvoice(?int $supplierId, array $inv): ?StockDocument
     {
         $query = StockDocument::where('type', 'receipt');
-        $number = trim((string) ($inv['number'] ?? ''));
+        $number = (string) InvoiceNumber::normalize($inv['number'] ?? null);
         $date = $this->date($inv['date'] ?? null);
 
         if ($number !== '') {
@@ -220,6 +233,8 @@ class AccountingDesk
     {
         $amount = (float) ($pay['amount'] ?? 0);
         $supplierId = $this->matcher->supplierId($pay['recipient_name'] ?? null, $pay['recipient_code'] ?? null);
+        $this->rememberCode($supplierId, $pay['recipient_code'] ?? null);
+        $number = $this->paymentInvoiceNumber($pay);
 
         // Не постачальник і ШІ теж каже «не закупівля» — питаємо лише власника.
         if (! $supplierId && empty($pay['is_supplier_payment'])) {
@@ -228,7 +243,7 @@ class AccountingDesk
             return;
         }
 
-        $candidates = $this->unpaid($supplierId, $amount, $pay['date'] ?? null);
+        $candidates = $this->unpaid($supplierId, $amount, $pay['date'] ?? null, $number);
 
         if ($candidates->isEmpty()) {
             // Схоже на постачальника, але відкритих накладних немає.
@@ -240,7 +255,9 @@ class AccountingDesk
         }
 
         $best = $candidates->first();
-        $exact = abs((float) $best->total_sum - $amount) <= 1;
+        // «Оплата товару №ХВ00128602» — номер з призначення точніший за суму.
+        $byNumber = $number && InvoiceNumber::normalize($best->invoice_number) === $number;
+        $exact = $byNumber || abs((float) $best->total_sum - $amount) <= 1;
         $account = $this->matcher->accountId($pay['payer_name'] ?? null);
 
         $text = "💳 <b>Оплата ".$this->money($amount).' ₴</b> → '
@@ -248,7 +265,7 @@ class AccountingDesk
             .(! empty($pay['date']) ? ' · '.$this->day($pay['date']) : '')
             ."\nЗ рахунку: ".e($account ? Account::find($account)->name : 'не впізнав — спитаю')
             ."\n\n".($exact
-                ? 'Підходить накладна '.$this->docLine($best)
+                ? 'Підходить накладна '.($byNumber ? '№'.e($best->invoice_number).' ' : '').$this->docLine($best)
                 : 'Точної суми серед неоплачених немає. Яку накладну закриває ця оплата?');
 
         $keyboard = $exact
@@ -264,11 +281,26 @@ class AccountingDesk
         $item->update(['status' => 'proposed', 'bot_message_id' => $id]);
     }
 
-    /** Неоплачені накладні: спершу постачальника, інакше будь-чиї з близькою сумою. */
-    private function unpaid(?int $supplierId, float $amount, ?string $date)
+    /**
+     * Неоплачені накладні: спершу та, чий номер у призначенні платежу, далі —
+     * постачальника, інакше будь-чиї з близькою сумою.
+     */
+    private function unpaid(?int $supplierId, float $amount, ?string $date, ?string $number = null)
     {
         $until = ($this->date($date) ?? now())->copy()->addDays(3);
 
+        $byNumber = $number
+            ? StockDocument::where('type', 'receipt')->where('is_paid', false)
+                ->where('invoice_number', $number)->with('supplier')->get()
+            : collect();
+
+        return $byNumber->concat($this->unpaidBySupplier($supplierId, $amount, $until)
+            ->reject(fn ($d) => $byNumber->contains('id', $d->id)))
+            ->take(6)->values();
+    }
+
+    private function unpaidBySupplier(?int $supplierId, float $amount, Carbon $until)
+    {
         return StockDocument::where('type', 'receipt')
             ->where('is_paid', false)
             ->whereDate('operation_date', '<=', $until)
@@ -436,7 +468,15 @@ class AccountingDesk
         DB::transaction(function () use ($item, $document, $accountId, $fromId) {
             // is_paid → syncTransaction: проведена накладна одразу дає витрату
             // «Закупівля», чернетка — коли її проведуть.
-            $document->update(['is_paid' => true, 'account_id' => $accountId]);
+            $document->update(array_filter([
+                'is_paid'     => true,
+                'account_id'  => $accountId,
+                // У бланку постачальника часто немає — з квитанції він відомий.
+                'supplier_id' => $document->supplier_id ?: $this->matcher->supplierId(
+                    $item->extracted['payment']['recipient_name'] ?? null,
+                    $item->extracted['payment']['recipient_code'] ?? null,
+                ),
+            ], fn ($v) => $v !== null));
             $item->update([
                 'status' => 'paid', 'stock_document_id' => $document->id,
                 'decided_by' => $fromId, 'decided_at' => now(),
@@ -461,7 +501,7 @@ class AccountingDesk
     {
         $pay = $item->extracted['payment'] ?? [];
         $supplierId = $this->matcher->supplierId($pay['recipient_name'] ?? null, $pay['recipient_code'] ?? null);
-        $docs = $this->unpaid($supplierId, (float) ($pay['amount'] ?? 0), $pay['date'] ?? null);
+        $docs = $this->unpaid($supplierId, (float) ($pay['amount'] ?? 0), $pay['date'] ?? null, $this->paymentInvoiceNumber($pay));
 
         $keyboard = $this->docButtons($item, $docs);
         $keyboard[] = [['text' => '✖️ Не оплата постачальнику', 'callback_data' => self::CALLBACK.":np:{$item->id}"]];
@@ -524,6 +564,21 @@ class AccountingDesk
     }
 
     // ── Дрібниці ────────────────────────────────────────────────────────────
+
+    private function paymentInvoiceNumber(array $pay): ?string
+    {
+        return InvoiceNumber::normalize($pay['invoice_number'] ?? null) ?? InvoiceNumber::fromPurpose($pay['purpose'] ?? null);
+    }
+
+    /** Постачальника впізнали за прізвищем, а в документі є його код — запамʼятати. */
+    private function rememberCode(?int $supplierId, ?string $code): void
+    {
+        $code = preg_replace('/\D+/', '', (string) $code);
+
+        if ($supplierId && strlen($code) >= 8) {
+            Supplier::whereKey($supplierId)->where(fn ($q) => $q->whereNull('inn')->orWhere('inn', ''))->update(['inn' => $code]);
+        }
+    }
 
     private function docButtons(AccountingItem $item, $docs): array
     {

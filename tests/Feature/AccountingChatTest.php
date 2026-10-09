@@ -119,7 +119,8 @@ class AccountingChatTest extends TestCase
         return ['kind' => 'payment', 'confidence' => 'high', 'invoice' => null, 'payment' => array_merge([
             'amount' => 30351.56, 'date' => '2026-09-26', 'payer_name' => 'ФОП Настечина Вікторія', 'payer_bank' => 'ПриватБанк',
             'recipient_name' => 'ФОП Атабеков', 'recipient_code' => '3011223344', 'recipient_iban' => null,
-            'purpose' => 'Оплата за продукти згідно накладної', 'is_supplier_payment' => true, 'category_guess' => 'постачальник',
+            'purpose' => 'Оплата за продукти згідно накладної', 'invoice_number' => null,
+            'is_supplier_payment' => true, 'category_guess' => 'постачальник',
         ], $payment)];
     }
 
@@ -342,5 +343,71 @@ class AccountingChatTest extends TestCase
 
         $this->assertSame(0, AccountingItem::count());
         Http::assertNotSent(fn ($r) => str_contains($r->url(), 'sendMessage'));
+    }
+
+    public function test_signed_bank_pdf_is_unwrapped_before_reading(): void
+    {
+        // monobank: PDF усередині PKCS#7 (SEQUENCE … OCTET STRING з PDF).
+        $pdf = "%PDF-1.4\n1 0 obj<<>>endobj\n%%EOF\n";
+        $octet = "\x04\x81".chr(strlen($pdf)).$pdf;
+        $signed = "\x30\x82\x01\x00\x06\x09\x2a\x86\x48\x86\xf7\x0d\x01\x07\x02".$octet."\x31\x00SIGNATURE";
+
+        $this->assertSame($pdf, \App\Support\Documents\SignedPdf::unwrap($signed));
+        $this->assertNull(\App\Support\Documents\SignedPdf::unwrap($pdf)); // чистий PDF не чіпаємо
+
+        // Заглушки з setUp перехоплюють запити першими — ставимо свої з нуля.
+        Http::swap(new \Illuminate\Http\Client\Factory());
+        Http::fake([
+            'api.telegram.org/*/getFile*' => Http::response(['ok' => true, 'result' => ['file_path' => 'documents/file_25.pdf']]),
+            'api.telegram.org/file/*'     => Http::response($signed),
+            'api.telegram.org/*'          => Http::response(['ok' => true, 'result' => ['message_id' => 42]]),
+        ]);
+
+        $this->postJson('/webhooks/telegram-bot', [
+            'update_id' => 1,
+            'message'   => [
+                'message_id' => 20,
+                'chat'       => ['id' => (int) self::GROUP, 'type' => 'supergroup'],
+                'from'       => ['id' => 300],
+                'document'   => ['file_id' => 'pdf1', 'file_unique_id' => 'updf', 'mime_type' => 'application/pdf'],
+            ],
+        ], ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();
+
+        $file = AccountingItem::first()->files[0];
+        $this->assertStringEndsWith('.unsigned.pdf', $file['path']);
+        $this->assertSame($pdf, \Illuminate\Support\Facades\Storage::disk('local')->get($file['path']));
+        $this->assertNotEmpty($file['signed']); // оригінал з підписом лишається
+    }
+
+    public function test_payment_finds_invoice_by_number_in_purpose_and_fills_supplier(): void
+    {
+        // Накладна без постачальника (у бланку його немає) і з іншою сумою —
+        // але номер з призначення платежу збігається, навіть кирилицею.
+        $doc = $this->draft(24000.00, '2026-10-07');
+        $doc->update(['supplier_id' => null, 'invoice_number' => 'XB00128602']);
+        $this->atabekov->update(['inn' => null]);
+
+        $item = $this->classify($this->paymentAnswer([
+            'amount' => 24767.95, 'recipient_name' => 'АТАБЕКОВ АРСЕН РАФАЕЛОВИЧ', 'recipient_code' => '2634313872',
+            'purpose' => 'Оплата товару №ХВ00128602 від 07.10.2026', 'invoice_number' => null,
+        ]));
+
+        $this->assertTrue($this->sent(self::GROUP, '№XB00128602'));
+        $this->assertSame('2634313872', $this->atabekov->fresh()->inn); // код запамʼятали
+
+        $this->press("acc:pay:{$item->id}:{$doc->id}");
+
+        $doc->refresh();
+        $this->assertTrue((bool) $doc->is_paid);
+        $this->assertSame($this->atabekov->id, (int) $doc->supplier_id);
+    }
+
+    public function test_invoice_numbers_compare_across_cyrillic_and_latin(): void
+    {
+        $n = \App\Support\Documents\InvoiceNumber::class;
+
+        $this->assertSame('XB00128602', $n::normalize('№ ХВ00128602'));
+        $this->assertSame('XB00128602', $n::fromPurpose('Оплата товару №ХВ00128602 від 07.10.2026'));
+        $this->assertNull($n::fromPurpose('Оплата за електроенергію'));
     }
 }

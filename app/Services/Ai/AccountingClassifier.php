@@ -50,6 +50,7 @@ class AccountingClassifier
         - `payer_name` — хто платив (ФОП/компанія/людина), `payer_bank` — банк платника;
         - `recipient_name`, `recipient_code` (ЄДРПОУ/ІПН), `recipient_iban` — кому;
         - `purpose` — призначення платежу дослівно;
+        - `invoice_number` — номер накладної/рахунку з призначення («Оплата товару №ХВ00128602» → ХВ00128602), інакше null;
         - `is_supplier_payment` — true, якщо це оплата постачальнику продуктів, упаковки чи господарських товарів для кухні
           (за призначенням або отримувачем); false — оренда, комуналка, податки, реклама, зарплата, особисте тощо;
         - `category_guess` — коротко, що це за витрата («оренда», «комуналка», «реклама», «податок», «постачальник» …).
@@ -79,10 +80,11 @@ class AccountingClassifier
                     'properties' => [
                         'amount' => $num, 'date' => $str, 'payer_name' => $str, 'payer_bank' => $str,
                         'recipient_name' => $str, 'recipient_code' => $str, 'recipient_iban' => $str,
-                        'purpose' => $str, 'is_supplier_payment' => ['type' => 'boolean'], 'category_guess' => $str,
+                        'purpose' => $str, 'invoice_number' => $str,
+                        'is_supplier_payment' => ['type' => 'boolean'], 'category_guess' => $str,
                     ],
                     'required'             => ['amount', 'date', 'payer_name', 'payer_bank', 'recipient_name',
-                        'recipient_code', 'recipient_iban', 'purpose', 'is_supplier_payment', 'category_guess'],
+                        'recipient_code', 'recipient_iban', 'purpose', 'invoice_number', 'is_supplier_payment', 'category_guess'],
                     'additionalProperties' => false,
                 ],
                 'confidence' => ['type' => 'string', 'enum' => ['high', 'medium', 'low']],

@@ -159,7 +159,7 @@ class InvoiceReader
                 'attachments'    => array_map(fn ($p) => ['path' => $p], $photoPaths),
                 'comment'        => trim('Накладна '.($data['number'] ?? '').' '.($data['supplier_name'] ?? '')),
                 // Номер і дата з бланка — щоб ловити повторне внесення тієї самої накладної.
-                'invoice_number' => ! empty($data['number']) ? mb_substr(trim((string) $data['number']), 0, 64) : null,
+                'invoice_number' => \App\Support\Documents\InvoiceNumber::normalize($data['number'] ?? null),
                 'invoice_date'   => ! empty($data['date']) ? $this->date($data['date'])->toDateString() : null,
                 'ai_comment'     => $this->comment($data, $unmatched, $warnings),
             ]);
