@@ -212,7 +212,7 @@
                                 <tr class="header-kcal">
                                     @foreach($table['columns'] as $label => $info)
                                         @if(!empty($info['ind']))
-                                            <th style="font-size:11px;font-weight:800;background:{{ $info['ind']['eve'] ? '#1e3a8a' : '#fde68a' }};color:{{ $info['ind']['eve'] ? '#fff' : '#78350f' }};">@include('print.partials.ind-colhead', ['c' => $info['ind']])</th>
+                                            <th style="font-size:11px;font-weight:800;background:{{ !empty($info['ind']['cust']) ? '#fed7aa' : ($info['ind']['eve'] ? '#1e3a8a' : '#fde68a') }};color:{{ !empty($info['ind']['cust']) ? '#9a3412' : ($info['ind']['eve'] ? '#fff' : '#78350f') }};">@include('print.partials.ind-colhead', ['c' => $info['ind']])</th>
                                         @else
                                         <th style="font-size:15px;font-weight:900;">
                                             {{ $info['label'] ?? $label }} <span style="font-size:11px;font-weight:500;opacity:.8;">({{ ($info['count'] ?? 0) + ($info['custom_count'] ?? 0) }})</span>

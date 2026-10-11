@@ -408,6 +408,28 @@ class IndividualPacking
         return $tables;
     }
 
+    /**
+     * Звичайний клієнт із замінами в циклічній страві — колонкою «#155 Суходольська · 1800»
+     * у її таблиці: грами саме йому, заміни й «НЕ класти» червоними клітинками.
+     */
+    public function customColumn(array $tableData, Order $order, Dish $dish, int $weight): array
+    {
+        $cells = [];
+        foreach ($this->rowsFor($order, $dish, $weight, '') as $r) {
+            $cells[$r['pos']] = ['val' => round($r['g']), 'note' => $r['note'], 'skip' => $r['skip']];
+        }
+        $slug = $order->project ?? 'none';
+        $tableData['columns']['cust-'.$order->id] = [
+            'label' => '#'.$order->client?->id.' '.$this->shortName($order), 'count' => 1, 'sum_scale' => 0, 'custom_count' => 0,
+            'ind'   => ['n' => null, 'name' => '#'.$order->client?->id.' '.$this->shortName($order).' · '.(int) $order->calories,
+                'eve' => $this->isEvening($order), 'time' => '', 'weight' => $weight, 'cust' => true],
+            'cells' => $cells,
+            'projects' => [$slug => ['name' => $order->projectData?->name ?? ucfirst($slug), 'count' => 1, 'custom_count' => 0]],
+        ];
+
+        return $tableData;
+    }
+
     private function block(array $b): array
     {
         return [

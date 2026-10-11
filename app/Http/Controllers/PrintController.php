@@ -792,23 +792,11 @@ class PrintController extends Controller
                         continue;
                     }
 
-                    $oid = $order->id;
-                    if (!isset($customClientData[$oid])) {
-                        $customClientData[$oid] = [
-                            'is_individual'    => true,
-                            'is_custom_client' => true,
-                            'client_label'     => '#' . $order->client->id . ' ' . $order->client->name,
-                            'calories'         => (int)($order->calories ?? 0),
-                            'project'          => $order->projectData?->name ?? ucfirst($order->project ?? ''),
-                            'meals'            => [],
-                        ];
-                    }
-                    $customClientData[$oid]['meals'][] = [
-                        'meal'      => $mItem->mealType?->name ?? '-',
-                        'dish_name' => $dish->name,
-                        'rows'      => $this->buildCustomClientRows($order, $dish, $dishScale),
-                        'notes'     => $this->collectCustomPrintNotes($order, $dish),
-                    ];
+                    // Клієнт із замінами — окремою колонкою в таблиці страви (грами саме йому,
+                    // заміни й «не класти» червоними клітинками), а не карткою внизу листа.
+                    $tableData['columns'][$cKey]['custom_count']--;
+                    $tableData['columns'][$cKey]['projects'][$cSlug]['custom_count']--;
+                    $tableData = $indPacking->customColumn($tableData, $order, $dish, (int) ($plannedWeight ?? $realW));
                     continue;
                 }
 
@@ -840,11 +828,12 @@ class PrintController extends Controller
 
             ksort($tableData['columns']);
 
-            foreach ($dish->dishIngredients as $di) {
+            foreach ($dish->dishIngredients->values() as $pos => $di) {
                 $originalName = $this->ingredientRowLabel($di);
 
                 $cells = [];
                 foreach ($tableData['columns'] as $key => $col) {
+                    if (isset($col['cells'])) { $cells[$key] = $col['cells'][$pos] ?? ['val' => 0]; continue; }
                     $count = (int)($col['count'] ?? 1);
                     $sumScale = (float)($col['sum_scale'] ?? 0.0);
 

@@ -90,7 +90,10 @@
             color: white;
             margin: 0 2px;
         }
-    </style>
+            /* Таблиця з багатьма колонками (клієнти із замінами) — щільніше, щоб влазила в аркуш */
+        table.dense th, table.dense td { padding: 1px 2px !important; font-size: 9px !important; }
+        table.dense td b { font-size: 10px !important; }
+</style>
 </head>
 <body>
 
@@ -168,7 +171,7 @@
         @endphp
 
         <div class="meal-title {{ $mealClass }}">{{ $table['meal'] }}: {{ $table['dish_name'] }}</div>
-        <table>
+        <table class="{{ count($table['columns']) > 11 ? 'dense' : '' }}">
             <thead>
                 <tr>
                     <th rowspan="2" style="width:200px;vertical-align:middle;">{{ $table['dish_name'] }}</th>
@@ -178,7 +181,7 @@
                 <tr>
                     @foreach($table['columns'] as $colKey => $colData)
                         @if(!empty($colData['ind']))
-                            <th style="font-size:10.5px;background:{{ $colData['ind']['eve'] ? '#1e3a8a' : '#fde68a' }} !important;color:{{ $colData['ind']['eve'] ? '#fff' : '#78350f' }} !important;">@include('print.partials.ind-colhead', ['c' => $colData['ind']])</th>
+                            <th style="font-size:10.5px;background:{{ !empty($colData['ind']['cust']) ? '#fed7aa' : ($colData['ind']['eve'] ? '#1e3a8a' : '#fde68a') }} !important;color:{{ !empty($colData['ind']['cust']) ? '#9a3412' : ($colData['ind']['eve'] ? '#fff' : '#78350f') }} !important;">@include('print.partials.ind-colhead', ['c' => $colData['ind']])</th>
                         @else
                         <th class="kcal-{{ trim($colKey) }}">
                             {{ $colData['label'] ?? $colKey }} <span style="font-size:11px;font-weight:400;opacity:.85;">({{ ($colData['count'] ?? 0) + ($colData['custom_count'] ?? 0) }})</span>

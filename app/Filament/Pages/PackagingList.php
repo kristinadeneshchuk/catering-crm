@@ -530,23 +530,11 @@ class PackagingList extends Page implements HasForms
                     }
 
                     // (c) інгредієнтний свап / force-approved / невирішений конфлікт
-                    $oid = $order->id;
-                    if (!isset($customClientData[$oid])) {
-                        $customClientData[$oid] = [
-                            'is_individual'    => true,   // рендер тим самим блоком, що індивідуали
-                            'is_custom_client' => true,   // блейд може розрізнити оформленням
-                            'client_label'     => '#' . $order->client->id . ' ' . $order->client->name,
-                            'calories'         => (int)($order->calories ?? 0),
-                            'project'          => $order->projectData?->name ?? ucfirst($order->project ?? ''),
-                            'meals'            => [],
-                        ];
-                    }
-                    $customClientData[$oid]['meals'][] = [
-                        'meal'      => $mItem->mealType->name ?? 'Інше',
-                        'dish_name' => $dish->name,
-                        'rows'      => $this->buildCustomClientRows($order, $dish, $dishScale),
-                        'notes'     => $this->collectOrderNotes($order, $dish),
-                    ];
+                    // Клієнт із замінами — окремою колонкою в таблиці страви (грами саме йому,
+                    // заміни й «не класти» червоними клітинками), а не карткою внизу листа.
+                    $tableData['columns'][$cKey]['custom_count']--;
+                    $tableData['columns'][$cKey]['projects'][$cSlug]['custom_count']--;
+                    $tableData = $indPacking->customColumn($tableData, $order, $dish, (int) ($plannedWeight ?? $realW));
                     continue;
                 }
 
@@ -582,12 +570,13 @@ class PackagingList extends Page implements HasForms
 
             ksort($tableData['columns']);
 
-            foreach ($dish->dishIngredients as $di) {
+            foreach ($dish->dishIngredients->values() as $pos => $di) {
                 $name = $this->ingredientRowLabel($di);
 
                 $netWeight = (float)($di->net_weight_g ?? 0);
                 $cells = [];
                 foreach ($tableData['columns'] as $key => $col) {
+                    if (isset($col['cells'])) { $cells[$key] = $col['cells'][$pos] ?? ['val' => 0]; continue; }
                     $count    = (int)($col['count'] ?? 1);
                     $sumScale = (float)($col['sum_scale'] ?? 0.0);
 
