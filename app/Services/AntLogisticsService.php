@@ -1006,7 +1006,7 @@ class AntLogisticsService
 
             $countComps = (int) ($route['Count_Comps'] ?? 0);
             $antCost    = (float) ($route['Cost_Route'] ?? 0);
-            $ourCost    = DeliveryRoute::calculateCourierCost($countComps, $courier);
+            $ourCost    = DeliveryRoute::calculateCourierCost($countComps, $courier, \Carbon\Carbon::parse($date)->toDateString());
 
             $createdRoute = DeliveryRoute::updateOrCreate(
                 ['date' => $date, 'ant_route_id' => $routeId],
@@ -1145,7 +1145,7 @@ class AntLogisticsService
 
             $route->update([
                 'employee_id'     => $employee->id,
-                'calculated_cost' => \App\Models\DeliveryRoute::calculateCourierCost((int) $route->count_comps, $employee),
+                'calculated_cost' => \App\Models\DeliveryRoute::calculateCourierCost((int) $route->count_comps, $employee, \Carbon\Carbon::parse($route->date)->toDateString()),
             ]);
             $route->update(['calculated_cost' => $route->recalcCost()]);
             $fixed++;

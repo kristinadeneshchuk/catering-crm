@@ -47,8 +47,42 @@ class Employee extends Model
         return $this->belongsTo(Project::class, 'project_id');
     }
 
+    /** Історія ставки за зміну/виїзд: щоб зміна ставки не переписувала минулі дні. */
+    private ?array $rateSeries = null;
+
+    /**
+     * Ставка, що діяла на дату. Без історії (ставку ще не міняли) — поточна.
+     */
+    public function rateOn(?string $date = null): float
+    {
+        if (! $date || ! \App\Support\SchemaReady::has('rate_history')) {
+            return (float) $this->base_rate;
+        }
+        $this->rateSeries ??= RateHistory::seriesFor(['rate:'.$this->id])['rate:'.$this->id] ?? [];
+        if (! $this->rateSeries) {
+            return (float) $this->base_rate;
+        }
+        $v = RateHistory::valueOn($this->rateSeries, substr($date, 0, 10));
+
+        return $v > 0 ? $v : (float) $this->base_rate;
+    }
+
     protected static function booted(): void
     {
+        // Ставка за зміну/виїзд — датована: нова діє з сьогодні, минулі дні
+        // (перерахунок клітинки табеля, розбивка «база/бонус», вартість маршрутів)
+        // лишаються за старою. Перша зміна фіксує й попередню ставку «з давніх-давен».
+        static::saved(function (Employee $employee) {
+            if ($employee->wasChanged('base_rate') && \App\Support\SchemaReady::has('rate_history')) { // на створенні wasChanged порожній
+                $scope = 'rate:'.$employee->id;
+                if (! RateHistory::where('scope', $scope)->exists()) {
+                    RateHistory::record($scope, (float) $employee->getOriginal('base_rate'), '2000-01-01');
+                }
+                RateHistory::record($scope, (float) $employee->base_rate);
+                $employee->rateSeries = null;
+            }
+        });
+
         // Датовані оклади: ЗП помісячних посад фіксується в історії «діє з сьогодні»
         static::saved(function (Employee $employee) {
             if ($employee->wasRecentlyCreated || $employee->wasChanged('base_rate') || $employee->wasChanged('position')) {

@@ -111,9 +111,9 @@ class DeliveryRoute extends Model
      * Якщо кур'єра не призначено або у нього base_rate=0 — повертаємо 0
      * (треба задати ставку в картці кур'єра).
      */
-    public static function calculateCourierCost(int $stops, ?Employee $courier = null): float
+    public static function calculateCourierCost(int $stops, ?Employee $courier = null, ?string $date = null): float
     {
-        $baseRate     = (float) ($courier?->base_rate ?? 0);
+        $baseRate     = (float) ($courier?->rateOn($date) ?? 0); // ставка на дату маршруту
         $baseStops    = (int)   (Setting::where('key', 'courier_base_stops')->value('value') ?: 12);
         $extraPerStop = (float) (Setting::where('key', 'courier_extra_per_stop')->value('value') ?: 50);
 
@@ -195,7 +195,7 @@ class DeliveryRoute extends Model
      */
     public function recalcCost(): float
     {
-        return static::calculateCourierCost((int) $this->count_comps, $this->employee)
+        return static::calculateCourierCost((int) $this->count_comps, $this->employee, $this->date ? \Carbon\Carbon::parse($this->date)->toDateString() : null)
              + $this->extraDeliveryFee();
     }
 

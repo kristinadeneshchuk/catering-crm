@@ -138,7 +138,7 @@ class EmployeeAttendance extends Page
      */
     private function slotRate(Employee $employee, string $date, string $slot): float
     {
-        $base      = (float) $employee->base_rate;
+        $base      = $employee->rateOn($date); // ставка, що діяла того дня
         $isCourier = $employee->position === 'courier';
 
         $extras = $isCourier
@@ -255,7 +255,7 @@ class EmployeeAttendance extends Page
             //      full = 2 виїзди = 2 × base_rate + надбавки (доп точки + дальня доставка).
             //      half = 1 виїзд = base_rate + надбавки.
             //    - Кухня/офіс: full = base_rate; half = base_rate/2 (надбавок нема).
-            $baseRate  = (float) $employee->base_rate;
+            $baseRate  = $employee->rateOn($date); // ставка того дня, а не поточна
             $isCourier = $employee->position === 'courier';
             $extras    = $isCourier
                 ? \App\Services\CourierShiftPricingService::calcExtras($employeeId, $date, $baseRate)
@@ -376,7 +376,7 @@ class EmployeeAttendance extends Page
                 $employee->increment('balance', $bonus);
             } else {
                 // Зміни ще немає — створюємо одразу зі статусом "черговий".
-                $baseRate = (float) $employee->base_rate;
+                $baseRate = $employee->rateOn($date); // ставка того дня
                 EmployeeShift::create([
                     'employee_id' => $employeeId,
                     'date'        => $date,

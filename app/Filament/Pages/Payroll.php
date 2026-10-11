@@ -98,14 +98,14 @@ class Payroll extends Page implements HasActions, HasForms
 
         if ($emp->position === 'courier') {
             $trips = $shift->is_half ? 1 : 2;
-            $base  = round((float) $emp->base_rate * $trips, 2);
+            $base  = round($emp->rateOn((string) $shift->date) * $trips, 2);
             $base  = min($base, $rate);
             $bonus = max(0, round($rate - $base, 2));
             return ['base' => $base, 'bonus' => $bonus];
         }
 
         $half = $shift->is_half ? 0.5 : 1.0;
-        $base = round((float) $emp->base_rate * $half, 2);
+        $base = round($emp->rateOn((string) $shift->date) * $half, 2);
         $base = min($base, $rate);
         $bonus = max(0, round($rate - $base, 2));
 
@@ -492,7 +492,7 @@ class Payroll extends Page implements HasActions, HasForms
     {
         $date  = Carbon::parse($shift->date);
         $rate  = (float) $shift->rate;
-        $base  = (float) $emp->base_rate;
+        $base  = $emp->rateOn((string) $shift->date);
 
         $singleTrip = $shift->is_half
             || in_array($shift->shift_slot, [EmployeeShift::SLOT_MORNING, EmployeeShift::SLOT_EVENING], true);

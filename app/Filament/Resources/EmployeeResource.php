@@ -77,6 +77,7 @@ class EmployeeResource extends Resource
                             ->numeric()
                             ->prefix('₴')
                             ->default(0)
+                            ->helperText('Нова ставка діє з сьогодні: вже нараховані зміни й минулі дні не перераховуються.')
                             ->required(),
 
                         Select::make('project_id')
