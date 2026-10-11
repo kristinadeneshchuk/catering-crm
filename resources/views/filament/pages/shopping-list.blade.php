@@ -45,7 +45,7 @@
         @php
             $toBuyList  = array_filter($shoppingList, fn($r) => !$r['enough']);
             $enoughList = array_filter($shoppingList, fn($r) => $r['enough']);
-            $fmt = fn($val, $unit) => number_format($val, $val < 10 ? 2 : 1, '.', ' ') . ' ' . $unit;
+            $fmt = fn($val, $unit) => \App\Support\PurchaseQty::format((float) $val, (string) $unit);
         @endphp
 
         {{-- Шапка з кнопкою --}}
@@ -88,6 +88,7 @@
                         </td>
                         <td style="padding:7px 10px;text-align:right;font-size:15px;font-weight:900;color:{{ $row['stock'] < 0 ? '#f87171' : '#fbbf24' }};">
                             {{ $fmt($row['to_buy'], $row['unit']) }}
+                            @if(!empty($row['pieces']))<div style="font-size:11px;font-weight:600;color:#9ca3af;">({{ $row['pieces'] }})</div>@endif
                         </td>
                     </tr>
                     @endforeach

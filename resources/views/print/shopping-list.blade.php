@@ -117,7 +117,7 @@
     @php
         $toBuy   = array_values(array_filter($shoppingList, fn($r) => !$r['enough']));
         $enough  = array_values(array_filter($shoppingList, fn($r) => $r['enough']));
-        $fmt = fn($v, $u) => number_format($v, $v < 10 ? 2 : ($v < 100 ? 1 : 0), '.', ' ') . ' ' . $u;
+        $fmt = fn($v, $u) => \App\Support\PurchaseQty::format((float) $v, (string) $u);
     @endphp
 
     {{-- Статистика --}}
@@ -156,6 +156,7 @@
                 <td class="r {{ $row['stock'] < 0 ? 'stock-neg' : 'stock-pos' }}">{{ $fmt($row['stock'], $row['unit']) }}</td>
                 <td class="r">
                     <span class="buy-cell {{ $row['stock'] >= 0 ? 'warn' : '' }}">{{ $fmt($row['to_buy'], $row['unit']) }}</span>
+                    @if(!empty($row['pieces']))<div class="need-cell">({{ $row['pieces'] }})</div>@endif
                 </td>
             </tr>
             @endforeach

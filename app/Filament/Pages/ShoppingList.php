@@ -203,6 +203,7 @@ class ShoppingList extends Page implements HasForms
                 'to_buy'  => $toBuy,
                 'unit'    => $unit,
                 'enough'  => $toBuy <= 0,
+                'pieces'  => \App\Support\PurchaseQty::pieces($dbIng, $toBuy),
             ];
         }
 

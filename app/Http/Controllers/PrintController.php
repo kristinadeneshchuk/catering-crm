@@ -1326,6 +1326,7 @@ class PrintController extends Controller
                     'to_buy' => $toBuy,
                     'unit'   => $unit,
                     'enough' => $toBuy <= 0,
+                    'pieces' => \App\Support\PurchaseQty::pieces($dbIng, $toBuy),
                 ];
             }
             usort($shoppingList, fn ($a, $b) => strcmp($a['name'], $b['name']));
