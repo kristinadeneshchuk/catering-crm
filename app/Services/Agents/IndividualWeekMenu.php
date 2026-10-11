@@ -187,7 +187,34 @@ class IndividualWeekMenu
             $out[] = "Повтор: {$name} — " . implode('; ', $parts);
         }
 
-        return array_merge($out, $this->costWarnings($p));
+        return array_merge($out, $this->kitchenLoadWarnings($p), $this->costWarnings($p));
+    }
+
+    /**
+     * Навантаження кухні: скільки окремих страв поза циклом на день по всіх
+     * індивідуальних разом (з цим меню замість поточного меню цього замовлення).
+     *
+     * @return string[]
+     */
+    public function kitchenLoadWarnings(array $p): array
+    {
+        $max = (int) config('services.ai_agents.kitchen_offcycle_max', 6);
+        $cycle = \Illuminate\Support\Facades\DB::table('daily_menu_dishes')->distinct()->pluck('dish_id')->flip();
+        $refNames = collect($p['new_dishes'] ?? [])->mapWithKeys(fn ($d) => [$d['ref'] => $d['name']]);
+        $out = [];
+        foreach ((array) ($p['days'] ?? []) as $day) {
+            $date = $day['date'];
+            $others = OrderDayDish::whereDate('date', $date)->where('order_id', '!=', $p['order_id'] ?? 0)->pluck('dish_id')
+                ->reject(fn ($id) => $cycle->has($id))->map(fn ($id) => (string) $id);
+            $mine = collect($day['meals'] ?? [])->map(fn ($m) => !empty($m['dish_id']) ? (string) $m['dish_id'] : 'new:' . ($refNames[$m['dish_ref'] ?? ''] ?? $m['dish_ref'] ?? ''))
+                ->reject(fn ($k) => ctype_digit($k) && $cycle->has((int) $k));
+            $total = $others->merge($mine)->unique()->count();
+            if ($total > $max) {
+                $out[] = 'Навантаження кухні ' . Carbon::parse($date)->format('d.m') . ": {$total} окремих страв поза циклом (ліміт {$max}) — краще взяти страви, які вже готуються іншим";
+            }
+        }
+
+        return $out;
     }
 
     /**

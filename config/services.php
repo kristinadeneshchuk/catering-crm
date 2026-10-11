@@ -74,6 +74,10 @@ return [
         'approvers' => env('AI_APPROVERS', ''),
         // Межа собівартості продуктів від ціни дня в індивідуальних меню, %.
         'food_cost_max_pct' => (float) env('FOOD_COST_MAX_PCT', 30),
+        // Скільки окремих страв поза циклом кухня тягне за день (усі індивідуальні разом).
+        'kitchen_offcycle_max' => (int) env('KITCHEN_OFFCYCLE_MAX', 6),
+        // Кому після погодження меню йде задача «надіслати меню клієнту».
+        'menu_handoff_agent' => env('AI_MENU_HANDOFF_AGENT', 'inbox'),
         // Погоджені повідомлення клієнтам → Inbox (HMAC sha256(ts.body), секрет лише в env).
         'inbox_send_url'    => env('INBOX_CRM_SEND_URL', ''),
         'inbox_send_secret' => env('CRM_SEND_SECRET', ''),

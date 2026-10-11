@@ -89,6 +89,8 @@ Route::prefix('agents/v1')
         Route::post('reports', 'report');
         Route::post('messages', 'say');
         Route::get('messages', 'messages');
+        Route::get('files/{message}/{index}', 'file');
+        Route::get('dishes', 'dishes');
         Route::get('memory', 'memory');
         Route::put('memory/{key}', 'remember')->where('key', '.+');
         Route::delete('memory/{key}', 'forget')->where('key', '.+');

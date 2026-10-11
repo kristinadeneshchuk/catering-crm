@@ -42,7 +42,16 @@ class AiAgentsTest extends TestCase
         });
         Schema::table('dishes', function (Blueprint $t) {
             $t->text('description')->nullable(); $t->float('base_weight_g')->nullable(); $t->string('group')->nullable();
+            $t->boolean('is_semi_finished')->default(false);
         });
+        Schema::create('daily_menu_dishes', function (Blueprint $t) {
+            $t->id(); $t->unsignedBigInteger('daily_menu_id')->default(1); $t->unsignedBigInteger('dish_id'); $t->unsignedBigInteger('meal_type_id')->default(1);
+        });
+        foreach (['client_ingredient_exclusion' => 'ingredient_id', 'client_dish_exclusion' => 'dish_id', 'order_ingredient_exclusion' => 'ingredient_id'] as $tbl => $col) {
+            Schema::hasTable($tbl) || Schema::create($tbl, function (Blueprint $t) use ($tbl, $col) {
+                $t->id(); $t->unsignedBigInteger(str_starts_with($tbl, 'order') ? 'order_id' : 'client_id'); $t->unsignedBigInteger($col);
+            });
+        }
         Schema::create('meal_types', function (Blueprint $t) {
             $t->id(); $t->string('name'); $t->integer('sort_order')->default(1); $t->timestamps();
         });
@@ -561,5 +570,78 @@ class AiAgentsTest extends TestCase
 
         $this->assertSame('applied', AiProposal::find($id)->status);
         $this->assertTrue(\App\Models\AiMessage::where('direction', 'system')->where('text', 'like', '%Погоджено%')->exists());
+    }
+
+    // --- зібрати з готового, навантаження кухні, передача на розсилку --------
+
+    public function test_the_agent_finds_existing_dishes_with_client_conflicts(): void
+    {
+        $nuts = $this->ingredient('горіх волоський');
+        $chicken = $this->ingredient('філе куряче');
+        $cycle = Dish::create(['name' => 'Салат з куркою']);
+        DB::table('dish_ingredients')->insert(['dish_id' => $cycle->id, 'type' => 'product', 'ingredient_id' => $chicken, 'net_weight_g' => 100]);
+        DB::table('daily_menu_dishes')->insert(['dish_id' => $cycle->id]);
+        $ind = Dish::create(['name' => 'Інд · Салат з куркою і горіхами']);
+        DB::table('dish_ingredients')->insert([
+            ['dish_id' => $ind->id, 'type' => 'product', 'ingredient_id' => $chicken, 'net_weight_g' => 100],
+            ['dish_id' => $ind->id, 'type' => 'product', 'ingredient_id' => $nuts, 'net_weight_g' => 20],
+        ]);
+        $relation = $this->clientExclusionRelation();
+        if ($relation) DB::table($relation[0])->insert(['client_id' => $this->order->client_id, $relation[1] => $nuts]);
+        OrderDayDish::create(['order_id' => $this->order->id, 'date' => '2026-10-05', 'meal_type_id' => $this->lunch, 'dish_id' => $ind->id]);
+
+        $res = collect($this->api('GET', "dishes?q=Салат&order_id={$this->order->id}")->assertOk()->json())->keyBy('name');
+
+        $this->assertSame('cycle', $res['Салат з куркою']['kind']);
+        $this->assertSame('individual', $res['Інд · Салат з куркою і горіхами']['kind']);
+        $this->assertSame(['2026-10-05'], $res['Інд · Салат з куркою і горіхами']['served_to_client_last_28d']);
+        if ($relation) $this->assertSame(['горіх волоський'], $res['Інд · Салат з куркою і горіхами']['conflicts']);
+        $this->assertSame(['Салат з куркою'], collect($this->api('GET', 'dishes?kind=cycle')->json())->pluck('name')->all());
+    }
+
+    /** Таблиця виключень продуктів клієнта — як її називає модель. */
+    protected function clientExclusionRelation(): ?array
+    {
+        $rel = (new \App\Models\Client)->ingredientExclusions();
+
+        return Schema::hasTable($rel->getTable()) ? [$rel->getTable(), $rel->getRelatedPivotKeyName()] : null;
+    }
+
+    public function test_too_many_off_cycle_dishes_a_day_is_flagged(): void
+    {
+        config(['services.ai_agents.kitchen_offcycle_max' => 2]);
+        $other = Order::create(['client_id' => $this->makeClient(['name' => 'Інший', 'phone' => '0670000001']), 'project' => 'u_fit',
+            'tariff_id' => $this->order->tariff_id, 'calories' => 1600, 'duration' => 7, 'start_date' => '2026-10-12', 'end_date' => '2026-10-18', 'scale_factor' => 1]);
+        foreach (['Інд · А', 'Інд · Б'] as $n) {
+            OrderDayDish::create(['order_id' => $other->id, 'date' => '2026-10-12', 'meal_type_id' => $this->lunch, 'dish_id' => Dish::create(['name' => $n])->id]);
+        }
+
+        $warnings = implode("\n", $this->api('POST', 'proposals', ['type' => 'individual_week_menu', 'payload' => $this->menuPayload()])->json('warnings'));
+
+        $this->assertStringContainsString('Навантаження кухні 12.10: 4 окремих страв поза циклом (ліміт 2)', $warnings);
+        $this->assertStringNotContainsString('Навантаження кухні 13.10', $warnings);
+    }
+
+    public function test_an_approved_menu_is_handed_to_the_messaging_agent_with_its_files(): void
+    {
+        $this->user(7);
+        \Illuminate\Support\Facades\Storage::fake('local');
+        $inbox = AiAgent::create(['slug' => 'inbox', 'name' => 'Inbox']);
+        $inboxToken = $inbox->issueToken();
+
+        $id = $this->api('POST', 'proposals', ['type' => 'individual_week_menu', 'payload' => $this->menuPayload(),
+            'files' => [['name' => 'Меню Гоголь.pdf', 'mime' => 'application/pdf', 'base64' => base64_encode('%PDF menu')]]])->json('id');
+        app(ProposalDesk::class)->approve(AiProposal::find($id), User::find(7));
+
+        $task = $inbox->tasks()->firstOrFail();
+        $this->assertStringContainsString('Надіслати меню клієнту: Гоголь Денис (12.10–13.10)', $task->title);
+        $file = $task->payload['files'][0];
+        $this->assertSame('Меню Гоголь.pdf', $file['name']);
+
+        $this->withToken($inboxToken)->get("/api/agents/v1/files/{$file['message_id']}/{$file['index']}")
+            ->assertOk()->assertStreamedContent('%PDF menu');
+        // Чужий агент файл не отримає.
+        $stranger = AiAgent::create(['slug' => 'x', 'name' => 'X'])->issueToken();
+        $this->withToken($stranger)->get("/api/agents/v1/files/{$file['message_id']}/{$file['index']}")->assertForbidden();
     }
 }

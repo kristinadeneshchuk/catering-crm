@@ -168,4 +168,22 @@ class AgentApiController extends Controller
             'created_at' => $m->created_at->toIso8601String(),
         ]));
     }
+
+    /** Пошук готових страв: ?q=&ingredient=&kind=individual|cycle|all&order_id= (конфлікти з виключеннями клієнта). */
+    public function dishes(Request $r, \App\Services\Agents\DishCatalog $catalog): JsonResponse
+    {
+        return response()->json($catalog->search($r->only(['q', 'ingredient', 'kind', 'order_id', 'limit'])));
+    }
+
+    /** Файл з чату: свій, адресований мені, або з пропозиції в моїй задачі. */
+    public function file(Request $r, \App\Models\AiMessage $message, int $index)
+    {
+        $me = $this->agent($r);
+        $allowed = $message->ai_agent_id === $me->id || $message->to_agent_id === $me->id
+            || ($message->ai_proposal_id && $me->tasks()->where('payload->proposal_id', $message->ai_proposal_id)->exists());
+        abort_unless($allowed, 403);
+        $f = ((array) $message->attachments)[$index] ?? abort(404);
+
+        return \Illuminate\Support\Facades\Storage::disk('local')->download($f['path'], $f['name']);
+    }
 }

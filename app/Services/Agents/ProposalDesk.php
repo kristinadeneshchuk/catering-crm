@@ -6,6 +6,7 @@ use App\Models\AiAgent;
 use App\Models\AiProposal;
 use App\Models\User;
 use App\Services\TelegramService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Throwable;
@@ -88,6 +89,7 @@ class ProposalDesk
         try {
             $result = $this->handler($p->type)->apply($p->payload, $p, $force);
             $p->forceFill(['status' => 'applied', 'applied_at' => now(), 'apply_result' => $result])->save();
+            $this->handOff($p);
             $answer = $p->type === 'client_message' ? '✅ Погоджено й надіслано клієнту' : '✅ Погоджено й виконано';
         } catch (ProposalOutcome $o) {
             $p->forceFill(['status' => $o->status, 'apply_result' => $o->result + ['error' => $o->getMessage()]])->save();
@@ -193,5 +195,28 @@ class ProposalDesk
     public function url(AiProposal $p): string
     {
         return \App\Filament\Resources\AiProposalResource::getUrl('view', ['record' => $p]);
+    }
+
+    /**
+     * Погоджене меню → задача агенту розсилки «надіслати меню клієнту» з файлами,
+     * які автор меню додав до пропозиції. Перед відправкою той звіряється з рецензентом.
+     */
+    private function handOff(AiProposal $p): void
+    {
+        if ($p->type !== 'individual_week_menu') return;
+        $to = \App\Models\AiAgent::where('slug', config('services.ai_agents.menu_handoff_agent'))->where('is_active', true)->first();
+        if (!$to) return;
+
+        $msg = \App\Models\AiMessage::where('ai_proposal_id', $p->id)->where('direction', 'agent')->oldest('id')->first();
+        $dates = array_column((array) ($p->payload['days'] ?? []), 'date');
+        $to->tasks()->create([
+            'title'   => 'Надіслати меню клієнту: ' . ($p->client?->name ?? "#{$p->client_id}")
+                . ($dates ? ' (' . Carbon::parse(min($dates))->format('d.m') . '–' . Carbon::parse(max($dates))->format('d.m') . ')' : ''),
+            'details' => "Меню погоджено. Перед відправкою — звірся з рецензентом меню; потім запропонуй повідомлення клієнту (client_message).",
+            'payload' => [
+                'proposal_id' => $p->id, 'order_id' => $p->order_id, 'client_id' => $p->client_id, 'dates' => $dates,
+                'files' => collect((array) $msg?->attachments)->keys()->map(fn ($i) => ['message_id' => $msg->id, 'index' => $i, 'name' => $msg->attachments[$i]['name']])->all(),
+            ],
+        ]);
     }
 }
