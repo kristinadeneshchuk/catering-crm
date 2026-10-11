@@ -70,6 +70,12 @@ class KitchenStockDebit
         ));
     }
 
+    /** id продуктів, які не ведемо на складі (за замовч. 26 — вода). */
+    public static function untrackedIds(): array
+    {
+        return array_values(array_filter(array_map('intval', explode(',', (string) config('services.stock.untracked_ingredients', '26')))));
+    }
+
     /**
      * Очікуване списання за нормою для кухні: що й скільки піде зі складу
      * за цю дату готування. Без цін — кухні гроші не показуємо.
@@ -136,6 +142,10 @@ class KitchenStockDebit
 
         $lines = [];
         $skipped = [];
+
+        // Те, що не купуємо й не тримаємо на складі (вода з крана), не списуємо —
+        // інакше воно щодня йде в мінус. Список — STOCK_UNTRACKED_INGREDIENTS.
+        foreach (self::untrackedIds() as $id) unset($grams[$id]);
 
         $ingredients = Ingredient::whereIn('id', array_keys($grams))->get()->keyBy('id');
         foreach ($grams as $id => $g) {

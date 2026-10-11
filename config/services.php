@@ -64,6 +64,11 @@ return [
         'daily_cap_usd'  => (float) env('ANTHROPIC_DAILY_CAP_USD', 20),
     ],
 
+    // Продукти, яких немає на складі (вода з крана) — нормою не списуємо. id через кому.
+    'stock' => [
+        'untracked_ingredients' => env('STOCK_UNTRACKED_INGREDIENTS', '26'),
+    ],
+
     // Гроші бізнесу (банк, звірка) бачить лише супер адмін.
     'finance' => [
         'super_admin_ids' => env('FINANCE_SUPER_ADMIN_IDS', '7'),

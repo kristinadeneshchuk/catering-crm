@@ -111,6 +111,21 @@ class KitchenStockDebitTest extends TestCase
         $this->assertSame([], $this->debit->pendingFoodDates(Carbon::parse('2026-09-14')));
     }
 
+    public function test_tap_water_is_not_debited(): void
+    {
+        config(['services.stock.untracked_ingredients' => (string) $this->milk->id]);
+        $this->builder->day('2026-09-15', orders: 12, grams: [
+            $this->chicken->id => 2500,
+            $this->milk->id    => 1800,   // «вода» — не ведемо на складі
+        ]);
+
+        $plan = $this->debit->plan(Carbon::parse('2026-09-14'));
+
+        $this->assertSame([$this->chicken->id], array_column($plan['lines'], 'id'));
+        $this->debit->post($plan);
+        $this->assertEqualsWithDelta(10, (float) $this->milk->fresh()->stock, 0.001);
+    }
+
     public function test_price_is_average_of_receipts_up_to_the_date(): void
     {
         $this->receipt('2026-08-01', $this->chicken, qty: 10, price: 100);
