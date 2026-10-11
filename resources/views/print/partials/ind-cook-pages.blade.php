@@ -28,7 +28,8 @@
     @page { size: A4; margin: 10mm; }
     @media print {
         .ind-page { height: 270mm; overflow: hidden; }
-        .ind-fit { zoom: var(--ind-zoom, 1); }
+        /* transform, а не zoom: zoom разом із розривами сторінок вішає друк у Chrome */
+        .ind-fit { transform: scale(var(--ind-zoom, 1)); transform-origin: top left; width: calc(100% / var(--ind-zoom, 1)); }
     }
 </style>
 @foreach($pages as $p)
@@ -92,13 +93,23 @@
             box.appendChild(probe);
             document.body.appendChild(box);
             var max = probe.offsetHeight;
+            var boxW = box.offsetWidth;
             document.querySelectorAll('.ind-fit').forEach(function (el) {
-                var clone = el.cloneNode(true);
-                clone.style.setProperty('--ind-zoom', 1);
-                box.appendChild(clone);
-                var h = clone.offsetHeight;
-                box.removeChild(clone);
-                el.style.setProperty('--ind-zoom', h > max ? (max / h).toFixed(3) : 1);
+                // Стиснутий аркуш ширший (100% / z) — рядки менше переносяться і він нижчий,
+                // тож масштаб уточнюємо кілька разів, міряючи в тій самій ширині.
+                var z = 1;
+                for (var i = 0; i < 4; i++) {
+                    var clone = el.cloneNode(true);
+                    clone.style.transform = 'none';
+                    clone.style.width = (boxW / z) + 'px';
+                    box.appendChild(clone);
+                    var h = clone.offsetHeight;
+                    box.removeChild(clone);
+                    var next = Math.min(1, max / h); // висота після стиснення = h × z ≤ max
+                    if (Math.abs(next - z) < 0.01) { z = next; break; }
+                    z = next;
+                }
+                el.style.setProperty('--ind-zoom', (Math.floor(z * 1000) / 1000).toFixed(3));
             });
             document.body.removeChild(box);
         }
