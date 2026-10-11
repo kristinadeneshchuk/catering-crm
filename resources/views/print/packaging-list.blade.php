@@ -134,6 +134,8 @@
 
     @include('print.partials.expected-writeoff', ['writeoff' => $writeoff ?? []])
 
+    @include('print.partials.ind-registry', ['registry' => $indRegistry ?? []])
+
     {{-- ОБХІД ПО ПЛАНАХ МЕНЮ --}}
     @foreach($reportByPlan as $planId => $planBlock)
         @php
@@ -175,9 +177,13 @@
                 </tr>
                 <tr>
                     @foreach($table['columns'] as $colKey => $colData)
+                        @if(!empty($colData['ind']))
+                            <th style="font-size:10.5px;background:{{ $colData['ind']['eve'] ? '#1e3a8a' : '#fde68a' }} !important;color:{{ $colData['ind']['eve'] ? '#fff' : '#78350f' }} !important;">@include('print.partials.ind-colhead', ['c' => $colData['ind']])</th>
+                        @else
                         <th class="kcal-{{ trim($colKey) }}">
                             {{ $colData['label'] ?? $colKey }} <span style="font-size:11px;font-weight:400;opacity:.85;">({{ ($colData['count'] ?? 0) + ($colData['custom_count'] ?? 0) }})</span>
                         </th>
+                        @endif
                     @endforeach
                 </tr>
                 <tr>
@@ -201,8 +207,12 @@
                         <td class="text-left" style="font-weight:bold;">{{ $row['original_name'] }}</td>
                         @php $rowTotal = 0; @endphp
                         @foreach($table['columns'] as $colKey => $colData)
-                            @php $cell=$row['cells'][$colKey]??0; $val=is_array($cell)?($cell['val']??0):$cell; $rowTotal+=$val*($colData['count']??1); @endphp
+                            @php $cell=$row['cells'][$colKey]??0; $val=is_array($cell)?(!empty($cell['skip'])?0:($cell['val']??0)):$cell; $rowTotal+=$val*($colData['count']??1); @endphp
+                            @if(!empty($colData['ind']) && is_array($cell))
+                                <td style="font-size:12px;{{ !empty($cell['skip']) || !empty($cell['note']) ? 'background:#fee2e2;' : '' }}">@include('print.partials.ind-cell', ['cell' => $cell])</td>
+                            @else
                             <td style="font-weight:bold;font-size:13px;">@if(($colData['count'] ?? 0) > 0){{ $val }} г@else—@endif</td>
+                            @endif
                         @endforeach
                         <td style="font-size:14px;font-weight:bold;">{{ round($rowTotal) }} г</td>
                     </tr>
@@ -210,6 +220,7 @@
             </tbody>
         </table>
 
+        @include('print.partials.ind-pack', ['pack' => $table['pack'] ?? []])
         @if(!empty($table['individual_notes']))
             {{-- Хто в червоних цифрах і що саме йому класти. --}}
             <div class="notes-box" style="border:2px solid #dc2626;background:#fef2f2;">

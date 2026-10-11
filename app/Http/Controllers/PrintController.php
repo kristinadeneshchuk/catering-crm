@@ -644,6 +644,8 @@ class PrintController extends Controller
             return "Немає активних замовлень на {$targetDate}.";
         }
 
+        $indPacking = new \App\Services\Kitchen\IndividualPacking($orders, $targetDate);
+
         // Групуємо по планах меню — кожен план має свої страви/день циклу
         $ordersByPlan = $orders->groupBy(fn ($o) => $o->effectiveMenuPlan()?->id ?? 0);
 
@@ -904,7 +906,7 @@ class PrintController extends Controller
         $cycle = array_values(array_filter($report, fn ($t) => isset($t['meal_type_id'])));
         $rest  = array_values(array_filter($report, fn ($t) => !isset($t['meal_type_id'])));
         $report = array_merge(
-            app(\App\Services\Kitchen\IndividualPacking::class)->arrange($cycle, $orders, $sortedMenuItems, $plansByOrder),
+            $indPacking->arrange($cycle, $orders, $sortedMenuItems, $plansByOrder),
             $rest
         );
 
@@ -942,6 +944,7 @@ class PrintController extends Controller
 
         $date = $inputDate;
         return view('print.packaging-list', [
+            'indRegistry'    => $indPacking->registry(),
             'reportByPlan'   => $reportByPlan,
             'missingPlans'   => $missingPlans,
             'date'           => $date,

@@ -176,6 +176,8 @@
                     </div>
                 @endif
 
+                @include('print.partials.ind-registry', ['registry' => $this->indRegistry])
+
                 {{-- ОБХІД ПО ПЛАНАХ МЕНЮ --}}
                 @foreach($report as $planId => $planBlock)
                 @php
@@ -209,9 +211,13 @@
                                 </tr>
                                 <tr class="header-kcal">
                                     @foreach($table['columns'] as $label => $info)
+                                        @if(!empty($info['ind']))
+                                            <th style="font-size:11px;font-weight:800;background:{{ $info['ind']['eve'] ? '#1e3a8a' : '#fde68a' }};color:{{ $info['ind']['eve'] ? '#fff' : '#78350f' }};">@include('print.partials.ind-colhead', ['c' => $info['ind']])</th>
+                                        @else
                                         <th style="font-size:15px;font-weight:900;">
                                             {{ $info['label'] ?? $label }} <span style="font-size:11px;font-weight:500;opacity:.8;">({{ ($info['count'] ?? 0) + ($info['custom_count'] ?? 0) }})</span>
                                         </th>
+                                        @endif
                                     @endforeach
                                 </tr>
                                 <tr class="row-count">
@@ -235,8 +241,12 @@
                                         <td class="row-label">{{ $row['original_name'] }}</td>
                                         @php $rowTotal = 0; @endphp
                                         @foreach($table['columns'] as $colKey => $info)
-                                            @php $cell=$row['cells'][$colKey]??0; $val=is_array($cell)?($cell['val']??0):$cell; $rowTotal+=$val*($info['count']??1); @endphp
+                                            @php $cell=$row['cells'][$colKey]??0; $val=is_array($cell)?(!empty($cell['skip'])?0:($cell['val']??0)):$cell; $rowTotal+=$val*($info['count']??1); @endphp
+                                            @if(!empty($info['ind']) && is_array($cell))
+                                                <td style="{{ !empty($cell['skip']) || !empty($cell['note']) ? 'background:#fee2e2;' : '' }}">@include('print.partials.ind-cell', ['cell' => $cell])</td>
+                                            @else
                                             <td><span style="font-weight:800;">@if(($info['count'] ?? 0) > 0){{ $val }} г@else—@endif</span></td>
+                                            @endif
                                         @endforeach
                                         <td style="font-size:14px;font-weight:900;">{{ round($rowTotal) }} г</td>
                                     </tr>
@@ -244,6 +254,7 @@
                             </tbody>
                         </table>
                         </div>
+                        @include('print.partials.ind-pack', ['pack' => $table['pack'] ?? []])
                         @if(!empty($table['individual_notes']))
                             <div class="replacements-container">
                                 <div style="font-weight:900;text-transform:uppercase;margin-bottom:5px;font-size:11px;color:#dc2626;">Заміни в цій страві ({{ count($table['individual_notes']) }}):</div>

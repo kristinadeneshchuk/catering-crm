@@ -46,6 +46,7 @@ class PackagingList extends Page implements HasForms
     public array $clientComments = [];
     /** Очікуване списання за нормою (без цін) — перелік зверху листа. */
     public array $writeoff = [];
+    public array $indRegistry = []; // реєстр індивідуальних угорі листа (№, доставка, ⛔)
     public array $missingPlans = []; // плани з замовленнями, у яких немає меню на цей день циклу
     public ?string $debugMessage = null;
 
@@ -298,6 +299,7 @@ class PackagingList extends Page implements HasForms
         $targetDateObj = Carbon::parse($selectedDate)->addDay();
         $targetDate    = $targetDateObj->format('Y-m-d');
 
+        $this->indRegistry = [];
         $this->report = []; // тепер: [$planId => ['plan'=>MenuPlan, 'day_number'=>int, 'tables'=>[...]]]
         $this->orderPlans = [];
         $this->missingPlans = [];
@@ -323,6 +325,9 @@ class PackagingList extends Page implements HasForms
         }
 
         $this->buildVersionTwo($orders, $targetDate);
+
+        $indPacking = new \App\Services\Kitchen\IndividualPacking($orders, $targetDate);
+        $this->indRegistry = $indPacking->registry();
 
         try {
             $this->writeoff = app(\App\Services\Kitchen\KitchenStockDebit::class)->expected(Carbon::parse($selectedDate));
@@ -601,8 +606,7 @@ class PackagingList extends Page implements HasForms
         }
 
         // Індивідуальні — по прийомах поруч із циклічним (див. IndividualPacking).
-        $planTables = app(\App\Services\Kitchen\IndividualPacking::class)
-            ->arrange($planTables, $orders, $sortedMenuItems, $this->orderPlans);
+        $planTables = $indPacking->arrange($planTables, $orders, $sortedMenuItems, $this->orderPlans);
 
         // === ЗАМІННІ СТРАВИ — окремі таблиці для страв, якими повністю замінено оригінал ===
         foreach ($replacementDishData as $repDishId => $repData) {

@@ -6,24 +6,74 @@ use App\Models\Dish;
 use App\Models\Order;
 use App\Traits\CalculatesOrderPlan;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
- * Індивідуальні клієнти у фасувальному листі — по прийомах їжі, поруч із циклічним.
+ * Індивідуальні клієнти у фасувальному листі — за погодженим 11.10 стандартом
+ * («Фасування_дд.мм» сесії індивідуальних), поруч із циклічним меню:
  *
- * Кухня фасує по черзі: сніданок циклічного, потім індивідуальні сніданки, обід…
- * Тому:
- *   - індивідуальний з тією самою стравою, що й у циклічному (без виключень),
- *     стає окремою колонкою «🌙 #620 Олександр 3000» у таблиці циклічної страви;
- *   - решта індивідуальних страв цього прийому — блоком одразу під таблицею
- *     в погодженому форматі 11.10: зліва складові, колонки — клієнти
- *     (спершу вечірні), у клітинці грами, заміни червоним;
- *   - прийоми, яких немає в циклічному (додаток до прийому), — блоками в кінці.
+ *   - угорі реєстр: № клієнта, доставка (🌙 вечірні першими, час), ⛔ що не можна;
+ *   - клієнт з тією самою стравою, що в циклічному, — колонкою в таблиці
+ *     циклічної страви, навіть із замінами: заміна чи «НЕ класти» — червоною клітинкою;
+ *   - решта страв прийому — блоком одразу під таблицею: таблиця на страву,
+ *     складові × клієнти, «Разом»; власні страви клієнта — з «≈»;
+ *   - шапка колонки: № клієнта, ім'я, 🌙/☀ час доставки, вага порції;
+ *   - пакувальні примітки 📦 — з примітки до страви в персональному меню.
  */
 class IndividualPacking
 {
     use CalculatesOrderPlan;
 
-    private array $twoOrders = [];
+    /** @var array<int, array> за order_id: n, name, eve, time, kcal, order */
+    private array $clients = [];
+
+    public function __construct(Collection $orders, string $date)
+    {
+        $withMenu = DB::table('order_day_dishes')->whereDate('date', $date)
+            ->whereIn('order_id', $orders->where('menu_type', 'individual')->pluck('id'))
+            ->distinct()->pluck('order_id')->flip();
+
+        $list = $orders->filter(fn (Order $o) => $o->menu_type === 'individual' && isset($withMenu[$o->id]))
+            ->sortBy(fn (Order $o) => [$this->isEvening($o) ? 0 : 1, (string) $o->delivery_time, (string) $o->client?->name])
+            ->values();
+
+        $twins = $list->groupBy(fn (Order $o) => $o->client_id.':'.$o->calories)->filter(fn ($g) => $g->count() > 1)->keys()->all();
+        foreach ($list as $i => $o) {
+            $this->clients[$o->id] = [
+                'n'     => $i + 1,
+                'name'  => $this->shortName($o).(in_array($o->client_id.':'.$o->calories, $twins) ? ' (зам. '.$o->id.')' : ''),
+                'eve'   => $this->isEvening($o),
+                'time'  => (string) $o->delivery_time,
+                'kcal'  => (int) $o->calories,
+                'order' => $o,
+            ];
+        }
+
+    }
+
+    /** Реєстр угорі листа: №, клієнт, доставка, ⛔ не можна (алергії, виключені продукти й страви). */
+    public function registry(): array
+    {
+        return array_values(array_map(function ($c) {
+            $o = $c['order'];
+            // Набори («Безлактозні») — однією назвою, а не півсотнею продуктів; решту — до 15 назв.
+            $bundles = $o->client?->replacementBundles ?? collect();
+            $inBundles = $bundles->flatMap(fn ($b) => $b->items->pluck('original_ingredient_id'))->flip();
+            $manual = ($o->client?->ingredientExclusions ?? collect())->merge($o->ingredientExclusions ?? collect())
+                ->reject(fn ($i) => isset($inBundles[$i->id]))
+                ->pluck('name')->map(fn ($n) => mb_strtolower(trim($n)))->unique()->values();
+            $ex = $manual->take(15)->implode(', ').($manual->count() > 15 ? ' … ще '.($manual->count() - 15) : '');
+            $dx = $o->client?->dishExclusions?->pluck('name')->implode(', ');
+            $stop = array_filter([
+                trim((string) $o->client?->allergies),
+                $bundles->pluck('name')->map(fn ($n) => mb_strtoupper($n))->implode(', '),
+                $ex ? 'Без: '.$ex : '',
+                $dx ? 'Не давати: '.$dx : '',
+            ]);
+
+            return ['n' => $c['n'], 'name' => $c['name'].' · '.$c['kcal'], 'eve' => $c['eve'], 'time' => $c['time'], 'stop' => implode('. ', $stop)];
+        }, $this->clients));
+    }
 
     /**
      * @param  array  $tables  таблиці плану (циклічні мають dish_id і meal_type_id)
@@ -31,9 +81,8 @@ class IndividualPacking
      */
     public function arrange(array $tables, Collection $orders, Collection $menuItems, array $plans): array
     {
-        $individuals = $orders->filter(fn (Order $o) => $o->menu_type === 'individual' && !empty($plans[$o->id]['items']))
-            ->sortBy(fn (Order $o) => [$this->isEvening($o) ? 0 : 1, $o->client?->name])
-            ->values();
+        $individuals = $orders->filter(fn (Order $o) => isset($this->clients[$o->id]) && !empty($plans[$o->id]['items']))
+            ->sortBy(fn (Order $o) => $this->clients[$o->id]['n'])->values();
         if ($individuals->isEmpty()) {
             return $tables;
         }
@@ -42,31 +91,40 @@ class IndividualPacking
             ->mapWithKeys(fn ($mi) => [$mi->dish_id.':'.$mi->meal_type_id => $mi])->all();
         $mealOrder = $menuItems->mapWithKeys(fn ($mi) => [$mi->meal_type_id => $mi->mealType?->sort_order ?? 99])->all();
 
-        // Два замовлення одного клієнта на день (два раціони) — підписуємо номер замовлення.
-        $this->twoOrders = $individuals->countBy(fn (Order $o) => $o->client_id)->filter(fn ($n) => $n > 1)->keys()->all();
-
-        $blocks = []; // [meal_type_id => [meal, sort, dishes => [dish_id => ...]]]
-
+        $blocks = [];
         foreach ($individuals as $order) {
             foreach ($plans[$order->id]['items'] as $item) {
                 $dish = Dish::with(['dishIngredients.ingredient', 'dishIngredients.childDish.dishIngredients.ingredient'])->find($item['dish_id']);
                 if (!$dish) continue;
 
                 $weight = (int) $item['weight'];
-                $baseW  = (float) ($dish->base_weight_g ?? 0);
-                $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
+                $col    = $this->column($order, $weight);
+                $rows   = $this->rowsFor($order, $dish, $weight, (string) $item['meal'], $this->noteSwaps($item['cooking_note'] ?? null));
+                $pack   = $this->packNote($item['cooking_note'] ?? null);
                 $key    = $dish->id.':'.$item['meal_type_id'];
 
-                // Та сама страва, що в циклічному, і без змін — у таблицю циклічного.
-                if (isset($cycleKeys[$key]) && !$this->isCustomForDish($order, $dish)) {
-                    $tables = $this->addColumn($tables, $cycleKeys[$key], $dish, $order, $scale);
+                // Та сама страва, що в циклічному, — у таблицю циклічного, з червоними клітинками.
+                if (isset($cycleKeys[$key])) {
+                    $tables = $this->addColumn($tables, $cycleKeys[$key], $dish, $order, $col, $rows, $pack);
                     continue;
                 }
 
                 $mt = (int) $item['meal_type_id'];
                 $blocks[$mt] ??= ['meal' => $item['meal'], 'meal_type_id' => $mt, 'dishes' => []];
-                $blocks[$mt]['dishes'][$dish->id] ??= ['dish_name' => $dish->name, 'clients' => [], 'rows' => [], 'notes' => []];
-                $this->addClient($blocks[$mt]['dishes'][$dish->id], $order, $dish, $scale, $weight);
+                $blocks[$mt]['dishes'][$dish->id] ??= [
+                    'dish_name' => $dish->name, 'is_cycle' => !$this->isOwn($dish),
+                    'clients' => [], 'rows' => [], 'pack' => [],
+                ];
+                $d = &$blocks[$mt]['dishes'][$dish->id];
+                $c = count($d['clients']);
+                $d['clients'][] = $col;
+                foreach ($rows as $r) {
+                    if ($r['g'] < 0.5 && !$r['skip'] && $r['note'] === '') continue;
+                    $d['rows'][$r['name']] ??= ['name' => $r['name'], 'cells' => []];
+                    $d['rows'][$r['name']]['cells'][$c] = $r;
+                }
+                if ($pack) $d['pack'][] = ['n' => $col['n'], 'text' => $pack];
+                unset($d);
             }
         }
 
@@ -85,7 +143,6 @@ class IndividualPacking
                 unset($blocks[$mt]);
             }
             if ($i === $lastCycleIdx) {
-                // Прийоми без циклічної страви — одразу після циклічних, за порядком прийомів.
                 uasort($blocks, fn ($a, $b) => ($mealOrder[$a['meal_type_id']] ?? 99) <=> ($mealOrder[$b['meal_type_id']] ?? 99));
                 foreach ($blocks as $b) $out[] = $this->block($b);
                 $blocks = [];
@@ -96,7 +153,75 @@ class IndividualPacking
         return $out;
     }
 
-    private function addColumn(array $tables, $menuItem, Dish $dish, Order $order, float $scale): array
+    /**
+     * Складові страви для одного клієнта — верхній рівень техкарти, як у фасувальному.
+     * Заміна/виключення продукту — у клітинці продукту; усередині ПФ — приміткою на рядку ПФ.
+     * pos — номер рядка техкарти (для колонки в циклічній таблиці).
+     */
+    private function rowsFor(Order $order, Dish $dish, int $weight, string $meal, array $noteSwaps = []): array
+    {
+        $approx = $this->isOwn($dish);
+        if (str_contains(mb_strtolower($meal), 'додаток') || $dish->dishIngredients->isEmpty()) {
+            return [['pos' => 0, 'name' => $dish->dishIngredients->isEmpty() ? 'вся страва' : $dish->name,
+                'g' => $weight, 'note' => '', 'skip' => false, 'approx' => $approx]];
+        }
+
+        $baseW = (float) $dish->base_weight_g ?: max(1.0, (float) $dish->dishIngredients->sum('net_weight_g'));
+        $k = $weight / $baseW;
+        $excluded = array_flip($order->effectiveExcludedIngredientIds());
+        $reps = $order->replacements->where('dish_id', $dish->id)->where('force_approved', false)
+            ->whereNotNull('original_product_id')->keyBy('original_product_id');
+
+        $out = [];
+        foreach ($dish->dishIngredients->values() as $pos => $di) {
+            $row = ['pos' => $pos, 'name' => $this->ingredientRowLabel($di), 'g' => (float) $di->net_weight_g * $k,
+                'note' => '', 'skip' => false, 'approx' => $approx];
+            if ($di->type === 'pf' && $di->childDish) {
+                $notes = [];
+                foreach ($this->closure($di->childDish) as $ingId => $ingName) {
+                    if ($to = $noteSwaps[mb_strtolower(trim($ingName))] ?? null) {
+                        $notes[] = mb_strtolower($ingName).' → '.mb_strtolower($to);
+                    } elseif ($rep = $reps[$ingId] ?? null) {
+                        $notes[] = mb_strtolower($ingName).' → '.mb_strtolower((string) $rep->replacementProduct?->name);
+                    } elseif (isset($excluded[$ingId])) {
+                        $notes[] = 'без '.mb_strtolower($ingName);
+                    }
+                }
+                $row['note'] = implode('; ', array_unique($notes));
+            } elseif ($di->ingredient_id) {
+                if ($to = $noteSwaps[mb_strtolower(trim((string) $di->ingredient?->name))] ?? null) {
+                    $row['note'] = '→ '.$to;
+                } elseif ($rep = $reps[$di->ingredient_id] ?? null) {
+                    $row['note'] = '→ '.$rep->replacementProduct?->name;
+                } elseif (isset($excluded[$di->ingredient_id])) {
+                    $row['skip'] = true;
+                }
+            }
+            $out[] = $row;
+        }
+
+        return $out;
+    }
+
+    /** Усі продукти всередині ПФ (рекурсивно): [id => назва]. */
+    private function closure(Dish $pf, array $seen = []): array
+    {
+        $out = [];
+        $pf->loadMissing('dishIngredients.ingredient', 'dishIngredients.childDish');
+        foreach ($pf->dishIngredients as $di) {
+            if ($di->type === 'pf' && $di->childDish) {
+                if (isset($seen[$di->child_dish_id])) continue;
+                $seen[$di->child_dish_id] = true;
+                $out += $this->closure($di->childDish, $seen);
+            } elseif ($di->ingredient_id && $di->ingredient) {
+                $out[$di->ingredient_id] = $di->ingredient->name;
+            }
+        }
+
+        return $out;
+    }
+
+    private function addColumn(array $tables, $menuItem, Dish $dish, Order $order, array $col, array $rows, ?string $pack): array
     {
         $idx = null;
         foreach ($tables as $i => $t) {
@@ -109,50 +234,34 @@ class IndividualPacking
             // Циклічну страву сьогодні їдять лише індивідуальні — таблиця з нуля.
             $tables[] = ['meal' => $menuItem->mealType?->name ?? 'Інше', 'dish_name' => $dish->name,
                 'dish_id' => (int) $dish->id, 'meal_type_id' => (int) $menuItem->meal_type_id,
-                'columns' => [], 'individual_notes' => [],
-                'rows' => $dish->dishIngredients->map(fn ($di) => ['original_name' => $this->ingredientRowLabel($di), 'cells' => []])->all()];
+                'columns' => [], 'rows' => [], 'individual_notes' => []];
             $idx = array_key_last($tables);
         }
         if (empty($tables[$idx]['rows'])) {
-            // Таблиця була лише з примітками (усі стандартні клієнти з замінами).
             $tables[$idx]['rows'] = $dish->dishIngredients->map(fn ($di) => ['original_name' => $this->ingredientRowLabel($di), 'cells' => []])->all();
         }
 
         $colKey = 'ind-'.$order->id;
         $slug   = $order->project ?? 'none';
         $tables[$idx]['columns'][$colKey] = [
-            'label'        => $this->clientLabel($order),
+            'label'        => '№'.$col['n'].' '.$col['name'],
             'count'        => 1,
-            'sum_scale'    => $scale,
+            'sum_scale'    => 0,
             'custom_count' => 0,
-            'individual'   => true,
+            'ind'          => $col,
             'projects'     => [$slug => ['name' => $order->projectData?->name ?? ucfirst($slug), 'count' => 1, 'custom_count' => 0]],
         ];
-        foreach ($dish->dishIngredients->values() as $r => $di) {
-            if (isset($tables[$idx]['rows'][$r])) {
-                $tables[$idx]['rows'][$r]['cells'][$colKey] = round((float) ($di->net_weight_g ?? 0) * $scale);
+        // Рядки циклічної таблиці побудовані в тому ж порядку, що dishIngredients.
+        foreach ($rows as $r) {
+            if (isset($tables[$idx]['rows'][$r['pos']])) {
+                $tables[$idx]['rows'][$r['pos']]['cells'][$colKey] = ['val' => round($r['g']), 'note' => $r['note'], 'skip' => $r['skip']];
             }
+        }
+        if ($pack) {
+            $tables[$idx]['pack'][] = ['n' => $col['n'], 'text' => $pack];
         }
 
         return $tables;
-    }
-
-    private function addClient(array &$dishBlock, Order $order, Dish $dish, float $scale, int $weight): void
-    {
-        $c = count($dishBlock['clients']);
-        $dishBlock['clients'][] = ['label' => $this->clientLabel($order), 'weight' => $weight];
-
-        foreach ($this->buildCustomClientRows($order, $dish, $scale) as $row) {
-            $changed = str_starts_with($row['name'], '↔') || str_contains($row['name'], 'ВИКЛЮЧЕНО');
-            $dishBlock['rows'][$row['name']] ??= ['name' => $row['name'], 'changed' => $changed, 'cells' => []];
-            $dishBlock['rows'][$row['name']]['cells'][$c] = $row['weight'];
-        }
-
-        if ($note = $this->individualNote($order, $dish)) {
-            foreach ($note['changes'] as $text) {
-                $dishBlock['notes'][] = ['client' => $this->clientLabel($order), 'text' => $text];
-            }
-        }
     }
 
     private function block(array $b): array
@@ -164,14 +273,50 @@ class IndividualPacking
         ];
     }
 
-    private function clientLabel(Order $order): string
+    private function column(Order $order, int $weight): array
     {
-        // Коротко, щоб таблиця влазила в аркуш: «🌙 #481 Jiri Svoboda · 2300».
-        $name = trim(preg_replace('/\s*\(.*?\)\s*/u', ' ', (string) $order->client?->name));
-        $name = implode(' ', array_slice(preg_split('/\s+/u', $name), 0, 2));
+        $c = $this->clients[$order->id];
 
-        return ($this->isEvening($order) ? '🌙 ' : '☀ ').'#'.$order->client?->id.' '.$name.' · '.(int) $order->calories
-            .(in_array($order->client_id, $this->twoOrders) ? ' (зам. '.$order->id.')' : '');
+        return ['n' => $c['n'], 'name' => $c['name'], 'eve' => $c['eve'], 'time' => mb_substr($c['time'], 0, 5), 'weight' => $weight];
+    }
+
+    /**
+     * Заміни з примітки до страви («індичка (філе) → Лосось з/м; без: цибуля») — агент
+     * пише їх туди, коли заміни немає в оформлених: [назва продукту в нижньому регістрі => на що].
+     */
+    private function noteSwaps(?string $note): array
+    {
+        $out = [];
+        foreach (explode(';', (string) $note) as $part) {
+            if (str_contains($part, '→')) {
+                [$from, $to] = array_map('trim', explode('→', $part, 2));
+                if ($from !== '' && $to !== '') $out[mb_strtolower($from)] = $to;
+            }
+        }
+
+        return $out;
+    }
+
+    /** Примітка до страви без замін (заміни вже в клітинках): «білкова добавка, окремий контейнер». */
+    private function packNote(?string $note): ?string
+    {
+        $parts = array_filter(array_map('trim', explode(';', (string) $note)),
+            fn ($p) => $p !== '' && !str_starts_with(mb_strtolower($p), 'без:') && !str_contains($p, '→'));
+
+        return $parts ? implode('; ', $parts) : null;
+    }
+
+    private function shortName(Order $order): string
+    {
+        $name = trim(preg_replace('/\s*\(.*?\)\s*/u', ' ', (string) $order->client?->name));
+
+        return implode(' ', array_slice(preg_split('/\s+/u', $name), 0, 2));
+    }
+
+    /** Власна страва клієнта — створена під нього («Інд · …»), на відміну від страв довідника. */
+    private function isOwn(Dish $dish): bool
+    {
+        return str_starts_with(trim($dish->name), 'Інд');
     }
 
     private function isEvening(Order $order): bool
