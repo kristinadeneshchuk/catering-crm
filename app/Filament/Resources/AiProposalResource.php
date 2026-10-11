@@ -32,7 +32,12 @@ class AiProposalResource extends Resource
 
     public static function getNavigationBadge(): ?string
     {
-        $n = AiProposal::where('status', 'pending')->count();
+        // Поки деплой не накотив міграцію, таблиці ще немає — меню не має падати.
+        try {
+            $n = AiProposal::where('status', 'pending')->count();
+        } catch (\Throwable) {
+            return null;
+        }
 
         return $n ? (string) $n : null;
     }
