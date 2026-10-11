@@ -424,10 +424,13 @@ trait CalculatesOrderPlan
             $outW = (float)($dt['output_weight'] ?? ($dish->base_weight_g ?? 0));
             $outW = $outW > 0 ? $outW : 1.0;
 
-            $totals['kcal'] += $weight * $kcalPer100 / 100.0;
-            $totals['prot'] += $weight * ((float)($dt['prot'] ?? 0) / $outW);
-            $totals['fat']  += $weight * ((float)($dt['fat']  ?? 0) / $outW);
-            $totals['carb'] += $weight * ((float)($dt['carb'] ?? 0) / $outW);
+            $macros = [
+                'kcal' => $weight * $kcalPer100 / 100.0,
+                'prot' => $weight * ((float)($dt['prot'] ?? 0) / $outW),
+                'fat'  => $weight * ((float)($dt['fat']  ?? 0) / $outW),
+                'carb' => $weight * ((float)($dt['carb'] ?? 0) / $outW),
+            ];
+            foreach ($macros as $k => $v) $totals[$k] += $v;
 
             $itemsOut[] = [
                 'dish_id'      => (int)$dish->id,
@@ -437,6 +440,8 @@ trait CalculatesOrderPlan
                 'dish'         => $dish->name,
                 // Інструкція під лікувальну дієту (та сама, що й у гілці вище).
                 'cooking_note' => $pd->cooking_note ?: null,
+                // КБЖВ саме цієї порції — для екрана персональних меню.
+                'macros'       => array_map(fn ($v) => round($v, 1), $macros),
             ];
         }
 

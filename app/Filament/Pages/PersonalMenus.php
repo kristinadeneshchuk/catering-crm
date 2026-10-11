@@ -14,6 +14,7 @@ use Carbon\Carbon;
 class PersonalMenus extends Page
 {
     use RestrictCookAccess;
+    use \App\Traits\CalculatesOrderPlan;
 
     protected static ?string $navigationIcon  = 'heroicon-o-user-circle';
     protected static ?string $navigationLabel = 'Персональні меню';
@@ -23,7 +24,6 @@ class PersonalMenus extends Page
 
     public string $date   = '';
     public array  $cards  = [];
-    public array  $allDishes = [];
 
     // Інгредієнти циклічного меню на цю дату (для підказок "є на кухні")
     public array $kitchenIngredientIds = [];
@@ -40,7 +40,6 @@ class PersonalMenus extends Page
     public function mount(): void
     {
         $this->date = now()->format('Y-m-d');
-        $this->loadAllDishes();
         $this->loadData();
     }
 
@@ -65,7 +64,6 @@ class PersonalMenus extends Page
         $this->modalOrderId    = $orderId;
         $this->modalMealTypeId = $mealTypeId;
 
-        $availableIds = [];
         foreach ($this->cards as $card) {
             if ($card['order_id'] === $orderId) {
                 $this->modalClientName = $card['client'];
@@ -73,12 +71,13 @@ class PersonalMenus extends Page
                     if ($meal['meal_type_id'] === $mealTypeId) {
                         $this->modalCurrentDishId = $meal['current_dish_id'];
                         $this->modalMealLabel     = $meal['meal_type_name'];
-                        $availableIds             = $meal['available_ids'];
                         break 2;
                     }
                 }
             }
         }
+        $excluded = Order::find($orderId)?->effectiveExcludedIngredientIds() ?? [];
+        $availableIds = $excluded ? $this->getAvailableDishIds($excluded) : [];
 
         $query = Dish::with('dishIngredients.ingredient')
             ->where('name', 'not like', '%н/ф%')
@@ -110,7 +109,6 @@ class PersonalMenus extends Page
             return [
                 'id'                  => $d->id,
                 'name'                => $d->name,
-                'kcal'                => $d->total_kcal ? (int) $d->total_kcal : null,
                 'is_kitchen'          => $isKitchen,
                 'matches'             => $matches,
                 'matching_ingredients'=> $matchingIngredients,
@@ -211,65 +209,61 @@ class PersonalMenus extends Page
     // Завантаження даних
     // -----------------------------------------------------------------------
 
-    private function loadAllDishes(): void
-    {
-        $this->allDishes = Dish::orderBy('name')
-            ->get()
-            ->mapWithKeys(fn($d) => [
-                $d->id => $d->name . ($d->total_kcal ? ' (' . (int)$d->total_kcal . ' ккал)' : ''),
-            ])
-            ->toArray();
-    }
-
     public function loadData(): void
     {
         $this->kitchenIngredientIds = $this->getKitchenIngredientIds($this->date);
+        \App\Models\Ingredient::preloadAveragePrices();
 
+        // Як кухня: на паузі й завершені на сьогодні й далі не годуємо.
         $orders = Order::where('menu_type', 'individual')
-            ->whereHas('orderDays', fn($q) => $q->where('date', $this->date))
+            ->feedingOn($this->date)
             ->with([
                 'client.mealTypes',
                 'client.ingredientExclusions',
                 'client.replacementBundles.items.originalIngredient',
                 'ingredientExclusions',
                 'projectData',
-                'orderDays'      => fn($q) => $q->where('date', $this->date),
-                'personalDishes' => fn($q) => $q->where('date', $this->date),
+                'personalDishes' => fn($q) => $q->where('date', $this->date)->with([
+                    'mealType',
+                    'dish.dishIngredients.ingredient',
+                    'dish.dishIngredients.childDish.dishIngredients.ingredient',
+                ]),
             ])
             ->get();
 
+        $multiplier = \App\Support\DailyWeightMultiplier::for($this->date);
         $this->cards = [];
 
         foreach ($orders as $order) {
             $client  = $order->client;
             $project = $order->projectData;
 
-            $assigned = $order->personalDishes
-                ->keyBy('meal_type_id')
-                ->map(fn($pd) => $pd->dish_id)
-                ->toArray();
+            // Порція й КБЖВ кожної страви — так само, як рахує виробництво.
+            $plan  = $this->buildPlanFromPersonal($order->personalDishes, $order, $multiplier);
+            $items = collect($plan['items'])->keyBy('meal_type_id');
+            $names = $order->personalDishes->mapWithKeys(fn($pd) => [$pd->meal_type_id => $pd->dish?->name]);
 
-            $mealTypes      = $client->mealTypes->sortBy('sort_order');
+            // Виключення могли з'явитися вже після того, як страву призначили
+            // (анкету правлять посеред періоду) — тоді кухня має це побачити.
             $excludedIngIds = $order->effectiveExcludedIngredientIds();
+            $assignedIds    = $order->personalDishes->pluck('dish_id')->filter()->unique()->all();
+            $conflictIds    = ($excludedIngIds && $assignedIds)
+                ? Dish::whereIn('id', $assignedIds)
+                    ->whereHas('dishIngredients', fn($q) => $q->whereIn('ingredient_id', $excludedIngIds))
+                    ->pluck('id')->all()
+                : [];
 
             $meals = [];
-            foreach ($mealTypes as $mt) {
-                $currentDishId  = $assigned[$mt->id] ?? null;
-                $availableIds   = $this->getAvailableDishIds($excludedIngIds);
-
-                // Виключення могли з'явитися вже після того, як страву призначили
-                // (анкету правлять посеред періоду) — тоді призначене більше не
-                // проходить по складу і кухня має це побачити.
-                $conflict = $currentDishId !== null
-                    && !empty($excludedIngIds)
-                    && !in_array($currentDishId, $availableIds, true);
-
+            foreach ($client->mealTypes->sortBy('sort_order') as $mt) {
+                $item = $items[$mt->id] ?? null;
                 $meals[] = [
                     'meal_type_id'    => $mt->id,
                     'meal_type_name'  => $mt->name,
-                    'current_dish_id' => $currentDishId,
-                    'available_ids'   => $availableIds,
-                    'conflict'        => $conflict,
+                    'current_dish_id' => $item['dish_id'] ?? null,
+                    'dish_name'       => $names[$mt->id] ?? null,
+                    'weight'          => $item['weight'] ?? null,
+                    'macros'          => $item['macros'] ?? null,
+                    'conflict'        => $item && in_array($item['dish_id'], $conflictIds, true),
                 ];
             }
 
@@ -280,6 +274,7 @@ class PersonalMenus extends Page
                 'client_id'  => $client->id,
                 'client'     => $client->name,
                 'calories'   => (int)$order->calories,
+                'totals'     => array_map(fn($v) => (int) round($v), $plan['totals']),
                 'project'    => $project?->name ?? ucfirst($order->project ?? ''),
                 'color'      => $project?->color ?? 'gray',
                 'is_evening' => $isEvening,
@@ -331,7 +326,7 @@ class PersonalMenus extends Page
     private function getAvailableDishIds(array $excludedIngIds): array
     {
         if (empty($excludedIngIds)) {
-            return array_keys($this->allDishes);
+            return [];
         }
 
         return Dish::whereDoesntHave('dishIngredients', fn($q) =>

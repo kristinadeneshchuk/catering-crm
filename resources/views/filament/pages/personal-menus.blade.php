@@ -190,7 +190,7 @@
         .pm-no-results { grid-column:1/-1; text-align:center; padding:40px 0; color:#2d2d2d; font-size:14px; font-weight:600; }
     </style>
 
-    <div wire:poll.30s="loadData" x-data="{ search: '' }">
+    <div wire:poll.60s="loadData" x-data="{ search: '' }">
 
         {{-- Навігація по датах --}}
         <div class="pm-nav">
@@ -255,6 +255,12 @@
                         <span class="pm-kcal" style="color:#555555;">клієнт #{{ $card['client_id'] }}</span>
                         <span class="pm-kcal" style="color:#555555;">замовлення #{{ $card['order_id'] }}</span>
                         <span class="pm-kcal">{{ $card['calories'] }} ккал</span>
+                        @if($card['filled'])
+                            @php $t = $card['totals']; $off = $card['calories'] > 0 ? abs($t['kcal'] - $card['calories']) / $card['calories'] : 0; @endphp
+                            <span class="pm-kcal" style="color:{{ $off > 0.1 ? '#f59e0b' : '#86efac' }};" title="Сума за днем: ккал · білки / жири / вуглеводи">
+                                Σ {{ $t['kcal'] }} ккал · Б {{ $t['prot'] }} / Ж {{ $t['fat'] }} / В {{ $t['carb'] }}
+                            </span>
+                        @endif
                     </div>
                     <div class="pm-card-head-right">
                         <span class="pm-badge" style="background:{{ $pc['bg'] }};color:{{ $pc['text'] }};">
@@ -286,7 +292,12 @@
                                 wire:click="openDishModal({{ $card['order_id'] }}, {{ $meal['meal_type_id'] }})">
                                 <span class="pm-meal-btn-text">
                                     @if($meal['current_dish_id'])
-                                        {{ $allDishes[$meal['current_dish_id']] ?? '—' }}
+                                        {{ $meal['dish_name'] ?? '—' }}
+                                        @if($meal['macros'])
+                                            <span style="font-weight:500;color:#9ca3af;font-size:12px;">
+                                                · {{ $meal['weight'] }} г · {{ (int) round($meal['macros']['kcal']) }} ккал · Б {{ round($meal['macros']['prot']) }} / Ж {{ round($meal['macros']['fat']) }} / В {{ round($meal['macros']['carb']) }}
+                                            </span>
+                                        @endif
                                     @else
                                         <span style="color:#2d2d2d;">─── не призначено ───</span>
                                     @endif
