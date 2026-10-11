@@ -66,3 +66,29 @@ Route::prefix('lunch')
         Route::get('cycle-menu', [LunchApiController::class, 'cycleMenu']);
         Route::post('kitchen-plan', [LunchApiController::class, 'kitchenPlan']);
     });
+
+/*
+|--------------------------------------------------------------------------
+| ШІ-агенти
+|--------------------------------------------------------------------------
+|
+| Агент пропонує → людина погоджує в CRM чи кнопкою в Telegram → CRM виконує.
+| У бойові дані агент напряму не пише.
+|
+*/
+
+Route::prefix('agents/v1')
+    ->middleware('agent.token')
+    ->controller(\App\Http\Controllers\Api\Agents\AgentApiController::class)
+    ->group(function () {
+        Route::get('me', 'me');
+        Route::get('tasks', 'tasks');
+        Route::patch('tasks/{task}', 'updateTask');
+        Route::post('proposals', 'propose');
+        Route::get('proposals', 'proposals');
+        Route::post('reports', 'report');
+        Route::get('memory', 'memory');
+        Route::put('memory/{key}', 'remember')->where('key', '.+');
+        Route::delete('memory/{key}', 'forget')->where('key', '.+');
+    });
+

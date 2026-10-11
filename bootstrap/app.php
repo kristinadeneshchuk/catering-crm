@@ -22,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'inbox.token' => \App\Http\Middleware\VerifyInboxToken::class,
             'lunch.token' => \App\Http\Middleware\VerifyLunchToken::class,
+            'agent.token' => \App\Http\Middleware\VerifyAgentToken::class,
         ]);
 
         // Гостей із захищених сторінок ведемо на відповідний логін, бо іменованого

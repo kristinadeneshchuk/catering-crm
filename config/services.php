@@ -69,6 +69,11 @@ return [
         'super_admin_ids' => env('FINANCE_SUPER_ADMIN_IDS', '7'),
     ],
 
+    // Пульт ШІ-агентів: хто погоджує пропозиції. "user_id:telegram_id,…"
+    'ai_agents' => [
+        'approvers' => env('AI_APPROVERS', ''),
+    ],
+
     'monobank' => [
         'base_url' => env('MONOBANK_API_URL', 'https://api.monobank.ua'),
     ],

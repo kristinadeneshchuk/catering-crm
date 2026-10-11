@@ -87,6 +87,14 @@ class TelegramBotWebhookController extends Controller
             return;
         }
 
+        // Пропозиції ШІ-агентів: погодити / відхилити.
+        if (str_starts_with($data, \App\Services\Agents\ProposalDesk::CALLBACK.':')) {
+            $answer = app(\App\Services\Agents\ProposalDesk::class)->button($fromId, $data);
+            $this->telegram->answerCallback((string) $callback['id'], $answer);
+
+            return;
+        }
+
         // «Бухгалтерія»: додати накладну, закрити оплату, непрофільні витрати.
         if (str_starts_with($data, \App\Services\Accounting\AccountingDesk::CALLBACK.':')) {
             $this->accountingButton($callback, $fromId, $data);
