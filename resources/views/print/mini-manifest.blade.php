@@ -744,13 +744,8 @@ function fitClientNames() {
 }
 
 window.addEventListener('load', function () {
-    document.querySelectorAll('.qr-placeholder').forEach(function (el) {
-        var url = el.dataset.url;
-        if (!url) return;
-        new QRCode(el, { text: url, width: 50, height: 50, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
-    });
-    padDays();
-    fitClientNames();
+    // За замовчуванням — великий формат (70×99, 9 шт/аркуш); ?format=small — малий.
+    switchFormat(new URLSearchParams(location.search).get('format') === 'small' ? 'small' : 'large');
 });
 
 window.addEventListener('beforeprint', function () {
