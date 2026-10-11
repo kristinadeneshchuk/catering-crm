@@ -19,6 +19,8 @@ class DishCatalog
     public function search(array $f): array
     {
         $cycleIds = DB::table('daily_menu_dishes')->distinct()->pluck('dish_id')->flip();
+        // Середні ціни одним запитом, а не по запиту на кожен продукт.
+        \App\Models\Ingredient::preloadAveragePrices();
 
         $q = Dish::query()->with(['dishIngredients.ingredient', 'dishIngredients.childDish.dishIngredients.ingredient'])
             ->where(fn ($w) => $w->whereNull('is_semi_finished')->orWhere('is_semi_finished', false));

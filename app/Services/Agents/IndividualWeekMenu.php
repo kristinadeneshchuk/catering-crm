@@ -231,6 +231,7 @@ class IndividualWeekMenu
         $price = (float) ($order->price_per_day ?: ($order->duration ? $order->final_price / $order->duration : 0));
         $kcalTarget = (float) $order->calories;
 
+        Ingredient::preloadAveragePrices();
         $new = collect($p['new_dishes'] ?? [])->keyBy('ref')->map(fn ($d) => $this->draftDish($d));
         $ids = collect($p['days'] ?? [])->flatMap(fn ($d) => collect($d['meals'] ?? [])->pluck('dish_id'))->filter()->unique();
         $dishes = Dish::with(['dishIngredients.ingredient', 'dishIngredients.childDish.dishIngredients.ingredient'])->whereIn('id', $ids)->get()->keyBy('id');
