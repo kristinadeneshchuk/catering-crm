@@ -33,6 +33,7 @@ class IndividualWeekMenu
         if (!$order) $errors[] = 'order_id: замовлення не знайдено';
 
         $refs = [];
+        $typical = self::typicalGrams(collect($p['new_dishes'] ?? [])->flatMap(fn ($d) => array_column((array) ($d['ingredients'] ?? []), 'ingredient_id'))->filter()->all());
         foreach ((array) ($p['new_dishes'] ?? []) as $i => $d) {
             $ref = $d['ref'] ?? null;
             if (!$ref) $errors[] = "new_dishes[$i]: немає ref";
@@ -43,7 +44,14 @@ class IndividualWeekMenu
                 if (!$id && !$child) $errors[] = "new_dishes[$i].ingredients[$j]: потрібен ingredient_id або child_dish_id";
                 if ($id && !Ingredient::whereKey($id)->exists()) $errors[] = "new_dishes[$i].ingredients[$j]: продукту #{$id} немає";
                 if ($child && !Dish::whereKey($child)->exists()) $errors[] = "new_dishes[$i].ingredients[$j]: напівфабрикату #{$child} немає";
-                if ((float) ($ing['net_weight_g'] ?? 0) <= 0) $errors[] = "new_dishes[$i].ingredients[$j]: net_weight_g > 0";
+                $g = (float) ($ing['net_weight_g'] ?? 0);
+                if ($g <= 0) $errors[] = "new_dishes[$i].ingredients[$j]: net_weight_g > 0";
+                // Грами на порцію, не кг і не грами на партію: 0,15 замість 150 чи 1500
+                // замість 150 перекошують собівартість і закупку в тисячу разів.
+                elseif (($base = (float) ($d['base_weight_g'] ?? 0)) > 0 && $g > $base * 2.5)
+                    $errors[] = "new_dishes[$i].ingredients[$j]: {$g} г при виході страви {$base} г — net_weight_g у грамах на одну порцію";
+                elseif ($id && ($med = $typical[$id] ?? null) && $med >= 20 && $g < $med / 50)
+                    $errors[] = "new_dishes[$i].ingredients[$j]: {$g} г, а зазвичай ~{$med} г — схоже, кілограми замість грамів";
             }
             if ($ref) $refs[$ref] = true;
         }
@@ -62,6 +70,23 @@ class IndividualWeekMenu
         }
 
         return $errors;
+    }
+
+    /**
+     * Типова вага продукту в техкартах (медіана грамів на рядок) — щоб ловити
+     * кілограми, записані замість грамів.
+     *
+     * @return array<int, float>
+     */
+    private static function typicalGrams(array $ingredientIds): array
+    {
+        if (!$ingredientIds) return [];
+
+        return DishIngredient::whereIn('ingredient_id', array_unique($ingredientIds))->where('net_weight_g', '>', 0)
+            ->get(['ingredient_id', 'net_weight_g'])->groupBy('ingredient_id')
+            ->filter(fn ($rows) => $rows->count() >= 4)
+            ->map(fn ($rows) => (float) $rows->pluck('net_weight_g')->sort()->values()[intdiv($rows->count(), 2)])
+            ->all();
     }
 
     /** Виконати погоджене. Повертає підсумок для звіту. */

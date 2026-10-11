@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\DB;
  */
 class InvoiceReader
 {
-    public function __construct(private OpsAi $ai, private InvoiceQuantity $quantity)
+    public function __construct(private OpsAi $ai, private InvoiceQuantity $quantity, private ?UnitGuard $guard = null)
     {
     }
 
@@ -143,6 +143,20 @@ class InvoiceReader
 
                 if (isset($resolved['warning'])) {
                     $warnings[] = $row['raw_name'].': '.$resolved['warning'];
+                } elseif ($item instanceof Ingredient) {
+                    // Сума з накладної правильна, а одиниці часто ні: 30 яєць як
+                    // 30 кг, 500 г як 0,5 г. Ціна за кг це видає — виправляємо тут.
+                    $guard = $this->guard ?? app(UnitGuard::class);
+                    $baseQty = $resolved['qty'] * StockDocumentItem::unitFactor($resolved['unit'], $item->unit);
+                    $checked = $guard->check($item, $baseQty, (float) $row['total_price']);
+
+                    if ($checked['note']) {
+                        $resolved = ['qty' => round($checked['qty'], 3), 'unit' => StockDocumentItem::canonUnit($item->unit),
+                            'note' => trim(($resolved['note'] ?? '').' '.$checked['note'])];
+                        $warnings[] = $row['raw_name'].': виправлено — '.$checked['note'];
+                    } elseif ($checked['problem']) {
+                        $warnings[] = $checked['problem'];
+                    }
                 }
 
                 $matched[] = [$item, $row, $resolved];

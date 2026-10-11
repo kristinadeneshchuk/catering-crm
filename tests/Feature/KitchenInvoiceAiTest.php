@@ -377,4 +377,64 @@ class KitchenInvoiceAiTest extends TestCase
             && $r['chat_id'] === '100'
             && str_contains($r['text'], 'Чернетка накладної'));
     }
+
+    // --- плутанина одиниць ----------------------------------------------------
+
+    private function row(Ingredient $ing, float $qty, string $unit, float $total): array
+    {
+        return ['raw_name' => $ing->name, 'match' => 'ING '.$ing->id, 'quantity' => $qty, 'unit' => $unit,
+            'pack_size' => null, 'pack_unit' => null, 'total_price' => $total, 'note' => null];
+    }
+
+    public function test_eggs_written_as_kilograms_are_counted_as_pieces(): void
+    {
+        // 30 яєць по 6 ₴ записали як «30 кг» — на складі вийшло б 30 кг яєць по 6 ₴/кг.
+        $eggs = Ingredient::create(['name' => 'Яйце куряче', 'unit' => 'кг', 'price_per_kg' => 110,
+            'is_packaged' => true, 'package_weight' => 55, 'package_unit' => 'г']);
+        $this->fakeAi($this->answer(['items' => [$this->row($eggs, 30, 'кг', 180)], 'total' => 180]));
+
+        $document = app(InvoiceReader::class)->fromPhotos([$this->photo()]);
+        $item = $document->items()->first();
+
+        $this->assertEquals(1.65, (float) $item->qty, '30 шт × 55 г = 1,65 кг');
+        $this->assertEqualsWithDelta(109.09, (float) $item->price, 0.01);
+        $this->assertStringContainsString('виправлено', $document->ai_comment);
+    }
+
+    public function test_grams_read_as_kilograms_are_divided_by_a_thousand(): void
+    {
+        // «Пармезан 500» — це грами, а не 500 кг по 0,65 ₴.
+        $parmesan = Ingredient::create(['name' => 'Пармезан', 'unit' => 'кг', 'price_per_kg' => 650]);
+        $this->fakeAi($this->answer(['items' => [$this->row($parmesan, 500, 'кг', 325)], 'total' => 325]));
+
+        $item = app(InvoiceReader::class)->fromPhotos([$this->photo()])->items()->first();
+
+        $this->assertEquals(0.5, (float) $item->qty);
+        $this->assertEquals(650, (float) $item->price);
+    }
+
+    public function test_an_unexplained_price_is_left_for_a_person_and_shown_before_posting(): void
+    {
+        // Курка по 800 ₴/кг при звичних 200 — ні ×1000, ні вага штуки. Не вгадуємо.
+        $this->fakeAi($this->answer(['items' => [$this->row($this->chicken, 10, 'кг', 8000)], 'total' => 8000]));
+
+        $document = app(InvoiceReader::class)->fromPhotos([$this->photo()]);
+
+        $this->assertEquals(10, (float) $document->items()->first()->qty, 'кількість не чіпаємо');
+        $this->assertStringContainsString('перевірте кількість', $document->ai_comment);
+
+        $problems = \App\Filament\Resources\StockDocumentResource::postProblems($document);
+        $this->assertCount(1, $problems);
+        $this->assertStringContainsString('Філе куряче', $problems[0]);
+    }
+
+    public function test_a_normal_price_raises_nothing(): void
+    {
+        $this->fakeAi($this->answer(['items' => [$this->row($this->chicken, 10, 'кг', 2100)], 'total' => 2100]));
+
+        $document = app(InvoiceReader::class)->fromPhotos([$this->photo()]);
+
+        $this->assertSame([], \App\Filament\Resources\StockDocumentResource::postProblems($document));
+        $this->assertEquals(10, (float) $document->items()->first()->qty);
+    }
 }

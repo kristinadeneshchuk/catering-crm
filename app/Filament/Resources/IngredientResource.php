@@ -115,12 +115,14 @@ class IngredientResource extends Resource
                                         return (float) $value;
                                     }),
 
+                                // Склад — лише кг або л: техкарти в грамах, і штуки чи грами
+                                // в обліку плутали ціни в тисячі разів. Штучне — через вагу
+                                // штуки нижче; накладні в штуках перераховуються самі.
                                 Select::make('unit')
                                     ->label('Базова од. (склад)')
-                                    ->options([
-                                        'г' => 'Грами (г)', 'кг' => 'Кілограми (кг)', 'шт' => 'Штуки (шт)',
-                                        'мл' => 'Мілілітри (мл)', 'л' => 'Літри (л)',
-                                    ])
+                                    ->options(fn (?Ingredient $record) => ['кг' => 'Кілограми (кг)', 'л' => 'Літри (л)']
+                                        + ($record && ! in_array($record->unit, ['кг', 'л'], true) ? [$record->unit => $record->unit.' (застаріле — змініть на кг/л)'] : []))
+                                    ->default('кг')
                                     ->required()
                                     ->live()
                                     // Тримаємо одиницю упаковки в тій же групі, що й базова
@@ -133,8 +135,8 @@ class IngredientResource extends Resource
                                 // 📦 Упаковочний режим: закупник вводить упаковки,
                                 // склад отримує базову одиницю.
                                 Forms\Components\Toggle::make('is_packaged')
-                                    ->label('Продається упаковками')
-                                    ->helperText('Напр. сметана в упаковці 400 г — на приході вводимо к-сть упаковок і ціну за упаковку')
+                                    ->label('Купуємо штуками чи упаковками')
+                                    ->helperText('Яйця, булочки, сметана 400 г — вкажіть вагу однієї штуки/упаковки, і накладні в штуках перерахуються в кг самі')
                                     ->live()
                                     ->afterStateUpdated(function ($state, Forms\Get $get, Forms\Set $set) {
                                         if ($state && blank($get('package_unit'))) {
@@ -145,7 +147,7 @@ class IngredientResource extends Resource
                                     ->columnSpan(3),
 
                                 TextInput::make('package_weight')
-                                    ->label('📦 Вміст однієї упаковки')
+                                    ->label('📦 Вага однієї штуки / упаковки')
                                     ->numeric()
                                     ->required(fn (Forms\Get $get) => (bool) $get('is_packaged'))
                                     ->visible(fn (Forms\Get $get) => (bool) $get('is_packaged'))

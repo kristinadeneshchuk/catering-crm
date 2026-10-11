@@ -21,8 +21,10 @@ class EditStockDocument extends EditRecord
                 ->color('success')
                 ->visible(fn () => $this->record->isDraft() && StockDocumentResource::canPost())
                 ->requiresConfirmation()
-                ->modalHeading('Провести чернетку?')
-                ->modalDescription('Збережіть правки перед проведенням. Позиції потраплять на склад, середня ціна перерахується.')
+                ->modalHeading(fn () => StockDocumentResource::postProblems($this->record) ? '⚠️ Дивні ціни — перевірте одиниці' : 'Провести чернетку?')
+                ->modalDescription(fn () => StockDocumentResource::postDescription($this->record,
+                    'Збережіть правки перед проведенням. Позиції потраплять на склад, середня ціна перерахується.'))
+                ->modalSubmitActionLabel(fn () => StockDocumentResource::postProblems($this->record) ? 'Провести все одно' : 'Провести')
                 ->action(function () {
                     $this->record->post(auth()->id());
                     \Filament\Notifications\Notification::make()->title('Документ проведено')->success()->send();

@@ -745,12 +745,36 @@ class StockDocumentResource extends Resource
             ->color('success')
             ->visible(fn (StockDocument $record) => $record->isDraft() && static::canPost())
             ->requiresConfirmation()
-            ->modalHeading('Провести чернетку?')
-            ->modalDescription('Позиції потраплять на склад, середня ціна інгредієнтів перерахується, оплата — у касу, якщо документ позначено оплаченим.')
+            ->modalHeading(fn (StockDocument $record) => static::postProblems($record) ? '⚠️ Дивні ціни — перевірте одиниці' : 'Провести чернетку?')
+            ->modalDescription(fn (StockDocument $record) => static::postDescription($record,
+                'Позиції потраплять на склад, середня ціна інгредієнтів перерахується, оплата — у касу, якщо документ позначено оплаченим.'))
+            ->modalSubmitActionLabel(fn (StockDocument $record) => static::postProblems($record) ? 'Провести все одно' : 'Провести')
             ->action(function (StockDocument $record) {
                 $record->post(auth()->id());
                 \Filament\Notifications\Notification::make()->title('Документ проведено')->success()->send();
             });
+    }
+
+    /**
+     * Рядки приходу з підозрілою ціною за кг — найчастіше це плутанина одиниць
+     * (штуки як кілограми, грами як кілограми). Показуємо перед проведенням.
+     *
+     * @return array<int, string>
+     */
+    public static function postProblems(StockDocument $record): array
+    {
+        return app(\App\Services\Ai\UnitGuard::class)->problems($record);
+    }
+
+    public static function postDescription(StockDocument $record, string $default): string
+    {
+        $problems = static::postProblems($record);
+
+        return $problems === []
+            ? $default
+            : "Ціна за кг сильно відрізняється від звичних закупівель — зазвичай це помилка в кількості чи одиниці:\n• "
+                .implode("\n• ", $problems)
+                ."\n\nВиправте рядки або проведіть, якщо ціна справді така.";
     }
 
     public static function getPages(): array

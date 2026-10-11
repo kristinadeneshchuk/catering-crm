@@ -168,6 +168,27 @@ class AiAgentsTest extends TestCase
         $this->assertSame(0, AiProposal::count());
     }
 
+    public function test_kilograms_or_batch_grams_in_a_new_tech_card_are_refused(): void
+    {
+        $chicken = $this->ingredient('філе куряче');
+        $other = Dish::create(['name' => 'Стара страва']);
+        foreach ([140, 150, 160, 150] as $g) {
+            DB::table('dish_ingredients')->insert(['dish_id' => $other->id, 'type' => 'product', 'ingredient_id' => $chicken, 'net_weight_g' => $g]);
+        }
+
+        $kg = $this->menuPayload();
+        $kg['new_dishes'][0]['ingredients'][0]['net_weight_g'] = 0.15;
+        $this->api('POST', 'proposals', ['type' => 'individual_week_menu', 'payload' => $kg])
+            ->assertStatus(422)->assertJsonPath('errors.0', fn ($e) => str_contains($e, 'кілограми замість грамів'));
+
+        $batch = $this->menuPayload();
+        $batch['new_dishes'][0]['ingredients'][0]['net_weight_g'] = 1500;
+        $this->api('POST', 'proposals', ['type' => 'individual_week_menu', 'payload' => $batch])
+            ->assertStatus(422)->assertJsonPath('errors.0', fn ($e) => str_contains($e, 'у грамах на одну порцію'));
+
+        $this->assertSame(0, AiProposal::count());
+    }
+
     public function test_an_approved_menu_creates_dishes_and_the_personal_menu(): void
     {
         $this->user(7);
