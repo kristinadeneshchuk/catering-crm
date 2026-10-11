@@ -21,7 +21,7 @@ class MemoryRelationManager extends RelationManager
             ->columns([
                 Tables\Columns\TextColumn::make('key')->label('Ключ')->searchable(),
                 Tables\Columns\TextColumn::make('value')->label('Значення')
-                    ->formatStateUsing(fn ($s) => mb_strimwidth(is_string($s) ? $s : json_encode($s, JSON_UNESCAPED_UNICODE), 0, 160, '…'))->wrap(),
+                    ->formatStateUsing(fn ($state) => mb_strimwidth(is_string($state) ? $state : json_encode($state, JSON_UNESCAPED_UNICODE), 0, 160, '…'))->wrap(),
                 Tables\Columns\TextColumn::make('updated_at')->label('Оновлено')->since(),
             ]);
     }

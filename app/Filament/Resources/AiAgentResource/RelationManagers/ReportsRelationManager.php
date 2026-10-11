@@ -31,7 +31,7 @@ class ReportsRelationManager extends RelationManager
             ->columns([
                 Tables\Columns\TextColumn::make('created_at')->label('Коли')->dateTime('d.m H:i'),
                 Tables\Columns\TextColumn::make('level')->label('')->badge()
-                    ->color(fn ($s) => ['warn' => 'warning', 'error' => 'danger'][$s] ?? 'gray'),
+                    ->color(fn ($state) => ['warn' => 'warning', 'error' => 'danger'][$state] ?? 'gray'),
                 Tables\Columns\TextColumn::make('title')->label('Звіт')->wrap(),
             ])
             ->actions([Tables\Actions\ViewAction::make()->label('')]);

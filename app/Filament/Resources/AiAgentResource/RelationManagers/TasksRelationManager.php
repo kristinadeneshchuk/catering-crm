@@ -32,7 +32,7 @@ class TasksRelationManager extends RelationManager
             ->columns([
                 Tables\Columns\TextColumn::make('title')->label('Задача')->wrap(),
                 Tables\Columns\TextColumn::make('status')->label('Статус')->badge()
-                    ->formatStateUsing(fn ($s) => AiAgentTask::STATUSES[$s] ?? $s),
+                    ->formatStateUsing(fn ($state) => AiAgentTask::STATUSES[$state] ?? $state),
                 Tables\Columns\TextColumn::make('due_at')->label('До')->dateTime('d.m H:i')->placeholder('—'),
                 Tables\Columns\TextColumn::make('result')->label('Результат')->limit(80)->wrap()->placeholder('—'),
             ])

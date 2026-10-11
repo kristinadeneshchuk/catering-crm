@@ -21,6 +21,7 @@ class AiProposal extends Model
     public const TYPES = [
         'individual_week_menu' => 'Індивідуальне меню',
         'client_message'       => 'Повідомлення клієнту',
+        'order_replacements'   => 'Заміни в стравах',
     ];
 
     public const STATUSES = [

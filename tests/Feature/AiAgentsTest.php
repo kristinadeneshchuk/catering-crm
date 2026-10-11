@@ -376,4 +376,75 @@ class AiAgentsTest extends TestCase
         $this->assertStringContainsString('не налаштована', $p->apply_result['error']);
         Http::assertNotSent(fn ($r) => str_contains($r->url(), 'inbox'));
     }
+
+    // --- заміни в стравах циклу ---------------------------------------------
+
+    public function test_approved_replacements_are_written_and_replace_mode_clears_old_ones(): void
+    {
+        $this->agent->update(['allowed_types' => ['order_replacements']]);
+        $this->user(7);
+        $dish = Dish::create(['name' => 'Крок мадам']);
+        $other = Dish::create(['name' => 'Омлет']);
+        $chicken = $this->ingredient('філе куряче');
+        $salmon = $this->ingredient('Лосось з/м');
+        DB::table('order_replacements')->insert(['order_id' => $this->order->id, 'dish_id' => $other->id, 'original_product_id' => $chicken]);
+
+        $this->api('POST', 'proposals', ['type' => 'order_replacements', 'payload' => [
+            'order_id' => $this->order->id, 'items' => [['dish_id' => 99999]],
+        ]])->assertStatus(422);
+
+        $id = $this->api('POST', 'proposals', ['type' => 'order_replacements', 'payload' => [
+            'order_id' => $this->order->id, 'mode' => 'replace',
+            'items' => [
+                ['dish_id' => $dish->id, 'original_product_id' => $chicken, 'replacement_product_id' => $salmon, 'comment' => 'не їсть курку'],
+                ['dish_id' => $other->id, 'replacement_dish_id' => $dish->id],
+            ],
+        ]])->assertCreated()->json('id');
+
+        app(ProposalDesk::class)->approve(AiProposal::find($id), User::find(7));
+
+        $rows = DB::table('order_replacements')->where('order_id', $this->order->id)->orderBy('dish_id')->get();
+        $this->assertCount(2, $rows);
+        $this->assertSame($salmon, (int) $rows[0]->replacement_product_id);
+        $this->assertNull($rows[1]->original_product_id);
+        $this->assertSame($dish->id, (int) $rows[1]->replacement_dish_id);
+        $this->assertSame(['order_id' => $this->order->id, 'replacements' => 2, 'removed' => 1], AiProposal::find($id)->apply_result);
+    }
+
+    public function test_bulk_approval_runs_every_pending_proposal(): void
+    {
+        $this->actingAs($this->user(7));
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $ids = [];
+        foreach (range(1, 2) as $i) {
+            $ids[] = $this->api('POST', 'proposals', ['type' => 'individual_week_menu', 'payload' => $this->menuPayload()])->json('id');
+        }
+
+        \Livewire\Livewire::test(\App\Filament\Resources\AiProposalResource\Pages\ListAiProposals::class)
+            ->callTableBulkAction('approve', AiProposal::whereIn('id', $ids)->get());
+
+        $this->assertSame(['applied', 'applied'], AiProposal::whereIn('id', $ids)->orderBy('id')->pluck('status')->all());
+    }
+
+    public function test_every_admin_screen_renders(): void
+    {
+        $this->actingAs($this->user(7));
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $id = $this->api('POST', 'proposals', ['type' => 'individual_week_menu', 'payload' => $this->menuPayload()])->json('id');
+        $this->agent->tasks()->create(['title' => 'Задача', 'status' => 'new']);
+        $this->agent->reports()->create(['title' => 'Звіт', 'body' => '**ок**', 'level' => 'warn']);
+        $this->agent->memory()->create(['key' => 'order:1:week', 'value' => ['status' => 'approved']]);
+
+        \Livewire\Livewire::test(\App\Filament\Resources\AiProposalResource\Pages\ListAiProposals::class)->assertOk()->assertSee('Чекає погодження');
+        \Livewire\Livewire::test(\App\Filament\Resources\AiProposalResource\Pages\ViewAiProposal::class, ['record' => $id])->assertOk()->assertSee('Меню по днях');
+        \Livewire\Livewire::test(\App\Filament\Resources\AiAgentResource\Pages\ListAiAgents::class)->assertOk();
+        foreach ([
+            \App\Filament\Resources\AiAgentResource\RelationManagers\TasksRelationManager::class => 'Задача',
+            \App\Filament\Resources\AiAgentResource\RelationManagers\ReportsRelationManager::class => 'Звіт',
+            \App\Filament\Resources\AiAgentResource\RelationManagers\MemoryRelationManager::class => 'order:1:week',
+        ] as $rm => $see) {
+            \Livewire\Livewire::test($rm, ['ownerRecord' => $this->agent, 'pageClass' => \App\Filament\Resources\AiAgentResource\Pages\EditAiAgent::class])
+                ->assertOk()->assertSee($see);
+        }
+    }
 }

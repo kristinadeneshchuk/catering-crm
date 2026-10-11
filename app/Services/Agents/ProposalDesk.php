@@ -21,11 +21,12 @@ class ProposalDesk
     public function __construct(private TelegramService $telegram) {}
 
     /** Обробник типу: перевірка, виконання, опис. */
-    public function handler(string $type): IndividualWeekMenu|ClientMessage
+    public function handler(string $type): IndividualWeekMenu|ClientMessage|OrderReplacements
     {
         return match ($type) {
             'individual_week_menu' => app(IndividualWeekMenu::class),
             'client_message'       => app(ClientMessage::class),
+            'order_replacements'   => app(OrderReplacements::class),
             default => throw new InvalidArgumentException("Невідомий тип пропозиції «{$type}»"),
         };
     }

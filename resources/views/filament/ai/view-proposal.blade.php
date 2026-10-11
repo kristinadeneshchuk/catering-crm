@@ -15,7 +15,28 @@
             <div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:{{ $p->status === 'failed' ? 'rgba(239,68,68,.12)' : 'rgba(34,197,94,.12)' }};">
                 @if(!empty($p->apply_result['error']))
                     <b>{{ $p->status === 'failed' ? 'Помилка виконання' : 'Не виконано' }}:</b> {{ $p->apply_result['error'] }}
-                @elseif($p->type === 'client_message')
+                @elseif($p->type === 'order_replacements')
+        @php($items = collect($p->payload['items'] ?? []))
+        @php($dn = \App\Models\Dish::whereIn('id', $items->pluck('dish_id')->merge($items->pluck('replacement_dish_id'))->filter())->pluck('name', 'id'))
+        @php($in = \App\Models\Ingredient::whereIn('id', $items->pluck('original_product_id')->merge($items->pluck('replacement_product_id'))->filter())->pluck('name', 'id'))
+        <x-filament::section heading="Заміни ({{ $items->count() }}){{ ($p->payload['mode'] ?? 'merge') === 'replace' ? ' — замість усіх наявних' : '' }}">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                @foreach($items as $it)
+                    <tr style="border-bottom:1px solid rgba(127,127,127,.2);">
+                        <td style="padding:4px 6px;">{{ $dn[$it['dish_id']] ?? '#'.$it['dish_id'] }}</td>
+                        <td style="padding:4px 6px;">
+                            @if(!empty($it['replacement_dish_id'])) уся страва → <b>{{ $dn[$it['replacement_dish_id']] ?? '#'.$it['replacement_dish_id'] }}</b>
+                            @elseif(!empty($it['force_approved'])) {{ !empty($it['original_product_id']) ? ($in[$it['original_product_id']] ?? '') : 'страва' }} — <b>примусово одобрено</b>
+                            @elseif(!empty($it['replacement_product_id'])) {{ $in[$it['original_product_id']] ?? '#'.($it['original_product_id'] ?? '') }} → <b>{{ $in[$it['replacement_product_id']] ?? '#'.$it['replacement_product_id'] }}</b>
+                            @else <b>без:</b> {{ !empty($it['original_product_id']) ? ($in[$it['original_product_id']] ?? '#'.$it['original_product_id']) : 'уся страва' }}
+                            @endif
+                            @if(!empty($it['comment']))<div style="font-size:12px;opacity:.7;">{{ $it['comment'] }}</div>@endif
+                        </td>
+                    </tr>
+                @endforeach
+            </table>
+        </x-filament::section>
+    @elseif($p->type === 'client_message')
                     <b>Надіслано клієнту</b> @if(!empty($p->apply_result['duplicate']))(повтор — уже було надіслано)@endif
                 @else
                     <b>Виконано:</b> записів меню {{ $p->apply_result['menu_rows'] ?? 0 }}
