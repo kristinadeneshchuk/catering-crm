@@ -299,6 +299,11 @@ class AiAgentsTest extends TestCase
 
         $this->api('POST', 'proposals', ['type' => $type, 'payload' => $this->messagePayload(['text' => 'Привіт, [імʼя]!'])])
             ->assertStatus(422)->assertJsonFragment(['text: є незаповнена [заготовка]']);
+        $noBase = $this->messagePayload(); unset($noBase['based_on_message_id']);
+        $this->api('POST', 'proposals', ['type' => $type, 'payload' => $noBase])->assertStatus(422)
+            ->assertJsonFragment(['based_on_message_id: обовʼязковий (0 — якщо клієнт ще не писав)']);
+        $gif = $this->messagePayload(['attachments' => [['kind' => 'photo', 'name' => 'a.gif', 'mime' => 'image/gif', 'base64' => base64_encode('GIF')]]]);
+        $this->api('POST', 'proposals', ['type' => $type, 'payload' => $gif])->assertStatus(422);
 
         $id = $this->api('POST', 'proposals', ['type' => $type, 'payload' => $this->messagePayload()])->assertCreated()->json('id');
         $p = AiProposal::find($id);

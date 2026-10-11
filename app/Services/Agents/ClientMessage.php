@@ -20,11 +20,17 @@ class ClientMessage
     public const MAX_TEXT = 4000;
     public const MAX_FILES = 10;
     public const MAX_BYTES = 10 * 1024 * 1024;
+    /** Увесь запит до Inbox (Caddy ріже на 35 МБ; base64 — ×4/3). */
+    public const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
+    public const PHOTO_MIMES = ['image/png', 'image/jpeg', 'image/webp'];
 
     public function validate(array $p): array
     {
         $e = [];
         if ((int) ($p['conversation_id'] ?? 0) <= 0) $e[] = 'conversation_id: потрібен id розмови Inbox';
+        if (!isset($p['based_on_message_id']) || !is_numeric($p['based_on_message_id']) || (int) $p['based_on_message_id'] < 0) {
+            $e[] = 'based_on_message_id: обовʼязковий (0 — якщо клієнт ще не писав)';
+        }
         $text = trim((string) ($p['text'] ?? ''));
         if ($text === '' && empty($p['attachments'])) $e[] = 'text: порожньо';
         if (mb_strlen($text) > self::MAX_TEXT) $e[] = 'text: довше ' . self::MAX_TEXT . ' символів';
@@ -32,13 +38,19 @@ class ClientMessage
 
         $files = (array) ($p['attachments'] ?? []);
         if (count($files) > self::MAX_FILES) $e[] = 'attachments: не більше ' . self::MAX_FILES;
+        $total = 0;
         foreach ($files as $i => $f) {
             if (!in_array($f['kind'] ?? null, ['photo', 'document'], true)) $e[] = "attachments[$i].kind: photo або document";
+            if (($f['kind'] ?? null) === 'photo' && !in_array(strtolower((string) ($f['mime'] ?? '')), self::PHOTO_MIMES, true)) {
+                $e[] = "attachments[$i]: фото лише PNG, JPEG або WebP (інше — як document)";
+            }
             if (blank($f['name'] ?? null)) $e[] = "attachments[$i].name: порожньо";
             $bin = isset($f['base64']) ? base64_decode((string) $f['base64'], true) : (isset($f['path']) ? 'stored' : false);
             if ($bin === false) $e[] = "attachments[$i]: base64 не читається";
             elseif (strlen($bin) > self::MAX_BYTES) $e[] = "attachments[$i]: більше 10 МБ";
+            if (is_string($bin) && $bin !== 'stored') $total += strlen($bin);
         }
+        if ($total > self::MAX_TOTAL_BYTES) $e[] = 'attachments: разом більше 25 МБ — Inbox не прийме запит';
 
         return $e;
     }
