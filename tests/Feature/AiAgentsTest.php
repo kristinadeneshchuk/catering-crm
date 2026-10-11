@@ -56,11 +56,21 @@ class AiAgentsTest extends TestCase
             $t->unsignedBigInteger('dish_id'); $t->integer('weight_grams')->nullable(); $t->text('cooking_note')->nullable(); $t->timestamps();
         });
         (require database_path('migrations/2026_10_11_100000_create_ai_agents.php'))->up();
+        (require database_path('migrations/2026_10_11_160000_create_ai_messages.php'))->up();
+        // Середня ціна продукту рахується з прихідних.
+        Schema::hasTable('stock_documents') || Schema::create('stock_documents', function (Blueprint $t) {
+            $t->id(); $t->string('type')->nullable(); $t->string('status')->nullable(); $t->timestamps();
+        });
+        Schema::hasTable('stock_document_items') || Schema::create('stock_document_items', function (Blueprint $t) {
+            $t->id(); $t->unsignedBigInteger('stock_document_id'); $t->string('itemable_type'); $t->unsignedBigInteger('itemable_id');
+            $t->decimal('qty', 12, 3)->default(0); $t->decimal('price', 12, 4)->default(0); $t->timestamps();
+        });
 
         config([
             'services.telegram.bot_token' => 'test-bot',
             'services.finance.super_admin_ids' => '7',
             'services.ai_agents.approvers' => '7:111,12:222',
+            'services.telegram.webhook_secret' => 'hook-secret',
         ]);
         Http::fake(['api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 55]])]);
 
@@ -446,5 +456,110 @@ class AiAgentsTest extends TestCase
             \Livewire\Livewire::test($rm, ['ownerRecord' => $this->agent, 'pageClass' => \App\Filament\Resources\AiAgentResource\Pages\EditAiAgent::class])
                 ->assertOk()->assertSee($see);
         }
+    }
+
+    // --- чат, повтори, собівартість -----------------------------------------
+
+    public function test_the_agent_writes_with_files_and_a_telegram_reply_reaches_it(): void
+    {
+        $this->user(7);
+        \Illuminate\Support\Facades\Storage::fake('local');
+
+        $this->api('POST', 'messages', ['text' => 'Меню на тиждень у PDF', 'files' => [
+            ['name' => 'меню.pdf', 'mime' => 'application/pdf', 'base64' => base64_encode('%PDF-1.4 test')],
+        ]])->assertCreated();
+
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage') && str_contains($r['text'], 'Меню на тиждень у PDF'));
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'sendDocument'));
+
+        // Тарас відповідає реплаєм у Telegram на повідомлення агента (message_id 55).
+        $this->postJson('/webhooks/telegram-bot', ['update_id' => 1, 'message' => [
+            'message_id' => 77, 'chat' => ['id' => 111], 'from' => ['id' => 111],
+            'text' => 'Поліні замість сирників — омлет', 'reply_to_message' => ['message_id' => 55],
+        ]], ['X-Telegram-Bot-Api-Secret-Token' => (string) config('services.telegram.webhook_secret')]);
+
+        $this->api('GET', 'messages?only_new_for_me=1')->assertOk()
+            ->assertJsonFragment(['text' => 'Поліні замість сирників — омлет', 'from' => 'u7']);
+    }
+
+    public function test_agents_talk_to_each_other_without_bothering_people(): void
+    {
+        $reviewer = AiAgent::create(['slug' => 'reviewer', 'name' => 'Рецензент меню']);
+        $reviewerToken = $reviewer->issueToken();
+        Http::fake(['*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]])]);
+
+        $this->api('POST', 'messages', ['to' => 'reviewer', 'text' => 'Глянь чернетку Гоголя'])->assertCreated();
+        Http::assertNothingSent();
+
+        $this->withToken($reviewerToken)->getJson('/api/agents/v1/messages?only_new_for_me=1')->assertOk()
+            ->assertJsonPath('0.text', 'Глянь чернетку Гоголя')->assertJsonPath('0.from', 'individual');
+        $this->withToken($reviewerToken)->postJson('/api/agents/v1/messages', ['to' => 'individual', 'text' => 'Курка тричі за тиждень'])->assertCreated();
+
+        $this->api('GET', 'messages?only_new_for_me=1')->assertJsonFragment(['text' => 'Курка тричі за тиждень', 'from' => 'reviewer']);
+    }
+
+    public function test_repeats_within_four_weeks_are_flagged_unless_the_client_allows_them(): void
+    {
+        $payload = $this->menuPayload();
+        $omelet = $payload['days'][0]['meals'][0]['dish_id'];
+        OrderDayDish::create(['order_id' => $this->order->id, 'date' => '2026-09-30', 'meal_type_id' => $this->breakfast, 'dish_id' => $omelet]);
+        OrderDayDish::create(['order_id' => $this->order->id, 'date' => '2026-09-01', 'meal_type_id' => $this->breakfast, 'dish_id' => $omelet]); // понад 28 днів — не рахуємо
+
+        $res = $this->api('POST', 'proposals', ['type' => 'individual_week_menu', 'payload' => $payload])->assertCreated();
+        $warnings = implode("\n", $res->json('warnings'));
+        $this->assertStringContainsString('Повтор: Омлет циклу — вже була 30.09', $warnings);
+        $this->assertStringNotContainsString('01.09', $warnings);
+        $this->assertStringContainsString('Курка з булгуром (Гоголь) — у цьому меню 2 рази', $warnings);
+        $this->assertStringContainsString('Повтор: Омлет', AiProposal::find($res->json('id'))->summary);
+
+        $ok = $this->menuPayload(['repeat_ok' => [$omelet, 'hohol_chicken']]);
+        $this->assertSame([], array_values(array_filter(
+            $this->api('POST', 'proposals', ['type' => 'individual_week_menu', 'payload' => $ok])->json('warnings'),
+            fn ($w) => str_starts_with($w, 'Повтор'),
+        )));
+    }
+
+    public function test_food_cost_over_thirty_percent_is_flagged_at_once(): void
+    {
+        Schema::table('ingredients', function (Blueprint $t) {
+            foreach (['price_per_kg', 'yield_percent', 'proteins_100g', 'fats_100g', 'carbs_100g'] as $c) {
+                if (!Schema::hasColumn('ingredients', $c)) $t->float($c)->nullable();
+            }
+            if (!Schema::hasColumn('ingredients', 'unit')) $t->string('unit')->nullable();
+        });
+        // Лосось: 1000 грн/кг, 20 г білка → 80 ккал на 100 г.
+        $salmon = DB::table('ingredients')->insertGetId(['name' => 'Лосось', 'unit' => 'кг', 'price_per_kg' => 1000, 'yield_percent' => 100, 'proteins_100g' => 20, 'fats_100g' => 0, 'carbs_100g' => 0]);
+        $this->order->forceFill(['price_per_day' => 1100])->saveQuietly();
+        \App\Models\Ingredient::clearAveragePriceCache();
+
+        $payload = [
+            'order_id' => $this->order->id,
+            'new_dishes' => [['ref' => 's', 'name' => 'Інд · Лосось', 'base_weight_g' => 200, 'ingredients' => [['ingredient_id' => $salmon, 'net_weight_g' => 200]]]],
+            // Фіксована вага 400 г → 400 г лосося = 400 грн = 36% від 1100.
+            'days' => [['date' => '2026-10-12', 'meals' => [['meal_type_id' => $this->lunch, 'dish_ref' => 's', 'weight_grams' => 400]]]],
+        ];
+
+        $costs = app(\App\Services\Agents\IndividualWeekMenu::class)->costs($payload);
+        $this->assertEqualsWithDelta(400, $costs[0]['cost'], 1);
+        $this->assertEqualsWithDelta(36.4, $costs[0]['pct'], 0.2);
+
+        $warnings = implode("\n", $this->api('POST', 'proposals', ['type' => 'individual_week_menu', 'payload' => $payload])->json('warnings'));
+        $this->assertStringContainsString('Собівартість 12.10 ≈ 400 грн = 36.4% ціни дня (1100), норма ≤ 30% (≤ 330 грн)', $warnings);
+    }
+
+    public function test_the_chat_page_shows_the_conversation_and_approves_from_it(): void
+    {
+        $this->actingAs($this->user(7));
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $id = $this->api('POST', 'proposals', ['type' => 'individual_week_menu', 'title' => 'Меню Гоголя', 'payload' => $this->menuPayload()])->json('id');
+
+        \Livewire\Livewire::test(\App\Filament\Pages\AiChat::class)
+            ->assertSee('Меню Гоголя')->assertSee('Погодити')
+            ->set('draft', 'Дякую, ок')->call('send')
+            ->call('approve', $id)
+            ->assertSee('Дякую, ок');
+
+        $this->assertSame('applied', AiProposal::find($id)->status);
+        $this->assertTrue(\App\Models\AiMessage::where('direction', 'system')->where('text', 'like', '%Погоджено%')->exists());
     }
 }

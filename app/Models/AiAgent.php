@@ -23,6 +23,7 @@ class AiAgent extends Model
     public function proposals(): HasMany { return $this->hasMany(AiProposal::class); }
     public function reports(): HasMany { return $this->hasMany(AiAgentReport::class); }
     public function memory(): HasMany { return $this->hasMany(AiAgentMemory::class); }
+    public function messages(): HasMany { return $this->hasMany(AiMessage::class); }
 
     /** Новий токен — показуємо один раз, у базі лише хеш. */
     public function issueToken(): string

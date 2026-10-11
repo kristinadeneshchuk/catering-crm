@@ -53,7 +53,12 @@
             <table style="width:100%;border-collapse:collapse;font-size:13px;">
                 @foreach($v['days'] as $day)
                     <tr><td colspan="3" style="padding:10px 6px 4px;font-weight:800;border-bottom:1px solid rgba(127,127,127,.3);">
-                        {{ \Carbon\Carbon::parse($day['date'])->locale('uk')->translatedFormat('l, d.m') }}</td></tr>
+                        {{ \Carbon\Carbon::parse($day['date'])->locale('uk')->translatedFormat('l, d.m') }}
+                        @if($c = $v['costs'][$day['date']] ?? null)
+                            @php($over = $c['pct'] > config('services.ai_agents.food_cost_max_pct', 30))
+                            <span style="font-weight:600;font-size:12px;margin-left:8px;color:{{ $over ? '#dc2626' : '#16a34a' }};">собівартість ≈ {{ round($c['cost']) }} грн · {{ $c['pct'] }}% з {{ round($c['price']) }}</span>
+                        @endif
+                        </td></tr>
                     @foreach($day['meals'] ?? [] as $m)
                         @php($isNew = empty($m['dish_id']))
                         <tr>

@@ -72,6 +72,7 @@ class ViewAiProposal extends ViewRecord
         $childIds = $newByRef->flatMap(fn ($d) => collect($d['ingredients'] ?? [])->pluck('child_dish_id'))->filter();
 
         return [
+            'costs'     => collect(app(\App\Services\Agents\IndividualWeekMenu::class)->costs($p))->keyBy('date'),
             'days'      => $p['days'] ?? [],
             'dishes'    => $dishes,
             'meals'     => $meals,

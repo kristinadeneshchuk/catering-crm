@@ -13,6 +13,8 @@
 | POST | `proposals` | `{type, title?, summary?, task_id?, payload}` → 201 `{id}` або 422 `{errors: [...]}` |
 | GET | `proposals?status=…&since=…` | що сталося з моїми пропозиціями (`review_comment` — правки) |
 | POST | `reports` | `{title, body (markdown), level: info|warn|error, task_id?}` |
+| POST | `messages` | написати людям: `{text, files:[{name,mime,base64}]}`; іншому агенту: `{to: "<slug>", text}` (у Telegram не йде) |
+| GET | `messages?after_id=…&only_new_for_me=1` | відповіді людей (з CRM і реплаї в Telegram), події «погоджено/відхилено», листи інших агентів |
 | GET | `memory?prefix=…` | моя памʼять |
 | PUT | `memory/{key}` | `{value: <будь-який JSON>}` |
 | DELETE | `memory/{key}` | |
@@ -59,3 +61,8 @@
 - text ≤ 4000, без незаповнених `[заготовок]`; ≤ 10 файлів по ≤ 10 МБ. Вкладення CRM зберігає файлами, не в базі.
 - Після погодження CRM шле в Inbox `POST INBOX_CRM_SEND_URL` з `X-Inbox-Timestamp`, `X-Inbox-Signature: sha256=HMAC(CRM_SEND_SECRET, ts + "." + body)`, `Idempotency-Key: proposal-<id>`; тіло = payload + proposal_id, approved_by, approved_at.
 - 201/200 → `applied`; 409 stale → `changes_requested` (у CRM кнопка «Надіслати все одно» → повтор з `force: true`); 409 locked / 422 → `failed`; 502 → до 3 спроб, далі `failed`.
+
+## Перевірки меню (при подачі, у `warnings` відповіді й у картці)
+- **Повтори:** страва не має повторюватись 28 днів (усі замовлення клієнта) і двічі в одному меню. Якщо клієнт сам просить або це додаток (білкова добавка) — перелічіть у `payload.repeat_ok` (id страв або ref нових).
+- **Собівартість:** продукти дня ≤ FOOD_COST_MAX_PCT (30%) від ціни дня замовлення (1100 → ≤ 330 грн). Вага без `weight_grams` — під калораж. Ціни з карток — орієнтовно.
+- Пропозицію з `warnings` не блокуємо, але краще виправити й подати знову до погодження.

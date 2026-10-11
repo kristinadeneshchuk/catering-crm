@@ -72,6 +72,8 @@ return [
     // Пульт ШІ-агентів: хто погоджує пропозиції. "user_id:telegram_id,…"
     'ai_agents' => [
         'approvers' => env('AI_APPROVERS', ''),
+        // Межа собівартості продуктів від ціни дня в індивідуальних меню, %.
+        'food_cost_max_pct' => (float) env('FOOD_COST_MAX_PCT', 30),
         // Погоджені повідомлення клієнтам → Inbox (HMAC sha256(ts.body), секрет лише в env).
         'inbox_send_url'    => env('INBOX_CRM_SEND_URL', ''),
         'inbox_send_secret' => env('CRM_SEND_SECRET', ''),

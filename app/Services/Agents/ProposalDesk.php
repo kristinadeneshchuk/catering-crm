@@ -42,7 +42,16 @@ class ProposalDesk
 
         $payload = (array) ($data['payload'] ?? []);
         $handler = $this->handler($type);
-        if ($errors = $handler->validate($payload)) return ['proposal' => null, 'errors' => $errors];
+        $errors = array_merge($handler->validate($payload), app(AgentChat::class)->validateFiles((array) ($data['files'] ?? [])));
+        if ($errors) return ['proposal' => null, 'errors' => $errors];
+        // Повтори й собівартість — підказка людині; збій розрахунку не блокує подачу.
+        if (method_exists($handler, 'warnings')) {
+            try {
+                $payload['_warnings'] = $handler->warnings($payload);
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
 
         if (method_exists($handler, 'prepare')) $payload = $handler->prepare($payload);
 
@@ -53,16 +62,18 @@ class ProposalDesk
             'ai_agent_task_id' => $data['task_id'] ?? null,
             'type'             => $type,
             'title'            => (string) ($data['title'] ?? AiProposal::TYPES[$type]),
-            'summary'          => $data['summary'] ?? $handler->describe($payload),
+            'summary'          => trim(($data['summary'] ?? $handler->describe($payload))
+                . (($payload['_warnings'] ?? []) ? "\n⚠️ " . implode("\n⚠️ ", $payload['_warnings']) : '')),
             'client_id'        => $clientId,
             'order_id'         => $order?->id,
             'payload'          => $payload,
             'status'           => 'pending',
         ]);
 
-        $this->notify($proposal);
+        // Пропозиція зʼявляється в чаті з агентом (і в Telegram) — з файлами, якщо агент їх додав.
+        app(AgentChat::class)->fromAgent($agent, trim($proposal->title . "\n" . $proposal->summary), (array) ($data['files'] ?? []), $proposal);
 
-        return ['proposal' => $proposal, 'errors' => []];
+        return ['proposal' => $proposal, 'errors' => [], 'warnings' => $payload['_warnings'] ?? []];
     }
 
     public function approve(AiProposal $p, ?User $by, bool $force = false): string
@@ -88,6 +99,7 @@ class ProposalDesk
         }
 
         $this->refreshTelegram($p, $answer . ($by ? " ({$by->name})" : ''));
+        app(AgentChat::class)->system($p->agent, "«{$p->title}»: {$answer}" . ($by ? " ({$by->name})" : ''), $p, $by);
 
         return $answer;
     }
@@ -105,6 +117,7 @@ class ProposalDesk
 
         $answer = $changes ? '✏️ Відправлено на правки' : '❌ Відхилено';
         $this->refreshTelegram($p, $answer . ($by ? " ({$by->name})" : '') . ($comment ? ": " . e($comment) : ''));
+        app(AgentChat::class)->system($p->agent, "«{$p->title}»: {$answer}" . ($by ? " ({$by->name})" : '') . ($comment ? "\n{$comment}" : ''), $p, $by);
 
         return $answer;
     }
@@ -148,30 +161,6 @@ class ProposalDesk
     }
 
     // --- Telegram -----------------------------------------------------------
-
-    public function notify(AiProposal $p): void
-    {
-        $text = "🤖 <b>" . e($p->agent->name) . "</b> пропонує: <b>" . e($p->title) . "</b>\n"
-            . e((string) $p->summary) . "\n\nПереглянути: " . e($this->url($p));
-        $keyboard = [[
-            ['text' => '✅ Погодити', 'callback_data' => self::CALLBACK . ":ok:{$p->id}"],
-            ['text' => '❌ Відхилити', 'callback_data' => self::CALLBACK . ":no:{$p->id}"],
-        ], [
-            ['text' => '✏️ Правки — у CRM', 'url' => $this->url($p)],
-        ]];
-
-        $sent = [];
-        foreach (array_filter($this->approvers()) as $tg) {
-            try {
-                if ($id = $this->telegram->sendMessage((string) $tg, $text, $keyboard)) {
-                    $sent[] = ['chat_id' => (string) $tg, 'message_id' => $id];
-                }
-            } catch (Throwable $e) {
-                Log::warning('ai proposal notify failed', ['chat' => $tg, 'error' => $e->getMessage()]);
-            }
-        }
-        $p->forceFill(['telegram_messages' => $sent])->save();
-    }
 
     /** Кнопка з Telegram. */
     public function button(string $fromId, string $data): string

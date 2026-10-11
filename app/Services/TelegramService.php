@@ -304,6 +304,27 @@ class TelegramService
         return $target;
     }
 
+    /** Файл документом (PDF, фото без стиснення). Повертає message_id. */
+    public function sendDocument(string $chatId, string $content, string $filename, ?string $caption = null, ?int $replyTo = null): ?int
+    {
+        if (empty($this->token)) return null;
+
+        $fields = ['chat_id' => $chatId];
+        if ($caption) { $fields['caption'] = mb_substr($caption, 0, 1000); $fields['parse_mode'] = 'HTML'; }
+        if ($replyTo) $fields['reply_parameters'] = json_encode(['message_id' => $replyTo, 'allow_sending_without_reply' => true]);
+
+        $response = Http::timeout(60)->attach('document', $content, $filename)
+            ->post("https://api.telegram.org/bot{$this->token}/sendDocument", $fields);
+
+        if (! $response->successful()) {
+            Log::error('TelegramService: sendDocument failed', ['status' => $response->status(), 'body' => mb_substr($response->body(), 0, 300)]);
+
+            return null;
+        }
+
+        return $response->json('result.message_id');
+    }
+
     /**
      * @return array<string, mixed>
      */

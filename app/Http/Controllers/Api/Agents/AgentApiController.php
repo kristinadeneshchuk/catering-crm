@@ -61,6 +61,7 @@ class AgentApiController extends Controller
         $data = $r->validate([
             'type' => 'required|string', 'title' => 'nullable|string|max:255', 'summary' => 'nullable|string',
             'task_id' => 'nullable|integer', 'payload' => 'required|array',
+            'files' => 'nullable|array', 'files.*.name' => 'required|string', 'files.*.base64' => 'required|string', 'files.*.mime' => 'nullable|string',
         ]);
         if (!empty($data['task_id']) && !$this->agent($r)->tasks()->whereKey($data['task_id'])->exists()) {
             return response()->json(['errors' => ['task_id: не ваша задача']], 422);
@@ -69,7 +70,7 @@ class AgentApiController extends Controller
         $res = $desk->submit($this->agent($r), $data);
         if ($res['errors']) return response()->json(['errors' => $res['errors']], 422);
 
-        return response()->json(['id' => $res['proposal']->id, 'status' => 'pending'], 201);
+        return response()->json(['id' => $res['proposal']->id, 'status' => 'pending', 'warnings' => $res['warnings'] ?? []], 201);
     }
 
     /** Що сталося з моїми пропозиціями: погоджено/правки/відхилено + коментар. */
@@ -122,5 +123,49 @@ class AgentApiController extends Controller
         $this->agent($r)->memory()->where('key', $key)->delete();
 
         return response()->json(['ok' => true]);
+    }
+
+    // --- чат --------------------------------------------------------------
+
+    /** Написати людям (як у переписці з сесією): текст + файли (PDF, фото). */
+    public function say(Request $r, \App\Services\Agents\AgentChat $chat): JsonResponse
+    {
+        $data = $r->validate([
+            'text' => 'required_without:files|nullable|string|max:4000',
+            'to' => 'nullable|string',
+            'files' => 'nullable|array', 'files.*.name' => 'required|string', 'files.*.base64' => 'required|string', 'files.*.mime' => 'nullable|string',
+        ]);
+        if ($errors = $chat->validateFiles((array) ($data['files'] ?? []))) return response()->json(['errors' => $errors], 422);
+
+        $to = null;
+        if (!empty($data['to'])) {
+            $to = AiAgent::where('slug', $data['to'])->where('is_active', true)->first();
+            if (!$to) return response()->json(['errors' => ["to: агента «{$data['to']}» немає"]], 422);
+        }
+        $msg = $chat->fromAgent($this->agent($r), (string) ($data['text'] ?? ''), (array) ($data['files'] ?? []), null, $to);
+
+        return response()->json(['id' => $msg->id], 201);
+    }
+
+    /** Розмова: відповіді людей і події (погоджено/відхилено). ?after_id= — лише нове. */
+    public function messages(Request $r): JsonResponse
+    {
+        $me = $this->agent($r);
+        // Моя розмова з людьми + те, що інші агенти написали мені.
+        $q = \App\Models\AiMessage::query()->with(['user:id,name', 'agent:id,slug', 'toAgent:id,slug'])
+            ->where(fn ($w) => $w->where(fn ($o) => $o->where('ai_agent_id', $me->id)->whereNull('to_agent_id'))
+                ->orWhere('to_agent_id', $me->id)
+                ->orWhere(fn ($o) => $o->where('ai_agent_id', $me->id)->whereNotNull('to_agent_id')))
+            ->orderBy('id');
+        if ($r->filled('after_id')) $q->where('id', '>', (int) $r->query('after_id'));
+        if ($r->boolean('only_new_for_me')) $q->where(fn ($w) => $w->where('direction', '!=', 'agent')->orWhere('to_agent_id', $me->id));
+
+        return response()->json($q->limit(200)->get()->map(fn ($m) => [
+            'id' => $m->id, 'direction' => $m->direction,
+            'from' => $m->direction === 'agent' ? $m->agent?->slug : $m->user?->name,
+            'to' => $m->toAgent?->slug, 'text' => $m->text,
+            'files' => collect((array) $m->attachments)->pluck('name'), 'proposal_id' => $m->ai_proposal_id,
+            'created_at' => $m->created_at->toIso8601String(),
+        ]));
     }
 }

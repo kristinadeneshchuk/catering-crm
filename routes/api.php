@@ -87,6 +87,8 @@ Route::prefix('agents/v1')
         Route::post('proposals', 'propose');
         Route::get('proposals', 'proposals');
         Route::post('reports', 'report');
+        Route::post('messages', 'say');
+        Route::get('messages', 'messages');
         Route::get('memory', 'memory');
         Route::put('memory/{key}', 'remember')->where('key', '.+');
         Route::delete('memory/{key}', 'forget')->where('key', '.+');

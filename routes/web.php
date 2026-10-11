@@ -167,3 +167,12 @@ Route::middleware('auth')->get('/admin/payment-claims/{claim}/attachment', funct
 
     return \Illuminate\Support\Facades\Storage::disk('local')->response($claim->attachment_path);
 })->name('payment-claims.attachment');
+
+// Файли з чату ШІ-агентів — лише погоджувачам.
+Route::get('/admin/ai/files/{message}/{index}', function (\App\Models\AiMessage $message, int $index) {
+    abort_unless(app(\App\Services\Agents\ProposalDesk::class)->mayApprove(auth()->user()), 403);
+    $file = ((array) $message->attachments)[$index] ?? abort(404);
+
+    return \Illuminate\Support\Facades\Storage::disk('local')->response($file['path'], $file['name']);
+})->middleware('auth')->name('ai.file');
+

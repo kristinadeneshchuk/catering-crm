@@ -183,6 +183,21 @@ class TelegramBotWebhookController extends Controller
             return;
         }
 
+        // Реплай погоджувача на повідомлення ШІ-агента — відповідь у чат з агентом.
+        if ($text !== null && ! empty($message['reply_to_message']['message_id'])) {
+            $desk = app(\App\Services\Agents\ProposalDesk::class);
+            $user = $desk->userByTelegram((string) ($message['from']['id'] ?? ''));
+            if ($user) {
+                $reply = app(\App\Services\Agents\AgentChat::class)
+                    ->replyFromTelegram((int) $message['reply_to_message']['message_id'], $chatId, $user, $text);
+                if ($reply) {
+                    $this->telegram->sendMessage($chatId, '✓ Передав агенту «'.e($reply->agent->name).'»');
+
+                    return;
+                }
+            }
+        }
+
         // Відповідь на питання про фасування: шукаємо чернетку за повідомленням,
         // на яке відповіли реплаєм.
         $accounting = \App\Services\Accounting\AccountingDesk::isAccountingChat($chatId);
