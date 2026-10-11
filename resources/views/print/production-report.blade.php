@@ -181,8 +181,6 @@
                 </div>
             @endif
 
-            @include('print.partials.ind-registry', ['registry' => $indRegistry ?? [], 'showDiet' => true])
-
             {{-- ОБХІД ПО ПЛАНАХ МЕНЮ --}}
             @foreach($report as $planId => $planData)
                 @php
@@ -530,13 +528,10 @@
                     @endif
 
                 @endforeach {{-- $dishes --}}
-                @include('print.partials.ind-prod-meal', ['meal' => $mealName, 'cards' => $planData['ind_meals'][$mealName] ?? [], 'showRecipe' => true])
                 @endforeach {{-- $planData['meals'] --}}
 
-                {{-- Прийоми, яких немає в циклічному (додаток до прийому) --}}
-                @foreach(array_diff_key($planData['ind_meals'] ?? [], $planData['meals'] ?? []) as $indMeal => $indCards)
-                    @include('print.partials.ind-prod-meal', ['meal' => $indMeal, 'cards' => $indCards, 'showRecipe' => true])
-                @endforeach
+                {{-- Індивідуальні: список + аркуш на клієнта (лише власні страви) --}}
+                @include('print.partials.ind-cook-pages', ['pages' => $planData['ind_pages'] ?? [], 'dayLabel' => \Carbon\Carbon::parse($targetDate)->format('d.m')])
 
                 {{-- ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану --}}
                 @if(!empty($planData['individuals']))

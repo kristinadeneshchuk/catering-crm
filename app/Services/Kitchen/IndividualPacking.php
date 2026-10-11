@@ -97,6 +97,105 @@ class IndividualPacking
         ];
     }
 
+    /**
+     * Страви довідника, які індивідуальні їдять, а в сьогоднішньому циклі їх немає:
+     * кухня готує їх загальною партією, як циклічні. Повертає «пункти меню»
+     * (dish, meal_type_id, mealType) для того самого циклу, що й циклічні страви.
+     */
+    public function catalogItems(Collection $planOrders, array $plans, Collection $menuItems): Collection
+    {
+        $cycleKeys = $menuItems->filter(fn ($mi) => $mi->dish)->mapWithKeys(fn ($mi) => [$mi->dish_id.':'.$mi->meal_type_id => true])->all();
+        $want = [];
+        foreach ($planOrders as $o) {
+            if ($o->menu_type !== 'individual') continue;
+            foreach ($plans[$o->id]['items'] ?? [] as $it) {
+                $key = $it['dish_id'].':'.$it['meal_type_id'];
+                if (!isset($cycleKeys[$key])) $want[$key] = [(int) $it['dish_id'], (int) $it['meal_type_id']];
+            }
+        }
+        if (!$want) return collect();
+
+        $dishes = Dish::with([
+            'dishIngredients.ingredient.allergens',
+            'dishIngredients.childDish.dishIngredients.ingredient.allergens',
+        ])->whereIn('id', array_column($want, 0))->get()->keyBy('id');
+        $mealTypes = \App\Models\MealType::whereIn('id', array_column($want, 1))->get()->keyBy('id');
+
+        return collect($want)
+            ->filter(fn ($w) => ($d = $dishes->get($w[0])) && !$this->isOwn($d))
+            ->map(fn ($w) => (object) ['dish' => $dishes->get($w[0]), 'dish_id' => $w[0], 'meal_type_id' => $w[1], 'mealType' => $mealTypes->get($w[1])])
+            ->values();
+    }
+
+    /**
+     * Аркуші готування: на кожного клієнта лише його власні страви («Інд · …»),
+     * решта — «з загальної партії». $components(Dish, float $scale, Order) → [components, totals].
+     */
+    public function cookPages(Collection $planOrders, array $plans, callable $components): array
+    {
+        $pages = [];
+        foreach ($planOrders as $o) {
+            if (!isset($this->clients[$o->id]) || empty($plans[$o->id]['items'])) continue;
+
+            $own = [];
+            $batch = [];
+            foreach ($plans[$o->id]['items'] as $it) {
+                $dish = Dish::with(['dishIngredients.ingredient', 'dishIngredients.childDish.dishIngredients.ingredient'])->find($it['dish_id']);
+                if (!$dish) continue;
+                if (!$this->isOwn($dish)) {
+                    $batch[] = $it['meal'].' — '.$dish->name;
+                    continue;
+                }
+                $baseW = (float) ($dish->base_weight_g ?? 0);
+                [$comps, $totals] = $components($dish, $baseW > 0 ? $it['weight'] / $baseW : 0.0, $o);
+                [$tech, $pack] = $this->technology((string) $dish->description);
+                $own[] = [
+                    'meal'       => $it['meal'],
+                    'dish_name'  => trim(preg_replace('/^Інд\s*·\s*/u', '', $dish->name)),
+                    'weight'     => (int) $it['weight'],
+                    'components' => $comps,
+                    'totals'     => $totals,
+                    'tech'       => $tech,
+                    // Пакування з техкарти; примітка до страви — лише якщо в техкарті його немає.
+                    'pack'       => rtrim($pack ?: (string) $this->packNote($it['cooking_note'] ?? null), '. '),
+                ];
+            }
+
+            $c = $this->clients[$o->id];
+            $reg = collect($this->registry())->firstWhere('n', $c['n']);
+            $pages[] = [
+                'n' => $c['n'], 'name' => $c['name'], 'kcal' => $c['kcal'], 'eve' => $c['eve'], 'time' => $c['time'],
+                'stop'  => $reg['stop'] ?? '',
+                'diet'  => $reg['diet'] ?? null,
+                'rules' => $reg['diet_rules'] ?? '',
+                // Коментар до виробництва, крім службових «Індивідуальний раціон/клієнт».
+                'memo'  => preg_match('/^індивідуальн\w*\s+(раціон|клієнт)\.?$/iu', $memo = trim((string) $o->client?->production_comment)) ? '' : $memo,
+                'own'   => $own,
+                'batch' => $batch,
+            ];
+        }
+        usort($pages, fn ($a, $b) => $a['n'] <=> $b['n']);
+
+        return $pages;
+    }
+
+    /** «… Технологія: 1. … 2. … Пакування: …» → [кроки, пакування]. */
+    private function technology(string $description): array
+    {
+        $text = trim(strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>'], "\n", $description)));
+        $pack = '';
+        if (preg_match('/Пакування:\s*(.+)$/su', $text, $m)) {
+            $pack = trim($m[1]);
+            $text = trim(mb_substr($text, 0, mb_strpos($text, $m[0])));
+        }
+        if (($p = mb_stripos($text, 'Технологія:')) !== false) {
+            $text = trim(mb_substr($text, $p + mb_strlen('Технологія:')));
+        }
+        $steps = array_values(array_filter(array_map('trim', preg_split('/\s*(?=\b\d{1,2}\.\s)/u', $text))));
+
+        return [$steps, $pack];
+    }
+
     /** Реєстр угорі листа: №, клієнт, доставка, ⛔ не можна (алергії, виключені продукти й страви). */
     public function registry(): array
     {

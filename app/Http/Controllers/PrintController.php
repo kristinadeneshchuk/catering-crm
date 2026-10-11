@@ -1016,6 +1016,12 @@ class PrintController extends Controller
 
             $planMeals = [];
             $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType?->sort_order ?? 99);
+            // Страви довідника, яких немає в сьогоднішньому циклі, але їх їдять індивідуальні, —
+            // загальною партією, під своїм прийомом після циклічних.
+            $sortedMenuItems = $sortedMenuItems->values()->map(fn ($mi) => [$mi, 0])
+                ->concat($ind->catalogItems($planOrders, $orderPlans, $menu->menuItems)->map(fn ($mi) => [$mi, 1]))
+                ->sortBy(fn ($x) => [$x[0]->mealType?->sort_order ?? 99, $x[1]])
+                ->map(fn ($x) => $x[0])->values();
 
             foreach ($sortedMenuItems as $item) {
                 if (!$item->dish) continue;
@@ -1104,49 +1110,23 @@ class PrintController extends Controller
                 ];
             }
 
-            // === ІНДИВІДУАЛЬНІ — страви, яких немає в циклічному, під своїм прийомом ===
-            $cycleKeys = $sortedMenuItems->filter(fn ($mi) => $mi->dish)
-                ->mapWithKeys(fn ($mi) => [$mi->dish_id.':'.$mi->meal_type_id => true])->all();
-            $planIndMeals = [];
-            foreach ($planOrders as $order) {
-                if ($order->menu_type !== 'individual') continue;
-                foreach ($orderPlans[$order->id]['items'] ?? [] as $item) {
-                    if (isset($cycleKeys[$item['dish_id'].':'.$item['meal_type_id']])) continue;
-                    $dish = \App\Models\Dish::with(
-                        'dishIngredients.ingredient',
-                        'dishIngredients.childDish.dishIngredients.ingredient'
-                    )->find($item['dish_id']);
-                    if (!$dish) continue;
+            // === ІНДИВІДУАЛЬНІ — аркуш на клієнта, лише його власні страви («Інд · …») ===
+            $planIndPages = $ind->cookPages($planOrders, $orderPlans, function ($dish, float $scale, $order) {
+                // З виключеннями і рішеннями менеджера — як для циклічних карток.
+                $components = $this->getHierarchicalIngredients($dish, $scale, 1.0, null, true, $order);
 
-                    $weight = (int)$item['weight'];
-                    $baseW  = (float)($dish->base_weight_g ?? 0);
-                    $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
-
-                    // З виключеннями клієнта — як на екрані.
-                    $components = $this->getHierarchicalIngredients($dish, $scale, 1.0, null, true, $order);
-                    $totals     = $this->calculateStructureTotals($components);
-
-                    $planIndMeals[$item['meal']][] = $ind->card($order, $item, $dish) + [
-                        'components'   => $components,
-                        'total_netto'  => $totals['netto'],
-                        'total_brutto' => $totals['brutto'],
-                    ];
-                }
-            }
-            foreach ($planIndMeals as &$cards) {
-                usort($cards, fn ($a, $b) => [$a['dish_name'], $a['n']] <=> [$b['dish_name'], $b['n']]);
-            }
-            unset($cards);
+                return [$components, $this->calculateStructureTotals($components)];
+            });
             $planIndividuals = [];
 
-            if (empty($planMeals) && empty($planIndMeals)) continue;
+            if (empty($planMeals) && empty($planIndPages)) continue;
 
             $report[$plan->id] = [
                 'plan'        => $plan,
                 'day_number'  => $dayNumber,
                 'meals'       => $planMeals,
                 'individuals' => $planIndividuals,
-                'ind_meals'   => $planIndMeals,
+                'ind_pages'   => $planIndPages,
             ];
         }
 

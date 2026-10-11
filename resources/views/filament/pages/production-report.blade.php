@@ -203,8 +203,8 @@
         };
 
         foreach($reportData as $planData) {
-            foreach(($planData['ind_meals'] ?? []) as $indCards) {
-                foreach($indCards as $indCard) $collectSummary($indCard['components']);
+            foreach(($planData['ind_pages'] ?? []) as $indPage) {
+                foreach($indPage['own'] as $indDish) $collectSummary($indDish['components']);
             }
             foreach(($planData['meals'] ?? []) as $mealGroup) {
                 foreach($mealGroup as $dishRow) {
@@ -265,8 +265,6 @@
             </div>
         </div>
     @endif
-
-    @include('print.partials.ind-registry', ['registry' => $this->indRegistry, 'showDiet' => true])
 
     {{-- КНОПКИ МАСОВИХ ДІЙ --}}
     @if(!empty($reportData))
@@ -428,17 +426,12 @@
                     @endforeach
                 </div>
             </div>
-                @if(!empty($planData['ind_meals'][$mealName]))
-                    @include('print.partials.ind-prod-meal', ['meal' => $mealName, 'cards' => $planData['ind_meals'][$mealName]])
-                @endif
                 @empty
                     <div style="text-align: center; padding: 14px; color: #64748b; font-size: 13px;">У цьому плані немає страв на цю дату</div>
                 @endforelse
 
-                {{-- Прийоми, яких немає в циклічному (додаток до прийому) --}}
-                @foreach(array_diff_key($planData['ind_meals'] ?? [], $planData['meals'] ?? []) as $indMeal => $indCards)
-                    @include('print.partials.ind-prod-meal', ['meal' => $indMeal, 'cards' => $indCards])
-                @endforeach
+                {{-- Індивідуальні: список + аркуш на клієнта (лише власні страви) --}}
+                @include('print.partials.ind-cook-pages', ['pages' => $planData['ind_pages'] ?? [], 'dayLabel' => \Carbon\Carbon::parse($this->data['date'] ?? now())->addDay()->format('d.m')])
 
                 {{-- ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану --}}
                 @if(!empty($planData['individuals']))
