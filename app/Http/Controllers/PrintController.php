@@ -1015,6 +1015,7 @@ class PrintController extends Controller
             }
 
             $planMeals = [];
+            $separate = []; // «order_id:dish_id» — циклова страва індивідуального із замінами
             $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType?->sort_order ?? 99);
             // Страви довідника, яких немає в сьогоднішньому циклі, але їх їдять індивідуальні, —
             // загальною партією, під своїм прийомом після циклічних.
@@ -1074,7 +1075,10 @@ class PrintController extends Controller
 
                     $isCustom = $hasDishLevelChange || $hasIngredientLevelChange;
 
-                    if ($isCustom) {
+                    if ($isInd && $isCustom) {
+                        // Індивідуальному заміни вирішено заздалегідь — страва окремо на його аркуші.
+                        $separate[$order->id.':'.$dish->id] = true;
+                    } elseif ($isCustom) {
                         $custom[] = ['order' => $order, 'scale' => $dishScale];
                         if (!$hasDishLevelChange) {
                             $standard[] = ['order' => $order, 'scale' => $dishScale];
@@ -1111,7 +1115,7 @@ class PrintController extends Controller
             }
 
             // === ІНДИВІДУАЛЬНІ — аркуш на клієнта, лише його власні страви («Інд · …») ===
-            $planIndPages = $ind->cookPages($planOrders, $orderPlans, function ($dish, float $scale, $order) {
+            $planIndPages = $ind->cookPages($planOrders, $orderPlans, $separate, function ($dish, float $scale, $order) {
                 // З виключеннями і рішеннями менеджера — як для циклічних карток.
                 $components = $this->getHierarchicalIngredients($dish, $scale, 1.0, null, true, $order);
 

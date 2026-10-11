@@ -128,10 +128,10 @@ class IndividualPacking
     }
 
     /**
-     * Аркуші готування: на кожного клієнта лише його власні страви («Інд · …»),
-     * решта — «з загальної партії». $components(Dish, float $scale, Order) → [components, totals].
+     * Аркуші готування: на кожного клієнта його власні страви («Інд · …») і циклові
+     * страви з його замінами ($separate), решта — «з загальної партії». $components(Dish, float $scale, Order) → [components, totals].
      */
-    public function cookPages(Collection $planOrders, array $plans, callable $components): array
+    public function cookPages(Collection $planOrders, array $plans, array $separate, callable $components): array
     {
         $pages = [];
         foreach ($planOrders as $o) {
@@ -142,7 +142,9 @@ class IndividualPacking
             foreach ($plans[$o->id]['items'] as $it) {
                 $dish = Dish::with(['dishIngredients.ingredient', 'dishIngredients.childDish.dishIngredients.ingredient'])->find($it['dish_id']);
                 if (!$dish) continue;
-                if (!$this->isOwn($dish)) {
+                // Циклова страва із замінами клієнта готується окремо — теж на аркуші.
+                $withSwaps = isset($separate[$o->id.':'.$dish->id]);
+                if (!$this->isOwn($dish) && !$withSwaps) {
                     $batch[] = $it['meal'].' — '.$dish->name;
                     continue;
                 }
@@ -152,6 +154,7 @@ class IndividualPacking
                 $own[] = [
                     'meal'       => $it['meal'],
                     'dish_name'  => trim(preg_replace('/^Інд\s*·\s*/u', '', $dish->name)),
+                    'with_swaps' => $withSwaps,
                     'weight'     => (int) $it['weight'],
                     'components' => $comps,
                     'totals'     => $totals,

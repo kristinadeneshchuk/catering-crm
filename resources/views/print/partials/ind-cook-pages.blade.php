@@ -9,7 +9,7 @@
 @if($pages->isNotEmpty())
 <div style="page-break-before:always; break-before:page; color:#111827; font-family:-apple-system,Segoe UI,Roboto,sans-serif;">
     <div style="font-size:20px; font-weight:900;">Готування індивідуальних · раціон на {{ $dayLabel }}</div>
-    <div style="font-size:11px; color:#555; margin:2px 0 8px;">Лише ВЛАСНІ страви клієнтів — циклові й страви довідника готуються загальною партією. Далі — по клієнту на сторінку (стос). Спочатку 🌙 вечірні (пакувати до 17:30).</div>
+    <div style="font-size:11px; color:#555; margin:2px 0 8px;">ВЛАСНІ страви клієнтів і циклові з їхніми замінами; решта готується загальною партією. Далі — по клієнту на сторінку (стос). Спочатку 🌙 вечірні (пакувати до 17:30).</div>
     <table style="width:100%; border-collapse:collapse; font-size:12px;">
         <tr style="color:#666; font-size:11px;"><th style="text-align:left; border-bottom:1px solid #999; padding:3px;">Клієнт</th><th style="text-align:left; border-bottom:1px solid #999;">Доставка</th><th style="border-bottom:1px solid #999;">Страв готувати</th><th style="border-bottom:1px solid #999;">Готово</th></tr>
         @foreach($pages as $p)
@@ -40,7 +40,7 @@
     @foreach($p['own'] as $d)
         <div style="border:1px solid #9ca3af; border-radius:6px; padding:5px 8px; margin-bottom:6px; break-inside:avoid; page-break-inside:avoid;">
             <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800;">
-                <div><span style="color:#6b7280;">{{ $mealLabel($d['meal']) }}</span> {{ $d['dish_name'] }}</div>
+                <div><span style="color:#6b7280;">{{ $mealLabel($d['meal']) }}</span> {{ $d['dish_name'] }}@if(!empty($d['with_swaps'])) <span style="font-size:10.5px; color:#9b1c1c;">цикл · із замінами клієнта</span>@endif</div>
                 <div>≈{{ $d['weight'] }} г готової</div>
             </div>
             <table style="width:100%; border-collapse:collapse; font-size:12px; margin-top:2px;">
