@@ -406,6 +406,8 @@ class PackagingList extends Page implements HasForms
             $tableData = [
                 'meal' => $mItem->mealType->name ?? 'Інше',
                 'dish_name' => $dish->name,
+                'dish_id' => (int) $dish->id,
+                'meal_type_id' => (int) $mItem->meal_type_id,
                 'columns' => [],
                 'rows' => [],
                 'individual_notes' => [],
@@ -598,6 +600,10 @@ class PackagingList extends Page implements HasForms
             $planTables[] = $tableData;
         }
 
+        // Індивідуальні — по прийомах поруч із циклічним (див. IndividualPacking).
+        $planTables = app(\App\Services\Kitchen\IndividualPacking::class)
+            ->arrange($planTables, $orders, $sortedMenuItems, $this->orderPlans);
+
         // === ЗАМІННІ СТРАВИ — окремі таблиці для страв, якими повністю замінено оригінал ===
         foreach ($replacementDishData as $repDishId => $repData) {
             $repDish = $repData['dish_obj'];
@@ -630,54 +636,6 @@ class PackagingList extends Page implements HasForms
         // Кожен клієнт — окрема картка з усіма своїми стравами дня, аналогічно індивідуальним.
         foreach ($customClientData as $card) {
             $planTables[] = $card;
-        }
-
-        // === ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану ===
-        $individualByOrder = [];
-
-        foreach ($orders as $order) {
-            if ($order->menu_type !== 'individual') continue;
-
-            $plan = $this->orderPlans[$order->id] ?? null;
-            if (!$plan || empty($plan['items'])) continue;
-
-            $oid = $order->id;
-            if (!isset($individualByOrder[$oid])) {
-                $individualByOrder[$oid] = [
-                    'is_individual' => true,
-                    'client_label'  => '#' . $order->client->id . ' ' . $order->client->name,
-                    'calories'      => (int)($order->calories ?? 0),
-                    'project'       => $order->projectData?->name ?? ucfirst($order->project ?? ''),
-                    'meals'         => [],
-                ];
-            }
-
-            foreach ($plan['items'] as $item) {
-                $dish = \App\Models\Dish::with([
-                    'dishIngredients.ingredient',
-                    'dishIngredients.childDish.dishIngredients.ingredient',
-                ])->find($item['dish_id']);
-                if (!$dish) continue;
-
-                $weight = (int)$item['weight'];
-                $baseW  = (float)($dish->base_weight_g ?? 0);
-                $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
-
-                // Ті самі хелпери, що й для карток циклічного меню. Раніше тут
-                // просто перелічувались інгредієнти з вагою, тож виключення
-                // клієнта на індивідуальному меню фасувальний не показував
-                // взагалі — ні з анкети, ні з замовлення.
-                $individualByOrder[$oid]['meals'][] = [
-                    'meal'      => $item['meal'],
-                    'dish_name' => $dish->name,
-                    'rows'      => $this->buildCustomClientRows($order, $dish, $scale),
-                    'notes'     => $this->collectOrderNotes($order, $dish),
-                ];
-            }
-        }
-
-        foreach ($individualByOrder as $clientData) {
-            $planTables[] = $clientData;
         }
 
             // Зберігаємо секцію цього плану

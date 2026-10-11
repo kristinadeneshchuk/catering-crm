@@ -689,6 +689,8 @@ class PrintController extends Controller
             $tableData = [
                 'meal' => $mItem->mealType?->name ?? '-',
                 'dish_name' => $dish->name,
+                'dish_id' => (int) $dish->id,
+                'meal_type_id' => (int) $mItem->meal_type_id,
                 'columns' => [],
                 'rows' => [],
                 'individual_notes' => [],
@@ -892,52 +894,19 @@ class PrintController extends Controller
             $report[] = $card;
         }
 
-        // === ІНДИВІДУАЛЬНІ КЛІЄНТИ — одна картка на клієнта ===
-        $individualByOrder = [];
-
+        // === ІНДИВІДУАЛЬНІ — по прийомах поруч із циклічним (див. IndividualPacking) ===
+        $plansByOrder = [];
         foreach ($orders as $order) {
-            if ($order->menu_type !== 'individual') continue;
-
-            $calc = $this->calculateOrderPlan($order, $menu, $targetDate);
-            if (empty($calc['items'])) continue;
-
-            $oid = $order->id;
-            if (!isset($individualByOrder[$oid])) {
-                $individualByOrder[$oid] = [
-                    'is_individual' => true,
-                    'client_label'  => '#' . $order->client->id . ' ' . $order->client->name,
-                    'calories'      => (int)($order->calories ?? 0),
-                    'project'       => $order->projectData?->name ?? ucfirst($order->project ?? ''),
-                    'meals'         => [],
-                ];
-            }
-
-            foreach ($calc['items'] as $item) {
-                $dish = \App\Models\Dish::with([
-                    'dishIngredients.ingredient',
-                    'dishIngredients.childDish.dishIngredients.ingredient',
-                ])->find($item['dish_id']);
-                if (!$dish) continue;
-
-                $weight = (int)$item['weight'];
-                $baseW  = (float)($dish->base_weight_g ?? 0);
-                $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
-
-                // Ті самі хелпери, що й для кастомних клієнтів вище. Без них
-                // друкований фасувальний не показував виключення клієнтів на
-                // індивідуальному меню — ні з анкети, ні з замовлення.
-                $individualByOrder[$oid]['meals'][] = [
-                    'meal'      => $item['meal'],
-                    'dish_name' => $dish->name,
-                    'rows'      => $this->buildCustomClientRows($order, $dish, $scale),
-                    'notes'     => $this->collectCustomPrintNotes($order, $dish),
-                ];
+            if ($order->menu_type === 'individual') {
+                $plansByOrder[$order->id] = $this->calculateOrderPlan($order, $menu, $targetDate);
             }
         }
-
-        foreach ($individualByOrder as $clientData) {
-            $report[] = $clientData;
-        }
+        $cycle = array_values(array_filter($report, fn ($t) => isset($t['meal_type_id'])));
+        $rest  = array_values(array_filter($report, fn ($t) => !isset($t['meal_type_id'])));
+        $report = array_merge(
+            app(\App\Services\Kitchen\IndividualPacking::class)->arrange($cycle, $orders, $sortedMenuItems, $plansByOrder),
+            $rest
+        );
 
             if (!empty($report)) {
                 $reportByPlan[$plan->id] = [

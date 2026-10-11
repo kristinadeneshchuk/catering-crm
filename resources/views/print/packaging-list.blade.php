@@ -151,6 +151,10 @@
 
     {{-- ЦИКЛІЧНІ СТРАВИ --}}
     @foreach($cyclicTables as $table)
+        @if(!empty($table['is_ind_block']))
+            @include('print.partials.ind-block', ['block' => $table])
+            @continue
+        @endif
         @php
             $mealLower = mb_strtolower(trim($table['meal']));
             $mealClass = 'meal-default';
