@@ -23,8 +23,17 @@
     </table>
 </div>
 
+<style>
+    /* Один клієнт — один аркуш А4: при друці аркуш стискається, якщо страв багато. */
+    @page { size: A4; margin: 10mm; }
+    @media print {
+        .ind-page { height: 270mm; overflow: hidden; }
+        .ind-fit { zoom: var(--ind-zoom, 1); }
+    }
+</style>
 @foreach($pages as $p)
-<div style="page-break-before:always; break-before:page; color:#111827; font-family:-apple-system,Segoe UI,Roboto,sans-serif; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
+<div class="ind-page" style="page-break-before:always; break-before:page;">
+<div class="ind-fit" style="color:#111827; font-family:-apple-system,Segoe UI,Roboto,sans-serif; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:3px solid #14532d; padding-bottom:3px;">
         <div style="font-size:22px; font-weight:900; color:#14532d;">{{ $p['n'] }}. {{ $p['name'] }} <span style="font-size:13px; color:#555;">· {{ $p['kcal'] }} ккал</span></div>
         <div style="font-size:12px; font-weight:800; padding:3px 10px; border-radius:6px; background:{{ $p['eve'] ? '#1e3a8a' : '#fde68a' }}; color:{{ $p['eve'] ? '#fff' : '#78350f' }};">{{ $deliv($p) }}</div>
@@ -70,5 +79,31 @@
     @endif
     <div style="font-size:12px;">☐ усе приготовано &nbsp; ☐ зважено &nbsp; ☐ передано на пакування</div>
 </div>
+</div>
 @endforeach
+<script>
+    // Міряємо кожен аркуш у ширині А4 (190 мм) і, якщо він вищий за 270 мм, стискаємо при друці.
+    (function () {
+        function fit() {
+            var box = document.createElement('div');
+            box.style.cssText = 'position:absolute;left:-10000px;top:0;width:190mm;visibility:hidden;';
+            var probe = document.createElement('div');
+            probe.style.height = '270mm';
+            box.appendChild(probe);
+            document.body.appendChild(box);
+            var max = probe.offsetHeight;
+            document.querySelectorAll('.ind-fit').forEach(function (el) {
+                var clone = el.cloneNode(true);
+                clone.style.setProperty('--ind-zoom', 1);
+                box.appendChild(clone);
+                var h = clone.offsetHeight;
+                box.removeChild(clone);
+                el.style.setProperty('--ind-zoom', h > max ? (max / h).toFixed(3) : 1);
+            });
+            document.body.removeChild(box);
+        }
+        if (document.readyState === 'complete') fit(); else window.addEventListener('load', fit);
+        window.addEventListener('beforeprint', fit);
+    })();
+</script>
 @endif
