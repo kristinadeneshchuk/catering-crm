@@ -13,8 +13,10 @@
         @if($p->review_comment)<div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(59,130,246,.1);"><b>Коментар:</b> {{ $p->review_comment }}</div>@endif
         @if($p->apply_result)
             <div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:{{ $p->status === 'failed' ? 'rgba(239,68,68,.12)' : 'rgba(34,197,94,.12)' }};">
-                @if($p->status === 'failed')
-                    <b>Помилка виконання:</b> {{ $p->apply_result['error'] ?? '' }}
+                @if(!empty($p->apply_result['error']))
+                    <b>{{ $p->status === 'failed' ? 'Помилка виконання' : 'Не виконано' }}:</b> {{ $p->apply_result['error'] }}
+                @elseif($p->type === 'client_message')
+                    <b>Надіслано клієнту</b> @if(!empty($p->apply_result['duplicate']))(повтор — уже було надіслано)@endif
                 @else
                     <b>Виконано:</b> записів меню {{ $p->apply_result['menu_rows'] ?? 0 }}
                     @if(!empty($p->apply_result['dishes_created'])); нові страви: {{ implode(', ', $p->apply_result['dishes_created']) }}@endif
@@ -62,6 +64,22 @@
                 @endforeach
             </x-filament::section>
         @endif
+    @elseif($p->type === 'client_message')
+        {{-- Так, як побачить клієнт. --}}
+        <x-filament::section heading="Повідомлення клієнту">
+            @if(!empty($p->payload['preview']))<div style="font-size:12px;opacity:.7;margin-bottom:8px;white-space:pre-line;">{{ $p->payload['preview'] }}</div>@endif
+            <div style="max-width:520px;padding:10px 14px;border-radius:14px;background:rgba(59,130,246,.12);white-space:pre-wrap;font-size:14px;line-height:1.45;">{{ $p->payload['text'] ?? '' }}</div>
+            @foreach($p->payload['attachments'] ?? [] as $f)
+                <div style="margin-top:8px;">
+                    @if(($f['kind'] ?? '') === 'photo' && !empty($f['path']) && \Illuminate\Support\Facades\Storage::disk('local')->exists($f['path']))
+                        <img src="data:{{ $f['mime'] ?? 'image/jpeg' }};base64,{{ base64_encode(\Illuminate\Support\Facades\Storage::disk('local')->get($f['path'])) }}" style="max-width:360px;border-radius:10px;" alt="{{ $f['name'] }}">
+                    @else
+                        📎 {{ $f['name'] ?? 'файл' }}
+                    @endif
+                </div>
+            @endforeach
+            <div style="font-size:12px;opacity:.6;margin-top:10px;">Розмова Inbox #{{ $p->payload['conversation_id'] ?? '—' }} · {{ $p->payload['account'] ?? '' }}</div>
+        </x-filament::section>
     @else
         <x-filament::section heading="Дані"><pre style="font-size:12px;white-space:pre-wrap;">{{ json_encode($p->payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) }}</pre></x-filament::section>
     @endif

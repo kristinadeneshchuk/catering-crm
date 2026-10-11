@@ -249,4 +249,131 @@ class AiAgentsTest extends TestCase
         $this->actingAs($this->user(1));   // інший адмін, не в переліку
         $this->assertFalse(AiProposalResource::canAccess());
     }
+
+    // --- повідомлення клієнтам (контракт з Inbox 11.10) ----------------------
+
+    protected function messageAgent(): string
+    {
+        $this->agent->update(['allowed_types' => ['individual_week_menu', 'client_message']]);
+        config([
+            'services.ai_agents.inbox_send_url' => 'https://inbox.test/api/integrations/crm/send',
+            'services.ai_agents.inbox_send_secret' => 'shh',
+        ]);
+        \Illuminate\Support\Facades\Storage::fake('local');
+
+        return 'client_message';
+    }
+
+    protected function messagePayload(array $over = []): array
+    {
+        return array_merge([
+            'conversation_id' => 72575, 'crm_client_id' => $this->order->client_id, 'account' => 'Afood',
+            'text' => "Добрий день! Меню на тиждень у вкладенні.", 'based_on_message_id' => 123456,
+            'attachments' => [['kind' => 'photo', 'name' => 'меню 1.png', 'mime' => 'image/png', 'base64' => base64_encode('PNGDATA')]],
+            'preview' => 'Гоголь Денис · Telegram',
+        ], $over);
+    }
+
+    public function test_a_client_message_is_checked_and_files_are_kept_out_of_the_database(): void
+    {
+        $type = $this->messageAgent();
+
+        $this->api('POST', 'proposals', ['type' => $type, 'payload' => $this->messagePayload(['text' => 'Привіт, [імʼя]!'])])
+            ->assertStatus(422)->assertJsonFragment(['text: є незаповнена [заготовка]']);
+
+        $id = $this->api('POST', 'proposals', ['type' => $type, 'payload' => $this->messagePayload()])->assertCreated()->json('id');
+        $p = AiProposal::find($id);
+
+        $this->assertSame($this->order->client_id, $p->client_id);
+        $this->assertArrayNotHasKey('base64', $p->payload['attachments'][0]);
+        \Illuminate\Support\Facades\Storage::disk('local')->assertExists($p->payload['attachments'][0]['path']);
+        // У Telegram погоджувач бачить сам текст.
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage') && str_contains($r['text'], 'Меню на тиждень'));
+    }
+
+    public function test_an_approved_message_goes_to_inbox_signed_and_once(): void
+    {
+        $type = $this->messageAgent();
+        $this->user(7);
+        Http::fake([
+            'inbox.test/*' => Http::response(['message_ids' => [9001, 9002]], 201),
+            'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 55]]),
+        ]);
+        $id = $this->api('POST', 'proposals', ['type' => $type, 'payload' => $this->messagePayload()])->json('id');
+
+        $answer = app(ProposalDesk::class)->approve(AiProposal::find($id), User::find(7));
+        $this->assertStringContainsString('надіслано', $answer);
+
+        Http::assertSent(function ($r) use ($id) {
+            if (!str_contains($r->url(), 'inbox.test')) return false;
+            $ts = $r->header('X-Inbox-Timestamp')[0];
+            $ok = $r->header('X-Inbox-Signature')[0] === 'sha256=' . hash_hmac('sha256', $ts . '.' . $r->body(), 'shh');
+            $b = json_decode($r->body(), true);
+
+            return $ok && $r->header('Idempotency-Key')[0] === "proposal-{$id}"
+                && $b['conversation_id'] === 72575 && $b['proposal_id'] === $id && $b['approved_by']['id'] === 7
+                && $b['attachments'][0]['base64'] === base64_encode('PNGDATA') && !isset($b['force']);
+        });
+
+        $p = AiProposal::find($id);
+        $this->assertSame('applied', $p->status);
+        $this->assertSame([9001, 9002], $p->apply_result['message_ids']);
+    }
+
+    public function test_a_stale_message_waits_and_can_be_forced(): void
+    {
+        $type = $this->messageAgent();
+        $this->user(7);
+        Http::fake([
+            'inbox.test/*' => Http::sequence()
+                ->push(['code' => 'stale'], 409)
+                ->push(['message_ids' => [9003]], 201),
+            'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 55]]),
+        ]);
+        $id = $this->api('POST', 'proposals', ['type' => $type, 'payload' => $this->messagePayload()])->json('id');
+        $desk = app(ProposalDesk::class);
+
+        $desk->approve(AiProposal::find($id), User::find(7));
+        $p = AiProposal::find($id);
+        $this->assertSame('changes_requested', $p->status);
+        $this->assertSame('stale', $p->apply_result['code']);
+
+        // Звичайне погодження вдруге не проходить, лише «надіслати все одно».
+        $this->assertStringContainsString('Уже розглянуто', $desk->approve($p, User::find(7)));
+        $desk->approve($p->fresh(), User::find(7), force: true);
+
+        $this->assertSame('applied', AiProposal::find($id)->status);
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'inbox.test') && (json_decode($r->body(), true)['force'] ?? false) === true);
+    }
+
+    public function test_telegram_rejection_is_retried_then_marked_failed(): void
+    {
+        $type = $this->messageAgent();
+        $this->user(7);
+        Http::fake([
+            'inbox.test/*' => Http::response(['message' => 'Telegram down'], 502),
+            'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 55]]),
+        ]);
+        $id = $this->api('POST', 'proposals', ['type' => $type, 'payload' => $this->messagePayload()])->json('id');
+
+        app(ProposalDesk::class)->approve(AiProposal::find($id), User::find(7));
+
+        $this->assertSame('failed', AiProposal::find($id)->status);
+        Http::assertSentCount(3 + Http::recorded(fn ($r) => str_contains($r->url(), 'telegram'))->count());
+    }
+
+    public function test_nothing_is_sent_until_inbox_is_configured(): void
+    {
+        $type = $this->messageAgent();
+        config(['services.ai_agents.inbox_send_url' => '']);
+        $this->user(7);
+        $id = $this->api('POST', 'proposals', ['type' => $type, 'payload' => $this->messagePayload()])->json('id');
+
+        app(ProposalDesk::class)->approve(AiProposal::find($id), User::find(7));
+
+        $p = AiProposal::find($id);
+        $this->assertSame('failed', $p->status);
+        $this->assertStringContainsString('не налаштована', $p->apply_result['error']);
+        Http::assertNotSent(fn ($r) => str_contains($r->url(), 'inbox'));
+    }
 }

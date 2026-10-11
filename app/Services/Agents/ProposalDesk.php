@@ -21,10 +21,11 @@ class ProposalDesk
     public function __construct(private TelegramService $telegram) {}
 
     /** Обробник типу: перевірка, виконання, опис. */
-    public function handler(string $type): IndividualWeekMenu
+    public function handler(string $type): IndividualWeekMenu|ClientMessage
     {
         return match ($type) {
             'individual_week_menu' => app(IndividualWeekMenu::class),
+            'client_message'       => app(ClientMessage::class),
             default => throw new InvalidArgumentException("Невідомий тип пропозиції «{$type}»"),
         };
     }
@@ -42,14 +43,17 @@ class ProposalDesk
         $handler = $this->handler($type);
         if ($errors = $handler->validate($payload)) return ['proposal' => null, 'errors' => $errors];
 
+        if (method_exists($handler, 'prepare')) $payload = $handler->prepare($payload);
+
         $order = \App\Models\Order::find($payload['order_id'] ?? null);
+        $clientId = $order?->client_id ?? (\App\Models\Client::whereKey($payload['crm_client_id'] ?? 0)->value('id'));
         $proposal = AiProposal::create([
             'ai_agent_id'      => $agent->id,
             'ai_agent_task_id' => $data['task_id'] ?? null,
             'type'             => $type,
             'title'            => (string) ($data['title'] ?? AiProposal::TYPES[$type]),
             'summary'          => $data['summary'] ?? $handler->describe($payload),
-            'client_id'        => $order?->client_id,
+            'client_id'        => $clientId,
             'order_id'         => $order?->id,
             'payload'          => $payload,
             'status'           => 'pending',
@@ -60,16 +64,22 @@ class ProposalDesk
         return ['proposal' => $proposal, 'errors' => []];
     }
 
-    public function approve(AiProposal $p, ?User $by): string
+    public function approve(AiProposal $p, ?User $by, bool $force = false): string
     {
-        if (!$p->isPending()) return 'Уже розглянуто: ' . (AiProposal::STATUSES[$p->status] ?? $p->status);
+        // Повторно — лише «надіслати все одно» після відмови stale.
+        $resend = $force && $p->status === 'changes_requested' && ($p->apply_result['code'] ?? null) === 'stale';
+        if (!$p->isPending() && !$resend) return 'Уже розглянуто: ' . (AiProposal::STATUSES[$p->status] ?? $p->status);
 
         $p->forceFill(['reviewed_by' => $by?->id, 'reviewed_at' => now()])->save();
+        $p->setRelation('reviewer', $by);
 
         try {
-            $result = $this->handler($p->type)->apply($p->payload);
+            $result = $this->handler($p->type)->apply($p->payload, $p, $force);
             $p->forceFill(['status' => 'applied', 'applied_at' => now(), 'apply_result' => $result])->save();
-            $answer = '✅ Погоджено й виконано';
+            $answer = $p->type === 'client_message' ? '✅ Погоджено й надіслано клієнту' : '✅ Погоджено й виконано';
+        } catch (ProposalOutcome $o) {
+            $p->forceFill(['status' => $o->status, 'apply_result' => $o->result + ['error' => $o->getMessage()]])->save();
+            $answer = '⚠️ ' . $o->getMessage();
         } catch (Throwable $e) {
             report($e);
             $p->forceFill(['status' => 'failed', 'apply_result' => ['error' => $e->getMessage()]])->save();

@@ -47,3 +47,15 @@
 ## Памʼять: рекомендовані ключі
 - `client:<client_id>:week:<YYYY-MM-DD>` → `{status, proposal_id, missing: [...], notes}` — що вже зроблено по клієнту на тиждень.
 - `rules:<тема>` — рішення власника, які треба памʼятати.
+
+## Тип `client_message` (контракт з Inbox, 11.10.2026)
+
+```json
+{"conversation_id": 72575, "crm_client_id": 665, "account": "Afood", "text": "…",
+ "attachments": [{"kind": "photo", "name": "меню_1.png", "mime": "image/png", "base64": "…"}],
+ "based_on_message_id": 123456, "preview": "Ім'я · канал · останні вхідні"}
+```
+
+- text ≤ 4000, без незаповнених `[заготовок]`; ≤ 10 файлів по ≤ 10 МБ. Вкладення CRM зберігає файлами, не в базі.
+- Після погодження CRM шле в Inbox `POST INBOX_CRM_SEND_URL` з `X-Inbox-Timestamp`, `X-Inbox-Signature: sha256=HMAC(CRM_SEND_SECRET, ts + "." + body)`, `Idempotency-Key: proposal-<id>`; тіло = payload + proposal_id, approved_by, approved_at.
+- 201/200 → `applied`; 409 stale → `changes_requested` (у CRM кнопка «Надіслати все одно» → повтор з `force: true`); 409 locked / 422 → `failed`; 502 → до 3 спроб, далі `failed`.

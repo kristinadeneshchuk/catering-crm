@@ -35,7 +35,15 @@ class ViewAiProposal extends ViewRecord
                     Notification::make()->title($answer)->{$this->record->fresh()->status === 'applied' ? 'success' : 'danger'}()->send();
                     $this->record->refresh();
                 }),
-            Actions\Action::make('changes')->label('Правки')->color('info')->icon('heroicon-o-pencil')
+            Actions\Action::make('force')->label('Надіслати все одно')->color('warning')->icon('heroicon-o-paper-airplane')
+                ->visible(fn () => $this->record->status === 'changes_requested' && ($this->record->apply_result['code'] ?? null) === 'stale')
+                ->requiresConfirmation()
+                ->modalDescription('Клієнт написав ще після того, як агент склав текст. Надіслати попри це?')
+                ->action(function () use ($desk) {
+                    Notification::make()->title($desk->approve($this->record, auth()->user(), true))->send();
+                    $this->record->refresh();
+                }),
+                        Actions\Action::make('changes')->label('Правки')->color('info')->icon('heroicon-o-pencil')
                 ->visible($pending)
                 ->form([Forms\Components\Textarea::make('comment')->label('Що змінити')->required()->rows(4)])
                 ->action(function (array $data) use ($desk) {

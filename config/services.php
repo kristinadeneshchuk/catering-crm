@@ -72,6 +72,9 @@ return [
     // Пульт ШІ-агентів: хто погоджує пропозиції. "user_id:telegram_id,…"
     'ai_agents' => [
         'approvers' => env('AI_APPROVERS', ''),
+        // Погоджені повідомлення клієнтам → Inbox (HMAC sha256(ts.body), секрет лише в env).
+        'inbox_send_url'    => env('INBOX_CRM_SEND_URL', ''),
+        'inbox_send_secret' => env('CRM_SEND_SECRET', ''),
     ],
 
     'monobank' => [
