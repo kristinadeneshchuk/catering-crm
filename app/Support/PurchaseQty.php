@@ -22,7 +22,7 @@ class PurchaseQty
         return number_format($value, $value < 10 ? 2 : ($value < 100 ? 1 : 0), '.', ' ').' '.$unit;
     }
 
-    /** «2 шт по 200 г» — скільки штук/упаковок узяти, якщо відома вага однієї. */
+    /** «2 шт по 200 г» / «1 уп. по 1.2 кг» — скільки штук чи упаковок узяти, якщо відома вага однієї. */
     public static function pieces(Ingredient $ing, float $toBuy): ?string
     {
         $w = (float) $ing->package_weight;
@@ -38,6 +38,9 @@ class PurchaseQty
         $piece = $w < 1 ? round($w * 1000).(StockDocumentItem::canonUnit($ing->unit) === 'л' ? ' мл' : ' г')
             : rtrim(rtrim(number_format($w, 2, '.', ''), '0'), '.').' '.$ing->unit;
 
-        return "{$n} шт по {$piece}";
+        // Від пів кіло — це вже упаковка (коробка круасанів 1,2 кг, олія 5 л), а не штука.
+        $label = $w >= 0.5 ? 'уп.' : 'шт';
+
+        return "{$n} {$label} по {$piece}";
     }
 }

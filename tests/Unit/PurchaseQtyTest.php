@@ -26,7 +26,10 @@ class PurchaseQtyTest extends TestCase
         $this->assertSame('30 шт по 55 г', PurchaseQty::pieces($eggs, 1.65));
 
         $oil = new Ingredient(['unit' => 'л', 'package_weight' => 5, 'package_unit' => 'л']);
-        $this->assertSame('2 шт по 5 л', PurchaseQty::pieces($oil, 7));
+        $this->assertSame('2 уп. по 5 л', PurchaseQty::pieces($oil, 7));
+
+        $croissants = new Ingredient(['unit' => 'кг', 'package_weight' => 1.2, 'package_unit' => 'кг']);
+        $this->assertSame('1 уп. по 1.2 кг', PurchaseQty::pieces($croissants, 0.039));
 
         $this->assertNull(PurchaseQty::pieces(new Ingredient(['unit' => 'кг']), 1.0));
     }
