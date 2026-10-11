@@ -21,7 +21,7 @@ class NoEat
         $ex = $manual->take($limit)->implode(', ').($manual->count() > $limit ? ' … ще '.($manual->count() - $limit) : '');
         // Страви — коротко: без напівфабрикатів, до 6 назв (кухня замінює продукти, а не страви).
         $dishes = ($o->client?->dishExclusions ?? collect())->pluck('name')
-            ->reject(fn ($n) => preg_match('/н[\\\/]ф\s*$/u', trim($n)))->map(fn ($n) => trim($n))->unique()->values();
+            ->reject(fn ($n) => preg_match('~н[\\\\/]ф\s*$~u', trim($n)))->map(fn ($n) => trim($n))->unique()->values();
         $dx = $dishes->take(6)->implode(', ').($dishes->count() > 6 ? ' … ще '.($dishes->count() - 6).' страв' : '');
 
         return implode('. ', array_filter([
