@@ -70,9 +70,12 @@ class IndividualPacking
         return $c ? '№'.$c['n'].' '.$c['name'].' · '.$c['kcal'].' '.($c['eve'] ? '🌙' : '☀').' '.$c['time'] : null;
     }
 
-    /** Підпис індивідуального в картці заміни циклічної страви + примітка до страви. */
+    /** Картка заміни циклічної страви: «не їсть» клієнта; для індивідуального — № і примітка. */
     public function decorateCard(array $card, Order $order, int $dishId): array
     {
+        // Повний короткий перелік «не їсть» — щоб, замінюючи, кухня не поклала заборонене.
+        $card['no_eat'] = \App\Support\NoEat::summary($order);
+
         if ($label = $this->label($order->id)) {
             $card['client_name'] = $label;
             $card['ind_note'] = $order->personalDishes()->whereDate('date', $this->date)->where('dish_id', $dishId)->value('cooking_note');
@@ -204,24 +207,10 @@ class IndividualPacking
     {
         return array_values(array_map(function ($c) {
             $o = $c['order'];
-            // Набори («Безлактозні») — однією назвою, а не півсотнею продуктів; решту — до 15 назв.
-            $bundles = $o->client?->replacementBundles ?? collect();
-            $inBundles = $bundles->flatMap(fn ($b) => $b->items->pluck('original_ingredient_id'))->flip();
-            $manual = ($o->client?->ingredientExclusions ?? collect())->merge($o->ingredientExclusions ?? collect())
-                ->reject(fn ($i) => isset($inBundles[$i->id]))
-                ->pluck('name')->map(fn ($n) => mb_strtolower(trim($n)))->unique()->values();
-            $ex = $manual->take(15)->implode(', ').($manual->count() > 15 ? ' … ще '.($manual->count() - 15) : '');
-            $dx = $o->client?->dishExclusions?->pluck('name')->implode(', ');
-            $stop = array_filter([
-                trim((string) $o->client?->allergies),
-                $bundles->pluck('name')->map(fn ($n) => mb_strtoupper($n))->implode(', '),
-                $ex ? 'Без: '.$ex : '',
-                $dx ? 'Не давати: '.$dx : '',
-            ]);
-
+            $stop = \App\Support\NoEat::summary($o);
             $diet = $o->client?->diet;
 
-            return ['n' => $c['n'], 'name' => $c['name'].' · '.$c['kcal'], 'eve' => $c['eve'], 'time' => $c['time'], 'stop' => implode('. ', $stop),
+            return ['n' => $c['n'], 'name' => $c['name'].' · '.$c['kcal'], 'eve' => $c['eve'], 'time' => $c['time'], 'stop' => $stop,
                 'diet' => $diet?->label(),
                 'diet_rules' => trim(implode(' ', array_filter([
                     $diet?->cooking_methods ? 'Спосіб приготування: '.$diet->cooking_methods.'.' : null,

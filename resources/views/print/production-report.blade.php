@@ -319,11 +319,11 @@
                         </div>
                     @endif
 
-                    {{-- 3. ІНДИВІДУАЛЬНІ ЗАМОВЛЕННЯ (КАСТОМ) — компактна таблиця змін --}}
+                    {{-- 3. ЗАМІНИ ЦИКЛІЧНОГО МЕНЮ — компактна таблиця змін --}}
                     @if(count($dish['custom_cards']) > 0)
                         <div style="margin-bottom: 16px;">
                             <h4 class="font-bold text-red-600 mb-2 uppercase text-xs border-b border-red-200 pb-1 print:text-black">
-                                Індивідуальні замовлення (Заміни)
+                                Заміни циклічного меню
                             </h4>
 
                             {{-- ТЕХКАРТИ ПОВНИХ ЗАМІН СТРАВ (згруповані та просумовані) --}}
@@ -469,7 +469,7 @@
                                             $exceptions = [];
 
                                             if ($card['dish_excluded']) {
-                                                $exceptions[] = '<span style="color:#dc2626;font-weight:bold;">СТРАВУ ВИКЛЮЧЕНО</span>';
+                                                $exceptions[] = '<span style="color:#dc2626;font-weight:bold;">НЕ ЇСТЬ ЦЮ СТРАВУ — не давати</span>';
                                             } elseif ($card['dish_replacement']) {
                                                 $exceptions[] = '<span style="color:#2563eb;font-weight:bold;">Заміна страви: ' . e($card['dish_replacement']) . '</span>';
                                             } else {
@@ -484,7 +484,7 @@
                                                     } elseif ($isConflict) {
                                                         $brutto = round($item['weight_brutto_sum'] ?? $item['weight_brutto'] ?? 0);
                                                         $allergen = !empty($item['conflict']['allergen']) ? ' <span style="color:#ea580c;font-size:9px;">[' . e($item['conflict']['allergen']) . ']</span>' : '';
-                                                        $exceptions[] = '<span style="text-decoration:line-through;color:#9ca3af;">' . e($item['name']) . '</span> <span style="color:#dc2626;font-weight:bold;">БЕЗ</span>' . $allergen . ' (' . $brutto . 'г)';
+                                                        $exceptions[] = '<span style="text-decoration:line-through;color:#9ca3af;">' . e($item['name']) . '</span> <span style="color:#dc2626;font-weight:bold;">не їсть — без цього</span>' . $allergen . ' (' . $brutto . 'г)';
                                                     }
                                                 }
                                                 // PF sub-ingredient changes
@@ -499,7 +499,7 @@
                                                         } elseif ($isSubConflict) {
                                                             $brutto = round($sub['weight_brutto_sum'] ?? $sub['weight_brutto'] ?? 0);
                                                             $allergen = !empty($sub['conflict']['allergen']) ? ' <span style="color:#ea580c;font-size:9px;">[' . e($sub['conflict']['allergen']) . ']</span>' : '';
-                                                            $exceptions[] = '[' . e($item['name']) . '] <span style="text-decoration:line-through;color:#9ca3af;">' . e($sub['name']) . '</span> <span style="color:#dc2626;font-weight:bold;">БЕЗ</span>' . $allergen . ' (' . $brutto . 'г)';
+                                                            $exceptions[] = '[' . e($item['name']) . '] <span style="text-decoration:line-through;color:#9ca3af;">' . e($sub['name']) . '</span> <span style="color:#dc2626;font-weight:bold;">не їсть — без цього</span>' . $allergen . ' (' . $brutto . 'г)';
                                                         }
                                                     }
                                                 }
@@ -513,11 +513,14 @@
                                             </td>
                                             <td style="border: 1px solid #d1d5db; padding: 4px 8px; font-size: 10px;">
                                                 @if(empty($exceptions))
-                                                    <span style="color:#9ca3af;font-style:italic;">без змін</span>
+                                                    <span style="color:#6b7280;font-style:italic;">як у циклі</span>
                                                 @else
                                                     @foreach($exceptions as $ex)
                                                         <div>{!! \Illuminate\Support\Str::sanitizeHtml($ex ?? '') !!}</div>
                                                     @endforeach
+                                                @endif
+                                                @if(!empty($card['no_eat']))
+                                                    <div style="margin-top:2px; font-size:9.5px; color:#9b1c1c;">⛔ Не їсть (не замінювати на це): {{ $card['no_eat'] }}</div>
                                                 @endif
                                             </td>
                                         </tr>

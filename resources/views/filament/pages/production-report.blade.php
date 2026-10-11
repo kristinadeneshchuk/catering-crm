@@ -340,6 +340,7 @@
                                             <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                                                 <div style="font-weight: 800; font-size: 13px;">{{ $card['client_name'] }}</div>
                                                 @if(!empty($card['ind_note']))<div style="width:100%; font-size:10px; color:#9b1c1c; font-weight:700;">📝 {{ $card['ind_note'] }}</div>@endif
+                                                @if(!empty($card['no_eat']))<div style="width:100%; font-size:10px; color:#9b1c1c;">⛔ Не їсть (не замінювати на це): {{ $card['no_eat'] }}</div>@endif
 
                                                 @if(!empty($card['bundles']))
                                                     @foreach($card['bundles'] as $bundleName)
