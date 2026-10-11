@@ -72,6 +72,9 @@ class ProductionPlanBuilder
             ];
         }
 
+        // Індивідуальні: № клієнта й доставка — ті самі, що у фасувальному.
+        $ind = new IndividualPacking($activeOrders, $targetDate);
+
         // Групуємо замовлення по планах меню
         $ordersByPlan = $activeOrders->groupBy(fn ($o) => $o->effectiveMenuPlan()?->id ?? 0);
 
@@ -120,22 +123,24 @@ class ProductionPlanBuilder
                 $standard = [];
                 $custom = [];
                 $commentClients = [];
+                $indInStandard = [];
 
                 foreach ($planOrders as $order) {
-                    if ($order->menu_type === 'individual') continue;
-
+                    // Індивідуальний з тією самою стравою на цей прийом готується разом
+                    // із циклічним: без змін — у загальний котел, із замінами — карткою.
                     $orderPlan = $this->orderPlans[$order->id] ?? null;
                     if (!$orderPlan) continue;
 
                     $plannedWeight = $this->plannedDishWeight($orderPlan['items'], (int)$dish->id, (int)$item->meal_type_id);
                     if ($plannedWeight === null) continue;
+                    $isInd = $order->menu_type === 'individual';
 
                     $baseW = (float)($dish->base_weight_g ?? 0);
                     $dishScale = ($baseW > 0) ? ((float)$plannedWeight / $baseW) : 0.0;
 
                     $isCustom = $this->isCustomForDish($order, $dish);
 
-                    if (!empty(trim($order->client->production_comment ?? ''))) {
+                    if (!$isInd && !empty(trim($order->client->production_comment ?? ''))) {
                         $commentClients[] = [
                             'client_name' => $order->client->name,
                             'order_id'    => $order->id,
@@ -147,6 +152,7 @@ class ProductionPlanBuilder
                         $custom[] = ['order' => $order, 'scale' => $dishScale];
                     } else {
                         $standard[] = ['order' => $order, 'scale' => $dishScale];
+                        if ($isInd && ($c = $ind->client($order->id))) $indInStandard[] = $c['n'];
                     }
                 }
 
@@ -157,8 +163,10 @@ class ProductionPlanBuilder
                 $standardStructure = $this->calculateIngredientsStructureByScales($dish, $standardScales);
                 $standardTotals = $this->calculateTotals($standardStructure);
 
-                $customCards = collect($custom)->map(function ($entry) use ($dish) {
-                    return $this->buildCustomCard($dish, $entry['order'], (float)$entry['scale']);
+                $customCards = collect($custom)->map(function ($entry) use ($dish, $ind) {
+                    $card = $this->buildCustomCard($dish, $entry['order'], (float)$entry['scale']);
+
+                    return $ind->decorateCard($card, $entry['order'], (int) $dish->id);
                 })->toArray();
 
                 $planMeals[$mealName][] = [
@@ -171,85 +179,59 @@ class ProductionPlanBuilder
                     'standard_total_brutto' => $standardTotals['brutto'],
                     'custom_cards' => $customCards,
                     'comment_clients' => $commentClients,
+                    'ind_in_standard' => $indInStandard,
                 ];
             }
 
-            // === ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану ===
-            // Preload all dishes for individual clients in one query to avoid N+1
-            $individualDishIds = [];
+            // === ІНДИВІДУАЛЬНІ — страви, яких немає в циклічному, під своїм прийомом ===
+            $cycleKeys = $sortedMenuItems->filter(fn ($mi) => $mi->dish)
+                ->mapWithKeys(fn ($mi) => [$mi->dish_id.':'.$mi->meal_type_id => true])->all();
+            $indItems = [];
             foreach ($planOrders as $order) {
                 if ($order->menu_type !== 'individual') continue;
-                $orderPlan = $this->orderPlans[$order->id] ?? null;
-                if (!$orderPlan || empty($orderPlan['items'])) continue;
-                foreach ($orderPlan['items'] as $item) {
-                    $individualDishIds[] = $item['dish_id'];
+                foreach ($this->orderPlans[$order->id]['items'] ?? [] as $item) {
+                    if (isset($cycleKeys[$item['dish_id'].':'.$item['meal_type_id']])) continue;
+                    $indItems[] = [$order, $item];
                 }
             }
-            $individualDishesMap = collect();
-            if (!empty($individualDishIds)) {
-                $individualDishesMap = Dish::with([
-                    'dishIngredients.ingredient.allergens',
-                    'dishIngredients.childDish.dishIngredients.ingredient.allergens',
-                ])->whereIn('id', array_unique($individualDishIds))->get()->keyBy('id');
-            }
+            $individualDishesMap = $indItems ? Dish::with([
+                'dishIngredients.ingredient.allergens',
+                'dishIngredients.childDish.dishIngredients.ingredient.allergens',
+            ])->whereIn('id', array_unique(array_map(fn ($x) => $x[1]['dish_id'], $indItems)))->get()->keyBy('id') : collect();
 
-            $planIndividuals = [];
-            foreach ($planOrders as $order) {
-                if ($order->menu_type !== 'individual') continue;
+            $planIndMeals = [];
+            foreach ($indItems as [$order, $item]) {
+                $dish = $individualDishesMap->get($item['dish_id']);
+                if (!$dish) continue;
 
-                $orderPlan = $this->orderPlans[$order->id] ?? null;
-                if (!$orderPlan || empty($orderPlan['items'])) continue;
+                $weight = (int)$item['weight'];
+                $baseW  = (float)($dish->base_weight_g ?? 0);
+                $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
 
-                $oid = $order->id;
-                $meals = [];
+                // З виключеннями і рішеннями менеджера — як для циклічних карток.
+                $components = $this->getHierarchicalIngredients($dish, $scale, 1.0, null, true, $order);
+                $totals     = $this->calculateTotals($components);
 
-                foreach ($orderPlan['items'] as $item) {
-                    $dish = $individualDishesMap->get($item['dish_id']);
-                    if (!$dish) continue;
-
-                    $weight = (int)$item['weight'];
-                    $baseW  = (float)($dish->base_weight_g ?? 0);
-                    $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
-
-                    // Клієнтам на індивідуальному меню картка малювалась без
-                    // перевірки виключень — кухня бачила звичайну рецептуру навіть
-                    // тоді, коли в анкеті стоїть «не їсть». Рахуємо так само, як
-                    // для циклічних карток: з виключеннями і рішеннями менеджера.
-                    $components = $this->getHierarchicalIngredients($dish, $scale, 1.0, null, true, $order);
-                    $totals     = $this->calculateTotals($components);
-
-                    $meals[] = [
-                        'meal'          => $item['meal'],
-                        'dish_name'     => $dish->name,
-                        'components'    => $components,
-                        'total_netto'   => $totals['netto'],
-                        'total_brutto'  => $totals['brutto'],
-                        'cooking_note'  => $item['cooking_note'] ?? null,
-                    ];
-                }
-
-                // Лікувальна дієта клієнта — кухня має бачити її правила
-                // над стравами, а не шукати в картці клієнта.
-                $diet = $order->client->diet;
-
-                $planIndividuals[$oid] = [
-                    'client_label' => '#' . $order->client->id . ' ' . $order->client->name,
-                    'calories'     => (int)($order->calories ?? 0),
-                    'project'      => $order->projectData?->name ?? ucfirst($order->project ?? ''),
-                    'meals'        => $meals,
-                    'diet_label'   => $diet?->label(),
-                    'diet_kitchen' => $diet?->kitchen_note,
-                    'diet_cooking' => $diet?->cooking_methods,
+                $planIndMeals[$item['meal']][] = $ind->card($order, $item, $dish) + [
+                    'components'   => $components,
+                    'total_netto'  => $totals['netto'],
+                    'total_brutto' => $totals['brutto'],
                 ];
             }
+            foreach ($planIndMeals as &$cards) {
+                usort($cards, fn ($a, $b) => [$a['dish_name'], $a['n']] <=> [$b['dish_name'], $b['n']]);
+            }
+            unset($cards);
+            $planIndividuals = []; // старий розріз «по клієнту» — тепер по прийомах (ind_meals)
 
-            if (empty($planMeals) && empty($planIndividuals)) continue;
+            if (empty($planMeals) && empty($planIndMeals)) continue;
 
             $report[$plan->id] = [
                 'plan'        => $plan,
                 'day_number'  => $dayNumber,
                 'meals'       => $planMeals,
                 'individuals' => $planIndividuals,
+                'ind_meals'   => $planIndMeals,
             ];
         }
 
@@ -261,6 +243,7 @@ class ProductionPlanBuilder
             'orders'        => $activeOrders,
             'report'        => $report,
             'missing_plans' => $missingPlans,
+            'ind_registry'  => $ind->registry(),
             'day_number'    => $defaultPlan ? $defaultPlan->globalDayFor($targetDateObj) : 0,
             'debug'         => "🍳 Готуємо сьогодні на завтра: " . $targetDateObj->format('d.m.Y')
                 . ($debugLines ? ' · ' . implode(' · ', $debugLines) : ''),
@@ -296,6 +279,14 @@ class ProductionPlanBuilder
             foreach (($planData['individuals'] ?? []) as $clientData) {
                 foreach ($clientData['meals'] as $meal) {
                     foreach ($meal['components'] as $comp) {
+                        $this->collectIngredientsRecursive($comp, $grams);
+                    }
+                }
+            }
+
+            foreach (($planData['ind_meals'] ?? []) as $cards) {
+                foreach ($cards as $card) {
+                    foreach ($card['components'] as $comp) {
                         $this->collectIngredientsRecursive($comp, $grams);
                     }
                 }

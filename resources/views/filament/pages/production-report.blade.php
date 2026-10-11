@@ -203,6 +203,9 @@
         };
 
         foreach($reportData as $planData) {
+            foreach(($planData['ind_meals'] ?? []) as $indCards) {
+                foreach($indCards as $indCard) $collectSummary($indCard['components']);
+            }
             foreach(($planData['meals'] ?? []) as $mealGroup) {
                 foreach($mealGroup as $dishRow) {
                     $collectSummary($dishRow['standard_structure']);
@@ -263,6 +266,8 @@
         </div>
     @endif
 
+    @include('print.partials.ind-registry', ['registry' => $this->indRegistry, 'showDiet' => true])
+
     {{-- КНОПКИ МАСОВИХ ДІЙ --}}
     @if(!empty($reportData))
     <div class="no-print" style="margin-bottom: 12px; display: flex; justify-content: flex-end; gap: 8px;">
@@ -303,6 +308,7 @@
                         <div class="dish-block" style="border-bottom: 2px solid #f1f5f9; padding-bottom: 15px; margin-bottom: 15px;">
                             <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px;">
                                 <h3 style="font-size: 18px; font-weight: 800; margin: 0;">{{ $dishRow['dish_name'] }}</h3>
+                                @if(!empty($dishRow['ind_in_standard']))<span style="font-size:12px; font-weight:700; color:#6d28d9;">у котлі індивідуальні №{{ implode(', №', collect($dishRow['ind_in_standard'])->sort()->all()) }}</span>@endif
                                 <span style="font-size: 13px; font-weight: 700; color: #64748b; white-space: nowrap;">
                                     Всього: <span style="color: #0f172a;">{{ $totalPortions }} порц.</span>
                                     @if($customCount > 0)
@@ -335,6 +341,7 @@
                                         <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 6px; border-bottom: 1px solid rgba(0,0,0,0.05); padding-bottom: 4px;">
                                             <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                                                 <div style="font-weight: 800; font-size: 13px;">{{ $card['client_name'] }}</div>
+                                                @if(!empty($card['ind_note']))<div style="width:100%; font-size:10px; color:#9b1c1c; font-weight:700;">📝 {{ $card['ind_note'] }}</div>@endif
 
                                                 @if(!empty($card['bundles']))
                                                     @foreach($card['bundles'] as $bundleName)
@@ -421,9 +428,17 @@
                     @endforeach
                 </div>
             </div>
+                @if(!empty($planData['ind_meals'][$mealName]))
+                    @include('print.partials.ind-prod-meal', ['meal' => $mealName, 'cards' => $planData['ind_meals'][$mealName]])
+                @endif
                 @empty
                     <div style="text-align: center; padding: 14px; color: #64748b; font-size: 13px;">У цьому плані немає страв на цю дату</div>
                 @endforelse
+
+                {{-- Прийоми, яких немає в циклічному (додаток до прийому) --}}
+                @foreach(array_diff_key($planData['ind_meals'] ?? [], $planData['meals'] ?? []) as $indMeal => $indCards)
+                    @include('print.partials.ind-prod-meal', ['meal' => $indMeal, 'cards' => $indCards])
+                @endforeach
 
                 {{-- ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану --}}
                 @if(!empty($planData['individuals']))

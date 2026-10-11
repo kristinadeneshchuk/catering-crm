@@ -43,6 +43,7 @@ class ProductionReport extends Page implements HasForms
     public ?array $data = [];
     public array $report = [];
     public array $individualClients = [];
+    public array $indRegistry = []; // реєстр індивідуальних (№, доставка, ⛔, дієта)
     public array $missingPlans = [];
     public float $currentDayNumber = 0;
     protected $activeOrders = null;
@@ -623,6 +624,7 @@ public function form(Form $form): Form
         $this->report = $built['report'];
         $this->individualClients = [];
         $this->missingPlans = $built['missing_plans'];
+        $this->indRegistry = $built['ind_registry'] ?? [];
         $this->activeOrders = $built['orders'];
 
         if ($built['day_number'] !== null) {

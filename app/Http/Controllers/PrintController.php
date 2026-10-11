@@ -976,6 +976,9 @@ class PrintController extends Controller
             return "Немає активних замовлень на {$targetDate}.";
         }
 
+        // Індивідуальні: № клієнта й доставка — ті самі, що у фасувальному.
+        $ind = new \App\Services\Kitchen\IndividualPacking($orders, $targetDate);
+
         // === ГРУПУЄМО ЗАМОВЛЕННЯ ПО ПЛАНАХ МЕНЮ ===
         $ordersByPlan = $orders->groupBy(fn ($o) => $o->effectiveMenuPlan()?->id ?? 0);
 
@@ -1023,9 +1026,11 @@ class PrintController extends Controller
                 $standard = [];
                 $custom = [];
                 $commentClients = [];
+                $indInStandard = [];
 
                 foreach ($planOrders as $order) {
-                    if ($order->menu_type === 'individual') continue;
+                    // Індивідуальний з тією самою стравою на цей прийом готується разом із циклічним.
+                    $isInd = $order->menu_type === 'individual';
 
                     $orderPlan = $orderPlans[$order->id] ?? null;
                     if (!$orderPlan) continue;
@@ -1039,7 +1044,7 @@ class PrintController extends Controller
                     $baseW = (float)($dish->base_weight_g ?? 0);
                     $dishScale = ($baseW > 0) ? ((float)$plannedWeight / $baseW) : 0.0;
 
-                    if (!empty(trim($order->client->production_comment ?? ''))) {
+                    if (!$isInd && !empty(trim($order->client->production_comment ?? ''))) {
                         $commentClients[] = [
                             'client_name' => $order->client->name,
                             'order_id'    => $order->id,
@@ -1070,6 +1075,7 @@ class PrintController extends Controller
                         }
                     } else {
                         $standard[] = ['order' => $order, 'scale' => $dishScale];
+                        if ($isInd && ($c = $ind->client($order->id))) $indInStandard[] = $c['n'];
                     }
                 }
 
@@ -1079,8 +1085,8 @@ class PrintController extends Controller
                 $standardStructure = $this->calculateIngredientsStructureByScales($dish, $standardScales);
                 $standardTotals = $this->calculateStructureTotals($standardStructure);
 
-                $customCards = collect($custom)->map(function ($entry) use ($dish) {
-                    return $this->buildCustomCard($dish, $entry['order'], (float)$entry['scale']);
+                $customCards = collect($custom)->map(function ($entry) use ($dish, $ind) {
+                    return $ind->decorateCard($this->buildCustomCard($dish, $entry['order'], (float)$entry['scale']), $entry['order'], (int) $dish->id);
                 })->toArray();
 
                 $planMeals[$mealName][] = [
@@ -1094,21 +1100,18 @@ class PrintController extends Controller
                     'standard_total_brutto' => $standardTotals['brutto'],
                     'custom_cards' => $customCards,
                     'comment_clients' => $commentClients,
+                    'ind_in_standard' => $indInStandard,
                 ];
             }
 
-            // === ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану ===
-            $planIndividuals = [];
+            // === ІНДИВІДУАЛЬНІ — страви, яких немає в циклічному, під своїм прийомом ===
+            $cycleKeys = $sortedMenuItems->filter(fn ($mi) => $mi->dish)
+                ->mapWithKeys(fn ($mi) => [$mi->dish_id.':'.$mi->meal_type_id => true])->all();
+            $planIndMeals = [];
             foreach ($planOrders as $order) {
                 if ($order->menu_type !== 'individual') continue;
-
-                $orderPlan = $orderPlans[$order->id] ?? null;
-                if (!$orderPlan || empty($orderPlan['items'])) continue;
-
-                $oid = $order->id;
-                $meals = [];
-
-                foreach ($orderPlan['items'] as $item) {
+                foreach ($orderPlans[$order->id]['items'] ?? [] as $item) {
+                    if (isset($cycleKeys[$item['dish_id'].':'.$item['meal_type_id']])) continue;
                     $dish = \App\Models\Dish::with(
                         'dishIngredients.ingredient',
                         'dishIngredients.childDish.dishIngredients.ingredient'
@@ -1119,42 +1122,31 @@ class PrintController extends Controller
                     $baseW  = (float)($dish->base_weight_g ?? 0);
                     $scale  = $baseW > 0 ? $weight / $baseW : 0.0;
 
-                    $components = $this->getHierarchicalIngredients($dish, $scale, 1.0, null, false, null);
+                    // З виключеннями клієнта — як на екрані.
+                    $components = $this->getHierarchicalIngredients($dish, $scale, 1.0, null, true, $order);
                     $totals     = $this->calculateStructureTotals($components);
 
-                    $meals[] = [
-                        'meal'         => $item['meal'],
-                        'dish_name'    => $dish->name,
-                        'recipe'       => $dish->description,
+                    $planIndMeals[$item['meal']][] = $ind->card($order, $item, $dish) + [
                         'components'   => $components,
                         'total_netto'  => $totals['netto'],
                         'total_brutto' => $totals['brutto'],
-                        'cooking_note' => $item['cooking_note'] ?? null,
                     ];
                 }
-
-                // Лікувальна дієта — у друкованому звіті так само, як на екрані:
-                // кухар працює саме з роздруківкою.
-                $diet = $order->client->diet;
-
-                $planIndividuals[$oid] = [
-                    'client_label' => '#' . $order->client->id . ' ' . $order->client->name,
-                    'calories'     => (int)($order->calories ?? 0),
-                    'project'      => $order->projectData?->name ?? ucfirst($order->project ?? ''),
-                    'meals'        => $meals,
-                    'diet_label'   => $diet?->label(),
-                    'diet_kitchen' => $diet?->kitchen_note,
-                    'diet_cooking' => $diet?->cooking_methods,
-                ];
             }
+            foreach ($planIndMeals as &$cards) {
+                usort($cards, fn ($a, $b) => [$a['dish_name'], $a['n']] <=> [$b['dish_name'], $b['n']]);
+            }
+            unset($cards);
+            $planIndividuals = [];
 
-            if (empty($planMeals) && empty($planIndividuals)) continue;
+            if (empty($planMeals) && empty($planIndMeals)) continue;
 
             $report[$plan->id] = [
                 'plan'        => $plan,
                 'day_number'  => $dayNumber,
                 'meals'       => $planMeals,
                 'individuals' => $planIndividuals,
+                'ind_meals'   => $planIndMeals,
             ];
         }
 
@@ -1163,6 +1155,7 @@ class PrintController extends Controller
         }
 
         return view('print.production-report', [
+            'indRegistry'        => $ind->registry(),
             'report'             => $report,
             'missingPlans'       => $missingPlans,
             'date'               => Carbon::parse($inputDate)->format('d.m.Y'),

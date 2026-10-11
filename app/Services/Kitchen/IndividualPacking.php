@@ -27,8 +27,11 @@ class IndividualPacking
     /** @var array<int, array> за order_id: n, name, eve, time, kcal, order */
     private array $clients = [];
 
+    private string $date;
+
     public function __construct(Collection $orders, string $date)
     {
+        $this->date = $date;
         $withMenu = DB::table('order_day_dishes')->whereDate('date', $date)
             ->whereIn('order_id', $orders->where('menu_type', 'individual')->pluck('id'))
             ->distinct()->pluck('order_id')->flip();
@@ -51,6 +54,49 @@ class IndividualPacking
 
     }
 
+    /** № клієнта, коротке ім'я, 🌙/☀, час доставки — для підписів у готувальному. */
+    public function client(int $orderId): ?array
+    {
+        $c = $this->clients[$orderId] ?? null;
+
+        return $c ? ['n' => $c['n'], 'name' => $c['name'], 'eve' => $c['eve'], 'time' => mb_substr($c['time'], 0, 5), 'kcal' => $c['kcal']] : null;
+    }
+
+    /** «№3 Лазутіна Олена 🌙 18:00» */
+    public function label(int $orderId): ?string
+    {
+        $c = $this->client($orderId);
+
+        return $c ? '№'.$c['n'].' '.$c['name'].' · '.$c['kcal'].' '.($c['eve'] ? '🌙' : '☀').' '.$c['time'] : null;
+    }
+
+    /** Підпис індивідуального в картці заміни циклічної страви + примітка до страви. */
+    public function decorateCard(array $card, Order $order, int $dishId): array
+    {
+        if ($label = $this->label($order->id)) {
+            $card['client_name'] = $label;
+            $card['ind_note'] = $order->personalDishes()->whereDate('date', $this->date)->where('dish_id', $dishId)->value('cooking_note');
+        }
+
+        return $card;
+    }
+
+    /** Шапка картки індивідуальної страви в готувальному. */
+    public function card(Order $order, array $item, Dish $dish): array
+    {
+        $c = $this->client($order->id) ?? ['n' => 0, 'name' => $order->client?->name, 'eve' => false, 'time' => '', 'kcal' => (int) $order->calories];
+
+        return $c + [
+            'meal'         => $item['meal'],
+            'dish_name'    => $dish->name,
+            'is_own'       => $this->isOwn($dish),
+            'weight'       => (int) $item['weight'],
+            'recipe'       => $dish->description,
+            'cooking_note' => $item['cooking_note'] ?? null,
+            'diet_label'   => $order->client?->diet?->label(),
+        ];
+    }
+
     /** Реєстр угорі листа: №, клієнт, доставка, ⛔ не можна (алергії, виключені продукти й страви). */
     public function registry(): array
     {
@@ -71,7 +117,14 @@ class IndividualPacking
                 $dx ? 'Не давати: '.$dx : '',
             ]);
 
-            return ['n' => $c['n'], 'name' => $c['name'].' · '.$c['kcal'], 'eve' => $c['eve'], 'time' => $c['time'], 'stop' => implode('. ', $stop)];
+            $diet = $o->client?->diet;
+
+            return ['n' => $c['n'], 'name' => $c['name'].' · '.$c['kcal'], 'eve' => $c['eve'], 'time' => $c['time'], 'stop' => implode('. ', $stop),
+                'diet' => $diet?->label(),
+                'diet_rules' => trim(implode(' ', array_filter([
+                    $diet?->cooking_methods ? 'Спосіб приготування: '.$diet->cooking_methods.'.' : null,
+                    $diet?->kitchen_note ? 'Правила кухні: '.$diet->kitchen_note : null,
+                ])))];
         }, $this->clients));
     }
 

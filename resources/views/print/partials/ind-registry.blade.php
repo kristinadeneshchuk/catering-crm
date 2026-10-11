@@ -14,7 +14,10 @@
                 <td style="border:1px solid #c9c9c9; padding:3px 5px; font-weight:800; text-align:center; width:26px;">{{ $r['n'] }}</td>
                 <td style="border:1px solid #c9c9c9; padding:3px 5px; font-weight:700;">{{ $r['name'] }}</td>
                 <td style="border:1px solid #c9c9c9; padding:3px 5px; white-space:nowrap;">{{ $r['eve'] ? '🌙 ВЕЧІРНЯ' : '☀ ранкова' }} {{ $r['time'] }}</td>
-                <td style="border:1px solid #c9c9c9; padding:3px 5px; color:#9b1c1c; font-size:10px;">{{ $r['stop'] }}</td>
+                <td style="border:1px solid #c9c9c9; padding:3px 5px; color:#9b1c1c; font-size:10px;">
+                    @if(!empty($r['diet']))<b style="background:#dc2626; color:#fff; padding:0 5px; border-radius:3px;">⚕ {{ $r['diet'] }}</b> @endif{{ $r['stop'] }}
+                    @if(!empty($showDiet) && !empty($r['diet_rules']))<div style="color:#7f1d1d; font-size:10.5px; margin-top:2px;">{{ $r['diet_rules'] }}</div>@endif
+                </td>
             </tr>
         @endforeach
     </table>

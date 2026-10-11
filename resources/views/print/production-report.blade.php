@@ -181,6 +181,8 @@
                 </div>
             @endif
 
+            @include('print.partials.ind-registry', ['registry' => $indRegistry ?? [], 'showDiet' => true])
+
             {{-- ОБХІД ПО ПЛАНАХ МЕНЮ --}}
             @foreach($report as $planId => $planData)
                 @php
@@ -223,6 +225,7 @@
                         <span class="font-normal text-sm text-gray-500 ml-2">
                             (Всього: {{ $dish['standard_count'] }} шт
                             @if($customCount > 0), з них {{ $customCount }} інд.@endif)
+                            @if(!empty($dish['ind_in_standard']))<span style="color:#6d28d9; font-weight:700;"> · у котлі індивідуальні №{{ implode(', №', collect($dish['ind_in_standard'])->sort()->all()) }}</span>@endif
                         </span>
                     </div>
 
@@ -507,6 +510,7 @@
                                         <tr>
                                             <td style="border: 1px solid #d1d5db; padding: 4px 8px; vertical-align: top; white-space: nowrap; font-weight: bold; font-size: 10px; background: #f9fafb;">
                                                 {{ $card['client_name'] }}<br>
+                                                @if(!empty($card['ind_note']))<span style="font-size:9px; color:#9b1c1c; font-weight:700;">📝 {{ $card['ind_note'] }}</span><br>@endif
                                                 <span style="font-weight:normal;color:#6b7280;font-size:9px;">Зам. #{{ $card['order_id'] }}</span>
                                             </td>
                                             <td style="border: 1px solid #d1d5db; padding: 4px 8px; font-size: 10px;">
@@ -526,7 +530,13 @@
                     @endif
 
                 @endforeach {{-- $dishes --}}
+                @include('print.partials.ind-prod-meal', ['meal' => $mealName, 'cards' => $planData['ind_meals'][$mealName] ?? [], 'showRecipe' => true])
                 @endforeach {{-- $planData['meals'] --}}
+
+                {{-- Прийоми, яких немає в циклічному (додаток до прийому) --}}
+                @foreach(array_diff_key($planData['ind_meals'] ?? [], $planData['meals'] ?? []) as $indMeal => $indCards)
+                    @include('print.partials.ind-prod-meal', ['meal' => $indMeal, 'cards' => $indCards, 'showRecipe' => true])
+                @endforeach
 
                 {{-- ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану --}}
                 @if(!empty($planData['individuals']))
