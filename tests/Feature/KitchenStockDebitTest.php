@@ -111,6 +111,18 @@ class KitchenStockDebitTest extends TestCase
         $this->assertSame([], $this->debit->pendingFoodDates(Carbon::parse('2026-09-14')));
     }
 
+    public function test_stock_value_respects_gram_cards(): void
+    {
+        // Ікра в грамах, ціна в картці — за кг: 500 г × 658 ₴/кг = 329 ₴, а не 329 000.
+        $caviar = Ingredient::create(['name' => 'Ікра', 'unit' => 'г', 'price_per_kg' => 658, 'stock' => 500]);
+        Ingredient::clearAveragePriceCache();
+
+        $this->assertEqualsWithDelta(329, $caviar->stockValue(), 0.01);
+        $this->assertEqualsWithDelta(0.658, $caviar->pricePerStockUnit(), 0.0001);
+        // Картка в кг — без змін: 20 кг × 150 = 3 000.
+        $this->assertEqualsWithDelta(3000, $this->chicken->fresh()->stockValue(), 0.01);
+    }
+
     public function test_tap_water_is_not_debited(): void
     {
         config(['services.stock.untracked_ingredients' => (string) $this->milk->id]);

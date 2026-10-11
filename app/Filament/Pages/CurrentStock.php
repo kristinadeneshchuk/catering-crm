@@ -55,11 +55,13 @@ class CurrentStock extends Page implements HasTable
             'ok'      => Ingredient::where('stock', '>', 0)->count(),
             'deficit' => Ingredient::where('stock', '<', 0)->count(),
             'zero'    => Ingredient::where('stock', '=', 0)->count(),
-            'value'   => Ingredient::get()->sum(function ($i) {
-                // stock і average_price обидва в базовій одиниці інгредієнта —
-                // вартість = залишок × ціна за одиницю, без конвертації.
-                return max(0, (float)$i->stock * (float)$i->average_price);
-            }),
+            // Ціна — як у собівартості (costPerGram): для карток у «г» середня ціна
+            // буває за кг, і «залишок × average_price» давав ікру на 329 000 ₴.
+            'value'   => (function () {
+                Ingredient::preloadAveragePrices();
+
+                return Ingredient::get()->sum(fn ($i) => max(0, $i->stockValue()));
+            })(),
         ];
     }
 
@@ -68,6 +70,9 @@ class CurrentStock extends Page implements HasTable
         $query = $this->activeTab === 'packaging'
             ? Packaging::query()
             : Ingredient::query();
+
+        // Ціни для «Ціна / од.» і «Вартість» — одним запитом, а не по рядку.
+        if ($this->activeTab !== 'packaging') Ingredient::preloadAveragePrices();
 
         // Фільтр по статусу залишку
         $query->when($this->stockFilter === 'ok',      fn ($q) => $q->where('stock', '>', 0))
@@ -109,7 +114,10 @@ class CurrentStock extends Page implements HasTable
                 ->label('Ціна / од.')
                 ->alignEnd()
                 ->visible($this->activeTab === 'ingredients')
-                ->formatStateUsing(fn ($state) => $state ? number_format((float)$state, 2, '.', ' ') . ' ₴' : '—')
+                ->getStateUsing(fn ($record) => $record->pricePerStockUnit())
+                ->formatStateUsing(fn ($state, $record) => $state
+                    ? number_format((float)$state, in_array($record->unit, ['г', 'мл'], true) ? 4 : 2, '.', ' ') . ' ₴/' . ($record->unit ?: 'кг')
+                    : '—')
                 ->color('gray')
                 ->toggleable(),
 
@@ -120,8 +128,7 @@ class CurrentStock extends Page implements HasTable
                     if ($this->activeTab === 'packaging') {
                         $val = (float)$record->stock * (float)$record->price;
                     } else {
-                        // stock і average_price у базовій одиниці — без ×0.001.
-                        $val = (float)$record->stock * (float)$record->average_price;
+                        $val = $record->stockValue();
                     }
                     return $val;
                 })

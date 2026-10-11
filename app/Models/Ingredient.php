@@ -116,6 +116,28 @@ class Ingredient extends Model
      * як за грам або як за кілограм; інакше картку. Те саме правило,
      * що KitchenStockDebit::pickPrice.
      */
+    /** Скільки грамів (мл) у залишку: кг/л ×1000, г/мл як є; «шт» з вагою склад веде в кг. */
+    public function stockGrams(): float
+    {
+        $unit = StockDocumentItem::canonUnit((string) $this->unit);
+
+        return in_array($unit, ['г', 'мл'], true) ? (float) $this->stock : (float) $this->stock * 1000;
+    }
+
+    /** Ціна за одиницю складу (за кг/л, а для «г»/«мл» — за грам), як її рахує собівартість. */
+    public function pricePerStockUnit(): float
+    {
+        $unit = StockDocumentItem::canonUnit((string) $this->unit);
+
+        return $this->costPerGram() * (in_array($unit, ['г', 'мл'], true) ? 1 : 1000);
+    }
+
+    /** Вартість залишку — та сама ціна, що в собівартості, з урахуванням одиниці. */
+    public function stockValue(): float
+    {
+        return $this->stockGrams() * $this->costPerGram();
+    }
+
     public function costPerGram(): float
     {
         $card = (float) $this->price_per_kg / 1000;
