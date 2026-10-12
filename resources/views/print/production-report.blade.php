@@ -45,6 +45,9 @@
         .text-right { text-align: right !important; }
         .font-bold { font-weight: bold !important; }
 
+        /* Рецепти страв і НФ поки сховано (власник 12.10) — щоб повернути, прибрати цей рядок */
+        .recipe-box { display: none !important; }
+
         /* РЕЦЕПТ ПРИГОТУВАННЯ */
         .recipe-box {
             margin: 0 0 18px 0;
