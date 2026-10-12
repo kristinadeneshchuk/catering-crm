@@ -246,6 +246,31 @@ class InboxApiTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_it_finds_a_client_by_telegram_username_without_case_or_at(): void
+    {
+        $id = $this->makeClient(['name' => 'Протасевич', 'phone' => '0501112233', 'telegram_username' => 'XamaShaid']);
+
+        $this->getJson('/api/inbox/v1/clients/search?telegram_username=@xamashaid', $this->authHeaders())
+            ->assertOk()->assertJsonPath('found', true)->assertJsonPath('client.id', $id);
+
+        // Два клієнти з тим самим ніком — нікого не привʼязуємо.
+        $this->makeClient(['name' => 'Дубль', 'phone' => '0501112234', 'telegram_username' => '@XamaShaid']);
+        $this->getJson('/api/inbox/v1/clients/search?telegram_username=XamaShaid', $this->authHeaders())
+            ->assertOk()->assertJsonPath('found', false);
+    }
+
+    public function test_search_by_name_returns_only_candidates(): void
+    {
+        $this->makeClient(['name' => 'Олена Протасевич', 'phone' => '0501112233']);
+        $this->makeClient(['name' => 'Олена Коваль', 'phone' => '0501112234']);
+
+        $this->getJson('/api/inbox/v1/clients/search?name='.urlencode('  протасевич   олена '), $this->authHeaders())
+            ->assertOk()
+            ->assertJsonPath('found', false)
+            ->assertJsonCount(1, 'candidates')
+            ->assertJsonPath('candidates.0.full_name', 'Олена Протасевич');
+    }
+
     public function test_it_finds_a_client_by_telegram_id(): void
     {
         $clientId = $this->makeClient();

@@ -27,13 +27,15 @@ class ClientController extends Controller
     public function search(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'phone'            => ['nullable', 'string'],
-            'telegram_user_id' => ['nullable', 'string'],
+            'phone'             => ['nullable', 'string'],
+            'telegram_user_id'  => ['nullable', 'string'],
+            'telegram_username' => ['nullable', 'string', 'max:64'],
+            'name'              => ['nullable', 'string', 'max:255'],
         ]);
 
-        if (empty($data['phone']) && empty($data['telegram_user_id'])) {
+        if (empty($data['phone']) && empty($data['telegram_user_id']) && empty($data['telegram_username']) && empty($data['name'])) {
             throw ValidationException::withMessages([
-                'phone' => 'Потрібен phone або telegram_user_id.',
+                'phone' => 'Потрібен phone, telegram_user_id, telegram_username або name.',
             ]);
         }
 
@@ -47,7 +49,61 @@ class ClientController extends Controller
             $client = $this->clientByPhone($data['phone']);
         }
 
+        // Нік Telegram унікальний — один збіг можна привʼязувати автоматично.
+        if (! $client && ! empty($data['telegram_username'])) {
+            $client = $this->clientByTelegramUsername($data['telegram_username']);
+        }
+
+        // За іменем нічого не привʼязуємо — лише підказки менеджеру.
+        if (! $client && ! empty($data['name'])) {
+            return response()->json(['found' => false, 'client' => null, 'candidates' => $this->candidatesByName($data['name'])]);
+        }
+
         return $this->clientResponse($client);
+    }
+
+    /** Точний збіг ніка (без регістру й початкового @); кілька збігів — нікого. */
+    protected function clientByTelegramUsername(string $username): ?Client
+    {
+        $nick = mb_strtolower(ltrim(trim($username), '@'));
+        if ($nick === '') {
+            return null;
+        }
+
+        $matches = Client::query()
+            ->whereIn(\Illuminate\Support\Facades\DB::raw('LOWER(TRIM(telegram_username))'), [$nick, '@'.$nick])
+            ->limit(2)->get();
+
+        return $matches->count() === 1 ? $matches->first() : null;
+    }
+
+    /** До 5 клієнтів, у чиєму імені є всі слова запиту. */
+    protected function candidatesByName(string $name): array
+    {
+        $words = array_values(array_filter(preg_split('/\s+/u', mb_strtolower(trim($name)))));
+        if (! $words) {
+            return [];
+        }
+
+        // SQL відбирає за першим словом (будь-який регістр), PHP перевіряє всі слова —
+        // однаково на MySQL і SQLite (LOWER там не знає кирилиці).
+        $first = $words[0];
+        $variants = array_unique([$first, mb_convert_case($first, MB_CASE_TITLE), mb_strtoupper($first)]);
+        $like = fn ($w) => '%'.addcslashes($w, '%_\\').'%';
+
+        return Client::query()
+            ->where(function ($q) use ($variants, $like) {
+                foreach ($variants as $v) $q->orWhere('name', 'like', $like($v));
+            })
+            ->orderByDesc('id')->limit(200)->get(['id', 'name', 'phone', 'telegram_username'])
+            ->filter(function (Client $c) use ($words) {
+                $n = mb_strtolower(preg_replace('/\s+/u', ' ', (string) $c->name));
+                foreach ($words as $w) if (! str_contains($n, $w)) return false;
+                return true;
+            })
+            ->take(5)
+            ->map(fn (Client $c) => ['id' => $c->id, 'full_name' => $c->name, 'phone' => $c->phone, 'telegram_username' => $c->telegram_username])
+            ->values()->all();
     }
 
     /**
