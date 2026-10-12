@@ -1006,12 +1006,6 @@ class PrintController extends Controller
             $planMeals = [];
             $separate = []; // «order_id:dish_id» — циклова страва індивідуального із замінами
             $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType?->sort_order ?? 99);
-            // Страви довідника, яких немає в сьогоднішньому циклі, але їх їдять індивідуальні, —
-            // загальною партією, під своїм прийомом після циклічних.
-            $sortedMenuItems = $sortedMenuItems->values()->map(fn ($mi) => [$mi, 0])
-                ->concat($ind->catalogItems($planOrders, $orderPlans, $menu->menuItems)->map(fn ($mi) => [$mi, 1]))
-                ->sortBy(fn ($x) => [$x[0]->mealType?->sort_order ?? 99, $x[1]])
-                ->map(fn ($x) => $x[0])->values();
 
             foreach ($sortedMenuItems as $item) {
                 if (!$item->dish) continue;
@@ -1027,6 +1021,7 @@ class PrintController extends Controller
                 foreach ($planOrders as $order) {
                     // Індивідуальний з тією самою стравою на цей прийом готується разом із циклічним.
                     $isInd = $order->menu_type === 'individual';
+                    if ($isInd) continue; // індивідуальні готуються окремо — на аркуші клієнта, не в загальному котлі
 
                     $orderPlan = $orderPlans[$order->id] ?? null;
                     if (!$orderPlan) continue;

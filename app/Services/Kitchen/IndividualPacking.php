@@ -131,8 +131,8 @@ class IndividualPacking
     }
 
     /**
-     * Аркуші готування: на кожного клієнта його власні страви («Інд · …») і циклові
-     * страви з його замінами ($separate), решта — «з загальної партії». $components(Dish, float $scale, Order) → [components, totals].
+     * Аркуші готування: на кожного клієнта всі його страви — власні («Інд · …»),
+     * циклові й з довідника (у загальний котел індивідуальних не додаємо). $components(Dish, float $scale, Order) → [components, totals].
      */
     public function cookPages(Collection $planOrders, array $plans, array $separate, callable $components): array
     {
@@ -145,12 +145,9 @@ class IndividualPacking
             foreach ($plans[$o->id]['items'] as $it) {
                 $dish = Dish::with(['dishIngredients.ingredient', 'dishIngredients.childDish.dishIngredients.ingredient'])->find($it['dish_id']);
                 if (!$dish) continue;
-                // Циклова страва із замінами клієнта готується окремо — теж на аркуші.
-                $withSwaps = isset($separate[$o->id.':'.$dish->id]);
-                if (!$this->isOwn($dish) && !$withSwaps) {
-                    $batch[] = $it['meal'].' — '.$dish->name;
-                    continue;
-                }
+                // Індивідуальний готується повністю на своєму аркуші — і власні страви,
+                // і циклові/з довідника (у загальний котел їх не додаємо).
+                $withSwaps = !$this->isOwn($dish);
                 $baseW = (float) ($dish->base_weight_g ?? 0);
                 [$comps, $totals] = $components($dish, $baseW > 0 ? $it['weight'] / $baseW : 0.0, $o);
                 [$tech, $pack] = $this->technology((string) $dish->description);
