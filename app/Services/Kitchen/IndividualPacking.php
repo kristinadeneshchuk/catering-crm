@@ -73,9 +73,6 @@ class IndividualPacking
     /** Картка заміни циклічної страви: «не їсть» клієнта; для індивідуального — № і примітка. */
     public function decorateCard(array $card, Order $order, int $dishId): array
     {
-        // Повний короткий перелік «не їсть» — щоб, замінюючи, кухня не поклала заборонене.
-        $card['no_eat'] = \App\Support\NoEat::summary($order);
-
         if ($label = $this->label($order->id)) {
             $card['client_name'] = $label;
             $card['ind_note'] = $order->personalDishes()->whereDate('date', $this->date)->where('dish_id', $dishId)->value('cooking_note');
