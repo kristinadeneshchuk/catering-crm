@@ -173,23 +173,26 @@ class OrderResource extends Resource
                             ->default('new'),
                     ]),
 
-                // === Корпоративні обіди: N комплектів, частина дня, окремий курʼєр ===
-                Section::make('Корпоративні обіди')
-                    ->description('Для звичайного раціону нічого не міняйте. Обіди для компанії: кілька однакових комплектів, страви щодня обираємо в «Персональних меню», порції як у повному раціоні цього калоражу.')
+                // === Корпоративні обіди: один чекбокс; поля — лише коли він увімкнений ===
+                Section::make()
                     ->columns(3)
-                    ->collapsed(fn ($record) => ! ($record?->partial_day || ($record?->kit_count ?? 1) > 1 || $record?->separate_courier))
                     ->schema([
+                        Toggle::make('partial_day')
+                            ->label('Корпоративні обіди')
+                            ->helperText('Лише для обідів компанії: кілька однакових комплектів, страви щодня обираємо в «Персональних меню», порції як у повному раціоні цього калоражу. Для звичайного раціону — вимкнено.')
+                            ->live()
+                            ->columnSpanFull(),
                         TextInput::make('kit_count')
                             ->label('Кількість комплектів')
                             ->helperText('Скільки однакових обідів щодня (кухня й фасування множать). Доставка — одна точка.')
                             ->numeric()->integer()->minValue(1)->maxValue(500)
-                            ->default(1)->required(),
-                        Toggle::make('partial_day')
-                            ->label('Частина дня (обіди)')
-                            ->helperText('Страви на день — у «Персональних меню»; порція = частка прийому в повному дні калоражу (обід 30% від 1800).'),
+                            ->default(1)
+                            ->required(fn (Get $get) => (bool) $get('partial_day'))
+                            ->visible(fn (Get $get) => (bool) $get('partial_day')),
                         Toggle::make('separate_courier')
                             ->label('Окремий курʼєр')
-                            ->helperText('Не йде в маршрут ANT і логістичний експорт — везе окремий курʼєр.'),
+                            ->helperText('Не йде в маршрут ANT і логістичний експорт — везе окремий курʼєр.')
+                            ->visible(fn (Get $get) => (bool) $get('partial_day')),
                     ]),
 
                 // === СЕКЦІЯ 1.5: Індивідуальні цілі КБЖУ (опційно) ===

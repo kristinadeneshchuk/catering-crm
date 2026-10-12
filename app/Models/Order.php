@@ -209,6 +209,13 @@ class Order extends Model
         });
 
         static::saving(function ($order) {
+            // Комплекти й окремий курʼєр — лише для корпоративних обідів: звичайне
+            // замовлення завжди 1 комплект і в маршруті.
+            if (! $order->partial_day && array_key_exists('kit_count', $order->getAttributes())) {
+                $order->kit_count = 1;
+                $order->separate_courier = false;
+            }
+
             if ($order->scale_factor === null) {
                 $order->scale_factor = 1.0;
             }
