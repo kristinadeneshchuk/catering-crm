@@ -25,12 +25,13 @@ class InvoiceService
      * натиснувши кнопку двічі, не наплодив клієнту різних номерів на одне й те
      * саме замовлення.
      */
-    public function forOrder(Order $order, bool $fresh = false): Invoice
+    public function forOrder(Order $order, bool $fresh = false, ?\App\Models\Account $account = null): Invoice
     {
         if (! $fresh) {
             $existing = Invoice::where('order_id', $order->id)->latest('id')->first();
 
-            if ($existing) {
+            // Наявний віддаємо, лише якщо отримувача не міняють.
+            if ($existing && (! $account || ($existing->requisites['iban'] ?? null) === $account->invoiceRequisites()['iban'])) {
                 return $existing;
             }
         }
@@ -43,11 +44,14 @@ class InvoiceService
             ]);
         }
 
-        $requisites = $this->requisites($project);
+        // Отримувача можна обрати (ФОП/рахунок); інакше — реквізити бренду.
+        $requisites = $account ? $account->invoiceRequisites() : $this->requisites($project);
 
         if (empty($requisites['iban']) || empty($requisites['recipient_name'])) {
             throw ValidationException::withMessages([
-                'requisites' => "У бренду «{$project->name}» не заповнені реквізити (отримувач та IBAN). Довідники → Проєкти.",
+                'requisites' => $account
+                    ? "У рахунку «{$account->name}» не заповнені реквізити (отримувач та IBAN). Фінанси → Рахунки."
+                    : "У бренду «{$project->name}» не заповнені реквізити (отримувач та IBAN). Довідники → Проєкти.",
             ]);
         }
 

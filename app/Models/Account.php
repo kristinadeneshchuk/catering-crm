@@ -11,6 +11,7 @@ class Account extends Model
 
     protected $fillable = [
         'name',
+        'recipient_name', 'iban', 'tax_id', 'bank_name', 'mfo',
         'type',
         'balance',
         'is_default',
@@ -72,5 +73,25 @@ class Account extends Model
         if (!$this->hasMonoToken()) return null;
 
         return '••••' . mb_substr((string) $this->mono_token, -4);
+    }
+
+    /** Реквізити для рахунку клієнту; IBAN — свій або з монобанку. */
+    public function invoiceRequisites(): array
+    {
+        return [
+            'recipient_name' => $this->recipient_name,
+            'iban'           => $this->iban ?: $this->mono_iban,
+            'tax_id'         => $this->tax_id,
+            'bank_name'      => $this->bank_name,
+            'mfo'            => $this->mfo,
+        ];
+    }
+
+    /** Чи можна виставляти на цей рахунок рахунки клієнтам. */
+    public function canInvoice(): bool
+    {
+        $r = $this->invoiceRequisites();
+
+        return ! empty($r['recipient_name']) && ! empty($r['iban']);
     }
 }

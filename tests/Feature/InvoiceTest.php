@@ -194,6 +194,32 @@ class InvoiceTest extends TestCase
             ->assertJsonStructure(['invoice' => ['pdf_url', 'purpose', 'text']]);
     }
 
+    public function test_the_manager_can_choose_whose_requisites_go_on_the_invoice(): void
+    {
+        $stroya = DB::table('accounts')->insertGetId(['name' => 'ФОП Катречко Катерина', 'type' => 'card',
+            'recipient_name' => 'ФОП Строя Катерина', 'tax_id' => '3797110084', 'mono_iban' => 'UA623220010000026000340091161',
+            'bank_name' => 'УНІВЕРСАЛ БАНК', 'mfo' => '322001']);
+        DB::table('accounts')->insert(['name' => 'Готівка', 'type' => 'cash']); // без реквізитів — не в списку
+        $h = ['Authorization' => 'Bearer '.config('services.inbox.token')];
+
+        $this->getJson('/api/inbox/v1/invoice-recipients', $h)
+            ->assertOk()->assertJsonCount(1, 'recipients')
+            ->assertJsonPath('recipients.0.account_id', $stroya)
+            ->assertJsonPath('recipients.0.iban', 'UA623220010000026000340091161');
+
+        $order = $this->makeOrder();
+        // Спершу за реквізитами бренду, потім — обрали ФОП Строї: новий рахунок саме на неї.
+        $this->postJson("/api/inbox/v1/orders/{$order->id}/invoice", [], $h)->assertJsonPath('invoice.iban', 'UA703220010000026005340086870');
+        $this->postJson("/api/inbox/v1/orders/{$order->id}/invoice", ['account_id' => $stroya], $h)
+            ->assertStatus(201)
+            ->assertJsonPath('invoice.recipient_name', 'ФОП Строя Катерина')
+            ->assertJsonPath('invoice.iban', 'UA623220010000026000340091161');
+        // Повторно на того самого — той самий рахунок, без нового номера.
+        $this->postJson("/api/inbox/v1/orders/{$order->id}/invoice", ['account_id' => $stroya], $h)->assertJsonPath('invoice.number', "2/{$order->id}");
+
+        $this->postJson("/api/inbox/v1/orders/{$order->id}/invoice", ['account_id' => 99999], $h)->assertStatus(422);
+    }
+
     public function test_the_api_needs_a_token(): void
     {
         $order = $this->makeOrder();

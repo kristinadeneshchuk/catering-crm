@@ -236,6 +236,12 @@ trait BuildsInboxTestSchema
         Schema::create('accounts', function (Blueprint $t) {
             $t->id();
             $t->string('name')->nullable();
+            $t->string('recipient_name')->nullable();
+            $t->string('iban')->nullable();
+            $t->string('tax_id')->nullable();
+            $t->string('bank_name')->nullable();
+            $t->string('mfo')->nullable();
+            $t->string('mono_iban')->nullable();
             $t->string('type')->nullable();
             $t->boolean('is_default')->default(false);
             $t->decimal('balance', 12, 2)->default(0);

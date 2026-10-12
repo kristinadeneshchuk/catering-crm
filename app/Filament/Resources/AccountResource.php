@@ -39,6 +39,18 @@ class AccountResource extends Resource
                         ->placeholder('Напр. Розрахунковий рахунок')
                         ->columnSpanFull(),
 
+                    \Filament\Forms\Components\Fieldset::make('Реквізити для рахунків клієнтам')
+                        ->schema([
+                            TextInput::make('recipient_name')->label('Отримувач (ФОП)')->placeholder('ФОП Прізвище Імʼя'),
+                            TextInput::make('tax_id')->label('ІПН / ЄДРПОУ'),
+                            TextInput::make('iban')->label('IBAN')->placeholder(fn ($record) => $record?->mono_iban ?: 'UA…')
+                                ->helperText('Порожньо — візьметься IBAN з монобанку, якщо підключено.'),
+                            TextInput::make('bank_name')->label('Банк'),
+                            TextInput::make('mfo')->label('МФО'),
+                        ])
+                        ->columns(2)
+                        ->columnSpanFull(),
+
                     Select::make('type')
                         ->label('Тип рахунку')
                         ->options([

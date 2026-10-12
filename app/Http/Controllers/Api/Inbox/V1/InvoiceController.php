@@ -17,9 +17,26 @@ use Illuminate\Http\JsonResponse;
  */
 class InvoiceController extends Controller
 {
-    public function store(Order $order, InvoiceService $invoices, PaymentClaimService $claims): JsonResponse
+    /** На кого можна виставити рахунок: рахунки (ФОП) із заповненими реквізитами. */
+    public function recipients(): JsonResponse
     {
-        $invoice = $invoices->forOrder($order);
+        $list = \App\Models\Account::withBankOnly()->orderBy('id')->get()
+            ->filter(fn ($a) => $a->canInvoice())
+            ->map(fn ($a) => ['account_id' => $a->id, 'name' => $a->name] + $a->invoiceRequisites())
+            ->values();
+
+        return response()->json(['recipients' => $list]);
+    }
+
+    public function store(\Illuminate\Http\Request $request, Order $order, InvoiceService $invoices, PaymentClaimService $claims): JsonResponse
+    {
+        $data = $request->validate(['account_id' => ['nullable', 'integer']]);
+        $account = ! empty($data['account_id']) ? \App\Models\Account::withBankOnly()->find($data['account_id']) : null;
+        if (! empty($data['account_id']) && ! $account) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['account_id' => 'Такого рахунку немає.']);
+        }
+
+        $invoice = $invoices->forOrder($order, false, $account);
         $r = $invoice->requisites ?? [];
 
         // Рахунок агент виставив — отже, чекаємо переказ. Менеджер побачить це в

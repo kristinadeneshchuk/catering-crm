@@ -38,6 +38,7 @@ Route::prefix('inbox/v1')
 
         Route::post('orders', [OrderController::class, 'store']);
         Route::post('orders/{order}/invoice', [InvoiceController::class, 'store']);
+        Route::get('invoice-recipients', [InvoiceController::class, 'recipients']);
 
         // Заяви про оплату: агент лише фіксує слова клієнта. Ставити оплату він не
         // може — це робить менеджер у CRM.
