@@ -35,6 +35,7 @@ use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Carbon\Carbon;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Repeater;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -170,6 +171,25 @@ class OrderResource extends Resource
 
                         Hidden::make('status')
                             ->default('new'),
+                    ]),
+
+                // === Корпоративні обіди: N комплектів, частина дня, окремий курʼєр ===
+                Section::make('Корпоративні обіди')
+                    ->description('Для звичайного раціону нічого не міняйте. Обіди для компанії: кілька однакових комплектів, страви щодня обираємо в «Персональних меню», порції як у повному раціоні цього калоражу.')
+                    ->columns(3)
+                    ->collapsed(fn ($record) => ! ($record?->partial_day || ($record?->kit_count ?? 1) > 1 || $record?->separate_courier))
+                    ->schema([
+                        TextInput::make('kit_count')
+                            ->label('Кількість комплектів')
+                            ->helperText('Скільки однакових обідів щодня (кухня й фасування множать). Доставка — одна точка.')
+                            ->numeric()->integer()->minValue(1)->maxValue(500)
+                            ->default(1)->required(),
+                        Toggle::make('partial_day')
+                            ->label('Частина дня (обіди)')
+                            ->helperText('Страви на день — у «Персональних меню»; порція = частка прийому в повному дні калоражу (обід 30% від 1800).'),
+                        Toggle::make('separate_courier')
+                            ->label('Окремий курʼєр')
+                            ->helperText('Не йде в маршрут ANT і логістичний експорт — везе окремий курʼєр.'),
                     ]),
 
                 // === СЕКЦІЯ 1.5: Індивідуальні цілі КБЖУ (опційно) ===

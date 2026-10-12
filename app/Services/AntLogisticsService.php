@@ -697,7 +697,9 @@ class AntLogisticsService
         $query = \App\Models\OrderDay::query()
             ->with(['order.client.addresses', 'order.projectData'])
             ->whereBetween('date', [$foodFrom, $foodTo])
-            ->whereHas('order', fn ($q) => $q->whereIn('status', ['active', 'new']));
+            ->whereHas('order', fn ($q) => $q->whereIn('status', ['active', 'new'])
+                // Окремий курʼєр (корпоративні обіди) — поза маршрутом ANT.
+                ->when(\App\Support\SchemaReady::hasColumn('orders', 'separate_courier'), fn ($w) => $w->where('separate_courier', false)));
 
         // Фільтр shift і точна відповідність даті — обидва у PHP, бо (1) shift залежить
         // від override delivery_time на конкретному orderDay, який не завжди відповідає

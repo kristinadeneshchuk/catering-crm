@@ -33,6 +33,18 @@ final class SchemaReady
         }
     }
 
+    /** Чи вже є колонка (нова міграція могла ще не пройти). */
+    public static function hasColumn(string $table, string $column): bool
+    {
+        return self::$cache[$table.'.'.$column] ??= (function () use ($table, $column) {
+            try {
+                return Schema::hasColumn($table, $column);
+            } catch (\Throwable) {
+                return false;
+            }
+        })();
+    }
+
     /** Для тестів: схема між ними створюється заново. */
     public static function flush(): void
     {

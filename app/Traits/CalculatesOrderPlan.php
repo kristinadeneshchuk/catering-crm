@@ -14,15 +14,21 @@ trait CalculatesOrderPlan
         $empty = ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
         $weightMultiplier = DailyWeightMultiplier::for($date);
 
-        // Індивідуальний клієнт — беремо персональне меню на дату
-        if ($date && $order->menu_type === 'individual') {
+        // Індивідуальний клієнт і обіди «частина дня» — беремо персональне меню на дату
+        if ($date && $order->usesPersonalMenu()) {
             $personalDishes = $order->personalDishes()
                 ->where('date', $date)
                 ->with(['dish', 'mealType'])
                 ->get();
 
             if ($personalDishes->isNotEmpty()) {
-                return $this->buildPlanFromPersonal($personalDishes, $order, $weightMultiplier);
+                return $this->buildPlanFromPersonal($personalDishes, $order, $weightMultiplier, $menu);
+            }
+
+            // Обіди без вибраних на день страв не готуємо: циклічне меню розтягнуло б
+            // калораж повного дня на прийоми клієнта.
+            if ($order->partial_day) {
+                return $empty;
             }
         }
 
@@ -396,7 +402,7 @@ trait CalculatesOrderPlan
     }
 
     // Будуємо план з персонального меню (для індивідуальних клієнтів)
-    private function buildPlanFromPersonal(Collection $personalDishes, Order $order, float $weightMultiplier = 1.0): array
+    private function buildPlanFromPersonal(Collection $personalDishes, Order $order, float $weightMultiplier = 1.0, ?DailyMenu $menu = null): array
     {
         $targetKcal = (float)($order->calories ?? 0);
         $count      = $personalDishes->count();
@@ -413,6 +419,14 @@ trait CalculatesOrderPlan
             // Якщо вага задана вручну — використовуємо її, інакше розраховуємо по калоріям
             if ($pd->weight_grams) {
                 $weight = (int)round((int)$pd->weight_grams * $weightMultiplier);
+            } elseif ($order->partial_day) {
+                // Обіди «частина дня»: порція як у повному раціоні цього калоражу —
+                // частка прийому в дні (обід 30% від 1800), а не 1800 на дві страви.
+                $sameMeal = $personalDishes->where('meal_type_id', $pd->meal_type_id)->count();
+                $kcalForMeal = $targetKcal * $this->fullDayMealShare((int) $targetKcal, $mealType, $menu) / max(1, $sameMeal);
+                $weight = ($kcalPer100 > 0)
+                    ? (int)round(($kcalForMeal / $kcalPer100) * 100.0 * $weightMultiplier)
+                    : 0;
             } else {
                 $kcalForMeal = $count > 0 ? $targetKcal / $count : 0;
                 $weight      = ($kcalPer100 > 0)
@@ -446,6 +460,31 @@ trait CalculatesOrderPlan
         }
 
         return ['items' => $itemsOut, 'totals' => $totals];
+    }
+
+    /**
+     * Частка прийому їжі в повному дні цього калоражу — так само, як для звичайного
+     * клієнта з усіма прийомами: % пункту меню дня (custom_energy_percent або % прийому)
+     * серед прийомів, що входять у раціон такого калоражу (MealPlan), нормовано до 100%.
+     */
+    private function fullDayMealShare(int $targetKcal, $mealType, ?DailyMenu $menu = null): float
+    {
+        if (!$mealType) return 0.0;
+        $allowed = \App\Models\MealPlan::getAllowedSortOrders($targetKcal);
+
+        $pct = [];
+        foreach (($menu?->menuItems ?? collect()) as $mi) {
+            $so = $mi->mealType?->sort_order;
+            if (!in_array($so, $allowed) || isset($pct[$mi->meal_type_id])) continue;
+            $pct[$mi->meal_type_id] = $mi->custom_energy_percent !== null ? (float) $mi->custom_energy_percent : (float) ($mi->mealType?->energy_percent ?? 0);
+        }
+        if (!$pct) {
+            foreach (\App\Models\MealType::whereIn('sort_order', $allowed)->get() as $mt) $pct[$mt->id] = (float) $mt->energy_percent;
+        }
+        $own = $pct[$mealType->id] ?? (float) ($mealType->energy_percent ?? 0);
+        $total = array_sum($pct);
+
+        return $total > 0 ? $own / $total : 0.0;
     }
 
     private function dishKcalPer100g($dish): float

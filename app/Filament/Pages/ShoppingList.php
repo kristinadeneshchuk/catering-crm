@@ -146,7 +146,7 @@ class ShoppingList extends Page implements HasForms
 
                     $this->collectBrutto(
                         $activeDish,
-                        $dishScale,
+                        $dishScale * $order->kits(), // корпоративні обіди: N комплектів
                         1.0,
                         $order,
                         (int)$dish->id,

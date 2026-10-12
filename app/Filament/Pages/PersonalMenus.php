@@ -189,6 +189,14 @@ class PersonalMenus extends Page
             ->send();
     }
 
+    /** Обіди «частина дня»: обрати / прибрати страву меню дня. */
+    public function togglePick(int $orderId, int $mealTypeId, int $dishId): void
+    {
+        $exists = OrderDayDish::where('order_id', $orderId)->where('date', $this->date)
+            ->where('meal_type_id', $mealTypeId)->where('dish_id', $dishId)->exists();
+        $this->setDish($orderId, $mealTypeId, $exists ? null : $dishId);
+    }
+
     public function setDish(int $orderId, int $mealTypeId, ?int $dishId): void
     {
         if (!$dishId) {
@@ -215,7 +223,9 @@ class PersonalMenus extends Page
         \App\Models\Ingredient::preloadAveragePrices();
 
         // Як кухня: на паузі й завершені на сьогодні й далі не годуємо.
-        $orders = Order::where('menu_type', 'individual')
+        $orders = Order::where(fn ($q) => $q->where('menu_type', 'individual')
+                // Корпоративні обіди «частина дня» — страви теж обираємо тут.
+                ->when(\App\Support\SchemaReady::hasColumn('orders', 'partial_day'), fn ($w) => $w->orWhere('partial_day', true)))
             ->feedingOn($this->date)
             ->with([
                 'client.mealTypes',
@@ -239,7 +249,13 @@ class PersonalMenus extends Page
             $project = $order->projectData;
 
             // Порція й КБЖВ кожної страви — так само, як рахує виробництво.
-            $plan  = $this->buildPlanFromPersonal($order->personalDishes, $order, $multiplier);
+            // Для обідів «частина дня» порція залежить від % прийомів у меню дня.
+            $menu = null;
+            if ($order->partial_day && ($menuPlan = $order->effectiveMenuPlan())) {
+                $menu = \App\Models\DailyMenu::where('menu_plan_id', $menuPlan->id)->where('day_number', $menuPlan->globalDayFor($this->date))
+                    ->with(['menuItems.dish', 'menuItems.mealType'])->first();
+            }
+            $plan  = $this->buildPlanFromPersonal($order->personalDishes, $order, $multiplier, $menu);
             $items = collect($plan['items'])->keyBy('meal_type_id');
             $names = $order->personalDishes->mapWithKeys(fn($pd) => [$pd->meal_type_id => $pd->dish?->name]);
 
@@ -254,7 +270,27 @@ class PersonalMenus extends Page
                 : [];
 
             $meals = [];
-            foreach ($client->mealTypes->sortBy('sort_order') as $mt) {
+            // Обіди «частина дня»: рядки — меню цього дня; обираємо страви з нього,
+            // щоб кухня готувала й фасувала їх разом із циклічними.
+            if ($order->partial_day) {
+                foreach (($menu?->menuItems ?? collect())->sortBy(fn ($mi) => $mi->mealType?->sort_order ?? 99) as $mi) {
+                    if (!$mi->dish) continue;
+                    $item = $items[$mi->meal_type_id] ?? null;
+                    $picked = $item && (int) $item['dish_id'] === (int) $mi->dish_id;
+                    $meals[] = [
+                        'meal_type_id'    => $mi->meal_type_id,
+                        'meal_type_name'  => $mi->mealType?->name ?? '—',
+                        'menu_dish_id'    => (int) $mi->dish_id,
+                        'menu_dish_name'  => $mi->dish->name,
+                        'current_dish_id' => $picked ? (int) $mi->dish_id : null,
+                        'dish_name'       => $picked ? $mi->dish->name : null,
+                        'weight'          => $picked ? $item['weight'] : null,
+                        'macros'          => $picked ? $item['macros'] : null,
+                        'conflict'        => $picked && in_array($item['dish_id'], $conflictIds, true),
+                    ];
+                }
+            }
+            foreach ($order->partial_day ? [] : $client->mealTypes->sortBy('sort_order') as $mt) {
                 $item = $items[$mt->id] ?? null;
                 $meals[] = [
                     'meal_type_id'    => $mt->id,
@@ -274,6 +310,8 @@ class PersonalMenus extends Page
                 'client_id'  => $client->id,
                 'client'     => $client->name,
                 'calories'   => (int)$order->calories,
+                'kits'       => $order->kits(),
+                'partial'    => (bool) $order->partial_day,
                 'totals'     => array_map(fn($v) => (int) round($v), $plan['totals']),
                 'project'    => $project?->name ?? ucfirst($order->project ?? ''),
                 'color'      => $project?->color ?? 'gray',

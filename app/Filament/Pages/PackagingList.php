@@ -214,6 +214,8 @@ class PackagingList extends Page implements HasForms
         $rows  = [];
 
         foreach ($orders as $order) {
+            // Обіди «частина дня» сітка повного дня не описує — вони у версії 1.
+            if ($order->partial_day) continue;
             $grid = $grids[(int) $order->calories] ?? null;
 
             if (! $grid) {
@@ -271,7 +273,7 @@ class PackagingList extends Page implements HasForms
                     ];
                 }
 
-                $rows[$key]['count']++;
+                $rows[$key]['count'] += $order->kits();
 
                 // Додатковий снек — ще одна порція тієї самої страви.
                 $snack = $grid->snackBox();
@@ -501,12 +503,12 @@ class PackagingList extends Page implements HasForms
                                 'count' => 0, 'sum_scale' => 0.0, 'projects' => [],
                             ];
                         }
-                        $replacementDishData[$repDishId]['columns'][$colKey]['count']++;
-                        $replacementDishData[$repDishId]['columns'][$colKey]['sum_scale'] += $repScale;
+                        $replacementDishData[$repDishId]['columns'][$colKey]['count'] += $order->kits();
+                        $replacementDishData[$repDishId]['columns'][$colKey]['sum_scale'] += $repScale * $order->kits();
                         if (!isset($replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug])) {
                             $replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug] = ['name' => $projName, 'count' => 0];
                         }
-                        $replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug]['count']++;
+                        $replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug]['count'] += $order->kits();
                         continue;
                     }
 
@@ -552,13 +554,13 @@ class PackagingList extends Page implements HasForms
                     ];
                 }
 
-                $tableData['columns'][$colKey]['count']++;
-                $tableData['columns'][$colKey]['sum_scale'] += $dishScale;
+                $tableData['columns'][$colKey]['count'] += $order->kits(); // корпоративні обіди: N комплектів
+                $tableData['columns'][$colKey]['sum_scale'] += $dishScale * $order->kits();
 
                 if (!isset($tableData['columns'][$colKey]['projects'][$projSlug])) {
                     $tableData['columns'][$colKey]['projects'][$projSlug] = ['name' => $projName, 'count' => 0, 'custom_count' => 0];
                 }
-                $tableData['columns'][$colKey]['projects'][$projSlug]['count']++;
+                $tableData['columns'][$colKey]['projects'][$projSlug]['count'] += $order->kits();
             }
 
             if (empty($tableData['columns'])) {

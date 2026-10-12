@@ -255,8 +255,10 @@
                         <span class="pm-kcal" style="color:#555555;">клієнт #{{ $card['client_id'] }}</span>
                         <span class="pm-kcal" style="color:#555555;">замовлення #{{ $card['order_id'] }}</span>
                         <span class="pm-kcal">{{ $card['calories'] }} ккал</span>
+                        @if(!empty($card['partial']))<span class="pm-badge" style="background:#7c2d12;color:#fed7aa;">Обіди · порції як у {{ $card['calories'] }}</span>@endif
+                        @if(($card['kits'] ?? 1) > 1)<span class="pm-badge" style="background:#1e3a8a;color:#bfdbfe;">× {{ $card['kits'] }} комплектів</span>@endif
                         @if($card['filled'])
-                            @php $t = $card['totals']; $off = $card['calories'] > 0 ? abs($t['kcal'] - $card['calories']) / $card['calories'] : 0; @endphp
+                            @php $t = $card['totals']; $off = (empty($card['partial']) && $card['calories'] > 0) ? abs($t['kcal'] - $card['calories']) / $card['calories'] : 0; @endphp
                             <span class="pm-kcal" style="color:{{ $off > 0.1 ? '#f59e0b' : '#86efac' }};" title="Сума за днем: ккал · білки / жири / вуглеводи">
                                 Σ {{ $t['kcal'] }} ккал · Б {{ $t['prot'] }} / Ж {{ $t['fat'] }} / В {{ $t['carb'] }}
                             </span>
@@ -283,7 +285,26 @@
                     </div>
                 </div>
 
-                @foreach($card['meals'] as $meal)
+                @if(!empty($card['partial']))
+                    @foreach($card['meals'] as $meal)
+                        <div class="pm-meal-row">
+                            <div class="pm-meal-label">{{ $meal['meal_type_name'] }}</div>
+                            <div class="pm-meal-btn-wrap">
+                                <button class="pm-meal-btn {{ $meal['current_dish_id'] ? 'is-filled' : '' }} {{ ($meal['conflict'] ?? false) ? 'is-conflict' : '' }}"
+                                        wire:click="togglePick({{ $card['order_id'] }}, {{ $meal['meal_type_id'] }}, {{ $meal['menu_dish_id'] }})">
+                                    <span class="pm-meal-btn-text">
+                                        {{ $meal['current_dish_id'] ? '✓' : '○' }} {{ $meal['menu_dish_name'] }}
+                                        @if($meal['macros'])
+                                            <span style="font-weight:500;color:#9ca3af;font-size:12px;">· {{ $meal['weight'] }} г · {{ (int) round($meal['macros']['kcal']) }} ккал · Б {{ round($meal['macros']['prot']) }} / Ж {{ round($meal['macros']['fat']) }} / В {{ round($meal['macros']['carb']) }}</span>
+                                        @endif
+                                    </span>
+                                </button>
+                            </div>
+                            <div class="pm-meal-check">@if($meal['conflict'] ?? false)⚠️@endif</div>
+                        </div>
+                    @endforeach
+                @endif
+                @foreach(!empty($card['partial']) ? [] : $card['meals'] as $meal)
                     <div class="pm-meal-row">
                         <div class="pm-meal-label">{{ $meal['meal_type_name'] }}</div>
                         <div class="pm-meal-btn-wrap">

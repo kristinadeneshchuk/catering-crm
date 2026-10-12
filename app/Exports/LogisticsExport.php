@@ -42,7 +42,9 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
         $query = OrderDay::query()
             ->with(['order.client.addresses', 'order.projectData'])
             ->whereBetween('date', [$foodFrom, $foodTo])
-            ->whereHas('order', fn ($q) => $q->whereIn('status', ['active', 'new']));
+            ->whereHas('order', fn ($q) => $q->whereIn('status', ['active', 'new'])
+                // Окремий курʼєр (корпоративні обіди) — не в маршрутний експорт.
+                ->when(\App\Support\SchemaReady::hasColumn('orders', 'separate_courier'), fn ($w) => $w->where('separate_courier', false)));
 
         // Фільтр shift + точна відповідність даті — обидва у PHP, бо shift залежить
         // від override delivery_time на orderDay, який не завжди відповідає schedule_type.

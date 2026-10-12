@@ -30,6 +30,7 @@ class Order extends Model
                 'comment', 'schedule_type', 'menu_type', 'menu_plan_id', 'delivery_time',
                 'discount_type', 'discount_value', 'discount_reason',
                 'discount_amount', 'final_price',
+                'kit_count', 'partial_day', 'separate_courier',
             ])
             ->logOnlyDirty()
             ->dontSubmitEmptyLogs()
@@ -45,10 +46,14 @@ class Order extends Model
         'discount_type', 'discount_value', 'discount_reason',
         'discount_amount', 'final_price',
         'reward_unlocked', 'reward_given',
+        'kit_count', 'partial_day', 'separate_courier',
     ];
 
     protected $casts = [
         'is_paid'          => 'boolean',
+        'kit_count'        => 'integer',
+        'partial_day'      => 'boolean',
+        'separate_courier' => 'boolean',
         'reward_unlocked'  => 'boolean',
         'reward_given'     => 'boolean',
         'duration'         => 'integer',
@@ -517,6 +522,12 @@ class Order extends Model
     public function childOrders(): HasMany { return $this->hasMany(Order::class, 'parent_order_id'); }
 
     public function isIndividual(): bool { return $this->menu_type === 'individual'; }
+
+    /** Скільки однакових комплектів у замовленні (корпоративні обіди). Для звичайних — 1. */
+    public function kits(): int { return max(1, (int) ($this->kit_count ?? 1)); }
+
+    /** Страви на день обирають вручну (персональне меню): індивідуальні й обіди «частина дня». */
+    public function usesPersonalMenu(): bool { return $this->menu_type === 'individual' || (bool) $this->partial_day; }
 
     public function menuPlan(): BelongsTo { return $this->belongsTo(MenuPlan::class); }
 

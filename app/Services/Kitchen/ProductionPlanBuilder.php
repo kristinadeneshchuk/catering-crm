@@ -155,9 +155,9 @@ class ProductionPlanBuilder
                         // «Одобрити/Замінити» тут: страва готується окремо на його аркуші.
                         $separate[$order->id.':'.$dish->id] = true;
                     } elseif ($isCustom) {
-                        $custom[] = ['order' => $order, 'scale' => $dishScale];
+                        array_push($custom, ...array_fill(0, $order->kits(), ['order' => $order, 'scale' => $dishScale])); // N комплектів
                     } else {
-                        $standard[] = ['order' => $order, 'scale' => $dishScale];
+                        array_push($standard, ...array_fill(0, $order->kits(), ['order' => $order, 'scale' => $dishScale])); // N комплектів
                         if ($isInd && ($c = $ind->client($order->id))) $indInStandard[] = $c['n'];
                     }
                 }

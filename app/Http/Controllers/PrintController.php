@@ -535,7 +535,7 @@ class PrintController extends Controller
             // Клієнти зі стандартним набором сюди не потрапляють.
             $ownMeals = $order->client?->mealTypes?->pluck('sort_order')->all() ?? [];
 
-            if ($ownMeals) {
+            if ($ownMeals && ! $order->partial_day) { // обіди «частина дня» — свідомо не повний день
                 $missing = array_diff(
                     \App\Models\MealPlan::getAllowedSortOrders((int) $order->calories),
                     $ownMeals,
@@ -770,12 +770,12 @@ class PrintController extends Controller
                                 'count' => 0, 'sum_scale' => 0.0, 'projects' => [],
                             ];
                         }
-                        $replacementDishData[$repDishId]['columns'][$colKey]['count']++;
-                        $replacementDishData[$repDishId]['columns'][$colKey]['sum_scale'] += $repScale;
+                        $replacementDishData[$repDishId]['columns'][$colKey]['count'] += $order->kits();
+                        $replacementDishData[$repDishId]['columns'][$colKey]['sum_scale'] += $repScale * $order->kits();
                         if (!isset($replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug])) {
                             $replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug] = ['name' => $projName, 'count' => 0];
                         }
-                        $replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug]['count']++;
+                        $replacementDishData[$repDishId]['columns'][$colKey]['projects'][$projSlug]['count'] += $order->kits();
                         continue;
                     }
 
@@ -815,13 +815,13 @@ class PrintController extends Controller
                     ];
                 }
 
-                $tableData['columns'][$colKey]['count']++;
-                $tableData['columns'][$colKey]['sum_scale'] += $dishScale;
+                $tableData['columns'][$colKey]['count'] += $order->kits(); // корпоративні обіди: N комплектів
+                $tableData['columns'][$colKey]['sum_scale'] += $dishScale * $order->kits();
 
                 if (!isset($tableData['columns'][$colKey]['projects'][$projSlug])) {
                     $tableData['columns'][$colKey]['projects'][$projSlug] = ['name' => $projName, 'count' => 0, 'custom_count' => 0];
                 }
-                $tableData['columns'][$colKey]['projects'][$projSlug]['count']++;
+                $tableData['columns'][$colKey]['projects'][$projSlug]['count'] += $order->kits();
             }
 
             if (empty($tableData['columns'])) continue;
@@ -1063,12 +1063,12 @@ class PrintController extends Controller
                         // Індивідуальному заміни вирішено заздалегідь — страва окремо на його аркуші.
                         $separate[$order->id.':'.$dish->id] = true;
                     } elseif ($isCustom) {
-                        $custom[] = ['order' => $order, 'scale' => $dishScale];
+                        array_push($custom, ...array_fill(0, $order->kits(), ['order' => $order, 'scale' => $dishScale])); // N комплектів
                         if (!$hasDishLevelChange) {
-                            $standard[] = ['order' => $order, 'scale' => $dishScale];
+                            array_push($standard, ...array_fill(0, $order->kits(), ['order' => $order, 'scale' => $dishScale])); // N комплектів
                         }
                     } else {
-                        $standard[] = ['order' => $order, 'scale' => $dishScale];
+                        array_push($standard, ...array_fill(0, $order->kits(), ['order' => $order, 'scale' => $dishScale])); // N комплектів
                         if ($isInd && ($c = $ind->client($order->id))) $indInStandard[] = $c['n'];
                     }
                 }
@@ -1216,7 +1216,7 @@ class PrintController extends Controller
                         $dishForceApproved = $dishReplacement && $dishReplacement->force_approved;
                         if ($order->client->dishExclusions->contains('id', $dish->id) && !$dishReplacement && !$dishForceApproved) continue;
 
-                        $this->collectBruttoForShopping($activeDish, $dishScale, 1.0, $order, (int)$dish->id, $bruttoByIng);
+                        $this->collectBruttoForShopping($activeDish, $dishScale * $order->kits(), 1.0, $order, (int)$dish->id, $bruttoByIng);
                     }
                 }
 
@@ -1413,9 +1413,9 @@ class PrintController extends Controller
                         || !empty($this->getConflictingIngredients($dish, $order->effectiveExcludedIngredients()));
 
                     if ($isCustom) {
-                        $custom[] = ['order' => $order, 'scale' => $dishScale];
+                        array_push($custom, ...array_fill(0, $order->kits(), ['order' => $order, 'scale' => $dishScale])); // N комплектів
                     } else {
-                        $standard[] = ['order' => $order, 'scale' => $dishScale];
+                        array_push($standard, ...array_fill(0, $order->kits(), ['order' => $order, 'scale' => $dishScale])); // N комплектів
                     }
                 }
 

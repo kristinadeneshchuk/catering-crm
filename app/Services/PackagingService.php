@@ -56,8 +56,10 @@ class PackagingService
                         'total_cost'     => 0,
                     ];
                 }
-                $summary[$id]['total_qty']  += $item['qty'];
-                $summary[$id]['total_cost'] += $item['total_price'];
+                // Корпоративні обіди: N однакових комплектів — і пакування на кожен.
+                $kits = method_exists($order, 'kits') ? $order->kits() : 1;
+                $summary[$id]['total_qty']  += $item['qty'] * $kits;
+                $summary[$id]['total_cost'] += $item['total_price'] * $kits;
             }
         }
 
