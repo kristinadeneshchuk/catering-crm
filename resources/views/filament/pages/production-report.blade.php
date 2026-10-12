@@ -431,7 +431,9 @@
                 @endforelse
 
                 {{-- Індивідуальні: список + аркуш на клієнта (лише власні страви) --}}
-                @include('print.partials.ind-cook-pages', ['pages' => $planData['ind_pages'] ?? [], 'dayLabel' => \Carbon\Carbon::parse($this->data['date'] ?? now())->addDay()->format('d.m')])
+                {{-- Індивідуальні поки не друкуємо в готувальному (власник 12.10): готують за аркушами сесії індивідуальних.
+                     Списання їх і далі враховує. Щоб повернути — розкоментувати include. --}}
+                {{-- @include('print.partials.ind-cook-pages', ['pages' => $planData['ind_pages'] ?? [], 'dayLabel' => \Carbon\Carbon::parse($this->data['date'] ?? now())->addDay()->format('d.m')]) --}}
 
                 {{-- ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану --}}
                 @if(!empty($planData['individuals']))
