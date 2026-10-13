@@ -402,7 +402,7 @@ class IndividualPacking
             $c['projects'][$slug]['custom_count'] = ($c['projects'][$slug]['custom_count'] ?? 0) + 1;
             $t['individual_notes'][] = [
                 'id' => $order->client?->id, 'name' => '№'.$col['n'].' '.$col['name'].' ('.($col['eve'] ? '🌙' : '☀').' '.$col['time'].')',
-                'project' => $pName, 'calories' => $kcal,
+                'project' => $pName, 'calories' => $kcal, 'ind' => true,
                 'text' => 'порція '.$col['weight'].' г; '.implode('; ', array_unique($changes)),
             ];
         } else {

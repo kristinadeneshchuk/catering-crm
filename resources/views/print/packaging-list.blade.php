@@ -229,7 +229,7 @@
             <div class="notes-box" style="border:2px solid #dc2626;background:#fef2f2;">
                 <div class="notes-header" style="color:#dc2626;">Заміни в цій страві ({{ count($table['individual_notes']) }}):</div>
                 @foreach(collect($table['individual_notes'])->sortBy('calories') as $note)
-                    <div class="note-row"><b>{{ $note['project'] }} · {{ $note['calories'] }} ккал</b> — #{{ $note['id'] }} {{ $note['name'] }}: <b style="color:#dc2626;">{{ $note['text'] }}</b></div>
+                    <div class="note-row" style="{{ !empty($note['ind']) ? 'background:#ede9fe;color:#4c1d95;padding:1px 3px;border-radius:3px;-webkit-print-color-adjust:exact;print-color-adjust:exact;' : '' }}">@if(!empty($note['ind']))<span style="display:inline-block;background:#7c3aed;color:#fff;font-weight:900;font-size:10px;padding:1px 6px;border-radius:3px;margin-right:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">ІНДИВІДУАЛЬНИЙ</span>@endif<b>{{ $note['project'] }} · {{ $note['calories'] }} ккал</b> — #{{ $note['id'] }} {{ $note['name'] }}: <b style="color:#dc2626;">{{ $note['text'] }}</b></div>
                 @endforeach
             </div>
         @endif
