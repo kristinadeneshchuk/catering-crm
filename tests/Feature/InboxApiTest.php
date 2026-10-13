@@ -246,6 +246,18 @@ class InboxApiTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_client_orders_include_the_addresses_from_the_client_card(): void
+    {
+        $id = $this->makeClient();
+        DB::table('client_addresses')->insert(['client_id' => $id, 'address' => 'вул. Тестова, 1', 'address_floor' => '3', 'is_default' => true]);
+
+        $this->getJson("/api/inbox/v1/clients/{$id}/orders", $this->authHeaders())
+            ->assertOk()
+            ->assertJsonPath('client_addresses.0.address', 'вул. Тестова, 1')
+            ->assertJsonPath('client_addresses.0.floor', '3')
+            ->assertJsonPath('client_addresses.0.is_default', true);
+    }
+
     public function test_it_finds_a_client_by_telegram_username_without_case_or_at(): void
     {
         $id = $this->makeClient(['name' => 'Протасевич', 'phone' => '0501112233', 'telegram_username' => 'XamaShaid']);

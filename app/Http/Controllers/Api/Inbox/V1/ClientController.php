@@ -259,6 +259,9 @@ class ClientController extends Controller
 
         return response()->json([
             'client_id'      => $client->id,
+            // Адреси з картки: у замовлень, створених у CRM, адреса днів часто
+            // порожня — тоді Inbox бере її звідси.
+            'client_addresses' => $this->addressList($client),
             'client_balance' => (float) $client->balance,
             'data'           => $orders,
         ]);
@@ -318,6 +321,22 @@ class ClientController extends Controller
         return $this->linker->upsertAddress($client, $address);
     }
 
+    /** Адреси з картки клієнта — той самий формат у search і orders. */
+    protected function addressList(Client $client): \Illuminate\Support\Collection
+    {
+        $client->loadMissing('addresses');
+
+        return $client->addresses->map(fn (ClientAddress $a) => [
+            'id'               => $a->id,
+            'address'          => $a->address,
+            'entrance'         => $a->address_entrance,
+            'apartment'        => $a->address_apartment,
+            'floor'            => $a->address_floor,
+            'delivery_comment' => $a->delivery_comment,
+            'is_default'       => (bool) $a->is_default,
+        ])->values();
+    }
+
     protected function clientResponse(?Client $client, int $status = 200): JsonResponse
     {
         if (! $client) {
@@ -340,15 +359,7 @@ class ClientController extends Controller
                 'exclusions'        => $this->exclusions($client),
                 'target_kcal'       => $client->target_kcal ? (int) $client->target_kcal : null,
                 'balance'           => (float) $client->balance,
-                'addresses'         => $client->addresses->map(fn (ClientAddress $a) => [
-                    'id'               => $a->id,
-                    'address'          => $a->address,
-                    'entrance'         => $a->address_entrance,
-                    'apartment'        => $a->address_apartment,
-                    'floor'            => $a->address_floor,
-                    'delivery_comment' => $a->delivery_comment,
-                    'is_default'       => (bool) $a->is_default,
-                ])->values(),
+                'addresses'         => $this->addressList($client),
             ],
         ], $status);
     }
