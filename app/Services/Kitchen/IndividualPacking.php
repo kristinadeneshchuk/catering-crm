@@ -341,6 +341,25 @@ class IndividualPacking
         return $out;
     }
 
+    /**
+     * Стікер на бокс індивідуального: що змінено в страві (як у фасувальному) + примітка пакування.
+     * $item — пункт персонального плану (dish_id, meal, weight, cooking_note).
+     */
+    public function stickerChanges(Order $order, array $item): array
+    {
+        $dish = Dish::with(['dishIngredients.ingredient', 'dishIngredients.childDish.dishIngredients.ingredient'])->find($item['dish_id']);
+        if (!$dish) return [];
+        $changes = [];
+        foreach ($this->rowsFor($order, $dish, (int) $item['weight'], (string) $item['meal'], $this->noteSwaps($item['cooking_note'] ?? null)) as $r) {
+            $name = preg_replace('/^\[НФ\]\s*/u', '', $r['name']);
+            if ($r['skip']) $changes[] = 'БЕЗ: '.$name;
+            elseif ($r['note'] !== '') $changes[] = str_starts_with($r['note'], '→') ? $name.' '.$r['note'] : $name.': '.$r['note'];
+        }
+        if ($pack = $this->packNote($item['cooking_note'] ?? null)) $changes[] = '📦 '.$pack;
+
+        return array_values(array_unique($changes));
+    }
+
     /** Усі продукти всередині ПФ (рекурсивно): [id => назва]. */
     private function closure(Dish $pf, array $seen = []): array
     {

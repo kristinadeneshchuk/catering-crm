@@ -498,18 +498,10 @@ class PrintController extends Controller
         $stickers = [];
 
         foreach ($orders as $order) {
-            // Індивідуальне меню складається окремо і в цикл-меню не входить —
-            // інакше кухня отримає наклейки до страв, яких у клієнта немає.
-            //
-            // АЛЕ пропускати за самим прапорцем menu_type не можна: частина
-            // «індивідуальних» — це клієнти зі своїм КБЖУ, які їдять звичайне
-            // меню, і персональний набір страв їм не складають. Для них стікери
-            // не друкувались зовсім, тому кухня не бачила їхніх виключень і
-            // робила заміни навмання. Орієнтуємось на факт: є персональні
-            // страви на цю дату — пропускаємо, немає — друкуємо як звичайним.
-            if ($order->menu_type === 'individual' && $order->personalDishes->isNotEmpty()) {
-                continue;
-            }
+            // Індивідуальний з персональним меню на цю дату — стікери на його страви
+            // (нижче, окремою гілкою). Індивідуальний без персональних страв (своє
+            // КБЖУ на звичайному меню) — як звичайний клієнт: стікери лише на заміни.
+            $personal = $order->menu_type === 'individual' && $order->personalDishes->isNotEmpty();
 
             $menu = $menusByPlan[$order->effectiveMenuPlan()?->id]['menu'] ?? null;
             if (!$menu) continue;
@@ -527,6 +519,36 @@ class PrintController extends Controller
                 $isEvening = $hour >= 12;
             } else {
                 $isEvening = \App\Services\ScheduleService::isEvening($order->schedule_type);
+            }
+
+            // Індивідуальне меню на день: стікер на КОЖЕН бокс — страва з персонального
+            // меню, вага, що змінено (як у фасувальному) і примітка пакування.
+            if ($personal) {
+                $indPacking ??= new \App\Services\Kitchen\IndividualPacking($orders, $targetDate);
+                $mealSort = \App\Models\MealType::pluck('sort_order', 'id');
+                foreach ($calc['items'] as $it) {
+                    if (empty($it['dish_id'])) continue;
+                    $so = $mealSort[$it['meal_type_id']] ?? 99;
+                    $stickers[] = [
+                        'client'          => $order->client?->name ?? 'Без імені',
+                        'client_id'       => $order->client?->id ?? '---',
+                        'meal'            => $it['meal'] ?? 'Прийом',
+                        'meal_type_id'    => $it['meal_type_id'] ?? null,
+                        'meal_sort_order' => $so,
+                        'dish'            => $it['dish'] ?? '',
+                        'weight'          => (int) $it['weight'],
+                        'time'            => $so,
+                        'calories'        => (int) $order->calories,
+                        'project'         => $order->project,
+                        'is_individual'   => true,
+                        'changes'         => $indPacking->stickerChanges($order, $it),
+                        'date'            => $targetDate,
+                        'bundles'         => $order->client?->replacementBundles?->pluck('name')->values()->all() ?? [],
+                        'is_evening'      => $isEvening,
+                        'delivery_slot'   => $isEvening ? 'Вечір' : 'Ранок',
+                    ];
+                }
+                continue;
             }
 
             // Клієнт свідомо без якогось прийому: у фасувальний і виробничий
