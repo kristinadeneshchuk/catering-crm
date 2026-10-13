@@ -108,7 +108,7 @@ class InvoiceService
     protected function purpose(Project $project, string $number, \DateTimeInterface $issued): string
     {
         $template = $project->payment_purpose
-            ?: 'оплата згідно рахунку №:number від :date за доставку здорового харчування';
+            ?: 'Оплата товару згідно рахунку №:number від :date';
 
         return strtr($template, [
             ':number' => $number,

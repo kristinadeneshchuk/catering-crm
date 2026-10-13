@@ -104,7 +104,7 @@ class ProjectResource extends Resource
                         Forms\Components\TextInput::make('payment_purpose')
                             ->label('Шаблон призначення платежу')
                             ->helperText('Доступні підстановки: :number — номер рахунку, :date — дата, :brand — бренд. Порожньо — стандартний текст.')
-                            ->placeholder('оплата згідно рахунку №:number від :date за доставку здорового харчування')
+                            ->placeholder('Оплата товару згідно рахунку №:number від :date')
                             ->columnSpanFull()
                             ->maxLength(500),
                     ]),
