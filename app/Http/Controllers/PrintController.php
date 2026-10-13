@@ -930,6 +930,9 @@ class PrintController extends Controller
         }
 
         $date = $inputDate;
+        if ($request->input('part') === 'ind') {
+            return view('print.packaging-ind', compact('reportByPlan', 'date', 'targetDate'));
+        }
         return view('print.packaging-list', [
             'indRegistry'    => $indPacking->registry(),
             'reportByPlan'   => $reportByPlan,

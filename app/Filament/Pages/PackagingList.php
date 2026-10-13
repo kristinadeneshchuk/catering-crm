@@ -178,6 +178,13 @@ class PackagingList extends Page implements HasForms
                             ->color('gray')
                             ->url(fn () => route('print.assembly-sheet', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                             ->openUrlInNewTab(),
+                        \Filament\Forms\Components\Actions\Action::make('print_ind')
+                            ->label('Індивідуальні заміни')
+                            ->tooltip('Таблиці індивідуальних страв окремим друком: A4 горизонтально, жодна таблиця не ріжеться.')
+                            ->icon('heroicon-o-printer')
+                            ->color('gray')
+                            ->url(fn () => route('print.packaging-list', ['date' => $this->data['date'] ?? now()->format('Y-m-d'), 'part' => 'ind']))
+                            ->openUrlInNewTab(),
                         \Filament\Forms\Components\Actions\Action::make('print_view')
                             ->label('Відкрити версію для друку')
                             ->tooltip('Ця сама таблиця пакування, але у вигляді для друку на папері.')

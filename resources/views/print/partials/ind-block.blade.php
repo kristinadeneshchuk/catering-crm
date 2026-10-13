@@ -7,7 +7,7 @@
 <div style="display:flex; flex-wrap:wrap; gap:8px; margin:4px 0 16px; color:#111827; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
     @foreach(collect($block['dishes'])->sortByDesc(fn($d) => count($d['clients'])) as $d)
         @php $approx = !$d['is_cycle'] && !str_contains(mb_strtolower($block['meal']), 'додаток'); @endphp
-        <div style="flex:{{ count($d['clients']) >= 3 ? '1 1 100%' : '1 1 30%' }}; min-width:250px; break-inside:avoid; page-break-inside:avoid;">
+        <div class="ind-card" data-wide="{{ count($d['clients']) >= 3 ? 1 : 0 }}" style="flex:{{ count($d['clients']) >= 3 ? '1 1 100%' : '1 1 30%' }}; min-width:250px; break-inside:avoid; page-break-inside:avoid;">
             <div style="background:{{ $color }}; color:#fff; font-weight:800; padding:4px 8px; border-radius:4px 4px 0 0; font-size:12px; text-shadow:0 1px 1px rgba(0,0,0,.3);">
                 {{ $block['meal'] }}: {{ $d['dish_name'] }}@if($d['is_cycle']) <span style="font-size:9.5px; opacity:.9;">цикл</span>@endif · порцій: {{ count($d['clients']) }}
             </div>
