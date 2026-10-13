@@ -466,6 +466,7 @@ class PackagingList extends Page implements HasForms
 
                     // Хто саме в червоній цифрі і що йому класти — одразу під таблицею.
                     if ($note = $this->individualNote($order, $dish)) {
+                        $note['text'] = 'порція '.$plannedWeight.' г; '.$note['text'];
                         $tableData['individual_notes'][] = $note;
                     }
 
@@ -532,11 +533,8 @@ class PackagingList extends Page implements HasForms
                     }
 
                     // (c) інгредієнтний свап / force-approved / невирішений конфлікт
-                    // Клієнт із замінами — окремою колонкою в таблиці страви (грами саме йому,
-                    // заміни й «не класти» червоними клітинками), а не карткою внизу листа.
-                    $tableData['columns'][$cKey]['custom_count']--;
-                    $tableData['columns'][$cKey]['projects'][$cSlug]['custom_count']--;
-                    $tableData = $indPacking->customColumn($tableData, $order, $dish, (int) ($plannedWeight ?? $realW));
+                    // Клієнт із замінами — у колонці свого калоражу червоною цифрою, а що
+                    // йому класти (з порцією) — рядком у «Заміни в цій страві» під таблицею.
                     continue;
                 }
 
