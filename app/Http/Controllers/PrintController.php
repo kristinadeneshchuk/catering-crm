@@ -521,13 +521,17 @@ class PrintController extends Controller
                 $isEvening = \App\Services\ScheduleService::isEvening($order->schedule_type);
             }
 
-            // Індивідуальне меню на день: стікер на КОЖЕН бокс — страва з персонального
-            // меню, вага, що змінено (як у фасувальному) і примітка пакування.
+            // Індивідуальне меню на день: стікер лише на страву ЦИКЛУ, у якій є зміни
+            // (у фасувальному вона червона в колонці калоражу). Власні страви
+            // індивідуальних і страви циклу без змін — без стікера, вони йдуть окремо.
             if ($personal) {
                 $indPacking ??= new \App\Services\Kitchen\IndividualPacking($orders, $targetDate);
                 $mealSort = \App\Models\MealType::pluck('sort_order', 'id');
+                $cycleKeys = $menu->menuItems->mapWithKeys(fn ($mi) => [$mi->dish_id.':'.$mi->meal_type_id => true]);
                 foreach ($calc['items'] as $it) {
-                    if (empty($it['dish_id'])) continue;
+                    if (empty($it['dish_id']) || !isset($cycleKeys[$it['dish_id'].':'.$it['meal_type_id']])) continue;
+                    $changes = $indPacking->stickerChanges($order, $it);
+                    if (!array_filter($changes, fn ($c) => !str_starts_with($c, '📦'))) continue;
                     $so = $mealSort[$it['meal_type_id']] ?? 99;
                     $stickers[] = [
                         'client'          => $order->client?->name ?? 'Без імені',
@@ -541,7 +545,7 @@ class PrintController extends Controller
                         'calories'        => (int) $order->calories,
                         'project'         => $order->project,
                         'is_individual'   => true,
-                        'changes'         => $indPacking->stickerChanges($order, $it),
+                        'changes'         => $changes,
                         'date'            => $targetDate,
                         'bundles'         => $order->client?->replacementBundles?->pluck('name')->values()->all() ?? [],
                         'is_evening'      => $isEvening,
