@@ -379,25 +379,52 @@ class IndividualPacking
             $tables[$idx]['rows'] = $dish->dishIngredients->map(fn ($di) => ['original_name' => $this->ingredientRowLabel($di), 'cells' => []])->all();
         }
 
-        $colKey = 'ind-'.$order->id;
+        // Індивідуальний з тією самою стравою — у звичайну колонку свого калоражу,
+        // як звичайний клієнт. Зміни (заміни / «не класти») — червоною цифрою в
+        // колонці й рядком у «Заміни в цій страві» з його порцією.
+        $kcal   = (int) $order->calories;
+        $colKey = \App\Support\CalorieGroup::keyFor($kcal);
         $slug   = $order->project ?? 'none';
-        $tables[$idx]['columns'][$colKey] = [
-            'label'        => '№'.$col['n'].' '.$col['name'],
-            'count'        => 1,
-            'sum_scale'    => 0,
-            'custom_count' => 0,
-            'ind'          => $col,
-            'projects'     => [$slug => ['name' => $order->projectData?->name ?? ucfirst($slug), 'count' => 1, 'custom_count' => 0]],
-        ];
-        // Рядки циклічної таблиці побудовані в тому ж порядку, що dishIngredients.
+        $pName  = $order->projectData?->name ?? ucfirst($slug);
+        $t      = &$tables[$idx];
+        $t['columns'][$colKey] ??= ['label' => \App\Support\CalorieGroup::labelFor($colKey), 'count' => 0, 'sum_scale' => 0.0, 'projects' => [], 'custom_count' => 0];
+        $c = &$t['columns'][$colKey];
+        $c['projects'][$slug] ??= ['name' => $pName, 'count' => 0, 'custom_count' => 0];
+
+        $changes = [];
         foreach ($rows as $r) {
-            if (isset($tables[$idx]['rows'][$r['pos']])) {
-                $tables[$idx]['rows'][$r['pos']]['cells'][$colKey] = ['val' => round($r['g']), 'note' => $r['note'], 'skip' => $r['skip']];
+            if ($r['skip']) $changes[] = 'без '.mb_strtolower(preg_replace('/^\[НФ\]\s*/u', '', $r['name']));
+            elseif ($r['note'] !== '') $changes[] = (str_starts_with($r['note'], '→') ? preg_replace('/^\[НФ\]\s*/u', '', $r['name']).' ' : '').$r['note'];
+        }
+
+        if ($changes) {
+            $c['custom_count'] = ($c['custom_count'] ?? 0) + 1;
+            $c['projects'][$slug]['custom_count'] = ($c['projects'][$slug]['custom_count'] ?? 0) + 1;
+            $t['individual_notes'][] = [
+                'id' => $order->client?->id, 'name' => '№'.$col['n'].' '.$col['name'].' ('.($col['eve'] ? '🌙' : '☀').' '.$col['time'].')',
+                'project' => $pName, 'calories' => $kcal,
+                'text' => 'порція '.$col['weight'].' г; '.implode('; ', array_unique($changes)),
+            ];
+        } else {
+            $base = (float) ($dish->base_weight_g ?: 0);
+            $scale = $base > 0 ? $col['weight'] / $base : 0.0;
+            $c['count']++;
+            $c['sum_scale'] += $scale;
+            $c['projects'][$slug]['count']++;
+            // Перерахунок клітинок колонки: грами на одну порцію калоражу.
+            $per = $c['count'] > 0 ? $c['sum_scale'] / $c['count'] : 0;
+            foreach ($dish->dishIngredients->values() as $pos => $di) {
+                if (!isset($t['rows'][$pos])) continue;
+                $val = round((float) $di->net_weight_g * $per);
+                $old = $t['rows'][$pos]['cells'][$colKey] ?? null;
+                $t['rows'][$pos]['cells'][$colKey] = is_array($old) || $old === null ? ['val' => $val] : $val;
             }
         }
+        unset($c, $t);
         if ($pack) {
             $tables[$idx]['pack'][] = ['n' => $col['n'], 'text' => $pack];
         }
+        ksort($tables[$idx]['columns']);
 
         return $tables;
     }
