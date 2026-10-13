@@ -397,14 +397,15 @@ class IndividualPacking
             elseif ($r['note'] !== '') $changes[] = (str_starts_with($r['note'], '→') ? preg_replace('/^\[НФ\]\s*/u', '', $r['name']).' ' : '').$r['note'];
         }
 
+        // Індивідуальний тариф відмічаємо в замінах завжди — навіть коли страва зійшлась з циклом без змін.
+        $t['individual_notes'][] = [
+            'id' => $order->client?->id, 'name' => '№'.$col['n'].' '.$col['name'].' ('.($col['eve'] ? '🌙' : '☀').' '.$col['time'].')',
+            'project' => $pName, 'calories' => $kcal, 'ind' => true,
+            'text' => 'порція '.$col['weight'].' г; '.($changes ? implode('; ', array_unique($changes)) : 'як у циклі, без замін'),
+        ];
         if ($changes) {
             $c['custom_count'] = ($c['custom_count'] ?? 0) + 1;
             $c['projects'][$slug]['custom_count'] = ($c['projects'][$slug]['custom_count'] ?? 0) + 1;
-            $t['individual_notes'][] = [
-                'id' => $order->client?->id, 'name' => '№'.$col['n'].' '.$col['name'].' ('.($col['eve'] ? '🌙' : '☀').' '.$col['time'].')',
-                'project' => $pName, 'calories' => $kcal, 'ind' => true,
-                'text' => 'порція '.$col['weight'].' г; '.implode('; ', array_unique($changes)),
-            ];
         } else {
             $base = (float) ($dish->base_weight_g ?: 0);
             $scale = $base > 0 ? $col['weight'] / $base : 0.0;
