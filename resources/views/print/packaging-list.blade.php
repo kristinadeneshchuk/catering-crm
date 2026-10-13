@@ -157,8 +157,7 @@
     {{-- ЦИКЛІЧНІ СТРАВИ --}}
     @foreach($cyclicTables as $table)
         @if(!empty($table['is_ind_block']))
-            {{-- Індивідуальні страви — окремим друком (A4 горизонтально), кнопка «Індивідуальні заміни». --}}
-            <div style="margin:6px 0 14px; padding:5px 10px; border:1px dashed #7c3aed; color:#5b21b6; font-size:11px; font-weight:700;">{{ $table['meal'] }}: індивідуальні страви ({{ count($table['dishes']) }}) — окремим аркушем «Індивідуальні заміни»</div>
+            {{-- Індивідуальні страви — окремим друком «Індивідуальні заміни» (part=ind). --}}
             @continue
         @endif
         @php

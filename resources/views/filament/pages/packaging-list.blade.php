@@ -196,7 +196,7 @@
                 {{-- ЦИКЛІЧНІ СТРАВИ --}}
                 @foreach($cyclicTables as $table)
                     @if(!empty($table['is_ind_block']))
-                        @include('print.partials.ind-block', ['block' => $table])
+                        {{-- Індивідуальні страви — окремою кнопкою «Індивідуальні заміни». --}}
                         @continue
                     @endif
                     <div class="meal-section">
