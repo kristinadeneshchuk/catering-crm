@@ -48,6 +48,7 @@ class IndividualPacking
                 'eve'   => $this->isEvening($o),
                 'time'  => (string) $o->delivery_time,
                 'kcal'  => (int) $o->calories,
+                'brand' => self::brand($o),
                 'order' => $o,
             ];
         }
@@ -204,7 +205,7 @@ class IndividualPacking
             $stop = \App\Support\NoEat::summary($o);
             $diet = $o->client?->diet;
 
-            return ['n' => $c['n'], 'name' => $c['name'].' · '.$c['kcal'], 'eve' => $c['eve'], 'time' => $c['time'], 'stop' => $stop,
+            return ['n' => $c['n'], 'name' => $c['name'].' ('.$c['brand'].') · '.$c['kcal'], 'eve' => $c['eve'], 'time' => $c['time'], 'stop' => $stop,
                 'diet' => $diet?->label(),
                 'diet_rules' => trim(implode(' ', array_filter([
                     $diet?->cooking_methods ? 'Спосіб приготування: '.$diet->cooking_methods.'.' : null,
@@ -463,7 +464,7 @@ class IndividualPacking
     {
         $c = $this->clients[$order->id];
 
-        return ['n' => $c['n'], 'name' => $c['name'], 'eve' => $c['eve'], 'time' => mb_substr($c['time'], 0, 5), 'weight' => $weight];
+        return ['n' => $c['n'], 'name' => $c['name'], 'brand' => $c['brand'], 'eve' => $c['eve'], 'time' => mb_substr($c['time'], 0, 5), 'weight' => $weight];
     }
 
     /**
@@ -497,6 +498,17 @@ class IndividualPacking
         $name = trim(preg_replace('/\s*\(.*?\)\s*/u', ' ', (string) $order->client?->name));
 
         return implode(' ', array_slice(preg_split('/\s+/u', $name), 0, 2));
+    }
+
+    /** Бренд коротко, щоб кухня одразу бачила, в які пакети класти: AVOCADO / U-FIT / A-FOOD. */
+    public static function brand(Order $o): string
+    {
+        return match ((string) $o->project) {
+            'avocado_food' => 'AVOCADO',
+            'u_fit'        => 'U-FIT',
+            'afood'        => 'A-FOOD',
+            default        => mb_strtoupper((string) ($o->projectData?->name ?? $o->project)),
+        };
     }
 
     /** Власна страва клієнта — створена під нього («Інд · …»), на відміну від страв довідника. */
