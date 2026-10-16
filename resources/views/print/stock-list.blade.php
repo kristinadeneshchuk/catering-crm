@@ -112,6 +112,16 @@
             margin-left: 1px;
         }
 
+        /* Два стовпці: продукт · план · факт (кухня пише від руки, скільки взяла) */
+        .wo-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 8mm; }
+        .wo-head, .wo-row { display: grid; grid-template-columns: 1fr 58px 26mm; align-items: center; gap: 6px; }
+        .wo-head { font-size: 9.5px; color: #64748b; text-transform: uppercase; font-weight: 700; border-bottom: 2px solid #0f172a; padding: 2px 0; }
+        .wo-row { border-bottom: 1px solid #e2e8f0; padding: 3px 0; break-inside: avoid; }
+        .wo-row .ing-weight { text-align: right; }
+        .wo-fact { height: 16px; border: 1px solid #94a3b8; border-radius: 3px; }
+        .wo-section { margin-top: 9mm; padding: 5px 8px; background: #ede9fe; color: #4c1d95; font-weight: 900; font-size: 13px; text-transform: uppercase; border-radius: 4px; break-after: avoid; }
+        .wo-section small { font-weight: 600; text-transform: none; font-size: 10px; color: #6d28d9; }
+
         /* Підпис */
         .footer {
             margin-top: 10mm;
@@ -174,24 +184,44 @@
         </div>
     @endif
 
-    <div class="ingredient-grid">
-        @foreach($ingredients as $name => $weight)
-            @php
-                $kg  = $weight / 1000;
-                $display = $kg >= 1
-                    ? number_format($kg, 2, '.', ' ') . ' <span class="ing-unit">кг</span>'
-                    : number_format($weight, 0, '.', ' ') . ' <span class="ing-unit">г</span>';
-            @endphp
-            <div class="ingredient-row">
-                <span class="ing-name">{{ $name }}</span>
-                <span class="ing-weight">{!! $display !!}</span>
-            </div>
-        @endforeach
-    </div>
+    @php
+        $fmt = function ($w) {
+            $kg = $w / 1000;
+            return $kg >= 1
+                ? number_format($kg, 2, '.', ' ') . ' <span class="ing-unit">кг</span>'
+                : number_format($w, 0, '.', ' ') . ' <span class="ing-unit">г</span>';
+        };
+        $lists = [['title' => null, 'items' => $ingredients]];
+        if (!empty($indIngredients)) {
+            $lists[] = ['title' => 'Індивідуальні клієнти', 'items' => $indIngredients];
+        }
+    @endphp
+
+    @foreach($lists as $list)
+        @if($list['title'])
+            <div class="wo-section">{{ $list['title'] }} <small>— окремо від загального котла ({{ count($list['items']) }} позицій)</small></div>
+        @endif
+        @php $half = (int) ceil(count($list['items']) / 2); @endphp
+        <div class="wo-grid">
+            {{-- За алфавітом зверху вниз: спершу лівий стовпець, потім правий --}}
+            @foreach(array_chunk($list['items'], max(1, $half), true) as $chunk)
+                <div>
+                    <div class="wo-head"><span>Продукт</span><span style="text-align:right;">План</span><span>Факт</span></div>
+                    @foreach($chunk as $name => $weight)
+                        <div class="wo-row">
+                            <span class="ing-name">{{ $name }}</span>
+                            <span class="ing-weight">{!! $fmt($weight) !!}</span>
+                            <span class="wo-fact"></span>
+                        </div>
+                    @endforeach
+                </div>
+            @endforeach
+        </div>
+    @endforeach
 
     <div class="footer">
         <p>Сформовано: {{ now()->format('d.m.Y H:i') }}</p>
-        <span class="total">Всього позицій: {{ count($ingredients) }}</span>
+        <span class="total">Позицій: {{ count($ingredients) }}@if(!empty($indIngredients)) + індивідуальні {{ count($indIngredients) }}@endif</span>
     </div>
 
 </div>

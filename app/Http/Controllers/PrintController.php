@@ -1362,13 +1362,15 @@ class PrintController extends Controller
             return "Немає активних замовлень на {$targetDate}.";
         }
 
-        $summaryIngredients = [];
+        // Індивідуальні — окремим списком унизу: кухня бачить, скільки пішло саме на них.
+        $sums = ['main' => [], 'ind' => []];
+        $bucket = 'main';
 
-        $collectSummary = function($components) use (&$summaryIngredients, &$collectSummary) {
+        $collectSummary = function($components) use (&$sums, &$bucket, &$collectSummary) {
             foreach ($components as $comp) {
                 if (($comp['type'] ?? '') === 'product') {
                     $name = $comp['name'];
-                    $summaryIngredients[$name] = ($summaryIngredients[$name] ?? 0) + ($comp['weight_brutto'] ?? 0);
+                    $sums[$bucket][$name] = ($sums[$bucket][$name] ?? 0) + ($comp['weight_brutto'] ?? 0);
                 } elseif (($comp['type'] ?? '') === 'pf' && isset($comp['sub_ingredients'])) {
                     $collectSummary($comp['sub_ingredients']);
                 }
@@ -1458,7 +1460,8 @@ class PrintController extends Controller
                 }
             }
 
-            // === ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану ===
+            // === ІНДИВІДУАЛЬНІ КЛІЄНТИ цього плану — в окремий список ===
+            $bucket = 'ind';
             foreach ($planOrders as $order) {
                 if ($order->menu_type !== 'individual') continue;
 
@@ -1480,12 +1483,17 @@ class PrintController extends Controller
                     $collectSummary($components);
                 }
             }
+            $bucket = 'main';
         }
 
+        $summaryIngredients = $sums['main'];
+        $indIngredients = $sums['ind'];
         ksort($summaryIngredients);
+        ksort($indIngredients);
 
         return view('print.stock-list', [
             'ingredients'         => $summaryIngredients,
+            'indIngredients'      => $indIngredients,
             'date'                => Carbon::parse($inputDate)->format('d.m.Y'),
             'targetDateFormatted' => Carbon::parse($targetDate)->format('d.m.Y'),
             'planSummaries'       => $planSummaries,
