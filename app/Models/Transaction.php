@@ -45,6 +45,18 @@ class Transaction extends Model
         return $this->belongsTo(Employee::class);
     }
 
+    /** Без переказів між своїми рахунками і перерахунку каси — лише реальний рух грошей. */
+    public function scopeMoneyFlow($query)
+    {
+        return $query->where(fn ($q) => $q->whereNull('category')
+            ->orWhereNotIn('category', \App\Services\Accounting\CashBook::NON_FLOW));
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function stockDocument(): BelongsTo
     {
         return $this->belongsTo(StockDocument::class);
@@ -69,6 +81,10 @@ class Transaction extends Model
     // === ЛОГІКА БАЛАНСУ ТА АВТО-ОПЛАТИ ===
     protected static function booted()
     {
+        // Сальдо після кожної операції на сторінці «Каса» рахується з кешу.
+        static::saved(fn () => \App\Services\Accounting\CashBook::flush());
+        static::deleted(fn () => \App\Services\Accounting\CashBook::flush());
+
         // Єдиний запобіжник на всі шляхи, якими в CRM зʼявляються гроші клієнта.
         //
         // Шляхів пʼять: «Оплата» в картці замовлення, «Нова оплата» у вкладці

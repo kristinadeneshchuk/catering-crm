@@ -75,6 +75,12 @@ class AnalyticsController extends Controller
             $utilitiesByDay[$ymd] = $utilOnDay > 0 ? round($utilOnDay / $daysInMonth, 2) : 0;
         }
 
+        // Витрати з каси за статтями (сторінка «Каса», бот «Бухгалтерія»).
+        // ЗП, накладні, оренда й комунальні сюди не входять — вони в P&L своїми рядками.
+        $cashPnl = \App\Services\Accounting\CashBook::pnlExpenses($startDate, $endDate);
+        $cashExpensesByDay = $cashPnl['byDay'];
+        $cashExpensesByCategory = $cashPnl['byCategory'];
+
         // 2. Завантаження даних
         // Включаємо всі необхідні зв'язки для FoodCostService та аналітики
         $validDays = OrderDay::whereBetween('date', [$startDate, $endDate])
@@ -787,14 +793,17 @@ class AnalyticsController extends Controller
         // 7. КАСОВИЙ РОЗРИВ за обраний період
         // Тільки реальні платежі від клієнтів (з прив'язкою до рахунку).
         // Бухгалтерські записи від створення/зміни замовлень не мають account_id → не рахуємо.
+        // Переказ між рахунками і перерахунок каси — не надходження.
         $cashReceivedPeriod = round(Transaction::where('type', 'income')
             ->whereNotNull('account_id')
+            ->moneyFlow()
             ->whereBetween('date', [$startDate, $endDate])
             ->sum('amount'));
 
         // Розбивка отриманих коштів по рахунках за обраний період
         $cashReceivedByAccount = Transaction::where('type', 'income')
             ->whereNotNull('account_id')
+            ->moneyFlow()
             ->whereBetween('date', [$startDate, $endDate])
             ->selectRaw('account_id, SUM(amount) as total')
             ->groupBy('account_id')
@@ -883,6 +892,7 @@ class AnalyticsController extends Controller
             'discountCount', 'totalDiscount',  // 🔥 Знижки
             'spoilagePercent', 'otherExpenses', 'activeTab',
             'rentByDay', 'utilitiesByDay', 'monthlyRent', 'monthlyUtilities',
+            'cashExpensesByDay', 'cashExpensesByCategory',
             'unitEconomics', 'marketingStats', 'retentionStats',
             'cashReceivedPeriod', 'cashReceivedByAccount', 'cashBalance', 'prepaidValue',
             'totalClientDebt', 'debtorClientsCount',

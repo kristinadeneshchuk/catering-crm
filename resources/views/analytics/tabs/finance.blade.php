@@ -151,6 +151,23 @@
                     <td class="text-zinc-500">{{ number_format(count($dates) * $otherExpenses, 0, '.', ' ') }} ₴</td>
                 </tr>
 
+                <tr class="row-hover text-zinc-300">
+                    <td class="font-medium text-sm">
+                        <a href="{{ \App\Filament\Resources\CashOperationResource::getUrl() }}" class="hover:text-white">Витрати з каси</a>
+                        @if($cashExpensesByCategory)
+                            <div class="text-xs text-zinc-500 font-normal mt-1 leading-snug">
+                                @foreach($cashExpensesByCategory as $cat => $sum)
+                                    {{ $cat }} {{ number_format($sum, 0, '.', ' ') }}@if(!$loop->last) · @endif
+                                @endforeach
+                            </div>
+                        @endif
+                    </td>
+                    @foreach($dates as $ymd => $dm)
+                        <td class="text-zinc-500 text-sm">{{ number_format($cashExpensesByDay[$ymd] ?? 0, 0, '.', ' ') }} ₴</td>
+                    @endforeach
+                    <td class="text-zinc-400">{{ number_format(array_sum($cashExpensesByDay), 0, '.', ' ') }} ₴</td>
+                </tr>
+
                 @if($monthlyRent > 0)
                 <tr class="row-hover text-zinc-400">
                     <td class="font-medium text-sm flex items-center gap-2">
@@ -182,7 +199,7 @@
                     @foreach($dates as $ymd => $dm)
                         @php
                             $dailySpoilage = (($foodCostCount[$ymd] ?? 0) + ($packagingCount[$ymd] ?? 0)) * ($spoilagePercent / 100);
-                            $dailyNet = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0) - ($packagingCount[$ymd] ?? 0) - $dailySpoilage - $otherExpenses - ($courierCompByDate[$ymd] ?? 0) - ($rentByDay[$ymd] ?? 0) - ($utilitiesByDay[$ymd] ?? 0);
+                            $dailyNet = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0) - ($packagingCount[$ymd] ?? 0) - $dailySpoilage - $otherExpenses - ($courierCompByDate[$ymd] ?? 0) - ($rentByDay[$ymd] ?? 0) - ($utilitiesByDay[$ymd] ?? 0) - ($cashExpensesByDay[$ymd] ?? 0);
                         @endphp
                         <td class="font-bold text-base {{ $dailyNet < 0 ? 'text-rose-400' : 'text-emerald-300' }}">
                             {{ number_format($dailyNet, 0, '.', ' ') }} ₴
@@ -194,7 +211,7 @@
                             $totalOther    = count($dates) * $otherExpenses;
                             $totalRentAll  = array_sum($rentByDay);
                             $totalUtilAll  = array_sum($utilitiesByDay);
-                            $totalNet      = $totalRevenue - $totalFoodCost - $totalFop - $totalPackagingCost - $totalSpoilage - $totalOther - ($totalCourierComp ?? 0) - $totalRentAll - $totalUtilAll;
+                            $totalNet      = $totalRevenue - $totalFoodCost - $totalFop - $totalPackagingCost - $totalSpoilage - $totalOther - ($totalCourierComp ?? 0) - $totalRentAll - $totalUtilAll - array_sum($cashExpensesByDay);
                         @endphp
                         {{ number_format($totalNet, 0, '.', ' ') }} ₴
                     </td>
@@ -204,7 +221,7 @@
                     @foreach($dates as $ymd => $dm)
                         @php
                             $dailySpoilage = (($foodCostCount[$ymd] ?? 0) + ($packagingCount[$ymd] ?? 0)) * ($spoilagePercent / 100);
-                            $profit = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0) - ($packagingCount[$ymd] ?? 0) - $dailySpoilage - $otherExpenses - ($courierCompByDate[$ymd] ?? 0) - ($rentByDay[$ymd] ?? 0) - ($utilitiesByDay[$ymd] ?? 0);
+                            $profit = ($revenueCount[$ymd] ?? 0) - ($foodCostCount[$ymd] ?? 0) - ($fopCount[$ymd] ?? 0) - ($packagingCount[$ymd] ?? 0) - $dailySpoilage - $otherExpenses - ($courierCompByDate[$ymd] ?? 0) - ($rentByDay[$ymd] ?? 0) - ($utilitiesByDay[$ymd] ?? 0) - ($cashExpensesByDay[$ymd] ?? 0);
                             $margin = ($revenueCount[$ymd] ?? 0) > 0 ? ($profit / $revenueCount[$ymd]) * 100 : 0;
                         @endphp
                         <td class="font-semibold {{ $margin < 20 ? 'text-rose-400' : 'text-avocado-500' }}">

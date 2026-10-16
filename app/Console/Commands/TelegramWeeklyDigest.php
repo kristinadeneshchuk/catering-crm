@@ -370,6 +370,7 @@ class TelegramWeeklyDigest extends Command
             ->whereNull('employee_id')
             ->whereNull('stock_document_id')
             ->whereNotIn('category', $standardExpenseCategories)
+            ->moneyFlow()
             ->orderByDesc('amount')
             ->get(['category', 'amount', 'comment', 'date']);
 
@@ -393,6 +394,7 @@ class TelegramWeeklyDigest extends Command
             ->where('type', 'income')
             ->whereNull('order_id')
             ->whereNull('stock_document_id')
+            ->moneyFlow()
             ->orderByDesc('amount')
             ->get(['category', 'amount', 'comment', 'date']);
 

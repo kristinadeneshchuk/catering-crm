@@ -70,6 +70,7 @@ class DailyCashService
         $q = Transaction::whereDate('date', $ymd)
             ->where('type', 'income')
             ->whereNotNull('account_id')
+            ->moneyFlow()
             ->whereNull('employee_id')
             ->whereNull('stock_document_id');
         return [
@@ -94,6 +95,7 @@ class DailyCashService
         $agg = Transaction::whereBetween('date', [$from, $to])
             ->where('type', 'income')
             ->whereNotNull('account_id')
+            ->moneyFlow()
             ->whereNull('employee_id')
             ->whereNull('stock_document_id')
             ->selectRaw('account_id, SUM(amount) as total, COUNT(*) as cnt')
@@ -159,6 +161,7 @@ class DailyCashService
             ->whereNotNull('account_id')
             ->whereNull('employee_id')
             ->whereNull('stock_document_id')
+            ->moneyFlow()
             ->where(function ($q) {
                 $q->where('type', 'expense')->orWhere('type', 'refund');
             });
