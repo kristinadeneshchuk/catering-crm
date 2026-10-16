@@ -64,6 +64,14 @@ trait BuildsStockTestSchema
         });
 
         // Як на проді після всіх міграцій до 15.09.
+        // Транзакції з рахунком пишуть історію (spatie activitylog).
+        $make('activity_log', function (Blueprint $t) {
+            $t->id(); $t->string('log_name')->nullable(); $t->text('description')->nullable();
+            $t->nullableMorphs('subject', 'subject'); $t->nullableMorphs('causer', 'causer');
+            $t->string('event')->nullable(); $t->text('properties')->nullable(); $t->uuid('batch_uuid')->nullable();
+            $t->timestamps();
+        });
+
         $make('stock_documents', function (Blueprint $t) {
             $t->id();
             $t->string('type');

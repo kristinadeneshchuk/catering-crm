@@ -9,6 +9,7 @@ class ActivityLogTranslator
         \App\Models\OrderDay::class     => 'День замовлення',
         \App\Models\OrderDayDish::class => 'Страва дня',
         \App\Models\Client::class       => 'Клієнт',
+        \App\Models\Transaction::class  => 'Операція каси',
     ];
 
     public const EVENT_LABELS = [
@@ -82,6 +83,19 @@ class ActivityLogTranslator
         'water_option'        => 'Вода',
         'manager_comment'     => 'Коментар менеджера',
         'ant_comp_id'         => 'Ant ID',
+
+        // Transaction
+        'type'              => 'Тип',
+        'category'          => 'Стаття',
+        'amount'            => 'Сума',
+        'account.name'      => 'Рахунок',
+        'employee.name'     => 'Співробітник',
+        'stock_document_id' => 'Накладна',
+    ];
+
+    /** Значення, які людині незрозумілі як є. */
+    public const VALUE_LABELS = [
+        'type' => ['income' => 'Надходження', 'expense' => 'Витрата', 'refund' => 'Повернення'],
     ];
 
     public static function subject(?string $type): string
@@ -117,8 +131,13 @@ class ActivityLogTranslator
         $rows = [];
 
         foreach ($keys as $key) {
-            $oldVal = self::formatValue($old[$key] ?? null);
-            $newVal = self::formatValue($new[$key] ?? null);
+            $oldVal = self::formatValue(self::VALUE_LABELS[$key][$old[$key] ?? ''] ?? $old[$key] ?? null);
+            $newVal = self::formatValue(self::VALUE_LABELS[$key][$new[$key] ?? ''] ?? $new[$key] ?? null);
+
+            // При створенні порожні поля нічого не кажуть.
+            if ($oldVal === '—' && $newVal === '—') {
+                continue;
+            }
 
             $rows[] = [
                 'label' => self::attribute($key),
@@ -135,6 +154,11 @@ class ActivityLogTranslator
         if ($value === null || $value === '') return '—';
         if (is_bool($value)) return $value ? 'так' : 'ні';
         if (is_array($value)) return json_encode($value, JSON_UNESCAPED_UNICODE);
+        // Дати з моделей приходять у UTC: 2026-10-15T21:00:00.000000Z — це 16.10 за Києвом.
+        if (is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/', $value)) {
+            $d = \Illuminate\Support\Carbon::parse($value)->setTimezone(config('app.timezone'));
+            return $d->format($d->format('H:i:s') === '00:00:00' ? 'd.m.Y' : 'd.m.Y H:i');
+        }
         return (string) $value;
     }
 }

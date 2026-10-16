@@ -104,7 +104,7 @@ class CashOperationResource extends Resource
                     ->money('UAH')
                     ->color('gray')
                     ->tooltip('Залишок на рахунку після цієї операції'),
-                TextColumn::make('user.name')->label('Вніс')->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('user.name')->label('Вніс')->placeholder('—')->toggleable(),
             ])
             ->filters([
                 SelectFilter::make('account_id')
@@ -138,6 +138,15 @@ class CashOperationResource extends Resource
             ], layout: Tables\Enums\FiltersLayout::AboveContent)
             ->filtersFormColumns(5)
             ->actions([
+                Tables\Actions\Action::make('history')
+                    ->label('')
+                    ->tooltip('Історія: хто й що міняв')
+                    ->icon('heroicon-o-clock')
+                    ->color('gray')
+                    ->modalHeading(fn (Transaction $r) => 'Історія операції #'.$r->id)
+                    ->modalContent(fn (Transaction $r) => static::history($r))
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Закрити'),
                 Tables\Actions\EditAction::make()
                     ->label('')
                     ->tooltip('Змінити')
@@ -173,6 +182,28 @@ class CashOperationResource extends Resource
             (bool) $r->stock_document_id => 'Накладна #'.$r->stock_document_id.($r->stockDocument?->supplier ? ' · '.$r->stockDocument->supplier->name : ''),
             default                      => $r->comment,
         };
+    }
+
+    /** Усі записи журналу по операції: подія, хто, коли, що було → що стало. */
+    public static function history(Transaction $r): \Illuminate\Support\HtmlString
+    {
+        $items = \Spatie\Activitylog\Models\Activity::query()
+            ->where('subject_type', Transaction::class)
+            ->where('subject_id', $r->id)
+            ->with('causer')
+            ->orderBy('id')
+            ->get();
+
+        if ($items->isEmpty()) {
+            return new \Illuminate\Support\HtmlString('<p style="opacity:.7">Історії немає — операцію внесено до того, як її почали записувати'
+                .($r->user ? ' (вніс '.e($r->user->name).')' : '').'.</p>');
+        }
+
+        return new \Illuminate\Support\HtmlString($items->map(fn ($a) => '<div style="margin-bottom:18px">'
+            .'<div style="font-weight:600;margin-bottom:6px">'.e(\App\Support\ActivityLogTranslator::event($a->event))
+            .' · '.$a->created_at->format('d.m.Y H:i').' · '.e($a->causer?->name ?? 'Система').'</div>'
+            .ActivityResource::renderChanges($a)->toHtml()
+            .'</div>')->implode(''));
     }
 
     // ---- Форми для кнопок у шапці (ListCashOperations) ----

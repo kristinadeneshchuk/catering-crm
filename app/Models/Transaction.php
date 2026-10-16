@@ -4,9 +4,41 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class Transaction extends Model
 {
+    use LogsActivity {
+        shouldLogEvent as activityShouldLogEvent;
+    }
+
+    /** Хто й що змінив у грошах — видно в «Касі» (кнопка «Історія») і в «Журналі дій». */
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly([
+                'type', 'category', 'amount', 'date', 'comment',
+                'account.name', 'employee.name', 'order_id', 'stock_document_id',
+            ])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs()
+            ->useLogName('transaction');
+    }
+
+    /**
+     * Лише гроші. Записи «Нове замовлення / Зміна замовлення» без рахунку пише
+     * Order.php на кожну правку — їхня історія вже є в історії замовлення.
+     */
+    protected function shouldLogEvent(string $eventName): bool
+    {
+        if (! $this->account_id && ! $this->getOriginal('account_id')) {
+            return false;
+        }
+
+        return $this->activityShouldLogEvent($eventName);
+    }
+
     // 🔥 ДОДАНО employee_id
     protected $fillable = [
         'order_id',
