@@ -15,7 +15,7 @@
                 <tr>
                     <th style="border:1px solid #c9c9c9; padding:2px 4px; text-align:left; background:#fff; color:#111827;">Складова</th>
                     @foreach($d['clients'] as $c)
-                        <th style="border:1px solid #c9c9c9; padding:2px 4px; font-size:10.5px; background:{{ $c['eve'] ? '#1e3a8a' : '#fde68a' }}; color:{{ $c['eve'] ? '#fff' : '#78350f' }};">@include('print.partials.ind-colhead', ['c' => $c])</th>
+                        <th style="border:1px solid #c9c9c9; padding:2px 4px; font-size:10.5px; background:{{ $c['eve'] ? '#1e3a8a' : '#fde68a' }}; color:{{ $c['eve'] ? '#fff' : '#78350f' }};">@include('print.partials.ind-colhead', ['c' => $c + ['raw' => !$d['is_cycle']]])</th>
                     @endforeach
                     <th style="border:1px solid #c9c9c9; padding:2px 4px; background:#e5e7eb; color:#111827; width:52px;">Разом</th>
                 </tr>

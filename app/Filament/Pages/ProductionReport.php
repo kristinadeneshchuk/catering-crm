@@ -166,6 +166,13 @@ public function form(Form $form): Form
                                 ->color('warning')
                                 ->url(fn () => route('print.production-report', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
                                 ->openUrlInNewTab(),
+                            \Filament\Forms\Components\Actions\Action::make('print_ind_cook')
+                                ->label('Готування індивідуальних')
+                                ->tooltip('Окремі аркуші: один клієнт на А4 — його страви, грами продуктів і технологія.')
+                                ->icon('heroicon-o-printer')
+                                ->color('gray')
+                                ->url(fn () => route('print.production-report', ['date' => $this->data['date'] ?? now()->format('Y-m-d'), 'part' => 'ind-cook']))
+                                ->openUrlInNewTab(),
                             \Filament\Forms\Components\Actions\Action::make('print_stock')
                                 ->label('Список списання')
                                 ->tooltip('Перелік, що саме і в якій кількості буде списано зі складу за цей день.')

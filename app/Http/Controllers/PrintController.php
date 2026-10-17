@@ -1149,6 +1149,14 @@ class PrintController extends Controller
             return "Меню не знайдено на завтра ({$targetDate})";
         }
 
+        // Готування індивідуальних — окремою кнопкою: клієнт на аркуш А4, з технологією.
+        if ($request->input('part') === 'ind-cook') {
+            return view('print.production-ind-cook', [
+                'report'   => $report,
+                'dayLabel' => Carbon::parse($targetDate)->format('d.m'),
+            ]);
+        }
+
         return view('print.production-report', [
             'indRegistry'        => $ind->registry(),
             'report'             => $report,

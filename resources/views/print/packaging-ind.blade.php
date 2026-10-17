@@ -50,7 +50,7 @@
         var W = 281 * px, H = (193 - 9) * px, GAP = 2.5 * px, COLS = 3;
         var colW = (W - GAP * (COLS - 1)) / COLS;
         var out = document.getElementById('out');
-        var title = 'Індивідуальні заміни · фасування на {{ $dayLabel }}';
+        var title = 'Індивідуальні заміни · фасування на {{ $dayLabel }} <span style="font-weight:600;font-size:10px;color:#6d28d9;">· «сирих» = закладка сирих продуктів, не вага готового боксу</span>';
         var sheets = [], cur, cols;
 
         function newSheet() {
