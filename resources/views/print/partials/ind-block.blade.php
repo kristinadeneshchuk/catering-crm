@@ -18,18 +18,20 @@
                         <th style="border:1px solid #c9c9c9; padding:2px 4px; font-size:10.5px; background:{{ $c['eve'] ? '#1e3a8a' : '#fde68a' }}; color:{{ $c['eve'] ? '#fff' : '#78350f' }};">@include('print.partials.ind-colhead', ['c' => $c + ['raw' => !$d['is_cycle']]])</th>
                     @endforeach
                     <th style="border:1px solid #c9c9c9; padding:2px 4px; background:#e5e7eb; color:#111827; width:52px;">Разом</th>
+                    <th style="border:1px solid #c9c9c9; padding:2px 4px; background:#fef3c7; color:#78350f; width:52px;" title="Брутто: скільки взяти зі складу до очищення">Сира вага</th>
                 </tr>
                 @foreach($d['rows'] as $row)
-                    @php $tot = 0; @endphp
+                    @php $tot = 0; $raw = 0; $hasRaw = false; @endphp
                     <tr>
                         <td style="border:1px solid #c9c9c9; padding:2px 4px; font-weight:700; text-align:left; background:#fff;">{{ $row['name'] }}</td>
                         @foreach($d['clients'] as $i => $c)
-                            @php $cell = $row['cells'][$i] ?? null; if ($cell && empty($cell['skip'])) $tot += $cell['g']; @endphp
+                            @php $cell = $row['cells'][$i] ?? null; if ($cell && empty($cell['skip'])) { $tot += $cell['g']; if (isset($cell['raw'])) { $raw += $cell['raw']; $hasRaw = true; } } @endphp
                             <td style="border:1px solid #c9c9c9; padding:2px 4px; text-align:center; background:{{ $cell && (!empty($cell['skip']) || !empty($cell['note'])) ? '#fee2e2' : '#f3f4f6' }};">
                                 @if($cell) @include('print.partials.ind-cell', ['cell' => $cell, 'approx' => $approx, 'noUnit' => true]) @else — @endif
                             </td>
                         @endforeach
                         <td style="border:1px solid #c9c9c9; padding:2px 4px; text-align:center; font-weight:800; background:#e5e7eb;">{{ round($tot) }}</td>
+                        <td style="border:1px solid #c9c9c9; padding:2px 4px; text-align:center; font-weight:800; background:#fef3c7;">{{ $hasRaw ? round($raw) : '—' }}</td>
                     </tr>
                 @endforeach
             </table>

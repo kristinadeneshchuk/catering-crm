@@ -314,7 +314,12 @@ class IndividualPacking
         $out = [];
         foreach ($dish->dishIngredients->values() as $pos => $di) {
             $row = ['pos' => $pos, 'name' => $this->ingredientRowLabel($di), 'g' => (float) $di->net_weight_g * $k,
-                'note' => '', 'skip' => false, 'approx' => $approx];
+                'note' => '', 'skip' => false, 'approx' => $approx, 'raw' => null];
+            // Сира вага (брутто) — скільки взяти до очищення: нетто ÷ вихід продукту. Для ПФ — немає.
+            if ($di->ingredient_id && $di->ingredient) {
+                $yield = (float) ($di->ingredient->yield_percent ?: 100);
+                $row['raw'] = $row['g'] * 100 / ($yield > 0 ? $yield : 100);
+            }
             if ($di->type === 'pf' && $di->childDish) {
                 $notes = [];
                 foreach ($this->closure($di->childDish) as $ingId => $ingName) {
