@@ -299,11 +299,17 @@
             margin-top: auto;
         }
 
+        /* QR малюємо в 4× роздільності (різкий друк) з рівнем корекції L — менше
+           модулів, крупніші квадрати; біла рамка = «тиха зона», без неї сканер не бачить код. */
         .qr-placeholder {
             margin-right: 2mm;
             margin-bottom: 1.5mm;
             flex-shrink: 0;
+            box-sizing: content-box;
+            padding: 3px;
+            background: #fff;
         }
+        .qr-placeholder canvas, .qr-placeholder img { image-rendering: pixelated; }
 
         /* QRCode.js creates both canvas + img — hide img, show only canvas */
         .qr-placeholder img { display: none !important; }
@@ -708,7 +714,7 @@ function switchFormat(fmt) {
             el.style.height = '80px';
             var url = el.dataset.url;
             if (!url) return;
-            new QRCode(el, { text: url, width: 80, height: 80, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.M });
+            new QRCode(el, { text: url, width: 320, height: 320, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.L });
         });
     } else {
         document.body.classList.remove('fmt-large');
@@ -719,7 +725,7 @@ function switchFormat(fmt) {
             el.style.height = '50px';
             var url = el.dataset.url;
             if (!url) return;
-            new QRCode(el, { text: url, width: 50, height: 50, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.M });
+            new QRCode(el, { text: url, width: 200, height: 200, colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.L });
         });
     }
     document.getElementById('btn-fmt-small').classList.toggle('active', fmt === 'small');
