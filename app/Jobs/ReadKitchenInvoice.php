@@ -64,7 +64,7 @@ class ReadKitchenInvoice implements ShouldQueue
             return;
         }
 
-        $telegram->reactToMessage($this->chatId, $this->messageId, '✅');
+        $telegram->reactToMessage($this->chatId, $this->messageId, '👌');
 
         // Накладна з «Бухгалтерії»: запамʼятати, яку чернетку з неї зроблено.
         if ($this->accountingItemId) {

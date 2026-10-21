@@ -9,7 +9,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 // Чистимо активити-лог: записи старші за clean_after_days (180д = 6 міс).
-Schedule::command('activitylog:clean')->dailyAt('03:30');
+Schedule::command('activitylog:clean --force')->dailyAt('03:30');
 
 // Архів маршрутів. О 11:00 учорашній день уже точно розвезений і в ANT його
 // ніхто не перебудовує — знімаємо його разом з точками. Це страховка: коли

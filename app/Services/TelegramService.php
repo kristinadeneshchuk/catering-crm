@@ -266,7 +266,7 @@ class TelegramService
      * Позначити повідомлення реакцією. У чаті кухні це єдина відповідь бота:
      * «прийняв», без тексту й питань.
      */
-    public function reactToMessage(string $chatId, int $messageId, string $emoji = '✅'): void
+    public function reactToMessage(string $chatId, int $messageId, string $emoji = '👌'): void
     {
         $this->call('setMessageReaction', [
             'chat_id'    => $chatId,

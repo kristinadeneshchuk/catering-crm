@@ -49,7 +49,7 @@ class ReadKitchenVoice implements ShouldQueue
             return;
         }
 
-        $telegram->reactToMessage($this->chatId, $this->messageId, '✅');
+        $telegram->reactToMessage($this->chatId, $this->messageId, '👌');
 
         $url = \App\Filament\Resources\StockDocumentResource::getUrl('edit', ['record' => $document]);
         $sum = number_format((float) $document->total_sum, 0, ',', ' ');

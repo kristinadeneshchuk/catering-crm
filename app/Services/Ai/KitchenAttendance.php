@@ -74,7 +74,7 @@ class KitchenAttendance
 
         $shift = $this->markShift($employee, $this->position($text, $employee), share: $this->share($text), note: $text);
 
-        $this->telegram->reactToMessage($chatId, $messageId, '✅');
+        $this->telegram->reactToMessage($chatId, $messageId, '👌');
         $this->note($employee->name.' · '.($shift->position_key ?: 'зміна'));
 
         return $employee->name.' · '.($shift->position_key ?: 'зміна');
