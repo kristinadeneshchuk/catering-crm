@@ -94,6 +94,7 @@ class PackagingService
         $clientDishExclusions = $order->client?->dishExclusions ?? collect();
         $replacements         = $order->replacements ?? collect();
         $result               = [];
+        $boxesInMeal          = []; // meal_type_id => скільки боксів уже в цьому прийомі (для «Вечеря 2»)
 
         foreach ($plan['items'] as $planItem) {
             $originalDish = Dish::with('dishIngredients.childDish')->find($planItem['dish_id']);
@@ -135,6 +136,26 @@ class PackagingService
                 'total_price'    => (float) $container->price,
                 'auto_pair'      => false,
             ];
+
+            // Наліпка на бокс: бренд + прийом, другий бокс прийому — «… 2», якщо така є.
+            if (in_array($container->packaging_type, ['бокс', 'супник', 'стакан-десерт'], true)) {
+                $mealId = (int) ($planItem['meal_type_id'] ?? 0);
+                $boxNo  = $boxesInMeal[$mealId] = ($boxesInMeal[$mealId] ?? 0) + 1;
+                $label  = $this->findMealLabel($allPackaging, $mealId, $boxNo, $orderProject);
+                if ($label) {
+                    $result[] = [
+                        'packaging_id'   => $label->id,
+                        'name'           => $label->name,
+                        'packaging_type' => $label->packaging_type,
+                        'dish_name'      => $actualDish->name,
+                        'actual_weight'  => null,
+                        'qty'            => 1,
+                        'unit_price'     => (float) $label->price,
+                        'total_price'    => (float) $label->price,
+                        'auto_pair'      => true,
+                    ];
+                }
+            }
 
             // Автоматично додаємо пару (кришку / ковпачок).
             if ($container->pair_id) {
@@ -258,6 +279,30 @@ class PackagingService
     /**
      * Пакет по проекту замовлення.
      */
+    /**
+     * Наліпка на бокс для прийому: спершу свого бренду, потім загальна (без бренду).
+     * Для другого й далі бокса прийому — картка з meal_box_no = 2 («Вечеря 2»), якщо є.
+     */
+    private function findMealLabel(Collection $allPackaging, int $mealTypeId, int $boxNo, ?string $project): ?Packaging
+    {
+        if (!$mealTypeId) return null;
+
+        $labels = $allPackaging->filter(fn ($p) => $p->packaging_type === 'наліпка-бокс' && (int) $p->meal_type_id === $mealTypeId);
+        if ($labels->isEmpty()) return null;
+
+        $pick = function (Collection $set) use ($boxNo) {
+            if ($boxNo >= 2) {
+                $second = $set->first(fn ($p) => (int) $p->meal_box_no === 2);
+                if ($second) return $second;
+            }
+            return $set->first(fn ($p) => (int) ($p->meal_box_no ?? 1) <= 1) ?? $set->first();
+        };
+
+        $own = $project ? $labels->filter(fn ($p) => $p->project === $project) : collect();
+
+        return $pick($own->isNotEmpty() ? $own : $labels->filter(fn ($p) => is_null($p->project)));
+    }
+
     private function findPacket(Collection $allPackaging, ?string $project): ?Packaging
     {
         $packets = $allPackaging->filter(fn ($p) => $p->packaging_type === 'пакет');
