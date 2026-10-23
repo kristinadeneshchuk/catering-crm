@@ -35,6 +35,20 @@ class PrintController extends Controller
         return view('print.manifest', compact('manifests', 'date', 'layout', 'isFriday', 'weekend', 'targets'));
     }
 
+    /**
+     * Скільки етикеток друкується на день їжі: наклейки «в пакет» і стікери замін.
+     * Для автосписання аркушів етикеток (KitchenStockDebit::labelSheets).
+     *
+     * @return array{bags: int, replacements: int}
+     */
+    public function labelCounts(string $targetDate): array
+    {
+        return [
+            'bags'         => count($this->manifestsFor($targetDate) ?? []),
+            'replacements' => count($this->stickersFor($targetDate) ?? []),
+        ];
+    }
+
     /** Маніфести «в пакет» на один день їжі. null — на цей день немає замовлень. */
     private function manifestsFor(string $targetDate): ?array
     {

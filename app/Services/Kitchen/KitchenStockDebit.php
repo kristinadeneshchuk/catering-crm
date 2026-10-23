@@ -70,6 +70,31 @@ class KitchenStockDebit
         ));
     }
 
+    /**
+     * Аркуші етикеток на день їжі — стільки, скільки друкує CRM:
+     *  - «етикетка-пакет»: наклейка з QR на кожен пакет (маніфест «в пакет»);
+     *  - «етикетка-заміни»: стікер на кожну страву із заміною (сторінка «Стікери»).
+     * capacity картки = скільки етикеток на аркуші (9 чи 21); аркушів — з округленням угору.
+     *
+     * @return array<int, int> packaging_id => аркушів
+     */
+    public static function labelSheets(string $foodDate): array
+    {
+        $cards = Packaging::whereIn('packaging_type', ['етикетка-пакет', 'етикетка-заміни'])->where('capacity', '>', 0)->get();
+        if ($cards->isEmpty()) return [];
+
+        $counts = app(\App\Http\Controllers\PrintController::class)->labelCounts($foodDate);
+        $labels = ['етикетка-пакет' => $counts['bags'], 'етикетка-заміни' => $counts['replacements']];
+
+        $sheets = [];
+        foreach ($cards as $card) {
+            $n = $labels[$card->packaging_type] ?? 0;
+            if ($n > 0) $sheets[$card->id] = (int) ceil($n / (float) $card->capacity);
+        }
+
+        return $sheets;
+    }
+
     /** id продуктів, які не ведемо на складі (за замовч. 26 — вода). */
     public static function untrackedIds(): array
     {
@@ -136,6 +161,9 @@ class KitchenStockDebit
                 $grams[$id] = ($grams[$id] ?? 0) + $g;
             }
             foreach ($this->builder->collectPackagingQty($built['orders'], $food) as $id => $q) {
+                $packs[$id] = ($packs[$id] ?? 0) + $q;
+            }
+            foreach (self::labelSheets($food) as $id => $q) {
                 $packs[$id] = ($packs[$id] ?? 0) + $q;
             }
         }
