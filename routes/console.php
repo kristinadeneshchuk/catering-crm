@@ -33,6 +33,8 @@ Schedule::command('bank:sync')->dailyAt('04:10')->withoutOverlapping();
 
 Schedule::command('stock:debit-norm')->dailyAt('06:00')->withoutOverlapping()
     ->onFailure(fn () => \Illuminate\Support\Facades\Log::error('stock:debit-norm: автосписання о 06:00 не вдалось — див. попередні записи'));
+// Після автосписання: упаковки < 30 % від останньої поставки — нагадати власнику замовити.
+Schedule::command('stock:low-packaging')->dailyAt('06:20')->withoutOverlapping();
 
 // Telegram аналітика
 Schedule::command('telegram:morning-pulse')->dailyAt('11:00');
