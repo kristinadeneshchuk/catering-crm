@@ -24,7 +24,16 @@ class OrderReplacements
         if (!Order::whereKey($p['order_id'] ?? 0)->exists()) $e[] = 'order_id: замовлення не знайдено';
         if (!in_array($p['mode'] ?? 'merge', ['merge', 'replace'], true)) $e[] = 'mode: merge або replace';
         if (empty($p['items'])) $e[] = 'items: порожньо';
+        $known = ['dish_id', 'original_product_id', 'replacement_product_id', 'replacement_dish_id', 'force_approved', 'comment'];
         foreach ((array) ($p['items'] ?? []) as $i => $it) {
+            // Невідомі поля мовчки губились — і рядок без original_product_id ставав «прибрати всю страву».
+            if ($unknown = array_diff(array_keys((array) $it), $known)) {
+                $e[] = "items[$i]: невідомі поля " . implode(', ', $unknown) . ' — дозволено: ' . implode(', ', $known);
+                continue;
+            }
+            if (empty($it['original_product_id']) && empty($it['replacement_dish_id']) && empty($it['force_approved'])) {
+                $e[] = "items[$i]: вкажіть original_product_id (що міняємо/прибираємо) або replacement_dish_id (заміна всієї страви)";
+            }
             if (!Dish::whereKey($it['dish_id'] ?? 0)->exists()) $e[] = "items[$i]: страви #" . ($it['dish_id'] ?? '?') . ' немає';
             foreach (['original_product_id', 'replacement_product_id'] as $k) {
                 if (!empty($it[$k]) && !Ingredient::whereKey($it[$k])->exists()) $e[] = "items[$i].{$k}: продукту #{$it[$k]} немає";

@@ -67,9 +67,30 @@ class MenuTools implements AgentTools
                 ],
                 'required' => ['summary', 'payload'],
             ]),
-            $this->tool('submit_replacements', 'Подати заміни продуктів/страв у замовленні (тип order_replacements, docs/ai-agents-api.md).', [
+            $this->tool('submit_replacements', 'Подати заміни в стравах циклу для цього замовлення (діють щоразу, коли страва в циклі). Продукт → продукт: dish_id + original_product_id + replacement_product_id; «не класти»: без replacement_product_id; уся страва → інша: dish_id + replacement_dish_id без original_product_id.', [
                 'type' => 'object',
-                'properties' => ['summary' => ['type' => 'string'], 'payload' => ['type' => 'object']],
+                'properties' => [
+                    'summary' => ['type' => 'string'],
+                    'payload' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'mode' => ['type' => 'string', 'enum' => ['merge'], 'description' => 'merge — додати до наявних замін'],
+                            'items' => ['type' => 'array', 'items' => [
+                                'type' => 'object',
+                                'additionalProperties' => false,
+                                'properties' => [
+                                    'dish_id' => ['type' => 'integer', 'description' => 'страва циклу'],
+                                    'original_product_id' => ['type' => 'integer', 'description' => 'продукт, який міняємо або прибираємо'],
+                                    'replacement_product_id' => ['type' => 'integer', 'description' => 'чим замінити (немає — «не класти»)'],
+                                    'replacement_dish_id' => ['type' => 'integer', 'description' => 'заміна всієї страви'],
+                                    'comment' => ['type' => 'string'],
+                                ],
+                                'required' => ['dish_id'],
+                            ]],
+                        ],
+                        'required' => ['items'],
+                    ],
+                ],
                 'required' => ['summary', 'payload'],
             ]),
             $this->tool('progress', 'Коротко написати менеджеру, що зараз робите (видно в треді задачі). Одне речення.', [

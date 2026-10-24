@@ -317,6 +317,11 @@ class AiAgentsTest extends AgentsTestCase
         $this->api('POST', 'proposals', ['type' => 'order_replacements', 'payload' => [
             'order_id' => $this->order->id, 'items' => [['dish_id' => 99999]],
         ]])->assertStatus(422);
+        // Чужі назви полів не мають тихо ставати «прибрати всю страву».
+        $errors = $this->api('POST', 'proposals', ['type' => 'order_replacements', 'payload' => [
+            'order_id' => $this->order->id, 'items' => [['dish_id' => $dish->id, 'ingredient_id' => $chicken, 'replace_with_ingredient_id' => $salmon]],
+        ]])->assertStatus(422)->json('errors');
+        $this->assertStringContainsString('невідомі поля ingredient_id, replace_with_ingredient_id', implode("\n", $errors));
 
         $id = $this->api('POST', 'proposals', ['type' => 'order_replacements', 'payload' => [
             'order_id' => $this->order->id, 'mode' => 'replace',
