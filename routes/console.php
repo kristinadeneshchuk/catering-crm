@@ -52,3 +52,6 @@ Schedule::command('ops:weekly-report')->weeklyOn(1, '09:00');
 // які не приходять через webhook навіть після публікації app.
 // Увімкнути ПІСЛЯ App Review (зараз у dev mode conversations API повертає порожньо).
 // Schedule::command('messenger:poll-instagram')->everyMinute()->withoutOverlapping();
+
+// Агент «Переписки»: резервна звірка з Inbox, якщо вебхук пропустив (вимкнено — команда нічого не робить).
+Schedule::command('agents:inbox-sync')->everyFifteenMinutes()->withoutOverlapping();

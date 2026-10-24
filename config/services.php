@@ -101,10 +101,29 @@ return [
                     'effort'    => env('AGENT_MENU_EFFORT', 'high'),
                     'max_steps' => (int) env('AGENT_MENU_MAX_STEPS', 40),
                 ],
+                'chats' => [
+                    'model'     => env('AGENT_CHATS_MODEL', 'claude-sonnet-5-5'),
+                    'effort'    => env('AGENT_CHATS_EFFORT', 'medium'),
+                    'max_steps' => (int) env('AGENT_CHATS_MAX_STEPS', 25),
+                ],
             ],
             'tools' => [
                 'menu' => \App\Services\Agents\Runtime\MenuTools::class,
+                'chats' => \App\Services\Agents\Runtime\ChatsTools::class,
             ],
+        ],
+
+        // Вебхук подій Inbox (unified-inbox/docs/events-api.md): той самий секрет, що INBOX_EVENTS_SECRET в Inbox.
+        'inbox_events_secret' => env('INBOX_EVENTS_SECRET', ''),
+
+        // Агент «Переписки» (docs/tz-ai-agents-in-crm.md §5).
+        'chats' => [
+            'enabled'       => (bool) env('AGENT_CHATS_ENABLED', false),
+            // Тінь: пропозиції лише для порівняння — не виконуються, без Telegram-кнопок.
+            'shadow'        => (bool) env('AGENT_CHATS_SHADOW', true),
+            'batch_minutes' => (int) env('AGENT_CHATS_BATCH_MINUTES', 10),
+            'triage_model'  => env('AGENT_CHATS_TRIAGE_MODEL', 'claude-sonnet-5-5'),
+            'triage_effort' => env('AGENT_CHATS_TRIAGE_EFFORT', 'low'),
         ],
         // Кому після погодження меню йде задача «надіслати меню клієнту».
         'menu_handoff_agent' => env('AI_MENU_HANDOFF_AGENT', 'inbox'),

@@ -9,6 +9,7 @@ use App\Models\AiProposal;
 use App\Models\AiRun;
 use App\Models\Dish;
 use App\Services\Agents\Runtime\ModelGateway;
+use Tests\Support\ScriptedGateway;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -205,39 +206,5 @@ class AgentLoopTest extends AgentsTestCase
         RunAgentTask::dispatchSync($task = $this->task());
 
         $this->assertSame(['failed', 2], [$task->fresh()->status, $task->fresh()->steps]);
-    }
-}
-
-/** Модель-сценарій: кожен крок — список викликів інструментів [name, input]. */
-class ScriptedGateway implements ModelGateway
-{
-    public array $script = [];
-    public int $calls = 0;
-    /** @var array<int, array> повідомлення, які бачила модель на кожному кроці */
-    public array $seen = [];
-
-    public function step(string $model, string $effort, string $system, array $messages, array $tools): array
-    {
-        $this->seen[] = $messages;
-        $uses = $this->script[$this->calls] ?? [['finish', ['summary' => 'кінець сценарію']]];
-        $n = ++$this->calls;
-
-        return [
-            'content' => array_map(fn ($u, $i) => ['type' => 'tool_use', 'id' => "tu{$n}_{$i}", 'name' => $u[0], 'input' => $u[1]], $uses, array_keys($uses)),
-            'stop_reason' => 'tool_use',
-            'model' => $model,
-            'usage' => ['input' => 1000, 'output' => 200, 'cache_read' => 0, 'cache_write' => 0],
-        ];
-    }
-
-    /** Результат i-го інструменту, який модель побачила на кроці $step (1 = другий виклик моделі). */
-    public function toolResult(int $step, int $i): string
-    {
-        return (string) (end($this->seen[$step])['content'][$i]['content'] ?? '');
-    }
-
-    public function toolResultIsError(int $step, int $i): bool
-    {
-        return (bool) (end($this->seen[$step])['content'][$i]['is_error'] ?? false);
     }
 }

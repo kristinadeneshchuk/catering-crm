@@ -97,3 +97,7 @@ Route::prefix('agents/v1')
         Route::delete('memory/{key}', 'forget')->where('key', '.+');
     });
 
+// Вебхук подій Inbox → агент «Переписки». Без токена: перевіряє HMAC-підпис сам.
+Route::post('agents/inbox-events', \App\Http\Controllers\Webhooks\InboxEventsController::class)
+    ->middleware('throttle:600,1');
+

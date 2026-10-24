@@ -24,6 +24,11 @@ class AiProposal extends Model
         'individual_week_menu' => 'Індивідуальне меню',
         'client_message'       => 'Повідомлення клієнту',
         'order_replacements'   => 'Заміни в стравах',
+        'client_exclusion_add'  => 'Виключення з переписки',
+        'client_profile_update' => 'Профіль харчування з переписки',
+        'client_contact_update' => 'Контакти / адреса з переписки',
+        'order_day_change'      => 'Пауза / перенос дня',
+        'client_complaint'      => 'Скарга клієнта',
     ];
 
     public const STATUSES = [

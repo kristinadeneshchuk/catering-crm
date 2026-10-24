@@ -34,7 +34,7 @@ class TaskDesk
             'status'      => 'new',
             'created_by'  => $by->id,
             'due_at'      => $data['due_at'] ?? $this->deadline($template, $from),
-            'payload'     => !empty($data['shadow']) ? ['shadow' => true] : null,
+            'payload'     => (array) ($data['payload'] ?? []) + (!empty($data['shadow']) ? ['shadow' => true] : []) ?: null,
         ]);
         $task->log('note', "Поставив(ла) {$by->name}" . (!empty($data['shadow']) ? ' — тіньова: пропозиції лише для порівняння, не виконуються' : ''), [], $by->id);
 

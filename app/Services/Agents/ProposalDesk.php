@@ -22,12 +22,13 @@ class ProposalDesk
     public function __construct(private TelegramService $telegram) {}
 
     /** Обробник типу: перевірка, виконання, опис. */
-    public function handler(string $type): IndividualWeekMenu|ClientMessage|OrderReplacements
+    public function handler(string $type): IndividualWeekMenu|ClientMessage|OrderReplacements|ChatProposals
     {
         return match ($type) {
             'individual_week_menu' => app(IndividualWeekMenu::class),
             'client_message'       => app(ClientMessage::class),
             'order_replacements'   => app(OrderReplacements::class),
+            'client_exclusion_add', 'client_profile_update', 'client_contact_update', 'order_day_change', 'client_complaint' => new ChatProposals($type),
             default => throw new InvalidArgumentException("Невідомий тип пропозиції «{$type}»"),
         };
     }
@@ -68,7 +69,7 @@ class ProposalDesk
         if (method_exists($handler, 'prepare')) $payload = $handler->prepare($payload);
 
         $order = \App\Models\Order::find($payload['order_id'] ?? null);
-        $clientId = $order?->client_id ?? (\App\Models\Client::whereKey($payload['crm_client_id'] ?? 0)->value('id'));
+        $clientId = $order?->client_id ?? (\App\Models\Client::whereKey($payload['crm_client_id'] ?? $payload['client_id'] ?? 0)->value('id'));
         $proposal = AiProposal::create([
             'ai_agent_id'      => $agent->id,
             'ai_agent_task_id' => $data['task_id'] ?? null,

@@ -43,6 +43,17 @@ class AiAgent extends Model
         ]);
     }
 
+    /** Серверний агент «Переписки»: читає чати Inbox і пропонує зміни в картці. Клієнтам не пише. */
+    public static function serverChats(): self
+    {
+        return static::firstOrCreate(['slug' => 'chats'], [
+            'name' => 'Переписки (сервер)',
+            'role' => 'Читає нове в чатах клієнтів і пропонує: виключення, профіль, контакти, перенос дня, скарги',
+            'allowed_types' => array_keys(\App\Services\Agents\ChatProposals::TYPES),
+            'is_active' => true,
+        ]);
+    }
+
     public function issueToken(): string
     {
         $token = 'agt_' . $this->slug . '_' . Str::random(40);

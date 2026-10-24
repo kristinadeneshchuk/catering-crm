@@ -55,6 +55,24 @@ class InboxReadClient
         return collect($page['messages'] ?? [])->reject(fn (array $m) => ! empty($m['is_note']))->values();
     }
 
+    /** Діалог: conversation, account, contact, crm_orders, link. */
+    public function conversation(int $conversationId): array
+    {
+        return $this->get("/api/agent/conversations/{$conversationId}", []);
+    }
+
+    /**
+     * Сторінка повідомлень разом із нотатками менеджерів (is_note) — для агента «Переписки».
+     *
+     * @return array{messages: array, has_more: bool}
+     */
+    public function page(int $conversationId, int $limit = 60, ?int $before = null): array
+    {
+        $page = $this->get("/api/agent/conversations/{$conversationId}/messages", array_filter(['limit' => min(100, $limit), 'before' => $before]));
+
+        return ['messages' => (array) ($page['messages'] ?? []), 'has_more' => (bool) ($page['has_more'] ?? false)];
+    }
+
     private function get(string $path, array $query): array
     {
         $response = Http::withToken((string) config('services.inbox.agent_token'))

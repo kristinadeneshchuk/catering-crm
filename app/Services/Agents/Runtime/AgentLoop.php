@@ -204,8 +204,9 @@ class AgentLoop
         if ($task->details) $parts[] = "Деталі від менеджера: {$task->details}";
         if ($task->period_from) $parts[] = 'Період: ' . $task->period_from->format('d.m.Y') . ' – ' . ($task->period_to?->format('d.m.Y') ?? '?');
         if ($task->order_id) $parts[] = "Замовлення #{$task->order_id}";
+        if (!empty($task->payload['conversation_id'])) $parts[] = "Чат Inbox #{$task->payload['conversation_id']}" . (!empty($task->payload['brand']) ? " ({$task->payload['brand']})" : '');
         if ($task->payload['shadow'] ?? false) $parts[] = 'Режим: тіньовий прогін — працюй як завжди (меню подавай через submit_menu), людина порівняє з уже записаним; персональне меню, вже записане на ці дати, не копіюй — склади своє.';
-        $parts[] = 'Почни з task_context.';
+        $parts[] = $task->agent->slug === 'chats' ? 'Почни з chat_context.' : 'Почни з task_context.';
 
         return implode("\n", $parts);
     }
@@ -222,6 +223,13 @@ class AgentLoop
             'submit_menu'      => 'Подаю меню на погодження',
             'submit_replacements' => 'Подаю заміни на погодження',
             'remember'         => 'Запамʼятовую: ' . ($input['key'] ?? ''),
+            'chat_context'     => 'Читаю картку клієнта, замовлення й виключення',
+            'read_chat'        => 'Читаю чат' . (!empty($input['before_message_id']) ? ' (давніше)' : ''),
+            'propose_exclusion'  => 'Пропоную виключення',
+            'propose_profile'    => 'Пропоную зміни профілю',
+            'propose_contact'    => 'Пропоную оновити контакти',
+            'propose_day_change' => 'Пропоную паузу/перенос',
+            'report_complaint'   => 'Фіксую скаргу',
             default            => $name,
         };
     }
@@ -235,6 +243,11 @@ class AgentLoop
     }
 
     private function cost(string $model, array $u): float
+    {
+        return self::costOf($model, $u);
+    }
+
+    public static function costOf(string $model, array $u): float
     {
         $p = self::PRICES[$model] ?? self::PRICES['claude-opus-5-5'];
 
