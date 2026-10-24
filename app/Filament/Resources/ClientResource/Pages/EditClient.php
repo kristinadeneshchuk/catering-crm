@@ -20,6 +20,7 @@ class EditClient extends EditRecord
                 ->color('success')
                 ->url(fn () => OrderResource::getUrl('create', ['client_id' => $this->record->id])),
             \App\Filament\Actions\AssignToAgentAction::make(),
+            \App\Filament\Actions\DietProfileAction::make(),
             Actions\DeleteAction::make(),
         ];
     }

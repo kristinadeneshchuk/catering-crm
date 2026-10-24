@@ -236,15 +236,18 @@ class MenuGuard
     {
         if (!$ids) return [];
         $zeroOk = array_flip($groups[IngredientGroup::ZERO_KCAL_OK] ?? []);
+        $level = config('services.ai_agents.broken_ingredient_level', 'error') === 'warn' ? 'warn' : 'error';
         $out = [];
         foreach (Ingredient::whereIn('id', $ids)->get() as $ing) {
             $kcal = (float) ($ing->calories_100g ?? 0);
             $calc = 4 * (float) ($ing->proteins_100g ?? 0) + 9 * (float) ($ing->fats_100g ?? 0) + 4 * (float) ($ing->carbs_100g ?? 0);
+            $okZero = isset($zeroOk[$ing->id]) || preg_match(self::ZERO_KCAL_NAMES, (string) $ing->name);
             if ($calc <= 0) {
-                if (isset($zeroOk[$ing->id]) || preg_match(self::ZERO_KCAL_NAMES, (string) $ing->name)) continue;
-                $out[] = $this->c('V4', 'error', "Продукт «{$ing->name}» #{$ing->id}: у довіднику немає БЖВ (0 ккал) — КБЖВ страви неправдиве. Візьміть іншу страву або попросіть виправити довідник");
-            } elseif ($kcal > 0 && max($kcal, $calc) >= 30 && abs($kcal - $calc) / max($kcal, $calc) > 0.25) {
-                $out[] = $this->c('V4', 'error', "Продукт «{$ing->name}» #{$ing->id}: у картці " . round($kcal) . ' ккал/100 г, а за БЖВ ' . round($calc)
+                if ($okZero) continue;
+                $out[] = $this->c('V4', $level, "Продукт «{$ing->name}» #{$ing->id}: у довіднику немає БЖВ (0 ккал) — КБЖВ страви неправдиве. Візьміть іншу страву або попросіть виправити довідник");
+            } elseif (!$okZero && $kcal > 0 && abs($kcal - $calc) >= 40 && abs($kcal - $calc) / max($kcal, $calc) > 0.25) {
+                // Різниця < 40 ккал — клітковина й кислоти ягід/зелені, не помилка довідника.
+                $out[] = $this->c('V4', $level, "Продукт «{$ing->name}» #{$ing->id}: у картці " . round($kcal) . ' ккал/100 г, а за БЖВ ' . round($calc)
                     . ' — довідник з помилкою. Візьміть іншу страву або попросіть виправити довідник');
             }
         }

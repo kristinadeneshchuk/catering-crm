@@ -84,6 +84,8 @@ return [
         // КБЖВ дня проти цілі замовлення (MenuGuard V5): більше warn % — попередження, більше error % — не приймаємо.
         'kbzhu_warn_pct'  => (float) env('AI_KBZHU_WARN_PCT', 10),
         'kbzhu_error_pct' => (float) env('AI_KBZHU_ERROR_PCT', 20),
+        // «Битий» продукт довідника (MenuGuard V4): error — не приймаємо меню, warn — лише бейдж.
+        'broken_ingredient_level' => env('AI_BROKEN_INGREDIENT_LEVEL', 'error'),
         // Меню на D — до цієї години D−1 (кухня готує напередодні).
         'menu_deadline_hour' => (int) env('AI_MENU_DEADLINE_HOUR', 10),
 
