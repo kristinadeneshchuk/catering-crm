@@ -81,6 +81,11 @@ return [
         'food_cost_max_pct' => (float) env('FOOD_COST_MAX_PCT', 30),
         // Скільки окремих страв поза циклом кухня тягне за день (усі індивідуальні разом).
         'kitchen_offcycle_max' => (int) env('KITCHEN_OFFCYCLE_MAX', 6),
+        // КБЖВ дня проти цілі замовлення (MenuGuard V5): більше warn % — попередження, більше error % — не приймаємо.
+        'kbzhu_warn_pct'  => (float) env('AI_KBZHU_WARN_PCT', 10),
+        'kbzhu_error_pct' => (float) env('AI_KBZHU_ERROR_PCT', 20),
+        // Меню на D — до цієї години D−1 (кухня готує напередодні).
+        'menu_deadline_hour' => (int) env('AI_MENU_DEADLINE_HOUR', 10),
         // Кому після погодження меню йде задача «надіслати меню клієнту».
         'menu_handoff_agent' => env('AI_MENU_HANDOFF_AGENT', 'inbox'),
         // Погоджені повідомлення клієнтам → Inbox (HMAC sha256(ts.body), секрет лише в env).

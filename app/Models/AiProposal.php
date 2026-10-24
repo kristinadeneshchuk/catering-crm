@@ -16,6 +16,8 @@ class AiProposal extends Model
         'telegram_messages' => 'array',
         'reviewed_at'       => 'datetime',
         'applied_at'        => 'datetime',
+        'checks'            => 'array',
+        'cross_check'       => 'array',
     ];
 
     public const TYPES = [

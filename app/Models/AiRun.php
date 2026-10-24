@@ -15,6 +15,8 @@ class AiRun extends Model
     public const PURPOSE_COURIER_REPORT = 'courier_report';
     public const PURPOSE_OVERUSE = 'overuse';
     public const PURPOSE_ACCOUNTING = 'accounting';
+    public const PURPOSE_AGENT_MENU = 'agent_menu';
+    public const PURPOSE_AGENT_CHATS = 'agent_chats';
 
     protected $guarded = [];
 

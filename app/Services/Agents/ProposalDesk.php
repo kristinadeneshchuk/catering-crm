@@ -45,8 +45,17 @@ class ProposalDesk
         $handler = $this->handler($type);
         $errors = array_merge($handler->validate($payload), app(AgentChat::class)->validateFiles((array) ($data['files'] ?? [])));
         if ($errors) return ['proposal' => null, 'errors' => $errors];
-        // Повтори й собівартість — підказка людині; збій розрахунку не блокує подачу.
-        if (method_exists($handler, 'warnings')) {
+
+        // Меню: кодові перевірки (MenuGuard) — жорсткі помилки повертаємо агенту,
+        // попередження показуємо людині. Повтори/собівартість/кухня — уже всередині.
+        $checks = null;
+        if ($type === 'individual_week_menu') {
+            $checks = app(MenuGuard::class)->check($payload);
+            if ($guardErrors = MenuGuard::errors($checks)) return ['proposal' => null, 'errors' => $guardErrors];
+            if ($lock = $this->periodLock($agent, $payload)) return ['proposal' => null, 'errors' => [$lock]];
+            $payload['_warnings'] = MenuGuard::warnings($checks);
+        } elseif (method_exists($handler, 'warnings')) {
+            // Повтори й собівартість — підказка людині; збій розрахунку не блокує подачу.
             try {
                 $payload['_warnings'] = $handler->warnings($payload);
             } catch (Throwable $e) {
@@ -68,13 +77,50 @@ class ProposalDesk
             'client_id'        => $clientId,
             'order_id'         => $order?->id,
             'payload'          => $payload,
+            'checks'           => $checks,
             'status'           => 'pending',
         ]);
+        $this->supersede($agent, $proposal);
 
         // Пропозиція зʼявляється в чаті з агентом (і в Telegram) — з файлами, якщо агент їх додав.
         app(AgentChat::class)->fromAgent($agent, trim($proposal->title . "\n" . $proposal->summary), (array) ($data['files'] ?? []), $proposal);
 
         return ['proposal' => $proposal, 'errors' => [], 'warnings' => $payload['_warnings'] ?? []];
+    }
+
+    /**
+     * Блокування «клієнт × період»: поки на ці дати чекає меню іншого агента
+     * (сесія на Маку чи серверний агент), друге не приймаємо — щоб двоє не робили одне.
+     */
+    private function periodLock(AiAgent $agent, array $payload): ?string
+    {
+        $dates = array_column((array) ($payload['days'] ?? []), 'date');
+        if (!$dates || empty($payload['order_id'])) return null;
+        $other = AiProposal::query()->with('agent')
+            ->where('type', 'individual_week_menu')->where('status', 'pending')
+            ->where('order_id', $payload['order_id'])->where('ai_agent_id', '!=', $agent->id)
+            ->get()
+            ->first(fn (AiProposal $p) => array_intersect($dates, array_column((array) ($p->payload['days'] ?? []), 'date')));
+
+        return $other ? "На ці дати вже чекає погодження меню #{$other->id} від «{$other->agent?->name}» — дочекайтесь рішення або попросіть його відкликати" : null;
+    }
+
+    /** Нова версія меню того самого агента на ті самі дати замінює попередню, що ще чекала. */
+    private function supersede(AiAgent $agent, AiProposal $new): void
+    {
+        if ($new->type !== 'individual_week_menu' || !$new->order_id) return;
+        $dates = array_column((array) ($new->payload['days'] ?? []), 'date');
+        $old = AiProposal::query()
+            ->where('type', 'individual_week_menu')->whereIn('status', ['pending', 'changes_requested'])
+            ->where('order_id', $new->order_id)->where('ai_agent_id', $agent->id)->whereKeyNot($new->id)
+            ->latest('id')->get()
+            ->first(fn (AiProposal $p) => array_intersect($dates, array_column((array) ($p->payload['days'] ?? []), 'date')));
+        if (!$old) return;
+
+        $new->forceFill(['supersedes_id' => $old->id, 'version' => ($old->version ?? 1) + 1])->save();
+        if ($old->status === 'pending') {
+            $old->forceFill(['status' => 'rejected', 'review_comment' => "Замінено новою версією #{$new->id}", 'reviewed_at' => now()])->save();
+        }
     }
 
     public function approve(AiProposal $p, ?User $by, bool $force = false): string

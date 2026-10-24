@@ -104,6 +104,12 @@ class Client extends Authenticatable
         return $this->belongsTo(\App\Models\Diet::class);
     }
 
+    /** Профіль харчування індивідуального клієнта (режим, групи «не можна», правила-частоти). */
+    public function dietProfile(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(ClientDietProfile::class);
+    }
+
     public function ingredientExclusions(): BelongsToMany
     {
         return $this->belongsToMany(
