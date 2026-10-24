@@ -29,7 +29,8 @@ class CourierShiftReportResource extends Resource
 
     protected static ?string $navigationGroup = 'Система';
     protected static ?int $navigationSort = 3;
-    protected static ?string $navigationIcon = 'heroicon-o-truck';
+    // Без іконки: група «Система» має свою, а Filament не дозволяє обидві (уся адмінка — 500).
+    protected static ?string $navigationIcon = null;
     protected static ?string $navigationLabel = 'Звіти курʼєрів';
     protected static ?string $modelLabel = 'Звіт курʼєра';
     protected static ?string $pluralModelLabel = 'Звіти курʼєрів';
