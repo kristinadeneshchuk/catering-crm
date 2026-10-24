@@ -56,9 +56,10 @@ class AssignToAgentAction
                     'client_id' => $record instanceof Client ? $record->id : $order?->client_id,
                 ]);
 
-                Notification::make()->title("Задачу #{$task->id} доручено: {$agent->name}")->success()
-                    ->actions([\Filament\Notifications\Actions\Action::make('open')->label('Відкрити')->url(AiAgentTaskResource::getUrl('view', ['record' => $task]))])
-                    ->send();
+                Notification::make()->title("Задачу #{$task->id} доручено: {$agent->name}")->success()->send();
+
+                // Хід роботи й результат — у розмові «ШІ-чат».
+                return redirect(\App\Filament\Pages\AgentsChat::getUrl(['task' => $task->id]));
             });
     }
 

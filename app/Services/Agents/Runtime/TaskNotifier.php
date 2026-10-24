@@ -38,7 +38,7 @@ class TaskNotifier
 
     public function link(AiAgentTask $task): string
     {
-        return rtrim((string) config('app.url'), '/') . "/admin/ai-agent-tasks/{$task->id}";
+        return rtrim((string) config('app.url'), '/') . "/admin/ai?task={$task->id}";
     }
 
     private function send(AiAgentTask $task, string $text): void

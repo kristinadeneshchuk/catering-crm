@@ -17,10 +17,11 @@ class AiChat extends Page
     use WithFileUploads;
 
     protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-right';
-    protected static ?string $navigationLabel = 'ШІ-чат';
-    protected static ?string $title = 'ШІ-чат';
+    // Переписка з агентами на Маку (API agents/v1). Серверні агенти — у «ШІ-чат» (AgentsChat).
+    protected static ?string $navigationLabel = 'Агенти на Маку';
+    protected static ?string $title = 'Агенти на Маку';
     protected static ?string $navigationGroup = 'ШІ';
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 9;
     protected static string $view = 'filament.ai.chat';
 
     public ?int $agentId = null;

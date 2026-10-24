@@ -55,6 +55,16 @@ class InboxReadClient
         return collect($page['messages'] ?? [])->reject(fn (array $m) => ! empty($m['is_note']))->values();
     }
 
+    /**
+     * Чати Inbox, привʼязані до клієнта CRM.
+     *
+     * @return array<int, array> [{conversation, account, contact}]
+     */
+    public function conversationsForClient(int $clientId): array
+    {
+        return (array) ($this->get('/api/agent/conversations', ['crm_client_id' => $clientId, 'limit' => 20])['conversations'] ?? []);
+    }
+
     /** Діалог: conversation, account, contact, crm_orders, link. */
     public function conversation(int $conversationId): array
     {
