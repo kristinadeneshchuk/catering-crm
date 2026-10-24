@@ -26,6 +26,23 @@ class AiAgent extends Model
     public function messages(): HasMany { return $this->hasMany(AiMessage::class); }
 
     /** Новий токен — показуємо один раз, у базі лише хеш. */
+    /** Агенти, що працюють на сервері CRM (є в services.ai_agents.runtime.agents). */
+    public function runsOnServer(): bool
+    {
+        return array_key_exists($this->slug, (array) config('services.ai_agents.runtime.agents', []));
+    }
+
+    /** Серверний агент «Меню» — створюється сам при першій задачі. */
+    public static function serverMenu(): self
+    {
+        return static::firstOrCreate(['slug' => 'menu'], [
+            'name' => 'Меню (сервер)',
+            'role' => 'Персональні меню й заміни індивідуальним клієнтам за задачею менеджера',
+            'allowed_types' => ['individual_week_menu', 'order_replacements'],
+            'is_active' => true,
+        ]);
+    }
+
     public function issueToken(): string
     {
         $token = 'agt_' . $this->slug . '_' . Str::random(40);

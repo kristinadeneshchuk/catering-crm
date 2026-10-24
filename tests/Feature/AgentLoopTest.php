@@ -130,6 +130,34 @@ class AgentLoopTest extends AgentsTestCase
         $this->assertSame('Відповідь менеджера: 140 г', $this->gateway->toolResult(1, 0));
     }
 
+    public function test_a_manager_assigns_a_task_and_answers_in_the_thread(): void
+    {
+        \Illuminate\Support\Facades\Queue::fake();
+        $manager = $this->user(12, 'manager');
+        $this->actingAs($manager);
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+
+        // Те саме робить кнопка «Доручити агенту» на картці клієнта/замовлення.
+        app(\App\Services\Agents\TaskDesk::class)->assign($this->menu, $manager, [
+            'template' => 'menu_period', 'order_id' => $this->order->id, 'period_from' => '2026-10-14', 'period_to' => '2026-10-15', 'details' => 'більше риби',
+        ]);
+
+        $task = AiAgentTask::sole();
+        $this->assertSame(['Меню Гоголь Денис 14.10–15.10', $this->order->id, $this->order->client_id, 12, '2026-10-13 10:00'],
+            [$task->title, $task->order_id, $task->client_id, $task->created_by, $task->due_at->format('Y-m-d H:i')]);
+        \Illuminate\Support\Facades\Queue::assertPushedOn('agents', RunAgentTask::class, fn ($job) => $job->task->is($task) && $job->answer === null);
+
+        $task->forceFill(['status' => 'waiting_human'])->save();
+        $task->log('question', 'Скільки білка?');
+        \Livewire\Livewire::test(\App\Filament\Resources\AiAgentTaskResource\Pages\ListAiAgentTasks::class)->assertOk()->assertSee('Меню Гоголь Денис');
+        \Livewire\Livewire::test(\App\Filament\Resources\AiAgentTaskResource\Pages\ViewAiAgentTask::class, ['record' => $task->id])
+            ->assertOk()->assertSee('Скільки білка?')->assertSee('Агент чекає відповіді')
+            ->set('reply', '140 г')->call('sendReply');
+
+        $this->assertSame('140 г', $task->events()->where('kind', 'answer')->value('text'));
+        \Illuminate\Support\Facades\Queue::assertPushed(RunAgentTask::class, fn ($job) => $job->answer === '140 г');
+    }
+
     public function test_the_daily_cap_stops_the_agent_before_spending_more(): void
     {
         config(['services.ai_agents.runtime.daily_cap_usd' => 1]);

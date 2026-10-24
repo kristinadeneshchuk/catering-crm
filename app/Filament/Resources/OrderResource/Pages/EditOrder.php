@@ -19,6 +19,7 @@ class EditOrder extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            \App\Filament\Actions\AssignToAgentAction::make(),
             Actions\DeleteAction::make(),
         ];
     }

@@ -19,6 +19,7 @@ class EditClient extends EditRecord
                 ->icon('heroicon-o-plus-circle')
                 ->color('success')
                 ->url(fn () => OrderResource::getUrl('create', ['client_id' => $this->record->id])),
+            \App\Filament\Actions\AssignToAgentAction::make(),
             Actions\DeleteAction::make(),
         ];
     }

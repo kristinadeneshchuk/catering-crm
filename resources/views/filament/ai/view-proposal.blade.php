@@ -9,6 +9,25 @@
             <div><b>Подано:</b> {{ $p->created_at->format('d.m H:i') }}</div>
             @if($p->reviewer)<div><b>Розглянув:</b> {{ $p->reviewer->name }}, {{ $p->reviewed_at?->format('d.m H:i') }}</div>@endif
         </div>
+        @if($p->ai_agent_task_id)<div style="margin-top:6px;font-size:13px;"><a href="{{ \App\Filament\Resources\AiAgentTaskResource::getUrl('view', ['record' => $p->ai_agent_task_id]) }}" style="text-decoration:underline;">Задача #{{ $p->ai_agent_task_id }}</a>@if($p->version > 1) · версія {{ $p->version }}@endif</div>@endif
+        @if($p->checks)
+            {{-- Кодові перевірки MenuGuard: жорсткі сюди не доходять, тож тут — зелене й попередження. --}}
+            @php($warn = collect($p->checks)->where('level', 'warn'))
+            <div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:{{ $warn->isEmpty() ? 'rgba(34,197,94,.12)' : 'rgba(245,158,11,.14)' }};font-size:13px;">
+                @if($warn->isEmpty())
+                    <b>✅ Перевірки пройдено:</b> виключення (на всю глибину ПФ і групами), дні доставки, продукти довідника, КБЖВ дня, правила клієнта.
+                @else
+                    <b>⚠️ Перевірки — {{ $warn->count() }} попередж.:</b>
+                    @foreach($warn as $c)<div>[{{ $c['code'] }}] {{ $c['text'] }}</div>@endforeach
+                @endif
+            </div>
+        @endif
+        @if($p->cross_check)
+            <div style="margin-top:6px;padding:8px 12px;border-radius:8px;background:{{ ($p->cross_check['status'] ?? '') === 'conflict' ? 'rgba(239,68,68,.12)' : 'rgba(34,197,94,.12)' }};font-size:13px;">
+                <b>{{ ($p->cross_check['status'] ?? '') === 'conflict' ? '⚠️ Конфлікт з перепискою' : '✅ Переписка: суперечностей немає' }}</b>
+                @if(!empty($p->cross_check['notes']))<div style="white-space:pre-line;">{{ $p->cross_check['notes'] }}</div>@endif
+            </div>
+        @endif
         @if($p->summary)<div style="margin-top:10px;white-space:pre-line;">{{ $p->summary }}</div>@endif
         @if($p->review_comment)<div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(59,130,246,.1);"><b>Коментар:</b> {{ $p->review_comment }}</div>@endif
         @if($p->apply_result)
