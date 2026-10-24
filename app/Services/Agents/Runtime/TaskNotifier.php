@@ -22,6 +22,11 @@ class TaskNotifier
 
     public function finished(AiAgentTask $task): void
     {
+        if ($task->payload['shadow'] ?? false) {
+            $this->send($task, "👁 {$task->agent->name}: тіньовий прогін «{$task->title}» готовий — для порівняння, нічого не записано.\n" . $this->link($task));
+
+            return;
+        }
         if (!$task->proposals()->where('status', 'pending')->exists()) return; // нема що погоджувати — не турбуємо
         $this->send($task, "✅ {$task->agent->name}: «{$task->title}» — готово, чекає погодження.\n" . $this->link($task));
     }

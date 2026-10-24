@@ -204,6 +204,7 @@ class AgentLoop
         if ($task->details) $parts[] = "Деталі від менеджера: {$task->details}";
         if ($task->period_from) $parts[] = 'Період: ' . $task->period_from->format('d.m.Y') . ' – ' . ($task->period_to?->format('d.m.Y') ?? '?');
         if ($task->order_id) $parts[] = "Замовлення #{$task->order_id}";
+        if ($task->payload['shadow'] ?? false) $parts[] = 'Режим: тіньовий прогін — працюй як завжди (меню подавай через submit_menu), людина порівняє з уже записаним; персональне меню, вже записане на ці дати, не копіюй — склади своє.';
         $parts[] = 'Почни з task_context.';
 
         return implode("\n", $parts);

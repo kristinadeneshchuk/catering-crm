@@ -32,6 +32,7 @@ class AiProposal extends Model
         'rejected'          => 'Відхилено',
         'applied'           => 'Виконано',
         'failed'            => 'Помилка виконання',
+        'shadow'            => 'Тіньова (лише порівняння)',
     ];
 
     public function agent(): BelongsTo { return $this->belongsTo(AiAgent::class, 'ai_agent_id'); }

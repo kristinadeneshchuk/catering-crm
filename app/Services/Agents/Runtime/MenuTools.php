@@ -270,7 +270,7 @@ class MenuTools implements AgentTools
         if ($res['errors']) return ToolResult::error(['errors' => $res['errors']]);
 
         $p = $res['proposal'];
-        $this->task->log('step', "Подано на погодження: «{$p->title}» (#{$p->id})", [], null, $p->id);
+        $this->task->log('step', ($p->status === 'shadow' ? 'Тіньова пропозиція (не виконується)' : 'Подано на погодження') . ": «{$p->title}» (#{$p->id})", [], null, $p->id);
 
         return ToolResult::ok(['proposal_id' => $p->id, 'status' => 'pending', 'warnings' => $res['warnings'] ?? []]);
     }

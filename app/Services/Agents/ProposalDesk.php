@@ -43,6 +43,8 @@ class ProposalDesk
 
         $payload = (array) ($data['payload'] ?? []);
         $handler = $this->handler($type);
+        // Тіньова задача: пропозиція лише для порівняння — без погодження, Telegram і блокування дат.
+        $shadow = !empty($data['task_id']) && (bool) (\App\Models\AiAgentTask::whereKey($data['task_id'])->value('payload')['shadow'] ?? false);
         $errors = array_merge($handler->validate($payload), app(AgentChat::class)->validateFiles((array) ($data['files'] ?? [])));
         if ($errors) return ['proposal' => null, 'errors' => $errors];
 
@@ -52,7 +54,7 @@ class ProposalDesk
         if ($type === 'individual_week_menu') {
             $checks = app(MenuGuard::class)->check($payload);
             if ($guardErrors = MenuGuard::errors($checks)) return ['proposal' => null, 'errors' => $guardErrors];
-            if ($lock = $this->periodLock($agent, $payload)) return ['proposal' => null, 'errors' => [$lock]];
+            if (!$shadow && ($lock = $this->periodLock($agent, $payload))) return ['proposal' => null, 'errors' => [$lock]];
             $payload['_warnings'] = MenuGuard::warnings($checks);
         } elseif (method_exists($handler, 'warnings')) {
             // Повтори й собівартість — підказка людині; збій розрахунку не блокує подачу.
@@ -78,8 +80,9 @@ class ProposalDesk
             'order_id'         => $order?->id,
             'payload'          => $payload,
             'checks'           => $checks,
-            'status'           => 'pending',
+            'status'           => $shadow ? 'shadow' : 'pending',
         ]);
+        if ($shadow) return ['proposal' => $proposal, 'errors' => [], 'warnings' => $payload['_warnings'] ?? []];
         $this->supersede($agent, $proposal);
 
         // Пропозиція зʼявляється в чаті з агентом (і в Telegram) — з файлами, якщо агент їх додав.

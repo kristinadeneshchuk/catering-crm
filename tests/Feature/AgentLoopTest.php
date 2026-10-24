@@ -158,6 +158,32 @@ class AgentLoopTest extends AgentsTestCase
         \Illuminate\Support\Facades\Queue::assertPushed(RunAgentTask::class, fn ($job) => $job->answer === '140 г');
     }
 
+    public function test_a_shadow_run_neither_locks_the_days_nor_can_be_approved(): void
+    {
+        $dish = Dish::create(['name' => 'Омлет'])->id;
+        DB::table('dish_ingredients')->insert(['dish_id' => $dish, 'type' => 'product', 'ingredient_id' => $this->ingredient('яйце'), 'net_weight_g' => 150]);
+        $days = [['date' => '2026-10-14', 'meals' => [['meal_type_id' => $this->lunch, 'dish_id' => $dish]]]];
+        \Illuminate\Support\Facades\Http::fake(['api.telegram.org/*' => \Illuminate\Support\Facades\Http::response(['ok' => true, 'result' => ['message_id' => 55]])]);
+        \Illuminate\Support\Facades\Queue::fake([RunAgentTask::class]);
+        $this->artisan('agents:assign', ['order' => $this->order->id, 'from' => '2026-10-14', 'to' => '2026-10-14', '--shadow' => true, '--by' => 7])
+            ->expectsOutputToContain('(тіньова)')->assertSuccessful()->run();
+        $this->gateway->script = [[['submit_menu', ['summary' => 'тінь', 'payload' => ['days' => $days]]]], [['finish', ['summary' => 'ок']]]];
+        \Illuminate\Support\Facades\Http::fake(['api.telegram.org/*' => \Illuminate\Support\Facades\Http::response(['ok' => true, 'result' => ['message_id' => 56]])]);
+
+        app(\App\Services\Agents\Runtime\AgentLoop::class)->run(AiAgentTask::sole());
+
+        $shadow = AiProposal::sole();
+        $this->assertSame('shadow', $shadow->status);
+        // Сесія на Маку подає меню на ті самі дати — тінь їй не заважає.
+        $this->api('POST', 'proposals', ['type' => 'individual_week_menu', 'payload' => ['order_id' => $this->order->id, 'days' => $days]])->assertCreated();
+        $this->assertSame('shadow', $shadow->fresh()->status);
+        // Погодити тінь не можна, і в Telegram з кнопками вона не йшла.
+        app(\App\Services\Agents\ProposalDesk::class)->approve($shadow, $this->user(8));
+        $this->assertSame('shadow', $shadow->fresh()->status);
+        $this->assertSame(0, \App\Models\OrderDayDish::where('order_id', $this->order->id)->count());
+        \Illuminate\Support\Facades\Http::assertNotSent(fn ($r) => str_contains($r->body(), 'тінь') && str_contains($r->body(), 'aip'));
+    }
+
     public function test_the_daily_cap_stops_the_agent_before_spending_more(): void
     {
         config(['services.ai_agents.runtime.daily_cap_usd' => 1]);
