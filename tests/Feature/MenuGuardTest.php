@@ -63,6 +63,18 @@ class MenuGuardTest extends AgentsTestCase
         $this->propose($this->lunchOn('2026-10-14', $dish))->assertCreated();
     }
 
+    public function test_the_client_replacement_bundle_clears_the_original_product(): void
+    {
+        $milk = $this->ingredient('молоко');
+        $dish = $this->dish('Омлет на молоці', [['ing' => $this->ingredient('яйце')], ['ing' => $milk, 'g' => 30]]);
+        DB::table('client_ingredient_exclusion')->insert(['client_id' => $this->order->client_id, 'ingredient_id' => $milk]);
+        DB::table('replacement_bundles')->insert(['id' => 5, 'name' => 'Безлактозне']);
+        DB::table('replacement_bundle_items')->insert(['bundle_id' => 5, 'replacement_bundle_id' => 5, 'original_ingredient_id' => $milk, 'replacement_ingredient_id' => $this->ingredient('молоко безлактозне')]);
+        DB::table('client_replacement_bundle')->insert(['client_id' => $this->order->client_id, 'replacement_bundle_id' => 5]);
+
+        $this->propose($this->lunchOn('2026-10-14', $dish))->assertCreated();
+    }
+
     public function test_a_whole_group_excluded_in_the_profile_catches_every_synonym(): void
     {
         $mexican = $this->ingredient('Овочі мексиканські');

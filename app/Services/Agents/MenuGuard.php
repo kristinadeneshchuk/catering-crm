@@ -38,6 +38,9 @@ class MenuGuard
     /** @var array<int, string> */
     private array $dishNames = [];
 
+    /** @var array<int, int> продукт → заміна з наборів замін клієнта */
+    private array $bundle = [];
+
     /**
      * @return array<int, array{code: string, level: string, text: string}>
      */
@@ -55,6 +58,11 @@ class MenuGuard
         // Склад кожної страви меню до сирого продукту.
         $dishIds = collect($days)->flatMap(fn ($d) => collect($d['meals'] ?? [])->pluck('dish_id'))->filter()->map(fn ($id) => (int) $id)->unique()->all();
         $replacements = DB::table('order_replacements')->where('order_id', $order->id)->get();
+        // Набори замін клієнта (напр. «безлактозне»: молоко → безлактозне) CRM застосовує до всіх страв.
+        $this->bundle = DB::table('client_replacement_bundle')->where('client_id', $order->client_id)
+            ->join('replacement_bundle_items', 'replacement_bundle_items.bundle_id', '=', 'client_replacement_bundle.replacement_bundle_id')
+            ->pluck('replacement_bundle_items.replacement_ingredient_id', 'replacement_bundle_items.original_ingredient_id')
+            ->map(fn ($id) => (int) $id)->all();
         $this->load(array_merge($dishIds, $replacements->pluck('replacement_dish_id')->filter()->all(),
             $newDishes->flatMap(fn ($d) => collect($d['ingredients'] ?? [])->pluck('child_dish_id'))->filter()->all()));
 
@@ -199,7 +207,7 @@ class MenuGuard
     {
         $forDish = $replacements->where('dish_id', $dishId);
         $wholeDish = $forDish->first(fn ($r) => $r->replacement_dish_id && !$r->original_product_id);
-        if ($wholeDish) return $this->leaves((int) $wholeDish->replacement_dish_id);
+        if ($wholeDish) return $this->applyBundle($this->leaves((int) $wholeDish->replacement_dish_id));
 
         $leaves = $this->leaves($dishId);
         foreach ($forDish->where('original_product_id', '!=', null) as $r) {
@@ -207,6 +215,18 @@ class MenuGuard
             $via = $leaves[(int) $r->original_product_id];
             unset($leaves[(int) $r->original_product_id]);
             if ($r->replacement_product_id) $leaves[(int) $r->replacement_product_id] ??= $via;
+        }
+
+        return $this->applyBundle($leaves);
+    }
+
+    /** Набір замін клієнта: продукт → його заміна в усіх стравах. */
+    private function applyBundle(array $leaves): array
+    {
+        foreach (array_intersect_key($this->bundle, $leaves) as $orig => $repl) {
+            $via = $leaves[$orig];
+            unset($leaves[$orig]);
+            $leaves[$repl] ??= $via;
         }
 
         return $leaves;

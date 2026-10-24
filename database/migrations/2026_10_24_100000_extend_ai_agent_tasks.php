@@ -30,13 +30,16 @@ return new class extends Migration
 
     public function down(): void
     {
+        // MySQL: спершу зовнішні ключі (складені індекси їх підпирають), потім індекси й колонки.
+        Schema::table('ai_agent_tasks', function (Blueprint $t) {
+            $t->dropForeign(['client_id']);
+            $t->dropForeign(['order_id']);
+            $t->dropForeign(['parent_task_id']);
+        });
         Schema::table('ai_agent_tasks', function (Blueprint $t) {
             $t->dropIndex(['client_id', 'status']);
             $t->dropIndex(['order_id', 'status']);
-            $t->dropConstrainedForeignId('parent_task_id');
-            $t->dropConstrainedForeignId('order_id');
-            $t->dropConstrainedForeignId('client_id');
-            $t->dropColumn(['period_from', 'period_to', 'template', 'steps', 'cost_usd', 'error']);
+            $t->dropColumn(['client_id', 'order_id', 'parent_task_id', 'period_from', 'period_to', 'template', 'steps', 'cost_usd', 'error']);
         });
     }
 };

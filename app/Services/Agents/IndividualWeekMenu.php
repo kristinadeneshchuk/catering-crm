@@ -255,8 +255,9 @@ class IndividualWeekMenu
     }
 
     /**
-     * Що вийде за день: ккал, БЖВ і собівартість з техкарт CRM, з вагою під
-     * калораж замовлення для страв без weight_grams (як рахує сама CRM).
+     * Що вийде за день: ккал, БЖВ і собівартість з техкарт CRM — тією самою
+     * формулою, що й виробничий лист (CalculatesOrderPlan::buildPlanFromPersonal):
+     * страва з weight_grams — ця вага; без неї — калораж дня порівну між стравами дня.
      *
      * @return array<int, array{date: string, kcal: float, p: float, f: float, c: float, cost: float, price: float, pct: float}>
      */
@@ -274,25 +275,26 @@ class IndividualWeekMenu
 
         $out = [];
         foreach ((array) ($p['days'] ?? []) as $day) {
-            $fixed = ['kcal' => 0.0, 'prot' => 0.0, 'fat' => 0.0, 'carb' => 0.0, 'cost' => 0.0];
-            $free = $fixed;
-            foreach ($day['meals'] ?? [] as $m) {
+            $meals = collect($day['meals'] ?? []);
+            $count = $meals->count();
+            $sum = ['kcal' => 0.0, 'prot' => 0.0, 'fat' => 0.0, 'carb' => 0.0, 'cost' => 0.0];
+            foreach ($meals as $m) {
                 $dish = !empty($m['dish_id']) ? ($dishes[$m['dish_id']] ?? null) : ($new[$m['dish_ref'] ?? ''] ?? null);
                 if (!$dish) continue;
                 $t = $dish->calculated_totals;
-                $w = (float) ($t['output_weight'] ?: 1);
-                $k = !empty($m['weight_grams']) ? $m['weight_grams'] / $w : 1.0;
-                foreach (array_keys($fixed) as $key) {
-                    if (!empty($m['weight_grams'])) $fixed[$key] += $t[$key] * $k;
-                    else $free[$key] += $t[$key];
-                }
+                $outW = (float) ($t['output_weight'] ?: 1);
+                // Як у CRM: ккал на 100 г — від виходу страви (base_weight_g).
+                $base = (float) ($dish->base_weight_g ?: $outW);
+                $kcal100 = $base > 0 ? $t['kcal'] / $base * 100 : 0.0;
+                $weight = !empty($m['weight_grams'])
+                    ? (float) $m['weight_grams']
+                    : ($kcal100 > 0 && $count > 0 ? ($kcalTarget / $count) / $kcal100 * 100 : 0.0);
+                $sum['kcal'] += $weight * $kcal100 / 100;
+                foreach (['prot', 'fat', 'carb', 'cost'] as $k) $sum[$k] += $weight * $t[$k] / $outW;
             }
-            // Страви «під калораж» масштабуємо, щоб день дав калораж замовлення.
-            $scale = ($free['kcal'] > 0 && $kcalTarget > 0) ? max(0.3, min(3.0, ($kcalTarget - $fixed['kcal']) / $free['kcal'])) : 1.0;
-            $sum = fn (string $key) => round($fixed[$key] + $free[$key] * $scale, 1);
-            $cost = round($fixed['cost'] + $free['cost'] * $scale, 2);
+            $cost = round($sum['cost'], 2);
             $out[] = [
-                'date' => $day['date'], 'kcal' => $sum('kcal'), 'p' => $sum('prot'), 'f' => $sum('fat'), 'c' => $sum('carb'),
+                'date' => $day['date'], 'kcal' => round($sum['kcal'], 1), 'p' => round($sum['prot'], 1), 'f' => round($sum['fat'], 1), 'c' => round($sum['carb'], 1),
                 'cost' => $cost, 'price' => round($price, 2), 'pct' => $price > 0 ? round($cost / $price * 100, 1) : 0.0,
             ];
         }
