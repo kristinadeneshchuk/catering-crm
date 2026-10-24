@@ -86,6 +86,24 @@ return [
         'kbzhu_error_pct' => (float) env('AI_KBZHU_ERROR_PCT', 20),
         // Меню на D — до цієї години D−1 (кухня готує напередодні).
         'menu_deadline_hour' => (int) env('AI_MENU_DEADLINE_HOUR', 10),
+
+        // Агенти на сервері (docs/tz-ai-agents-in-crm.md §2): черга, моделі, ліміти.
+        'runtime' => [
+            'queue'         => env('AGENTS_QUEUE', 'agents'),
+            'daily_cap_usd' => (float) env('AGENTS_DAILY_CAP_USD', 20),
+            'max_tokens'    => (int) env('AGENTS_MAX_TOKENS', 16000),
+            'timeout'       => (int) env('AGENTS_TIMEOUT', 600),
+            'agents' => [
+                'menu' => [
+                    'model'     => env('AGENT_MENU_MODEL', 'claude-opus-5-5'),
+                    'effort'    => env('AGENT_MENU_EFFORT', 'high'),
+                    'max_steps' => (int) env('AGENT_MENU_MAX_STEPS', 40),
+                ],
+            ],
+            'tools' => [
+                'menu' => \App\Services\Agents\Runtime\MenuTools::class,
+            ],
+        ],
         // Кому після погодження меню йде задача «надіслати меню клієнту».
         'menu_handoff_agent' => env('AI_MENU_HANDOFF_AGENT', 'inbox'),
         // Погоджені повідомлення клієнтам → Inbox (HMAC sha256(ts.body), секрет лише в env).

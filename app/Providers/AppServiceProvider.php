@@ -24,7 +24,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Агенти на сервері ходять у Claude API; у тестах підміняється сценарієм.
+        $this->app->bind(\App\Services\Agents\Runtime\ModelGateway::class, \App\Services\Agents\Runtime\AnthropicGateway::class);
     }
 
     /**
