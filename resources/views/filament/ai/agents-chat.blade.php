@@ -3,15 +3,17 @@
         $state = function ($t) {
             if ($t->status === 'waiting_human') return ['агент питає', '#d97706'];
             if ($t->pending_count) return ['чекає погодження', '#d97706'];
-            if (in_array($t->status, ['new', 'in_progress'], true)) return ['працює…', '#2563eb'];
+            if (in_array($t->status, ['new', 'in_progress'], true)) return $t->agent?->runsOnServer()
+                ? ['працює…', '#2563eb']
+                : [$t->status === 'new' ? 'чекає агента на Маку' : 'агент на Маку працює', 'rgba(127,127,127,.8)'];
             if ($t->status === 'failed') return ['помилка', '#dc2626'];
             if ($t->status === 'cancelled') return ['скасовано', 'rgba(127,127,127,.8)'];
             return [($t->payload['shadow'] ?? false) ? 'готово · тінь' : 'готово', 'rgba(127,127,127,.8)'];
         };
     @endphp
-    <div wire:poll.5s style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
-        {{-- Розмови --}}
-        <div style="flex:0 0 250px;display:flex;flex-direction:column;gap:6px;max-height:78vh;overflow:auto;">
+    <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+        {{-- Розмови: своя прокрутка, поле вводу на них не налазить --}}
+        <div style="flex:0 0 250px;display:flex;flex-direction:column;gap:6px;position:sticky;top:5rem;max-height:calc(100vh - 7rem);overflow:auto;">
             <x-filament::button wire:click="newConversation" icon="heroicon-o-plus" color="gray">Нова розмова</x-filament::button>
             <div style="display:flex;gap:4px;font-size:12px;margin:4px 0;">
                 <button wire:click="$set('filter','all')" style="padding:3px 10px;border-radius:8px;{{ $filter === 'all' ? 'background:rgba(127,127,127,.18);font-weight:600;' : '' }}">Усі</button>
@@ -29,8 +31,9 @@
             @endforelse
         </div>
 
-        {{-- Розмова --}}
+        {{-- Розмова + поле вводу під нею --}}
         <div style="flex:1 1 520px;min-width:0;display:flex;flex-direction:column;gap:10px;">
+        <div wire:poll.5s style="display:flex;flex-direction:column;gap:10px;min-height:50vh;">
             @if(!$task)
                 <div style="padding:14px 16px;border-radius:12px;background:rgba(127,127,127,.08);font-size:14px;line-height:1.6;">
                     Напишіть агенту звичайними словами, наприклад:<br>
@@ -61,6 +64,9 @@
                     @if(!empty($task->payload['new_message_ids']))
                         {{-- Задачу поставило сортування нового в чаті, а не менеджер --}}
                         <div style="align-self:center;max-width:90%;font-size:13px;padding:6px 12px;border-radius:10px;background:rgba(127,127,127,.12);">📩 Нове в чаті клієнта: {{ trim(preg_replace('/\s*\[[^\]]*\]\s*$/u', '', $task->details)) }}</div>
+                    @elseif(!$task->creator || !$task->agent->runsOnServer())
+                        {{-- Задачу поставила CRM (напр. «надіслати меню клієнту» після погодження) --}}
+                        <div style="align-self:center;max-width:90%;font-size:13px;padding:6px 12px;border-radius:10px;background:rgba(127,127,127,.12);white-space:pre-line;">📋 {{ $task->title }}{{ $task->details ? "\n".$task->details : '' }}@if(!$task->agent->runsOnServer())<div style="font-size:11px;opacity:.7;margin-top:2px;">Цю задачу виконує агент на Маку — хід роботи тут не видно</div>@endif</div>
                     @else
                         @php($said = preg_match('/Дослівно: «(.*)»\s*$/us', $task->details, $m) ? $m[1] : $task->details)
                         <div style="align-self:flex-end;max-width:80%;padding:10px 14px;border-radius:14px;background:rgba(59,130,246,.15);white-space:pre-line;">{{ $said }}<div style="font-size:11px;opacity:.6;margin-top:2px;">{{ $task->creator?->name }} · {{ $task->created_at->format('d.m H:i') }}</div></div>
@@ -110,18 +116,19 @@
                     @endif
                 @endforeach
 
-                @if(in_array($task->status, ['new', 'in_progress'], true))
+                @if(in_array($task->status, ['new', 'in_progress'], true) && $task->agent->runsOnServer())
                     <div style="font-size:12px;opacity:.6;padding-left:4px;">… працює</div>
                 @endif
             @endif
         </div>
-    </div>
 
-    {{-- Поле вводу поза автооновленням, щоб не губився набраний текст --}}
-    <form wire:submit="send" style="position:sticky;bottom:0;display:flex;gap:8px;align-items:flex-end;padding:8px 0;background:inherit;">
-        <textarea wire:model.live.debounce.400ms="draft" rows="2" style="flex:1;border-radius:12px;padding:10px 12px;border:1px solid rgba(127,127,127,.35);background:transparent;"
-            placeholder="{{ !$taskId ? 'Напишіть доручення: «склади меню Ковальовій на 27–31.10»' : ($task?->status === 'waiting_human' ? 'Відповідь агенту…' : ($task?->isOpen() ? 'Уточнення агенту…' : 'Що змінити — агент візьме задачу знову…')) }}"
-            x-on:keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); $wire.send() }"></textarea>
-        <x-filament::button type="submit" icon="heroicon-o-paper-airplane">Надіслати</x-filament::button>
-    </form>
+        {{-- Поле вводу поза автооновленням, щоб не губився набраний текст --}}
+        <form wire:submit="send" class="bg-gray-50 dark:bg-gray-950" style="position:sticky;bottom:0;display:flex;gap:8px;align-items:flex-end;padding:8px 0 12px;">
+            <textarea wire:model.live.debounce.400ms="draft" rows="2" style="flex:1;border-radius:12px;padding:10px 12px;border:1px solid rgba(127,127,127,.35);background:transparent;"
+                placeholder="{{ !$taskId ? 'Напишіть доручення: «склади меню Ковальовій на 27–31.10»' : ($task?->status === 'waiting_human' ? 'Відповідь агенту…' : ($task?->isOpen() ? 'Уточнення агенту…' : 'Що змінити — агент візьме задачу знову…')) }}"
+                x-on:keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); $wire.send() }"></textarea>
+            <x-filament::button type="submit" icon="heroicon-o-paper-airplane">Надіслати</x-filament::button>
+        </form>
+        </div>
+    </div>
 </x-filament-panels::page>

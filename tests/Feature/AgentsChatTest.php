@@ -89,6 +89,17 @@ class AgentsChatTest extends AgentsTestCase
         Queue::assertPushed(RunAgentTask::class, fn ($j) => $j->answer === '140 г');
     }
 
+    public function test_a_task_for_an_agent_on_the_mac_is_not_shown_as_running_here(): void
+    {
+        $inbox = AiAgent::create(['slug' => 'inbox', 'name' => 'Inbox — переписки й розсилка', 'allowed_types' => ['client_message']]);
+        $task = $inbox->tasks()->create(['title' => 'Надіслати меню клієнту: Гоголь', 'status' => 'new', 'details' => 'Меню погоджено. Звірся з рецензентом.']);
+
+        Livewire::test(AgentsChat::class)->call('select', $task->id)
+            ->assertSee('чекає агента на Маку')
+            ->assertSee('Цю задачу виконує агент на Маку')
+            ->assertDontSee('… працює');
+    }
+
     public function test_changes_on_a_card_send_the_server_agent_back_to_work(): void
     {
         $menu = AiAgent::serverMenu();
