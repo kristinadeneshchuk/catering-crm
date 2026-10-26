@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
-use Tests\Support\BuildsStockTestSchema;
+use Tests\Support\CashWorld;
 use Tests\TestCase;
 
 /**
@@ -26,47 +26,7 @@ use Tests\TestCase;
  */
 class CashBookTest extends TestCase
 {
-    use BuildsStockTestSchema;
-
-    protected Account $cash;
-    protected Account $card;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        Bus::fake();
-        $this->buildStockSchema();
-
-        foreach (['users', 'employees', 'positions', 'rate_history'] as $table) {
-            Schema::dropIfExists($table);
-        }
-        Schema::create('users', function (Blueprint $t) {
-            $t->id(); $t->string('name'); $t->string('email')->unique(); $t->string('password');
-            $t->string('role')->default('manager'); $t->rememberToken(); $t->timestamps();
-        });
-        Schema::create('employees', function (Blueprint $t) {
-            $t->id(); $t->string('name'); $t->decimal('balance', 12, 2)->default(0); $t->timestamps();
-        });
-
-        Schema::create('positions', function (Blueprint $t) {
-            $t->id(); $t->string('key'); $t->string('payment_type')->nullable(); $t->timestamps();
-        });
-        Schema::create('rate_history', function (Blueprint $t) {
-            $t->id(); $t->string('scope'); $t->decimal('value', 12, 2); $t->date('effective_from'); $t->timestamps();
-        });
-
-        $this->card = Account::create(['name' => 'ФОП картка', 'type' => 'card', 'balance' => 10000, 'is_default' => true]);
-        $this->cash = Account::create(['name' => 'Готівка', 'type' => 'cash', 'balance' => 5000]);
-    }
-
-    protected function login(string $role = 'admin'): User
-    {
-        $user = User::create(['name' => $role, 'email' => $role.'@t.test', 'password' => 'x', 'role' => $role]);
-        $this->actingAs($user);
-
-        return $user;
-    }
+    use CashWorld;
 
     public function test_an_expense_by_category_leaves_the_cash_and_goes_to_pnl(): void
     {

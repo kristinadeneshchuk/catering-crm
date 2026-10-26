@@ -145,6 +145,22 @@ Route::middleware('auth')->group(function () {
 });
 
 // 🔥 НОВИЙ МАРШРУТ АНАЛІТИКИ (закритий авторизацією)
+// 📱 «Каса» на телефоні (PWA). manifest і service worker — без входу: у них немає даних.
+Route::get('/cash-app/manifest.webmanifest', [\App\Http\Controllers\CashAppController::class, 'manifest'])->name('cash-app.manifest');
+Route::get('/cash-app/sw.js', [\App\Http\Controllers\CashAppController::class, 'serviceWorker'])->name('cash-app.sw');
+Route::middleware('auth')->prefix('cash-app')->name('cash-app.')->controller(\App\Http\Controllers\CashAppController::class)->group(function () {
+    Route::get('/', 'show')->name('show');
+    Route::get('/refs', 'refs')->name('refs');
+    Route::get('/data', 'data')->name('data');
+    Route::get('/orders', 'orders')->name('orders');
+    Route::post('/ops', 'store')->name('store');
+    Route::post('/transfer', 'transfer')->name('transfer');
+    Route::post('/recount', 'recount')->name('recount');
+    Route::patch('/ops/{transaction}', 'update')->name('update');
+    Route::delete('/ops/{transaction}', 'destroy')->name('destroy');
+    Route::get('/ops/{transaction}/history', 'history')->name('history');
+});
+
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index')->middleware('auth');
 
 Route::middleware('auth')->group(function () {

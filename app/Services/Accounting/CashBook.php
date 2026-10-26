@@ -72,6 +72,25 @@ class CashBook
         return array_combine(self::INCOMES, self::INCOMES);
     }
 
+    /**
+     * На які статті можна перевести операцію при редагуванні. ЗП, оплата
+     * клієнта, накладна, переказ і перерахунок мають привʼязки — їм статтю
+     * не міняємо (порожній масив); і в ці статті не переводимо.
+     */
+    public static function editableCategories(Transaction $t): array
+    {
+        if ($t->employee_id || $t->order_id || $t->stock_document_id
+            || in_array($t->category, [self::SALARY, self::PURCHASE, self::CLIENT, ...self::NON_FLOW], true)) {
+            return [];
+        }
+
+        $names = $t->type === 'income'
+            ? array_values(array_diff(self::INCOMES, [self::CLIENT]))
+            : array_merge(self::PNL_EXPENSES, array_keys(self::OTHER_EXPENSES));
+
+        return array_combine($names, $names);
+    }
+
     /** Усі статті — для фільтра. */
     public static function allCategories(): array
     {

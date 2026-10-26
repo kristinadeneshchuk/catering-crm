@@ -155,8 +155,8 @@ class CashOperationResource extends Resource
                         Forms\Components\DatePicker::make('date')->label('Дата')->required()->native(false)->displayFormat('d.m.Y'),
                         Forms\Components\TextInput::make('amount')->label('Сума')->numeric()->minValue(0.01)->prefix('₴')->required(),
                         Forms\Components\Select::make('category')->label('Стаття')
-                            ->options(fn (Transaction $record) => $record->type === 'income' ? CashBook::incomeOptions() : CashBook::expenseOptions())
-                            ->disabled(fn (Transaction $record) => $record->employee_id || $record->order_id),
+                            ->options(fn (Transaction $record) => CashBook::editableCategories($record) ?: [$record->category => $record->category])
+                            ->disabled(fn (Transaction $record) => ! CashBook::editableCategories($record)),
                         Forms\Components\Textarea::make('comment')->label('Коментар')->rows(2),
                     ]),
                 Tables\Actions\DeleteAction::make()
