@@ -298,6 +298,27 @@ class Order extends Model
         static::updated(function ($o) {
             self::syncClient($o);
 
+            // Пауза з майбутніми днями доставки: кухня й логістика його більше не бачать
+            // (feedingOn бере лише new/active), а дні лишились — так клієнт без раціону.
+            // Сигнал власнику й менеджеру одразу, хто б не поставив паузу.
+            if ($o->wasChanged('status') && $o->status === 'paused') {
+                $days = $o->orderDays()->whereDate('date', '>=', now()->toDateString())
+                    ->orderBy('date')->pluck('date')
+                    ->map(fn ($d) => \Carbon\Carbon::parse($d)->format('d.m'));
+                if ($days->isNotEmpty()) {
+                    $who = auth()->user()?->name ?? 'не через CRM (скрипт/API)';
+                    try {
+                        app(\App\Services\TelegramService::class)->sendToOwnerAndManager(
+                            "⚠️ Замовлення №{$o->id} — ".($o->client?->name ?? 'клієнт')." поставлено на ПАУЗУ ({$who}), "
+                            ."але дні доставки лишились: ".$days->implode(', ').".\n"
+                            ."Кухня й наклейки його не бачать. Якщо клієнт їсть — поверніть статус; якщо пауза — перенесіть дні."
+                        );
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('pause alert failed', ['order' => $o->id, 'error' => $e->getMessage()]);
+                    }
+                }
+            }
+
             if ($o->isDirty('final_price')) {
                 $diff = (float) $o->final_price - (float) $o->getOriginal('final_price');
                 if (abs($diff) > 0.001) {

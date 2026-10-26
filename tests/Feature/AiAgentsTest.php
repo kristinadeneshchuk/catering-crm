@@ -558,4 +558,25 @@ class AiAgentsTest extends AgentsTestCase
         $stranger = AiAgent::create(['slug' => 'x', 'name' => 'X'])->issueToken();
         $this->withToken($stranger)->get("/api/agents/v1/files/{$file['message_id']}/{$file['index']}")->assertForbidden();
     }
+
+    public function test_pause_with_future_delivery_days_alerts_owner_and_manager(): void
+    {
+        config(['services.telegram.owner_chat_id' => '999', 'services.telegram.manager_chat_id' => '888']);
+        \App\Models\OrderDay::create(['order_id' => $this->order->id, 'date' => now()->addDay()->toDateString()]);
+        Http::fake(['api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]])]);
+
+        $this->order->refresh()->update(['status' => 'paused']);
+
+        Http::assertSent(fn ($r) => str_contains((string) $r['text'], 'ПАУЗУ') && str_contains((string) $r['text'], '№'.$this->order->id));
+    }
+
+    public function test_pause_without_future_days_is_silent(): void
+    {
+        config(['services.telegram.owner_chat_id' => '999']);
+        Http::fake(['api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]])]);
+
+        $this->order->update(['status' => 'paused']);
+
+        Http::assertNotSent(fn ($r) => str_contains((string) ($r['text'] ?? ''), 'ПАУЗУ'));
+    }
 }
