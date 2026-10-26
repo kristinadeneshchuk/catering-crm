@@ -80,6 +80,18 @@ class InboxApiTest extends TestCase
         $this->assertEquals(1000, $response->json('tariffs.0.calorie_ranges.0.price_per_day'));
     }
 
+    public function test_catalog_lists_delivery_time_slots_by_window(): void
+    {
+        $ids = $this->seedCatalog();
+
+        $times = $this->getJson("/api/inbox/v1/projects/{$ids['project_id']}/catalog", $this->authHeaders())
+            ->assertOk()->json('delivery_times');
+
+        $this->assertContains(['value' => '18:00-22:00', 'window' => 'evening'], $times);
+        $this->assertContains(['value' => '06:00-10:00', 'window' => 'morning'], $times);
+        $this->assertSame('evening', $times[0]['window']);
+    }
+
     public function test_catalog_hides_a_tariff_with_an_empty_price_matrix(): void
     {
         $ids = $this->seedCatalog();

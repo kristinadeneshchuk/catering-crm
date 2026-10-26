@@ -88,6 +88,13 @@ class ProjectController extends Controller
                 'name' => $project->name,
             ],
             'tariffs' => $payload,
+            // Точний час доставки — ті самі слоти, що в CRM (orders.delivery_time), спершу вечірні.
+            'delivery_times' => collect([
+                'evening' => \App\Services\ScheduleService::EVERY_DAY_EVENING,
+                'morning' => \App\Services\ScheduleService::EVERY_DAY_MORNING,
+            ])->flatMap(fn (string $type, string $window) => collect(\App\Services\ScheduleService::getTimeSlots($type))
+                ->keys()->map(fn ($value) => ['value' => (string) $value, 'window' => $window]))
+                ->values(),
         ]);
     }
 }
