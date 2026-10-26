@@ -573,6 +573,7 @@ class AiAgentsTest extends AgentsTestCase
     public function test_pause_without_future_days_is_silent(): void
     {
         config(['services.telegram.owner_chat_id' => '999']);
+        \App\Models\OrderDay::where('order_id', $this->order->id)->delete(); // лише минулі дні — нічого не губиться
         Http::fake(['api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]])]);
 
         $this->order->update(['status' => 'paused']);
