@@ -365,13 +365,16 @@
 
     function bindOrderSearch(el) {
         const q = $('#order-q', el), res = $('#order-res', el), hidden = $('[name=order_id]', el);
-        let t;
+        let t, seq = 0;
         q.addEventListener('input', () => {
             clearTimeout(t); hidden.value = '';
             t = setTimeout(async () => {
                 if (q.value.trim().length < 2) { res.hidden = true; return; }
+                const my = ++seq;
                 try {
                     const r = await api('GET', '/cash-app/orders?q=' + encodeURIComponent(q.value.trim()));
+                    // Запізніла відповідь на старий запит або замовлення вже обране — не перемальовуємо.
+                    if (my !== seq || hidden.value) return;
                     res.hidden = false;
                     res.innerHTML = r.items.length ? r.items.map(i => `<button type="button" data-id="${i.id}">${esc(i.label)}</button>`).join('')
                         : '<div class="hint" style="padding:10px">Нічого не знайдено</div>';
@@ -380,6 +383,7 @@
         });
         res.addEventListener('click', ev => {
             const b = ev.target.closest('button'); if (!b) return;
+            seq++;
             hidden.value = b.dataset.id; q.value = b.textContent; res.hidden = true;
         });
     }
@@ -402,6 +406,7 @@
         </form>`);
         const el = $('#f');
         $('.save', el).addEventListener('click', () => submitWith(el, 'POST', '/cash-app/transfer', idem, form(el)));
+        setTimeout(() => $('[name=amount]', el).focus(), 250);
     }
 
     // ⚖ Перерахунок
@@ -425,6 +430,7 @@
             $('#diff').innerHTML = `У CRM ${money(state.balance)} → різниця <b class="${d >= 0 ? 'plus' : 'minus'}">${signed(d)}</b>`;
         });
         $('.save', el).addEventListener('click', () => submitWith(el, 'POST', '/cash-app/recount', idem, form(el)));
+        setTimeout(() => $('[name=actual]', el).focus(), 250);
     }
 
     // Деталі операції
