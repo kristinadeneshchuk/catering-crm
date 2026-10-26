@@ -4,9 +4,12 @@ namespace App\Console\Commands;
 
 use App\Jobs\ProcessInboxChat;
 use App\Models\AiAgent;
+use App\Services\Inbox\InboxRateLimited;
 use App\Services\Inbox\InboxReadClient;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Звірка з Inbox на випадок, коли вебхук мовчав (простій CRM, повтори вичерпались):
@@ -25,8 +28,19 @@ class AgentsInboxSync extends Command
         $agent = AiAgent::serverChats();
         $since = Carbon::parse($agent->memory()->where('key', 'inbox:sync_since')->value('value') ?? now()->subHour());
         $started = now();
+        try {
+            $rows = $inbox->conversationsUpdatedSince($since, 500);
+        } catch (InboxRateLimited $e) {
+            // Мітку не рухаємо — наступний прогін візьме те саме вікно. Попередження раз на годину.
+            if (Cache::add('agents:inbox-sync:rate-limited', true, 3600)) {
+                Log::warning('agents:inbox-sync: Inbox ліміт запитів, звірку відкладено', ['since' => $since->toIso8601ZuluString(), 'retry_after' => $e->retryAfter]);
+            }
+            $this->warn($e->getMessage());
+
+            return self::SUCCESS;
+        }
         $n = 0;
-        foreach ($inbox->conversationsUpdatedSince($since, 500) as $row) {
+        foreach ($rows as $row) {
             $c = (array) ($row['conversation'] ?? []);
             if (empty($c['last_client_message_at']) || Carbon::parse($c['last_client_message_at'])->lt($since)) continue;
             if (($row['contact']['kind'] ?? 'client') !== 'client' || ($c['chat_type'] ?? 'private') !== 'private') continue;

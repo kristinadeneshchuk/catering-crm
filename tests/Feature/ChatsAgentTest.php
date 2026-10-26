@@ -14,8 +14,10 @@ use App\Services\Agents\Runtime\AgentLoop;
 use App\Services\Agents\Runtime\ModelGateway;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Sleep;
 use Tests\Support\ScriptedGateway;
 
 /**
@@ -189,5 +191,68 @@ class ChatsAgentTest extends AgentsTestCase
         $this->assertStringContainsString('вносить менеджер', $day->fresh()->apply_result['error']);
         $this->assertSame('applied', $complaint->fresh()->status);
         $this->assertStringContainsString('Котлета сира всередині', DB::table('ai_agent_reports')->value('body'));
+    }
+    protected function inboxConversation(int $id = 555): array
+    {
+        return ['conversation' => ['id' => $id, 'chat_type' => 'private', 'last_client_message_at' => '2026-10-11T11:50:00Z'], 'contact' => ['kind' => 'client']];
+    }
+
+    public function test_inbox_sync_survives_the_inbox_rate_limit_and_keeps_the_window(): void
+    {
+        Queue::fake();
+        Log::spy();
+        Sleep::fake(syncWithCarbon: true);
+        $limited = true;
+        Http::fake(['inbox.test/api/agent/conversations*' => function () use (&$limited) {
+            return $limited
+                ? Http::response(['error' => 'Rate limit: 60 requests per minute'], 429)
+                : Http::response(['conversations' => [$this->inboxConversation()], 'has_more' => false]);
+        }]);
+
+        $this->artisan('agents:inbox-sync')->assertSuccessful();
+        $this->artisan('agents:inbox-sync')->assertSuccessful();
+
+        Queue::assertNothingPushed();
+        // Мітку не зсунули — наступний прогін візьме те саме вікно.
+        $this->assertNull(AiAgent::serverChats()->memory()->where('key', 'inbox:sync_since')->value('value'));
+        // Кожен прогін: запит + 2 повтори після паузи до наступної хвилини; попередження — одне на обидва.
+        Http::assertSentCount(6);
+        Sleep::assertSleptTimes(4);
+        Log::shouldHaveReceived('warning')->once();
+
+        // Ліміт відпустило — звірка доганяє те саме вікно.
+        $limited = false;
+        $this->artisan('agents:inbox-sync')->assertSuccessful();
+        Queue::assertPushed(ProcessInboxChat::class, 1);
+    }
+
+    public function test_inbox_client_retries_after_429_honouring_retry_after(): void
+    {
+        Queue::fake();
+        Sleep::fake();
+        Http::fake(['inbox.test/api/agent/conversations*' => Http::sequence()
+            ->push(['error' => 'Rate limit: 60 requests per minute'], 429, ['Retry-After' => '7'])
+            ->push(['conversations' => [$this->inboxConversation()], 'has_more' => false])]);
+
+        $this->artisan('agents:inbox-sync')->assertSuccessful();
+
+        Sleep::assertSequence([Sleep::for(7)->seconds()]);
+        Queue::assertPushed(ProcessInboxChat::class, 1);
+        $this->assertNotNull(AiAgent::serverChats()->memory()->where('key', 'inbox:sync_since')->value('value'));
+    }
+
+    public function test_inbox_client_keeps_under_the_shared_per_minute_budget(): void
+    {
+        config(['services.inbox.agent_rpm' => 2]);
+        Sleep::fake(syncWithCarbon: true);
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-11 12:00:40'));
+        Http::fake(['inbox.test/api/agent/conversations/*/messages*' => Http::response(['messages' => [], 'has_more' => false])]);
+
+        $inbox = app(\App\Services\Inbox\InboxReadClient::class);
+        foreach ([1, 2, 3] as $id) $inbox->messages($id);
+
+        // Третій запит чекає початку наступної календарної хвилини (як рахує Inbox), без жодного 429.
+        Http::assertSentCount(3);
+        Sleep::assertSequence([Sleep::for(21)->seconds()]);
     }
 }

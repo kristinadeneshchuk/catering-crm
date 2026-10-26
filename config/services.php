@@ -196,6 +196,8 @@ return [
         // токен, що в агента продажів (unified-inbox/docs/events-api.md §4).
         'agent_base_url' => env('INBOX_AGENT_BASE_URL', 'https://inboxs.horenko-production.com'),
         'agent_token'    => env('INBOX_AGENT_TOKEN'),
+        // Inbox ріже на 60/хв на токен — тримаємося нижче, спільно на всі процеси CRM.
+        'agent_rpm'      => (int) env('INBOX_AGENT_RPM', 50),
 
         // Куди CRM стукає у зворотний бік — про оплату замовлення.
         // Порожньо = вебхуки вимкнені (нічого не ставиться в чергу).
