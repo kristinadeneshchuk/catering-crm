@@ -406,8 +406,11 @@ class PrintController extends Controller
         $stickers = [];
         $anyOrders = false;
 
+        // Персональне меню: стікер на кожен бокс індивідуального клієнта (клієнт, доставка, прийом, страва).
+        $personal = $request->input('mode') === 'personal';
+
         foreach ($targets as $targetDate) {
-            $day = $this->stickersFor($targetDate);
+            $day = $personal ? $this->personalStickersFor($targetDate) : $this->stickersFor($targetDate);
             $anyOrders = $anyOrders || $day !== null;
             $stickers = array_merge($stickers, $day ?? []);
         }
@@ -445,6 +448,11 @@ class PrintController extends Controller
         }
         unset($s);
 
+        if ($personal) {
+            // Як в аркушах індивідуальних: спершу вечірні (пакуються до 17:30), далі за часом і №, прийоми по порядку.
+            usort($stickers, fn ($a, $b) => [$a['date'], $b['is_evening'], $a['delivery_time'], $a['n'] ?? 99, $a['time']]
+                <=> [$b['date'], $a['is_evening'], $b['delivery_time'], $b['n'] ?? 99, $b['time']]);
+        } else
         usort($stickers, function ($a, $b) {
             // 0. Спершу субота, потім неділя
             $dateCmp = strcmp($a['date'], $b['date']);
@@ -475,7 +483,72 @@ class PrintController extends Controller
         $format = $request->input('format') === 'large' ? 'large' : 'small';
 
         // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату
-        return view('print.stickers', compact('stickers', 'date', 'format', 'hideIndividual', 'hiddenIndividual', 'isFriday', 'weekend', 'targets'));
+        return view('print.stickers', compact('stickers', 'date', 'format', 'hideIndividual', 'hiddenIndividual', 'isFriday', 'weekend', 'targets', 'personal'));
+    }
+
+    /**
+     * Стікери персонального меню на один день їжі: по одному на кожну страву
+     * індивідуального клієнта — №, клієнт, доставка (ранок/вечір і час), прийом, страва, вага.
+     */
+    private function personalStickersFor(string $targetDate): ?array
+    {
+        $orders = Order::feedingOn($targetDate)
+            ->with([
+                'client.mealTypes', 'client.ingredientExclusions', 'client.dishExclusions',
+                'client.replacementBundles.items.originalIngredient', 'ingredientExclusions', 'menuPlan', 'projectData',
+                'replacements.replacementProduct', 'replacements.replacementDish',
+                'orderDays' => fn ($q) => $q->where('date', $targetDate),
+                'personalDishes' => fn ($q) => $q->where('date', $targetDate),
+            ])
+            ->get();
+
+        if ($orders->isEmpty()) {
+            return null;
+        }
+
+        $menusByPlan = $this->getMenusForOrders($orders, $targetDate);
+        $ind = new \App\Services\Kitchen\IndividualPacking($orders, $targetDate);
+        $mealSort = \App\Models\MealType::pluck('sort_order', 'id');
+        $stickers = [];
+
+        foreach ($orders as $order) {
+            if ($order->menu_type !== 'individual' || $order->personalDishes->isEmpty()) continue;
+            $menu = $menusByPlan[$order->effectiveMenuPlan()?->id]['menu'] ?? null;
+            if (! $menu) continue;
+
+            $calc = $this->calculateOrderPlan($order, $menu, $targetDate);
+            $c = $ind->client($order->id);
+            $orderDay = $order->orderDays->first();
+            $time = mb_substr((string) ($orderDay?->delivery_time ?: $order->delivery_time), 0, 11);
+            $isEvening = $c['eve'] ?? \App\Services\ScheduleService::isEvening($order->schedule_type);
+
+            foreach ($calc['items'] ?? [] as $it) {
+                if (empty($it['dish_id'])) continue;
+                $so = $mealSort[$it['meal_type_id']] ?? 99;
+                $stickers[] = [
+                    'n'               => $c['n'] ?? null,
+                    'client'          => $order->client?->name ?? 'Без імені',
+                    'client_id'       => $order->client?->id ?? '---',
+                    'meal'            => $it['meal'] ?? 'Прийом',
+                    'meal_type_id'    => $it['meal_type_id'] ?? null,
+                    'meal_sort_order' => $so,
+                    'dish'            => trim(preg_replace('/^Інд\s*·\s*/u', '', (string) ($it['dish'] ?? ''))),
+                    'weight'          => (int) $it['weight'],
+                    'time'            => $so,
+                    'calories'        => (int) $order->calories,
+                    'project'         => $order->project,
+                    'is_individual'   => true,
+                    'changes'         => $ind->stickerChanges($order, $it),
+                    'date'            => $targetDate,
+                    'bundles'         => [],
+                    'is_evening'      => (bool) $isEvening,
+                    'delivery_time'   => $time,
+                    'delivery_slot'   => ($isEvening ? 'Вечір' : 'Ранок').($time ? ' '.$time : ''),
+                ];
+            }
+        }
+
+        return $stickers;
     }
 
     /**

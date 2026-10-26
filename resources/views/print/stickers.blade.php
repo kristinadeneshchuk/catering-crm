@@ -359,6 +359,8 @@
                 margin: 0;
             }
         }
+        .ind-num { display:inline-block; background:#111; color:#fff; font-weight:900; font-size:9px; padding:1px 5px; border-radius:3px; margin-right:3px; }
+        body.fmt-large .ind-num { font-size:13px; padding:2px 7px; }
     </style>
 </head>
 <body class="{{ $format === 'large' ? 'fmt-large' : '' }}">
@@ -367,7 +369,7 @@
     // Посилання зберігають дату й інший перемикач — сторінка перебудовується
     // на сервері, щоб аркуші ділились під формат (21 чи 9) і лічильник був чесним.
     $link = fn (array $change) => route('print.stickers', array_merge(
-        ['date' => $date, 'format' => $format, 'no_ind' => $hideIndividual ? 1 : 0, 'weekend' => $weekend ? 1 : 0],
+        ['date' => $date, 'format' => $format, 'no_ind' => $hideIndividual ? 1 : 0, 'weekend' => $weekend ? 1 : 0, 'mode' => ($personal ?? false) ? 'personal' : 'changes'],
         $change,
     ));
     $perSheet = $format === 'large' ? 9 : 21;
@@ -387,9 +389,15 @@
         </div>
     @endif
     <div class="group">
+        <a class="opt {{ ($personal ?? false) ? '' : 'active' }}" href="{{ $link(['mode' => 'changes']) }}">Заміни</a>
+        <a class="opt {{ ($personal ?? false) ? 'active' : '' }}" href="{{ $link(['mode' => 'personal']) }}" title="Стікер на кожну страву індивідуальних клієнтів">Персональне меню</a>
+    </div>
+    @unless($personal ?? false)
+    <div class="group">
         <a class="opt {{ $hideIndividual ? '' : 'active' }}" href="{{ $link(['no_ind' => 0]) }}">Усі клієнти</a>
         <a class="opt {{ $hideIndividual ? 'active' : '' }}" href="{{ $link(['no_ind' => 1]) }}">Без індивідуальних</a>
     </div>
+    @endunless
     <div class="group">
         <a class="opt {{ $format === 'small' ? 'active' : '' }}" href="{{ $link(['format' => 'small']) }}" title="68×42 мм — 21 шт/аркуш">▪▪▪ Малий 68×42</a>
         <a class="opt {{ $format === 'large' ? 'active' : '' }}" href="{{ $link(['format' => 'large']) }}" title="70×99 мм — 9 шт/аркуш, як «На пакет»">▬▬ Великий 70×99</a>
@@ -436,7 +444,7 @@
                             @if(!empty($sticker['bundles']))
                                 <div class="client-bundles">{{ implode(', ', $sticker['bundles']) }}</div>
                             @endif
-                            <span class="client-id">ID: {{ $sticker['client_id'] }}</span>@if(!empty($sticker['is_individual']))<span class="ind-tag">ІНД</span>@endif
+                            @if(!empty($sticker['n']))<span class="ind-num">№{{ $sticker['n'] }}</span>@endif<span class="client-id">ID: {{ $sticker['client_id'] }}</span>@if(!empty($sticker['is_individual']))<span class="ind-tag">ІНД</span>@endif
                         </div>
                         @if($logoBase64)
                             <img src="{{ $logoBase64 }}" class="brand-logo" alt="logo">
