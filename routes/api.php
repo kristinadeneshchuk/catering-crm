@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Inbox\V1\OrderController;
 use App\Http\Controllers\Api\Inbox\V1\PaymentClaimController;
 use App\Http\Controllers\Api\Inbox\V1\ProjectController;
 use App\Http\Controllers\Api\Inbox\V1\QuoteController;
+use App\Http\Controllers\Api\Inbox\V1\RouteStopController;
 use App\Http\Controllers\Api\Lunch\LunchApiController;
 use Illuminate\Support\Facades\Route;
 
@@ -44,6 +45,7 @@ Route::prefix('inbox/v1')
         // може — це робить менеджер у CRM.
         Route::post('orders/{order}/payment-claims', [PaymentClaimController::class, 'store']);
         Route::get('orders/{order}/payment', [PaymentClaimController::class, 'show']);
+        Route::get('orders/{order}/route-stop', [RouteStopController::class, 'show']);
     });
 
 /*
