@@ -30,6 +30,7 @@ Schedule::command('couriers:shift-report evening --remind')->dailyAt(config('ser
 // зміну кнопкою — нічого не робить. Помилки й відсутні меню пише в лог.
 // Нічний добір виписок monobank (вебхук — етап 3).
 Schedule::command('bank:sync')->dailyAt('04:10')->withoutOverlapping();
+Schedule::command('bank:reconcile')->dailyAt('04:40')->withoutOverlapping();
 
 Schedule::command('stock:debit-norm')->dailyAt('06:00')->withoutOverlapping()
     ->onFailure(fn () => \Illuminate\Support\Facades\Log::error('stock:debit-norm: автосписання о 06:00 не вдалось — див. попередні записи'));

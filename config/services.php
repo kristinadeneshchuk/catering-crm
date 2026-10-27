@@ -72,6 +72,8 @@ return [
     // Гроші бізнесу (банк, звірка) бачить лише супер адмін.
     'finance' => [
         'super_admin_ids' => env('FINANCE_SUPER_ADMIN_IDS', '7'),
+        // «Звірка» розбирає банк із цієї дати; старше — історія, її не чіпаємо.
+        'reconcile_from' => env('FINANCE_RECONCILE_FROM', '2026-10-01'),
     ],
 
     // Пульт ШІ-агентів: хто погоджує пропозиції. "user_id:telegram_id,…"

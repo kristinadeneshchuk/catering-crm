@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /** Операція з виписки банку (monobank). Лише для супер адміна. */
 class BankOperation extends Model
@@ -16,7 +17,12 @@ class BankOperation extends Model
         'amount'        => 'decimal:2',
         'balance_after' => 'decimal:2',
         'raw'           => 'array',
+        'reconciled_at' => 'datetime',
     ];
+
+    /** «Звірка»: null — ще не розібрано. */
+    public const MATCHED = 'matched';
+    public const IGNORED = 'ignored';
 
     /** Вікно, в якому зустрічна операція на іншому своєму рахунку = переказ між своїми. */
     public const INTERNAL_WINDOW_SEC = 900;
@@ -46,6 +52,22 @@ class BankOperation extends Model
         };
 
         return $internal ? $q->where($condition) : $q->whereNot($condition);
+    }
+
+    /** Записи CRM, якими ця операція розібрана (оплати, витрати, ЗП, накладні). */
+    public function transactions(): BelongsToMany
+    {
+        return $this->belongsToMany(Transaction::class)->withPivot('created_by_reconcile')->withTimestamps();
+    }
+
+    public function reconciledBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reconciled_by');
+    }
+
+    public function isIncoming(): bool
+    {
+        return (float) $this->amount > 0;
     }
 
     public function account(): BelongsTo
