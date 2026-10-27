@@ -440,7 +440,7 @@ class PrintController extends Controller
         // Додаємо кружечки до кожного стікера
         foreach ($stickers as &$s) {
             $circles = [];
-            $sortOrders = $clientMealSortOrders[$s['client_id'].'|'.$s['date']] ?? [];
+            $sortOrders = $s['meal_sort_orders'] ?? $clientMealSortOrders[$s['client_id'].'|'.$s['date']] ?? [];
             sort($sortOrders);
             foreach ($sortOrders as $so) {
                 $circles[] = $mealPalette[$so] ?? ['color' => '#94a3b8', 'letter' => '?'];
@@ -509,6 +509,7 @@ class PrintController extends Controller
 
         $menusByPlan = $this->getMenusForOrders($orders, $targetDate);
         $ind = new \App\Services\Kitchen\IndividualPacking($orders, $targetDate);
+        $mealSort = \App\Models\MealType::pluck('sort_order', 'id');
         $stickers = [];
 
         foreach ($orders as $order) {
@@ -524,8 +525,10 @@ class PrintController extends Controller
 
             // Кухня кладе табличку на стіл і складає біля неї всі бокси клієнта —
             // тому одна наліпка на клієнта, а не на кожну страву.
-            $boxes = collect($calc['items'] ?? [])->filter(fn ($it) => ! empty($it['dish_id']))->count();
+            $items = collect($calc['items'] ?? [])->filter(fn ($it) => ! empty($it['dish_id']));
+            $boxes = $items->count();
             if (! $boxes) continue;
+            $mealSorts = $items->map(fn ($it) => $mealSort[$it['meal_type_id']] ?? null)->filter()->unique()->sort()->values()->all();
             $stickers[] = [
                 'table'           => true,
                 'n'               => $c['n'] ?? null,
@@ -533,6 +536,7 @@ class PrintController extends Controller
                 'client_id'       => $order->client?->id ?? '---',
                 'brand'           => \App\Services\Kitchen\IndividualPacking::brand($order),
                 'boxes'           => $boxes,
+                'meal_sort_orders'=> $mealSorts,
                 'meal_sort_order' => null,
                 'time'            => 0,
                 'calories'        => (int) $order->calories,

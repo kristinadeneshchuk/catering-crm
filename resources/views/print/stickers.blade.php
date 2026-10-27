@@ -359,16 +359,7 @@
                 margin: 0;
             }
         }
-        .table-card { display:flex; flex-direction:column; justify-content:space-between; border:2px solid #7c3aed; }
-        .tc-top { display:flex; justify-content:space-between; align-items:center; }
-        .tc-num { background:#111; color:#fff; font-weight:900; font-size:14px; padding:1px 7px; border-radius:4px; }
-        .tc-brand { font-weight:900; font-size:11px; letter-spacing:.5px; }
-        .tc-name { font-weight:900; font-size:15pt !important; line-height:1.1; text-align:center; hyphens:none; overflow-wrap:normal; word-break:normal; }
-        .tc-bottom { display:flex; justify-content:space-between; align-items:center; font-size:10px; font-weight:700; }
-        body.fmt-large .tc-num { font-size:22px; }
-        body.fmt-large .tc-brand { font-size:16px; }
-        body.fmt-large .tc-name { font-size:21pt !important; }
-        body.fmt-large .tc-bottom { font-size:14px; }
+        .table-card { border:2px solid #7c3aed; }
         .ind-num { display:inline-block; background:#111; color:#fff; font-weight:900; font-size:9px; padding:1px 5px; border-radius:3px; margin-right:3px; }
         body.fmt-large .ind-num { font-size:13px; padding:2px 7px; }
     </style>
@@ -446,17 +437,43 @@
             @endphp
 
             @if(!empty($sticker['table']))
-                {{-- Табличка на стіл: біля неї кухня складає всі бокси цього клієнта. --}}
+                {{-- Табличка на стіл у стилі наліпки заміни: біля неї кухня складає всі бокси клієнта. --}}
                 <div class="sticker table-card">
-                    <div class="tc-top">
-                        @if(!empty($sticker['n']))<span class="tc-num">№{{ $sticker['n'] }}</span>@endif
-                        <span class="tc-brand" style="color: {{ $brandColor }};">{{ $sticker['brand'] }}</span>
+                    <div>
+                        <div class="sticker-header">
+                            <div>
+                                <div class="client-name">{{ $sticker['client'] }}</div>
+                                @if(!empty($sticker['n']))<span class="ind-num">№{{ $sticker['n'] }}</span>@endif<span class="client-id">ID: {{ $sticker['client_id'] }}</span><span class="ind-tag">ІНД</span>
+                            </div>
+                            @if($logoBase64)
+                                <img src="{{ $logoBase64 }}" class="brand-logo" alt="logo">
+                            @endif
+                        </div>
+
+                        <div class="meal-row">
+                            <span class="meal-type" style="color: {{ $brandColor }};">Інд. стіл</span>
+                            <span class="meal-date">{{ \Carbon\Carbon::parse($sticker['date'])->format('d.m') }}</span>
+                            <span class="meal-slot {{ $sticker['is_evening'] ? 'evening' : 'morning' }}">{{ $sticker['delivery_slot'] }}</span>
+                            <span class="calories">{{ $sticker['calories'] }}</span>
+                        </div>
+
+                        <div class="changes-box">
+                            <div class="change-item">Усі бокси клієнта — біля цієї наліпки</div>
+                            @if(!empty($sticker['circles']))
+                                <div class="circles-row">
+                                    @foreach($sticker['circles'] as $circle)
+                                        <div class="meal-circle" style="background-color: {{ $circle['color'] }};">{{ $circle['letter'] }}</div>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
                     </div>
-                    <div class="tc-name">{{ $sticker['client'] }}</div>
-                    <div class="tc-bottom">
-                        <span class="meal-slot {{ $sticker['is_evening'] ? 'evening' : 'morning' }}">{{ $sticker['is_evening'] ? '🌙 ' : '' }}{{ $sticker['delivery_slot'] }}</span>
-                        <span class="tc-boxes">{{ \Carbon\Carbon::parse($sticker['date'])->format('d.m') }} · {{ $sticker['boxes'] }} бокс.</span>
+
+                    <div class="weight-row">
+                        <span class="weight-value" style="color: {{ $brandColor }};">{{ $sticker['boxes'] }}</span><span class="weight-unit">бокс.</span>
                     </div>
+
+                    <div class="brand-watermark">{{ $project?->name ?? 'BRAND' }} DELIVERY</div>
                 </div>
                 @continue
             @endif
