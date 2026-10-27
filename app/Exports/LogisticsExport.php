@@ -133,6 +133,10 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
                 $infoParts[] = 'Інфо: ' . $bestDeliveryComment;
             }
 
+            if ($group->contains(fn (OrderDay $d) => $d->order?->client?->needsPass())) {
+                array_unshift($infoParts, \App\Services\AntLogisticsService::PASS_NOTE);
+            }
+
             foreach ($uniqueOrders as $o) {
                 if (!empty($o->comment)) {
                     $infoParts[] = 'Комент (' . ($o->client?->name ?? '') . '): ' . $o->comment;

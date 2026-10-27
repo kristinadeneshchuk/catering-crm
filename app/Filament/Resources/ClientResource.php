@@ -314,6 +314,11 @@ class ClientResource extends Resource
                                     ->label('Коментар для доставки')
                                     ->placeholder('Домофон, код...')
                                     ->columnSpanFull(),
+
+                                \Filament\Forms\Components\Checkbox::make('needs_pass')
+                                    ->label('Потрібна перепустка')
+                                    ->helperText('ЖК з охороною чи бізнес-центр — курʼєра без перепустки не пустять')
+                                    ->columnSpanFull(),
                             ])
                             ->columns(3)
                             ->dehydrated(false),

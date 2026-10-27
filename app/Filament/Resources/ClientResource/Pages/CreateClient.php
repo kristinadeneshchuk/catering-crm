@@ -31,6 +31,7 @@ class CreateClient extends CreateRecord
                 'address_apartment' => $addressData['address_apartment'] ?? null,
                 'address_floor'     => $addressData['address_floor'] ?? null,
                 'delivery_comment'  => $addressData['delivery_comment'] ?? null,
+                'needs_pass'        => (bool) ($addressData['needs_pass'] ?? false),
                 'is_default'        => (bool) ($addressData['is_default'] ?? false),
             ]);
         }

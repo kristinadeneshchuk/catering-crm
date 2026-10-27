@@ -278,6 +278,18 @@
             white-space: nowrap;
         }
 
+        .tag-pass {
+            display: inline-block;
+            font-size: 6pt;
+            font-weight: 900;
+            color: #fff;
+            background: #dc2626;
+            border-radius: 1mm;
+            padding: 0.3mm 1.2mm;
+            margin-top: 0.8mm;
+            white-space: nowrap;
+        }
+
         .tag-address {
             font-size: 5.5pt;
             color: #6b7280;
@@ -587,6 +599,9 @@
                 @if(!empty($man['same_address']))
                     {{-- Кілька пакетів на одну адресу: щоб курʼєр забрав усі. --}}
                     <span class="tag-same-address">📦 {{ $man['same_address']['pos'] }}/{{ $man['same_address']['total'] }}</span>
+                @endif
+                @if(!empty($man['needs_pass']))
+                    <span class="tag-pass">🎫 ПЕРЕПУСТКА</span>
                 @endif
                 @if(($man['address'] ?? 'Самовивіз') !== 'Самовивіз')
                     <span class="tag-address">{{ $man['address'] }}</span>

@@ -85,6 +85,10 @@
                             {{ $order->client->address }}
                         </div>
 
+                        @if($order->client->needsPass())
+                            <div style="display:inline-block; background:#dc2626; color:#fff; font-weight:900; padding:2px 6px; border-radius:4px; margin-bottom:4px;">🎫 ПОТРІБНА ПЕРЕПУСТКА</div>
+                        @endif
+
                         {{-- 1. Коментар ДОСТАВКИ (з картки клієнта) --}}
                         @if($order->client->delivery_comment)
                             <span class="delivery-note">

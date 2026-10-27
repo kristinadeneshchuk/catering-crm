@@ -92,6 +92,17 @@ class Client extends Authenticatable
         return $this->hasMany(ClientAddress::class);
     }
 
+    /**
+     * Чи потрібна курʼєру перепустка. Як і коментар доставки, береться з
+     * основної адреси (або першої, якщо основну не позначено).
+     */
+    public function needsPass(): bool
+    {
+        $addr = $this->addresses->firstWhere('is_default', true) ?? $this->addresses->first();
+
+        return (bool) $addr?->needs_pass;
+    }
+
     // Додаємо цей зв'язок, щоб Клієнт бачив усі свої транзакції через Замовлення
     public function transactions(): HasManyThrough
     {

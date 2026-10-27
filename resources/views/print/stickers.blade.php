@@ -359,6 +359,16 @@
                 margin: 0;
             }
         }
+        .table-card { display:flex; flex-direction:column; justify-content:space-between; border:2px solid #7c3aed; }
+        .tc-top { display:flex; justify-content:space-between; align-items:center; }
+        .tc-num { background:#111; color:#fff; font-weight:900; font-size:14px; padding:1px 7px; border-radius:4px; }
+        .tc-brand { font-weight:900; font-size:11px; letter-spacing:.5px; }
+        .tc-name { font-weight:900; font-size:15pt !important; line-height:1.1; text-align:center; hyphens:none; overflow-wrap:normal; word-break:normal; }
+        .tc-bottom { display:flex; justify-content:space-between; align-items:center; font-size:10px; font-weight:700; }
+        body.fmt-large .tc-num { font-size:22px; }
+        body.fmt-large .tc-brand { font-size:16px; }
+        body.fmt-large .tc-name { font-size:21pt !important; }
+        body.fmt-large .tc-bottom { font-size:14px; }
         .ind-num { display:inline-block; background:#111; color:#fff; font-weight:900; font-size:9px; padding:1px 5px; border-radius:3px; margin-right:3px; }
         body.fmt-large .ind-num { font-size:13px; padding:2px 7px; }
     </style>
@@ -390,7 +400,7 @@
     @endif
     <div class="group">
         <a class="opt {{ ($personal ?? false) ? '' : 'active' }}" href="{{ $link(['mode' => 'changes']) }}">Заміни</a>
-        <a class="opt {{ ($personal ?? false) ? 'active' : '' }}" href="{{ $link(['mode' => 'personal']) }}" title="Стікер на кожну страву індивідуальних клієнтів">Персональне меню</a>
+        <a class="opt {{ ($personal ?? false) ? 'active' : '' }}" href="{{ $link(['mode' => 'personal']) }}" title="Одна табличка на індивідуального клієнта — кладеться на стіл, біля неї бокси">Індивідуальні (на стіл)</a>
     </div>
     @unless($personal ?? false)
     <div class="group">
@@ -435,6 +445,21 @@
                     : null;
             @endphp
 
+            @if(!empty($sticker['table']))
+                {{-- Табличка на стіл: біля неї кухня складає всі бокси цього клієнта. --}}
+                <div class="sticker table-card">
+                    <div class="tc-top">
+                        @if(!empty($sticker['n']))<span class="tc-num">№{{ $sticker['n'] }}</span>@endif
+                        <span class="tc-brand" style="color: {{ $brandColor }};">{{ $sticker['brand'] }}</span>
+                    </div>
+                    <div class="tc-name">{{ $sticker['client'] }}</div>
+                    <div class="tc-bottom">
+                        <span class="meal-slot {{ $sticker['is_evening'] ? 'evening' : 'morning' }}">{{ $sticker['is_evening'] ? '🌙 ' : '' }}{{ $sticker['delivery_slot'] }}</span>
+                        <span class="tc-boxes">{{ \Carbon\Carbon::parse($sticker['date'])->format('d.m') }} · {{ $sticker['boxes'] }} бокс.</span>
+                    </div>
+                </div>
+                @continue
+            @endif
             <div class="sticker @if(!empty($sticker['changes'])) has-changes @endif">
 
                 <div>

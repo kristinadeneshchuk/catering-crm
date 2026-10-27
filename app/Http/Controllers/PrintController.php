@@ -300,6 +300,7 @@ class PrintController extends Controller
                 'project'            => $order->project,
                 'client'             => $order->client?->name ?? 'Без імені',
                 'address'            => $address,
+                'needs_pass'         => (bool) $order->client?->needsPass(),
                 'calories'           => (int) $order->calories,
                 'is_evening'         => $isEvening,
                 'is_individual'      => $order->menu_type === 'individual',
@@ -508,7 +509,6 @@ class PrintController extends Controller
 
         $menusByPlan = $this->getMenusForOrders($orders, $targetDate);
         $ind = new \App\Services\Kitchen\IndividualPacking($orders, $targetDate);
-        $mealSort = \App\Models\MealType::pluck('sort_order', 'id');
         $stickers = [];
 
         foreach ($orders as $order) {
@@ -522,30 +522,30 @@ class PrintController extends Controller
             $time = mb_substr((string) ($orderDay?->delivery_time ?: $order->delivery_time), 0, 11);
             $isEvening = $c['eve'] ?? \App\Services\ScheduleService::isEvening($order->schedule_type);
 
-            foreach ($calc['items'] ?? [] as $it) {
-                if (empty($it['dish_id'])) continue;
-                $so = $mealSort[$it['meal_type_id']] ?? 99;
-                $stickers[] = [
-                    'n'               => $c['n'] ?? null,
-                    'client'          => $order->client?->name ?? 'Без імені',
-                    'client_id'       => $order->client?->id ?? '---',
-                    'meal'            => $it['meal'] ?? 'Прийом',
-                    'meal_type_id'    => $it['meal_type_id'] ?? null,
-                    'meal_sort_order' => $so,
-                    'dish'            => trim(preg_replace('/^Інд\s*·\s*/u', '', (string) ($it['dish'] ?? ''))),
-                    'weight'          => (int) $it['weight'],
-                    'time'            => $so,
-                    'calories'        => (int) $order->calories,
-                    'project'         => $order->project,
-                    'is_individual'   => true,
-                    'changes'         => $ind->stickerChanges($order, $it),
-                    'date'            => $targetDate,
-                    'bundles'         => [],
-                    'is_evening'      => (bool) $isEvening,
-                    'delivery_time'   => $time,
-                    'delivery_slot'   => ($isEvening ? 'Вечір' : 'Ранок').($time ? ' '.$time : ''),
-                ];
-            }
+            // Кухня кладе табличку на стіл і складає біля неї всі бокси клієнта —
+            // тому одна наліпка на клієнта, а не на кожну страву.
+            $boxes = collect($calc['items'] ?? [])->filter(fn ($it) => ! empty($it['dish_id']))->count();
+            if (! $boxes) continue;
+            $stickers[] = [
+                'table'           => true,
+                'n'               => $c['n'] ?? null,
+                'client'          => $order->client?->name ?? 'Без імені',
+                'client_id'       => $order->client?->id ?? '---',
+                'brand'           => \App\Services\Kitchen\IndividualPacking::brand($order),
+                'boxes'           => $boxes,
+                'meal_sort_order' => null,
+                'time'            => 0,
+                'calories'        => (int) $order->calories,
+                'project'         => $order->project,
+                'is_individual'   => true,
+                'changes'         => [],
+                'date'            => $targetDate,
+                'bundles'         => [],
+                'is_evening'      => (bool) $isEvening,
+                'delivery_time'   => $time,
+                'delivery_slot'   => ($isEvening ? 'Вечір' : 'Ранок').($time ? ' '.$time : ''),
+                'weight'          => 0,
+            ];
         }
 
         return $stickers;

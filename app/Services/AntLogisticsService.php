@@ -13,6 +13,9 @@ use Illuminate\Support\Facades\Log;
 
 class AntLogisticsService
 {
+    /** Позначка для курʼєра в ANT і в Excel логістики. */
+    public const PASS_NOTE = '🎫 ПОТРІБНА ПЕРЕПУСТКА!';
+
     private string $baseUrl = 'https://main.ant-logistics.com/api/v2';
     private ?string $sessionIdent = null;
 
@@ -117,6 +120,9 @@ class AntLogisticsService
 
                 $address = $this->buildClientAddressFromRecord($addrRecord, $client);
                 $deliveryComment = $addrRecord->delivery_comment ?? $client->delivery_comment ?? '';
+                if ($addrRecord->needs_pass) {
+                    $deliveryComment = trim(self::PASS_NOTE.' '.$deliveryComment);
+                }
                 $label = $addrRecord->label ? " ({$addrRecord->label})" : '';
 
                 $row = [
@@ -941,6 +947,11 @@ class AntLogisticsService
         $defAddr     = $order->client->addresses->firstWhere('is_default', true)
             ?? $order->client->addresses->first();
         $addrComment = $defAddr?->delivery_comment ?? $order->client->delivery_comment;
+
+        // Перепустку — першою, щоб курʼєр побачив її до приїзду, а не біля шлагбаума.
+        if ($order->client->needsPass()) {
+            array_unshift($parts, self::PASS_NOTE);
+        }
 
         $deliveryComment = collect(array_unique(array_filter([$dayComment, $addrComment])))->implode(' / ');
         if ($deliveryComment) {

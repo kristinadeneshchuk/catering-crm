@@ -17,12 +17,14 @@ class ClientAddress extends Model
         'address_apartment',
         'address_floor',
         'delivery_comment',
+        'needs_pass',
         'is_default',
         'ant_comp_id',
     ];
 
     protected $casts = [
         'is_default' => 'boolean',
+        'needs_pass' => 'boolean',
     ];
 
     public function client(): BelongsTo

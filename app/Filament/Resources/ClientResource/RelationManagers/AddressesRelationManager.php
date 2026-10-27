@@ -98,6 +98,11 @@ class AddressesRelationManager extends RelationManager
                 ->label('Коментар для доставки')
                 ->placeholder('Домофон, код...')
                 ->columnSpanFull(),
+
+            Forms\Components\Checkbox::make('needs_pass')
+                ->label('Потрібна перепустка')
+                ->helperText('ЖК з охороною чи бізнес-центр — курʼєра без перепустки не пустять')
+                ->columnSpanFull(),
         ])->columns(3);
     }
 
@@ -138,6 +143,13 @@ class AddressesRelationManager extends RelationManager
                 Tables\Columns\IconColumn::make('is_default')
                     ->label('За замовч.')
                     ->boolean(),
+
+                Tables\Columns\IconColumn::make('needs_pass')
+                    ->label('Перепустка')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-identification')
+                    ->trueColor('danger')
+                    ->falseIcon(''),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()
