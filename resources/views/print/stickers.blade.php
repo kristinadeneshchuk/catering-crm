@@ -359,7 +359,6 @@
                 margin: 0;
             }
         }
-        .table-card { border:2px solid #7c3aed; }
         .ind-num { display:inline-block; background:#111; color:#fff; font-weight:900; font-size:9px; padding:1px 5px; border-radius:3px; margin-right:3px; }
         body.fmt-large .ind-num { font-size:13px; padding:2px 7px; }
     </style>
@@ -437,8 +436,8 @@
             @endphp
 
             @if(!empty($sticker['table']))
-                {{-- Табличка на стіл у стилі наліпки заміни: біля неї кухня складає всі бокси клієнта. --}}
-                <div class="sticker table-card">
+                {{-- Наліпка на стіл у форматі наліпки заміни: біля неї кухня складає всі бокси клієнта. --}}
+                <div class="sticker">
                     <div>
                         <div class="sticker-header">
                             <div>
@@ -451,22 +450,18 @@
                         </div>
 
                         <div class="meal-row">
-                            <span class="meal-type" style="color: {{ $brandColor }};">Інд. стіл</span>
                             <span class="meal-date">{{ \Carbon\Carbon::parse($sticker['date'])->format('d.m') }}</span>
                             <span class="meal-slot {{ $sticker['is_evening'] ? 'evening' : 'morning' }}">{{ $sticker['delivery_slot'] }}</span>
                             <span class="calories">{{ $sticker['calories'] }}</span>
                         </div>
 
-                        <div class="changes-box">
-                            <div class="change-item">Усі бокси клієнта — біля цієї наліпки</div>
-                            @if(!empty($sticker['circles']))
-                                <div class="circles-row">
-                                    @foreach($sticker['circles'] as $circle)
-                                        <div class="meal-circle" style="background-color: {{ $circle['color'] }};">{{ $circle['letter'] }}</div>
-                                    @endforeach
-                                </div>
-                            @endif
-                        </div>
+                        @if(!empty($sticker['circles']))
+                            <div class="circles-row">
+                                @foreach($sticker['circles'] as $circle)
+                                    <div class="meal-circle" style="background-color: {{ $circle['color'] }};">{{ $circle['letter'] }}</div>
+                                @endforeach
+                            </div>
+                        @endif
                     </div>
 
                     <div class="weight-row">
