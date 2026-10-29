@@ -85,6 +85,44 @@ class Payroll extends Page implements HasActions, HasForms
     }
 
     /**
+     * Що нараховано ПІСЛЯ кінця періоду — по співробітниках.
+     *
+     * Баланс співробітника — це борг на сьогодні: туди вже потрапили дні після
+     * обраного періоду. Щоб показати, скільки віддати саме «по цю дату», від
+     * поточного боргу віднімаємо пізніші зміни, премії й компенсацію пробігу
+     * і повертаємо пізніші штрафи. Виплати не чіпаємо: що вже віддали — те віддали.
+     */
+    protected function accruedAfter(array $employeeIds, string $end): array
+    {
+        if (empty($employeeIds)) return [];
+
+        $later = [];
+        $add = function ($rows) use (&$later) {
+            foreach ($rows as $id => $v) $later[$id] = ($later[$id] ?? 0) + (float) $v;
+        };
+
+        $add(EmployeeShift::whereIn('employee_id', $employeeIds)->where('date', '>', $end)
+            ->where('is_planned', false)->groupBy('employee_id')->selectRaw('employee_id, SUM(rate) s')->pluck('s', 'employee_id'));
+        $add(EmployeeBonus::whereIn('employee_id', $employeeIds)->where('date', '>', $end)
+            ->groupBy('employee_id')->selectRaw('employee_id, SUM(amount) s')->pluck('s', 'employee_id'));
+        $add(EmployeePenalty::whereIn('employee_id', $employeeIds)->where('date', '>', $end)
+            ->groupBy('employee_id')->selectRaw('employee_id, -SUM(amount) s')->pluck('s', 'employee_id'));
+        $add(CourierMileageLog::whereIn('employee_id', $employeeIds)->where('date', '>', $end)->get()
+            ->groupBy('employee_id')->map(fn ($logs) => $logs->sum(fn ($l) => $l->compensation)));
+
+        return $later;
+    }
+
+    /** Борг співробітника станом на кінець обраного періоду (не більше поточного). */
+    protected function dueForPeriod(Employee $emp): float
+    {
+        [, $end] = $this->dateRange();
+        $later = $this->accruedAfter([$emp->id], $end)[$emp->id] ?? 0;
+
+        return round(max(0, min((float) $emp->balance, (float) $emp->balance - $later)), 2);
+    }
+
+    /**
      * Розкладає rate зміни на (база, бонус).
      * - Курʼєр: base_rate — це ціна одного виїзду. full = 2 виїзди, half = 1 виїзд.
      *   База = base_rate × кількість виїздів (700 або 1400 при ставці 700).
@@ -196,9 +234,11 @@ class Payroll extends Page implements HasActions, HasForms
         $salaryScopes = $monthlyEmps->map(fn ($e) => 'salary:' . $e->id)->all();
         $salarySeries = RateHistory::seriesFor($salaryScopes);
 
+        $laterByEmp = $this->accruedAfter($employees->pluck('id')->all(), $end);
+
         $rows = [];
         $groupTotals = [];
-        $totals = ['salary' => 0, 'bonus' => 0, 'penalty' => 0, 'compensation' => 0, 'sum' => 0, 'balance' => 0];
+        $totals = ['salary' => 0, 'bonus' => 0, 'penalty' => 0, 'compensation' => 0, 'sum' => 0, 'balance' => 0, 'balance_now' => 0];
 
         foreach ($employees as $emp) {
             $pos = $positions[$emp->position] ?? null;
@@ -268,7 +308,9 @@ class Payroll extends Page implements HasActions, HasForms
                 'penalty'        => round($penaltyAmount, 2),
                 'compensation'   => round($compensation, 2),
                 'sum'            => round($sum, 2),
-                'balance'        => round((float) $emp->balance, 2),
+                // Борг станом на кінець періоду — саме стільки віддати «по цю дату».
+                'balance'        => round(max(0, min((float) $emp->balance, (float) $emp->balance - ($laterByEmp[$emp->id] ?? 0))), 2),
+                'balance_now'    => round((float) $emp->balance, 2),
                 'breakdown'      => array_values(array_filter($breakdown)),
                 'approved_payout' => round((float) $payoutsByEmp->get($emp->id, collect())
                     ->where('status', \App\Models\CourierPayout::STATUS_APPROVED)->sum('to_pay'), 2),
@@ -285,6 +327,7 @@ class Payroll extends Page implements HasActions, HasForms
             $totals['compensation'] += $row['compensation'];
             $totals['sum']          += $row['sum'];
             $totals['balance']      += max(0, $row['balance']);
+            $totals['balance_now']  += max(0, $row['balance_now']);
 
             $groupTotals[$group] = $groupTotals[$group] ?? ['salary' => 0, 'bonus' => 0, 'penalty' => 0, 'compensation' => 0, 'sum' => 0];
             $groupTotals[$group]['salary']       += $row['salary'];
@@ -312,6 +355,7 @@ class Payroll extends Page implements HasActions, HasForms
             'group_totals'=> array_map(fn ($g) => array_map(fn ($v) => round($v, 2), $g), $groupTotals),
             'per_portion' => $perPortion,
             'groups'      => Position::GROUPS,
+            'end_label'   => Carbon::parse($end)->format('d.m'),
         ];
     }
 
@@ -430,9 +474,11 @@ class Payroll extends Page implements HasActions, HasForms
                         ->label('Сума до виплати')
                         ->numeric()
                         ->required()
-                        ->default(fn () => $employee->balance)
+                        ->default(fn () => $this->dueForPeriod($employee))
                         ->suffix('₴')
-                        ->hint('Борг: ' . number_format($employee->balance, 0) . ' ₴'),
+                        ->hint('За період по ' . Carbon::parse($this->dateRange()[1])->format('d.m') . ': '
+                            . number_format($this->dueForPeriod($employee), 0, '.', ' ') . ' ₴ · весь борг сьогодні: '
+                            . number_format($employee->balance, 0, '.', ' ') . ' ₴'),
 
                     TextInput::make('comment')
                         ->label('Коментар (необовʼязково)')

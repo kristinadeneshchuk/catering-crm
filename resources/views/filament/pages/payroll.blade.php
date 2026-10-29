@@ -35,7 +35,7 @@
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
         <div>
             <h1 style="font-size:24px;font-weight:800;color:#f4f4f5;line-height:1.2;margin:0;">Зарплати</h1>
-            <p style="font-size:13px;color:#71717a;margin-top:2px;">Зведення нарахувань за період. Деталі та виплата — у «Співробітники» (кнопка «Історія / Виплата»).</p>
+            <p style="font-size:13px;color:#71717a;margin-top:2px;">Зведення нарахувань за період. «До виплати» — борг саме станом на кінець періоду, без днів після нього.</p>
         </div>
 
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -78,8 +78,11 @@
             <p style="color:#fbbf24;font-size:22px;font-weight:900;line-height:1;">{{ number_format($tot['compensation'], 0, '.', ' ') }} ₴</p>
         </div>
         <div style="background:linear-gradient(135deg,#2d0808,#1a0505);border:1px solid #b91c1c;border-radius:14px;padding:16px 18px;">
-            <p style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Борг по ЗП</p>
+            <p style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">До виплати по {{ $data['end_label'] }}</p>
             <p style="color:#ef4444;font-size:22px;font-weight:900;line-height:1;">{{ number_format($tot['balance'], 0, '.', ' ') }} ₴</p>
+            @if(round($tot['balance_now']) != round($tot['balance']))
+                <p style="color:#a1a1aa;font-size:12px;margin-top:6px;">Весь борг на сьогодні: {{ number_format($tot['balance_now'], 0, '.', ' ') }} ₴ — різниця нарахована вже після {{ $data['end_label'] }}</p>
+            @endif
         </div>
         <div style="background:linear-gradient(135deg,#052e16,#0a1f14);border:1px solid #065f46;border-radius:14px;padding:16px 18px;">
             <p style="color:#71717a;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Сума</p>
@@ -99,7 +102,7 @@
                     <th style="text-align:right;padding:12px 16px;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Бонус</th>
                     <th style="text-align:right;padding:12px 16px;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Штраф</th>
                     <th style="text-align:right;padding:12px 16px;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Компенсація</th>
-                    <th style="text-align:right;padding:12px 16px;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Борг по ЗП</th>
+                    <th style="text-align:right;padding:12px 16px;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;">До виплати<br>по {{ $data['end_label'] }}</th>
                     <th style="text-align:right;padding:12px 16px;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Сума</th>
                     <th style="text-align:center;padding:12px 16px;color:#52525b;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;">Виплата</th>
                 </tr>
@@ -150,6 +153,9 @@
                         </td>
                         <td style="padding:11px 16px;text-align:right;color:{{ $row['balance'] > 0 ? '#ef4444' : '#3f3f46' }};font-weight:{{ $row['balance'] > 0 ? '700' : '400' }};">
                             {{ $row['balance'] > 0 ? number_format($row['balance'], 0, '.', ' ') . ' ₴' : '—' }}
+                            @if(round($row['balance_now']) != round($row['balance']))
+                                <div style="font-size:11px;font-weight:400;color:#71717a;margin-top:2px;" title="Включно з днями після {{ $data['end_label'] }}">весь борг: {{ number_format($row['balance_now'], 0, '.', ' ') }} ₴</div>
+                            @endif
                             {{-- Погодження виплати в Telegram: власник перевірив суму. --}}
                             @if(($row['approved_days'] ?? 0) > 0)
                                 <div style="font-size:11px;font-weight:600;color:#16a34a;margin-top:2px;"
