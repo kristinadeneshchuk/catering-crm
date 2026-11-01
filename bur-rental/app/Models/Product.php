@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 
 class Product extends Model
 {
@@ -27,6 +28,11 @@ class Product extends Model
         // Пошуковий рядок збирається при кожному збереженні — інакше товар,
         // якому в адмінці поміняли бренд, шукався б за старим.
         static::saving(fn (Product $product) => $product->search_text = app(ProductSearch::class)->haystack($product));
+    }
+
+    public function getImageUrlAttribute(): ?string
+    {
+        return $this->image ? Storage::disk('public')->url($this->image) : null;
     }
 
     protected function casts(): array

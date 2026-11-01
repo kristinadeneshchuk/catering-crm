@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Products\Schemas;
 
 use App\Services\RentalPricing;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -76,6 +77,16 @@ class ProductForm
                             ->label('Джерело імпорту')
                             ->disabled()
                             ->visible(fn ($record) => filled($record?->source_url)),
+                    ]),
+
+                    Section::make('Фото')->schema([
+                        FileUpload::make('image')
+                            ->label('Фото')
+                            ->image()
+                            ->disk('public')
+                            ->directory('products')
+                            ->maxSize(4096)
+                            ->columnSpanFull(),
                     ]),
 
                     Section::make('Тексти')->schema([

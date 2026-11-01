@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Categories\Schemas;
 
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
@@ -24,6 +25,14 @@ class CategoryForm
                         : null),
 
                 TextInput::make('slug')->label('Slug')->required()->unique(ignoreRecord: true),
+
+                FileUpload::make('image')
+                    ->label('Фото')
+                    ->image()
+                    ->disk('public')
+                    ->directory('categories')
+                    ->maxSize(4096)
+                    ->columnSpanFull(),
 
                 TextInput::make('name_genitive')
                     ->label('Назва в родовому відмінку')

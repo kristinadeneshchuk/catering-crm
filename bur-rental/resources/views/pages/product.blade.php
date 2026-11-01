@@ -50,16 +50,19 @@
         <div class="grid gap-8 md:[grid-template-columns:1fr_420px]">
 
             {{-- ——— Галерея ——— --}}
-            <div class="grid gap-3 [grid-template-columns:72px_1fr] max-xs:[grid-template-columns:64px_1fr] max-sm:[grid-template-columns:1fr]">
-                <div class="flex flex-col gap-2 max-sm:order-2 max-sm:flex-row max-sm:overflow-x-auto">
-                    @foreach (['загальний вигляд', 'у кейсі', 'що входить у комплект', 'у роботі'] as $shot)
-                        <x-image-slot :label="$shot" ratio="1/1"
-                                      class="w-18 shrink-0 rounded-[6px] border border-border-1 max-sm:w-16" />
-                    @endforeach
-                </div>
+            <div @class(['grid gap-3', '[grid-template-columns:72px_1fr] max-xs:[grid-template-columns:64px_1fr] max-sm:[grid-template-columns:1fr]' => ! $product->image])>
+                {{-- Порожні мініатюри поруч зі справжнім фото виглядали б як зламана галерея --}}
+                @unless ($product->image)
+                    <div class="flex flex-col gap-2 max-sm:order-2 max-sm:flex-row max-sm:overflow-x-auto">
+                        @foreach (['загальний вигляд', 'у кейсі', 'що входить у комплект', 'у роботі'] as $shot)
+                            <x-image-slot :label="$shot" ratio="1/1"
+                                          class="w-18 shrink-0 rounded-[6px] border border-border-1 max-sm:w-16" />
+                        @endforeach
+                    </div>
+                @endunless
 
                 {{-- LCP-елемент сторінки: статичне фото, не карусель і не відео --}}
-                <x-image-slot :label="$product->brand->name.' '.$product->name"
+                <x-image-slot :src="$product->image_url" eager :label="$product->brand->name.' '.$product->name"
                               class="rounded-[12px] border border-border-1 max-sm:order-1" />
             </div>
 

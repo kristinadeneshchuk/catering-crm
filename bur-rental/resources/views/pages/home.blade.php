@@ -52,7 +52,7 @@
                 @foreach ($categories as $category)
                     <a href="{{ route('category', $category) }}"
                        class="group overflow-hidden rounded-[12px] border border-border-1 bg-surface-0 no-underline hover:border-brand hover:no-underline">
-                        <x-image-slot :label="$category->name" ratio="16/10" />
+                        <x-image-slot :src="$category->image_url" :label="$category->name" ratio="16/10" />
                         <div class="p-3.5">
                             <div class="text-sm font-semibold text-text-1">{{ $category->name }}</div>
                             <div class="mt-0.5 font-mono text-xs text-text-3">{{ $category->products_count }} позицій</div>

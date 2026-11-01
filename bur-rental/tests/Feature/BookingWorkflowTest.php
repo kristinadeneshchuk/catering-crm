@@ -25,7 +25,7 @@ class BookingWorkflowTest extends TestCase
         $this->workflow = app(BookingWorkflow::class);
     }
 
-    /** Бронь на 5 днів по перфоратору: 5 × 210 ₴ за тарифом «3–6 днів». */
+    /** Бронь на 5 днів по перфоратору: 5 × 270 ₴ за тарифом «3–6 днів». */
     private function fiveDayBooking(): Booking
     {
         $this->post('/booking', [
@@ -50,13 +50,13 @@ class BookingWorkflowTest extends TestCase
     public function test_early_return_reprices_by_the_actual_term(): void
     {
         $booking = $this->fiveDayBooking();
-        $this->assertSame(5 * 210, $booking->rent_total);
+        $this->assertSame(5 * 270, $booking->rent_total);
 
         // Здали на третій день: тариф «3–6 днів» лишається, але днів уже три.
         $closed = $this->workflow->close($booking, Carbon::today()->addDays(2)->toDateString());
 
         $this->assertSame('closed', $closed->status);
-        $this->assertSame(3 * 210, $closed->rent_total);
+        $this->assertSame(3 * 270, $closed->rent_total);
     }
 
     public function test_early_return_frees_the_unused_days(): void
@@ -83,10 +83,10 @@ class BookingWorkflowTest extends TestCase
     {
         $booking = $this->fiveDayBooking();
 
-        // Привезли на два дні пізніше: 5 днів за сходинкою + 2 доби по 250 ₴.
+        // Привезли на два дні пізніше: 5 днів за сходинкою + 2 доби по 320 ₴.
         $closed = $this->workflow->close($booking, Carbon::today()->addDays(6)->toDateString());
 
-        $this->assertSame(5 * 210 + 2 * 250, $closed->rent_total);
+        $this->assertSame(5 * 270 + 2 * 320, $closed->rent_total);
         $this->assertSame(7, $closed->items->first()->fresh()->days);
     }
 

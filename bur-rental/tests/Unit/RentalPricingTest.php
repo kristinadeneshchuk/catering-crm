@@ -38,18 +38,18 @@ class RentalPricingTest extends TestCase
     {
         $product = $this->product();
 
-        // Сходинка перфоратора: 250 / 210 / 170 ₴ за день.
-        $this->assertSame(250, $this->pricing->pricePerDay($product, 1));
-        $this->assertSame(250, $this->pricing->pricePerDay($product, 2));
-        $this->assertSame(210, $this->pricing->pricePerDay($product, 3));
-        $this->assertSame(210, $this->pricing->pricePerDay($product, 6));
-        $this->assertSame(170, $this->pricing->pricePerDay($product, 7));
-        $this->assertSame(170, $this->pricing->pricePerDay($product, 30));
+        // Сходинка перфоратора: 320 / 270 / 220 ₴ за день.
+        $this->assertSame(320, $this->pricing->pricePerDay($product, 1));
+        $this->assertSame(320, $this->pricing->pricePerDay($product, 2));
+        $this->assertSame(270, $this->pricing->pricePerDay($product, 3));
+        $this->assertSame(270, $this->pricing->pricePerDay($product, 6));
+        $this->assertSame(220, $this->pricing->pricePerDay($product, 7));
+        $this->assertSame(220, $this->pricing->pricePerDay($product, 30));
     }
 
     public function test_savings_are_measured_against_the_base_tier(): void
     {
-        $this->assertSame(7 * (250 - 170), $this->pricing->savings($this->product(), 7));
+        $this->assertSame(7 * (320 - 220), $this->pricing->savings($this->product(), 7));
     }
 
     public function test_a_single_rental_does_not_block_a_model_kept_in_several_units(): void

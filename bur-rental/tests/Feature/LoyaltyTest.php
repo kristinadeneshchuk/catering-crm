@@ -122,14 +122,14 @@ class LoyaltyTest extends TestCase
 
         $booking = Booking::latest('id')->firstOrFail();
 
-        // 5 днів × 210 ₴ = 1050 ₴ оренди, знижка 3% = 31 ₴ (донизу).
-        $this->assertSame(1050, $booking->rent_total);
+        // 5 днів × 270 ₴ = 1350 ₴ оренди, знижка 3% = 40 ₴ (донизу).
+        $this->assertSame(1350, $booking->rent_total);
         $this->assertSame(3, $booking->discount_percent);
-        $this->assertSame(31, $booking->discount_total);
+        $this->assertSame(40, $booking->discount_total);
 
         // Застава не дешевшає: це не дохід, вона повертається цілком.
         $this->assertSame(1500, $booking->deposit_total);
-        $this->assertSame(1050 + 1500 - 31, $booking->payable);
+        $this->assertSame(1350 + 1500 - 40, $booking->payable);
     }
 
     public function test_discount_is_given_by_phone_even_without_logging_in(): void

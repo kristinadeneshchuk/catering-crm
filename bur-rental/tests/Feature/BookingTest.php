@@ -55,10 +55,10 @@ class BookingTest extends TestCase
         $response->assertRedirect(route('booking.show', $booking));
         $this->assertStringStartsWith('TP-', $booking->number);
 
-        // 5 днів → тариф «3–6 днів» = 210 ₴, а не базові 250.
-        $this->assertSame(5 * 210, $booking->rent_total);
+        // 5 днів → тариф «3–6 днів» = 270 ₴, а не базові 320.
+        $this->assertSame(5 * 270, $booking->rent_total);
         $this->assertSame(1500, $booking->deposit_total);
-        $this->assertSame(5 * 210 + 1500, $booking->payable);
+        $this->assertSame(5 * 270 + 1500, $booking->payable);
     }
 
     public function test_client_supplied_prices_are_ignored(): void
@@ -68,7 +68,7 @@ class BookingTest extends TestCase
             'items' => [['price_per_day' => 1, 'total' => 1]],
         ]));
 
-        $this->assertSame(5 * 210, Booking::latest('id')->firstOrFail()->rent_total);
+        $this->assertSame(5 * 270, Booking::latest('id')->firstOrFail()->rent_total);
     }
 
     public function test_booked_dates_disappear_from_availability(): void

@@ -17,7 +17,7 @@
             @foreach ($categories as $category)
                 <a href="{{ route('category', $category) }}"
                    class="overflow-hidden rounded-[12px] border border-border-1 bg-surface-0 no-underline hover:border-brand hover:no-underline">
-                    <x-image-slot :label="$category->name" ratio="16/10" />
+                    <x-image-slot :src="$category->image_url" :label="$category->name" ratio="16/10" />
                     <div class="p-4">
                         <div class="text-[15px] font-semibold text-text-1">{{ $category->name }}</div>
                         <p class="mt-1 line-clamp-2 text-[13px] text-text-2">{{ $category->lead }}</p>
