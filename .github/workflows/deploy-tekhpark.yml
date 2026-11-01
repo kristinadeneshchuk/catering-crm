@@ -4,7 +4,7 @@
 # GitHub має. Тому Claude пушить коміт — а заливає раннер.
 #
 # Коли спрацьовує:
-#   · push у гілку розробки, якщо в повідомленні коміту є [deploy];
+#   · push у гілку розробки, якщо [deploy] стоїть у ПЕРШОМУ рядку коміту;
 #   · вручну: Actions → «Deploy Техпарк» → Run workflow.
 #
 # Що потрібно в Settings → Secrets and variables → Actions:
@@ -14,6 +14,9 @@
 #                              якщо там .env ще немає; наявний не перезаписується.
 # Необов'язкові змінні (vars.*), якщо щось на сервері інакше, ніж за замовчуванням:
 #   TEKHPARK_HOST, TEKHPARK_SSH_USER, TEKHPARK_SSH_PORT, TEKHPARK_APP_PATH, TEKHPARK_PHP.
+#
+# Фото: після міграцій сервер сам тягне фото товарам, у яких їх ще немає
+# (products:fetch-images, список джерел — database/seeders/data/product-image-sources.php).
 #
 # Що свідомо НЕ робить: не чіпає .env і storage/ на сервері, не запускає
 # db:seed на базі, де вже є каталог (catalog:seed-if-empty), не вмикає індексацію.
@@ -38,8 +41,70 @@ env:
   REMOTE_PHP: ${{ vars.TEKHPARK_PHP || '/opt/php84/bin/php' }}
 
 jobs:
+  # Тести на кожен пуш: хмарна сесія Claude не завжди має PHP 8.4, тож
+  # остаточна перевірка коду — тут, і її результат видно в логах Actions.
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: bur-rental
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, intl, gd, zip, pdo_sqlite
+          tools: composer:v2
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: bur-rental/package-lock.json
+
+      - name: Залежності
+        run: |
+          composer install --no-interaction --no-progress
+          npm ci
+
+      - name: Стиль коду (Pint)
+        run: vendor/bin/pint --test
+
+      - name: Збірка фронтенду
+        run: npm run build
+
+      - name: Тести
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          php artisan test --compact
+
+  # Позначка [deploy] рахується лише в ПЕРШОМУ рядку коміту: якщо шукати
+  # по всьому повідомленню, деплой запускає навіть опис того, як він працює.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.check.outputs.go }}
+    steps:
+      - id: check
+        env:
+          EVENT: ${{ github.event_name }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          subject=$(printf '%s\n' "$MESSAGE" | head -n 1)
+          if [ "$EVENT" = "workflow_dispatch" ] || printf '%s' "$subject" | grep -qF '[deploy]'; then
+            echo "go=true" >> "$GITHUB_OUTPUT"; echo "Деплой: так"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"; echo "Деплой: ні (у першому рядку коміту немає [deploy])"
+          fi
+
   deploy:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[deploy]')
+    needs: [tests, gate]
+    if: needs.gate.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -71,19 +136,12 @@ jobs:
           cache: npm
           cache-dependency-path: bur-rental/package-lock.json
 
-      - name: Тести — червоні тести не їдуть на сервер
-        run: |
-          composer install --no-interaction --no-progress
-          cp .env.example .env
-          php artisan key:generate
-          php artisan test --compact
-
+      # Тести вже пройшли в job «tests» — тут лише бойова збірка.
       - name: Збірка
         run: |
           npm ci
           npm run build
           composer install --no-dev --optimize-autoloader --no-interaction --no-progress
-          rm -f .env
 
       - name: SSH до сервера
         env:
@@ -143,6 +201,7 @@ jobs:
           "\$PHP" artisan migrate --force
           "\$PHP" artisan catalog:seed-if-empty
           "\$PHP" artisan search:reindex
+          "\$PHP" artisan products:fetch-images || true
           "\$PHP" artisan storage:link 2>/dev/null || true
           "\$PHP" artisan optimize
           EOF

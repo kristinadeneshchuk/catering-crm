@@ -9,7 +9,7 @@
 
 <article class="group flex flex-col overflow-hidden rounded-[12px] border border-border-1 bg-surface-0">
     <a href="{{ $url }}" class="block no-underline hover:no-underline" tabindex="-1" aria-hidden="true">
-        <x-image-slot :src="$product->image_url" :label="$product->full_name" />
+        <x-product-image :image="$product->images->first()" :alt="$product->full_name" />
     </a>
 
     <div class="flex flex-1 flex-col p-3.5">

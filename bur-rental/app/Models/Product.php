@@ -10,11 +10,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Storage;
 
 class Product extends Model
 {
     protected $guarded = [];
+
+    /**
+     * Фото потрібні скрізь, де є товар: картка, сторінка, кошик, розмітка.
+     * Один запит на всю вибірку дешевший за запит на кожну картку.
+     */
+    protected $with = ['images'];
 
     /**
      * Вітрина бачить лише опубліковане. Імпортовані чернетки живуть у базі,
@@ -44,11 +49,6 @@ class Product extends Model
         }
 
         return trim($this->brand_label.' '.$this->name);
-    }
-
-    public function getImageUrlAttribute(): ?string
-    {
-        return $this->image ? Storage::disk('public')->url($this->image) : null;
     }
 
     protected function casts(): array
@@ -99,6 +99,11 @@ class Product extends Model
     public function unavailableDates(): HasMany
     {
         return $this->hasMany(UnavailableDate::class);
+    }
+
+    public function images(): HasMany
+    {
+        return $this->hasMany(ProductImage::class)->orderBy('position')->orderBy('id');
     }
 
     public function reviews()

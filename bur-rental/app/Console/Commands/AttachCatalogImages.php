@@ -8,9 +8,9 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
 
 /*
- | Прив'язує залиті файли products/<slug>.webp до товарів, а категоріям дає фото
- | їхнього першого товару. Вже задане фото не чіпає: те, що менеджер поставив
- | в адмінці, важливіше за файл на диску. Запускати можна скільки завгодно разів.
+ | Заводить залиті файли products/<slug>.webp у галерею товарів без фото, а
+ | категоріям дає фото їхнього першого товару. Товар, у якого фото вже є (з
+ | адмінки чи products:fetch-images), не чіпає. Запускати можна скільки завгодно разів.
  */
 class AttachCatalogImages extends Command
 {
@@ -24,18 +24,18 @@ class AttachCatalogImages extends Command
         $products = 0;
         $categories = 0;
 
-        Product::withoutGlobalScope('published')->whereNull('image')->each(function (Product $product) use ($disk, &$products) {
+        Product::withoutGlobalScope('published')->orderBy('id')->each(function (Product $product) use ($disk, &$products) {
             $path = "products/{$product->slug}.webp";
 
-            if ($disk->exists($path)) {
-                $product->update(['image' => $path]);
+            if ($product->images->isEmpty() && $disk->exists($path)) {
+                $product->images()->create(['path' => $path, 'position' => 0]);
                 $products++;
             }
         });
 
         Category::whereNull('image')->orderBy('id')->each(function (Category $category) use (&$categories) {
             $ids = Category::where('parent_id', $category->id)->pluck('id')->push($category->id);
-            $image = Product::whereIn('category_id', $ids)->whereNotNull('image')->orderBy('id')->value('image');
+            $image = Product::whereIn('category_id', $ids)->whereHas('images')->orderBy('id')->first()?->images->first()->path;
 
             if ($image) {
                 $category->update(['image' => $image]);

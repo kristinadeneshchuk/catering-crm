@@ -38,7 +38,9 @@
 
         <x-section title="Доплати за важку техніку" lead="Ціни фіксовані — на видачі сюрпризів не буде.">
             <div class="grid gap-3 sm:grid-cols-3">
-                @php($pricing = \App\Services\RentalPricing::class)
+                @php
+                    $pricing = \App\Services\RentalPricing::class;
+                @endphp
                 @foreach ([
                     'Гідроборт, техніка від '.$pricing::HEAVY_KG.' кг' => '+'.$pricing::HOIST_FEE.' ₴',
                     'Окрема машина, техніка від '.$pricing::TRUCK_KG.' кг' => '+'.$pricing::TRUCK_FEE.' ₴',
