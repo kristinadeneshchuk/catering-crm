@@ -33,6 +33,7 @@ Route::prefix('inbox/v1')
 
         Route::get('clients/search', [ClientController::class, 'search']);
         Route::get('clients/by-channel/{channel}/{externalId}', [ClientController::class, 'byChannel']);
+        Route::get('clients/{client}', [ClientController::class, 'show']);
         Route::post('clients', [ClientController::class, 'store']);
         Route::post('clients/{client}/channels', [ClientController::class, 'attachChannel']);
         Route::get('clients/{client}/orders', [ClientController::class, 'orders']);

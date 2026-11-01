@@ -117,6 +117,15 @@ class ClientController extends Controller
     }
 
     /**
+     * Картка вже привʼязаного клієнта за id: Inbox знає crm_client_id, але в CRM
+     * може не бути Telegram-каналу чи ніка — тоді пошук за каналом порожній.
+     */
+    public function show(Client $client): JsonResponse
+    {
+        return $this->clientResponse($client);
+    }
+
+    /**
      * Створення або оновлення. Ключ пошуку той самий, що і в search: спершу
      * Telegram ID, потім телефон. Наявного клієнта не перезаписуємо порожнім —
      * тільки доповнюємо те, чого в CRM ще нема.
