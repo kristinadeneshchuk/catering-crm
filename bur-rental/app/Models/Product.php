@@ -16,6 +16,12 @@ class Product extends Model
     protected $guarded = [];
 
     /**
+     * Фото потрібні скрізь, де є товар: картка, сторінка, кошик, розмітка.
+     * Один запит на всю вибірку дешевший за запит на кожну картку.
+     */
+    protected $with = ['images'];
+
+    /**
      * Вітрина бачить лише опубліковане. Імпортовані чернетки живуть у базі,
      * але на сайт не потрапляють, доки менеджер їх не перевірить; адмінка
      * знімає цей scope явно.
@@ -77,6 +83,11 @@ class Product extends Model
     public function unavailableDates(): HasMany
     {
         return $this->hasMany(UnavailableDate::class);
+    }
+
+    public function images(): HasMany
+    {
+        return $this->hasMany(ProductImage::class)->orderBy('position')->orderBy('id');
     }
 
     public function reviews()

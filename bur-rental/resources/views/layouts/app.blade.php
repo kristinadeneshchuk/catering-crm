@@ -33,7 +33,7 @@
     {{--
         Прев'ю посилання. Основний канал, яким в Україні передають контакт
         підрядника, — це месенджери; без цих тегів посилання приходить голим
-        рядком. og:image з'явиться разом із реальними фото.
+        рядком. og:image — головне фото товару, якщо воно є.
     --}}
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Техпарк">
@@ -41,7 +41,12 @@
     <meta property="og:url" content="{{ url()->current() }}">
     <meta property="og:title" content="@yield('title', 'Техпарк — прокат будівельного інструменту')">
     <meta property="og:description" content="@yield('description', 'Подобова оренда будівельного, садового та вимірювального інструменту. Реальна наявність по датах і філіях.')">
-    <meta name="twitter:card" content="summary">
+    @hasSection('og_image')
+        <meta property="og:image" content="@yield('og_image')">
+        <meta name="twitter:card" content="summary_large_image">
+    @else
+        <meta name="twitter:card" content="summary">
+    @endif
 
     <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
     <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">

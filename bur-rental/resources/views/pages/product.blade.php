@@ -5,6 +5,10 @@
      тексту, інакше Google підставляє у видачу що заманеться. --}}
 @section('description', Str::limit(trim(strip_tags($product->lead).' '.Str::before((string) $product->description, "\n")), 155))
 
+@if ($product->images->isNotEmpty())
+    @section('og_image', $product->images->first()->url('lg'))
+@endif
+
 @section('content')
     @php
         $tiers = $product->tiers->map(fn ($t) => [
@@ -50,18 +54,54 @@
         <div class="grid gap-8 md:[grid-template-columns:1fr_420px]">
 
             {{-- ——— Галерея ——— --}}
-            <div class="grid gap-3 [grid-template-columns:72px_1fr] max-xs:[grid-template-columns:64px_1fr] max-sm:[grid-template-columns:1fr]">
-                <div class="flex flex-col gap-2 max-sm:order-2 max-sm:flex-row max-sm:overflow-x-auto">
-                    @foreach (['загальний вигляд', 'у кейсі', 'що входить у комплект', 'у роботі'] as $shot)
-                        <x-image-slot :label="$shot" ratio="1/1"
-                                      class="w-18 shrink-0 rounded-[6px] border border-border-1 max-sm:w-16" />
-                    @endforeach
-                </div>
+            @php($photos = $product->images)
+            @php($photoAlt = $product->brand->name.' '.$product->name)
+            @if ($photos->isNotEmpty())
+                {{-- Головне фото — LCP-елемент: віддається сервером одразу, мініатюри лише перемикають його. --}}
+                <div x-data="{ active: 0 }"
+                     class="grid gap-3 [grid-template-columns:72px_1fr] max-xs:[grid-template-columns:64px_1fr] max-sm:[grid-template-columns:1fr]">
+                    <div class="flex flex-col gap-2 max-sm:order-2 max-sm:flex-row max-sm:overflow-x-auto">
+                        @if ($photos->count() > 1)
+                            @foreach ($photos as $i => $photo)
+                                <button type="button" @click="active = {{ $i }}"
+                                        :class="active === {{ $i }} ? 'border-brand' : 'border-border-1'"
+                                        class="w-18 shrink-0 cursor-pointer overflow-hidden rounded-[6px] border-2 bg-white max-sm:w-16"
+                                        aria-label="Фото {{ $i + 1 }}">
+                                    <img src="{{ $photo->url('sm') }}" alt="" loading="lazy" decoding="async"
+                                         class="aspect-square size-full object-contain p-1">
+                                </button>
+                            @endforeach
+                        @endif
+                    </div>
 
-                {{-- LCP-елемент сторінки: статичне фото, не карусель і не відео --}}
-                <x-image-slot :label="$product->brand->name.' '.$product->name"
-                              class="rounded-[12px] border border-border-1 max-sm:order-1" />
-            </div>
+                    <div class="relative overflow-hidden rounded-[12px] border border-border-1 bg-white max-sm:order-1" style="aspect-ratio: 4/3">
+                        @foreach ($photos as $i => $photo)
+                            <img src="{{ $photo->url('lg') }}"
+                                 srcset="{{ $photo->srcset() }}"
+                                 sizes="(max-width: 768px) 100vw, 700px"
+                                 alt="{{ $photo->altFor($product) }}"
+                                 @if ($photo->width) width="{{ $photo->width }}" height="{{ $photo->height }}" @endif
+                                 @if ($i === 0) fetchpriority="high" @else loading="lazy" x-cloak @endif
+                                 decoding="async"
+                                 x-show="active === {{ $i }}"
+                                 class="absolute inset-0 size-full object-contain p-4">
+                        @endforeach
+                    </div>
+                </div>
+            @else
+                <div class="grid gap-3 [grid-template-columns:72px_1fr] max-xs:[grid-template-columns:64px_1fr] max-sm:[grid-template-columns:1fr]">
+                    <div class="flex flex-col gap-2 max-sm:order-2 max-sm:flex-row max-sm:overflow-x-auto">
+                        @foreach (['загальний вигляд', 'у кейсі', 'що входить у комплект', 'у роботі'] as $shot)
+                            <x-image-slot :label="$shot" ratio="1/1"
+                                          class="w-18 shrink-0 rounded-[6px] border border-border-1 max-sm:w-16" />
+                        @endforeach
+                    </div>
+
+                    {{-- LCP-елемент сторінки: статичне фото, не карусель і не відео --}}
+                    <x-image-slot :label="$photoAlt"
+                                  class="rounded-[12px] border border-border-1 max-sm:order-1" />
+                </div>
+            @endif
 
             {{-- ——— Конверсійне ядро ——— --}}
             <div class="md:sticky md:top-[88px] md:self-start">
@@ -480,6 +520,8 @@
             '@type' => 'Product',
             'name' => $product->brand->name.' '.$product->name,
             'sku' => $product->sku,
+            // Без фото Google не дає товару розширеного сніпета з картинкою.
+            'image' => $product->images->map(fn ($img) => $img->url('lg'))->all() ?: null,
             'brand' => ['@type' => 'Brand', 'name' => $product->brand->name],
             /*
             | Рейтинг віддаємо тільки тоді, коли за ним стоять справжні
