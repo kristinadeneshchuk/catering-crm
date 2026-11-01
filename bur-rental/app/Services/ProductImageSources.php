@@ -99,6 +99,13 @@ class ProductImageSources
             return $parts['scheme'].':'.$url;
         }
 
-        return $origin.(str_starts_with($url, '/') ? '' : '/').ltrim($url, '/');
+        if (str_starts_with($url, '/')) {
+            return $origin.$url;
+        }
+
+        // Відносно папки сторінки: /catalog/item + img/a.jpg → /catalog/img/a.jpg
+        $dir = rtrim(str_contains($parts['path'] ?? '', '/') ? dirname($parts['path'].'x') : '', '/');
+
+        return $origin.$dir.'/'.$url;
     }
 }

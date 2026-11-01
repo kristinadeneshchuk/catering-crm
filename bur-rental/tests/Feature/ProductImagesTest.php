@@ -78,7 +78,10 @@ class ProductImagesTest extends TestCase
 
         $this->assertStringContainsString('src="'.$image->url('lg').'"', $html);
         $this->assertStringContainsString('<meta property="og:image" content="'.$image->url('lg').'">', $html);
-        $this->assertStringContainsString('"image":["'.str_replace('/', '\/', $image->url('lg')).'"]', $html);
+        // Розмітка Product: дістаємо JSON і перевіряємо поле, а не форму екранування.
+        preg_match_all('~<script type="application/ld\+json">(.*?)</script>~s', $html, $blocks);
+        $schema = collect($blocks[1])->map(fn ($json) => json_decode($json, true))->firstWhere('@type', 'Product');
+        $this->assertSame([$image->url('lg')], $schema['image']);
         $this->assertStringContainsString('fetchpriority="high"', $html);
     }
 
@@ -165,5 +168,18 @@ class ProductImagesTest extends TestCase
                 $this->assertMatchesRegularExpression('~^https://~', $url, "{$slug}: не https");
             }
         }
+    }
+
+    public function test_relative_photo_paths_resolve_against_the_page(): void
+    {
+        $sources = app(ProductImageSources::class);
+        $page = 'https://maker.example/catalog/item';
+
+        $html = fn (string $src) => '<meta property="og:image" content="'.$src.'">';
+
+        $this->assertSame('https://maker.example/media/a.jpg', $sources->imageFromPage($html('/media/a.jpg'), $page));
+        $this->assertSame('https://maker.example/catalog/img/a.jpg', $sources->imageFromPage($html('img/a.jpg'), $page));
+        $this->assertSame('https://cdn.example/a.jpg', $sources->imageFromPage($html('//cdn.example/a.jpg'), $page));
+        $this->assertSame('https://cdn.example/a.jpg', $sources->imageFromPage($html('https://cdn.example/a.jpg'), $page));
     }
 }
