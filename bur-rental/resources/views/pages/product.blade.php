@@ -54,8 +54,10 @@
         <div class="grid gap-8 md:[grid-template-columns:1fr_420px]">
 
             {{-- ——— Галерея ——— --}}
-            @php($photos = $product->images)
-            @php($photoAlt = $product->brand->name.' '.$product->name)
+            @php
+                $photos = $product->images;
+                $photoAlt = $product->brand->name.' '.$product->name;
+            @endphp
             @if ($photos->isNotEmpty())
                 {{-- Головне фото — LCP-елемент: віддається сервером одразу, мініатюри лише перемикають його. --}}
                 <div x-data="{ active: 0 }"
