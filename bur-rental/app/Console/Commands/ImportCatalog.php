@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Branch;
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\Faq;
 use App\Models\Product;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
@@ -56,11 +57,22 @@ class ImportCatalog extends Command
         // Нові гілки дерева йдуть разом із товарами: без батьківської
         // категорії позиція не має куди лягти.
         foreach ($data['categories'] ?? [] as $i => $c) {
-            Category::firstOrCreate(['slug' => $c['slug']], [
+            $category = Category::firstOrCreate(['slug' => $c['slug']], [
                 'parent_id' => empty($c['parent']) ? null : Category::where('slug', $c['parent'])->firstOrFail()->id,
                 'name' => $c['name'], 'name_genitive' => $c['name_genitive'] ?? null,
                 'lead' => $c['lead'] ?? null, 'products_count' => 0, 'position' => 100 + $i,
             ]);
+
+            // Тексти й FAQ оновлюються при кожному запуску: правка в JSON
+            // має доїжджати на сайт без ручного втручання.
+            $category->update(array_filter(['seo_text' => $c['seo_text'] ?? null, 'lead' => $c['lead'] ?? null]));
+
+            foreach ($c['faqs'] ?? [] as $n => [$question, $answer]) {
+                Faq::updateOrCreate(
+                    ['faqable_type' => Category::class, 'faqable_id' => $category->id, 'position' => $n],
+                    ['question' => $question, 'answer' => $answer],
+                );
+            }
         }
 
         $created = $updated = 0;
@@ -74,6 +86,7 @@ class ImportCatalog extends Command
                 'brand_id' => $this->brand($row['name'], $brands, $row['brand'] ?? null) ?? $fallbackBrand->id,
                 'name' => $row['name'],
                 'lead' => $row['description'] ?? null,
+                'description' => $row['description_full'] ?? null,
                 'specs' => ($row['specs'] ?? null) ?: null,
                 'key_specs' => $row['key_specs'] ?? null,
                 'weight_kg' => $row['weight'] ?? null,
