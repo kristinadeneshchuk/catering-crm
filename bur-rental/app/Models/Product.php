@@ -38,6 +38,11 @@ class Product extends Model
 
     public function getFullNameAttribute(): string
     {
+        // «Rubi Плиткоріз Rubi DC-250» — бренд, який уже є в назві, не дублюємо.
+        if ($this->brand_label && mb_stripos($this->name, $this->brand_label) !== false) {
+            return $this->name;
+        }
+
         return trim($this->brand_label.' '.$this->name);
     }
 
