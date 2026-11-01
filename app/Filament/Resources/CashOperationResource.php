@@ -44,6 +44,9 @@ class CashOperationResource extends Resource
     protected static ?string $navigationGroup = 'Фінанси';
     protected static ?int $navigationSort = 40;
 
+    /** Пункт меню поки прибрано на прохання власника; сторінка лишається за прямим посиланням. */
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function canViewAny(): bool { return static::canAccess(); }
     public static function canCreate(): bool { return false; }
 
@@ -64,6 +67,7 @@ class CashOperationResource extends Resource
     {
         return parent::getEloquentQuery()
             ->whereNotNull('account_id')
+            ->whereNotIn('account_id', Account::HIDDEN_HISTORY_IDS)
             ->with(['account', 'employee', 'order.client', 'stockDocument.supplier']);
     }
 

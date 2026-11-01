@@ -204,6 +204,13 @@ class TransactionResource extends Resource
         ];
     }
 
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()->where(fn ($q) => $q
+            ->whereNull('account_id')
+            ->orWhereNotIn('account_id', \App\Models\Account::HIDDEN_HISTORY_IDS));
+    }
+
     /**
      * Менеджер може редагувати тільки сьогоднішні грошові транзакції.
      * Бухгалтерські записи (без account_id — «Нове замовлення / Зміна замовлення»)

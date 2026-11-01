@@ -47,7 +47,7 @@ class CashAppController extends Controller
 
         return response()->json([
             'user'     => ['name' => auth()->user()->name, 'role' => auth()->user()->role],
-            'accounts' => Account::orderBy('id')->get(['id', 'name', 'type'])
+            'accounts' => Account::whereNotIn('id', Account::HIDDEN_HISTORY_IDS)->orderBy('id')->get(['id', 'name', 'type'])
                 ->map(fn ($a) => ['id' => $a->id, 'name' => $a->name, 'cash' => $a->type === 'cash'])->values(),
             'default_account' => CashBook::defaultCashAccountId(),
             'income'   => collect(CashBook::INCOMES)->map(fn ($c) => ['name' => $c, 'hint' => $c === CashBook::CLIENT ? 'на баланс клієнта' : null])->values(),
@@ -79,6 +79,7 @@ class CashAppController extends Controller
         $this->authorizeCash();
 
         $account = Account::findOrFail($request->integer('account') ?: CashBook::defaultCashAccountId());
+        abort_if(in_array($account->id, Account::HIDDEN_HISTORY_IDS, true), 404);
         $page = max(0, $request->integer('page'));
 
         $base = Transaction::where('account_id', $account->id);

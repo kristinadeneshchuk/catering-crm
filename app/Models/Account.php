@@ -35,6 +35,9 @@ class Account extends Model
      * рахунку для оплат/ЗП/накладних, ні в касі дня. Явно їх бачать лише
      * «Банк», синхронізація і довідник рахунків супер адміна.
      */
+    /** Рахунки, рух по яких поки не показуємо ні в журналі, ні в касі (6 — «Крипта USDT»). */
+    public const HIDDEN_HISTORY_IDS = [6];
+
     protected static function booted(): void
     {
         static::addGlobalScope('payable', fn ($q) => $q->where($q->qualifyColumn('bank_only'), false));
