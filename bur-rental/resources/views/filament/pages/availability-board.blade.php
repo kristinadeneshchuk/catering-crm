@@ -75,7 +75,7 @@
                 @forelse ($this->products as $product)
                     <tr class="border-b border-gray-100 last:border-0 dark:border-gray-800">
                         <th scope="row" class="sticky left-0 z-10 bg-white p-3 text-left font-normal dark:bg-gray-900">
-                            <span class="block text-xs text-gray-400">{{ $product->brand->name }}</span>
+                            <span class="block text-xs text-gray-400">{{ $product->brand_label }}</span>
                             <a href="{{ \App\Filament\Resources\Products\ProductResource::getUrl('edit', ['record' => $product]) }}"
                                class="font-medium hover:underline">{{ $product->name }}</a>
                         </th>

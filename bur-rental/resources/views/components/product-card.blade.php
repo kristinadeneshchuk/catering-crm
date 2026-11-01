@@ -9,11 +9,11 @@
 
 <article class="group flex flex-col overflow-hidden rounded-[12px] border border-border-1 bg-surface-0">
     <a href="{{ $url }}" class="block no-underline hover:no-underline" tabindex="-1" aria-hidden="true">
-        <x-image-slot :src="$product->image_url" :label="$product->brand->name.' '.$product->name" />
+        <x-image-slot :src="$product->image_url" :label="$product->full_name" />
     </a>
 
     <div class="flex flex-1 flex-col p-3.5">
-        <div class="text-[11px] text-text-3">{{ $product->brand->name }}</div>
+        <div class="text-[11px] text-text-3">{{ $product->brand_label }}</div>
 
         <h3 class="mt-0.5 text-[15px] font-semibold leading-snug">
             <a href="{{ $url }}" class="text-text-1 no-underline hover:text-brand hover:no-underline">{{ $product->name }}</a>

@@ -30,6 +30,17 @@ class Product extends Model
         static::saving(fn (Product $product) => $product->search_text = app(ProductSearch::class)->haystack($product));
     }
 
+    /** Бренд у назві: порожньо для «Інші», щоб не писати «Оренда: Інші Плиткоріз». */
+    public function getBrandLabelAttribute(): string
+    {
+        return $this->brand->slug === 'inshi' ? '' : $this->brand->name;
+    }
+
+    public function getFullNameAttribute(): string
+    {
+        return trim($this->brand_label.' '.$this->name);
+    }
+
     public function getImageUrlAttribute(): ?string
     {
         return $this->image ? Storage::disk('public')->url($this->image) : null;

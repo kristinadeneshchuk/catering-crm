@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Branch;
 use App\Models\Product;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -79,5 +80,33 @@ class CatalogImportTest extends TestCase
         $product->update(['published' => true]);
 
         $this->get('/instrument/'.$product->slug)->assertOk()->assertSee($product->name);
+    }
+
+    public function test_import_puts_one_unit_in_each_branch_and_keeps_heavy_in_kyiv(): void
+    {
+        Storage::put('import/stock.json', json_encode(['products' => [
+            ['url' => 'https://x/a', 'name' => 'Дриль Bosch', 'price' => 100, 'category_slug' => 'dryli', 'brand' => 'Bosch', 'weight' => 2],
+            ['url' => 'https://x/b', 'name' => 'Віброплита Wacker', 'price' => 900, 'category_slug' => 'vibroplyty-reversyvni', 'brand' => 'Wacker Neuson', 'weight' => 160],
+            ['url' => 'https://x/c', 'name' => 'Плиткоріз Rubi DC-250', 'price' => 500, 'category_slug' => 'pyly', 'brand' => 'Rubi'],
+        ]], JSON_UNESCAPED_UNICODE));
+
+        $this->artisan('catalog:import', ['file' => 'import/stock.json'])->assertSuccessful();
+
+        $light = Product::withoutGlobalScopes()->where('source_url', 'https://x/a')->firstOrFail();
+        $heavy = Product::withoutGlobalScopes()->where('source_url', 'https://x/b')->firstOrFail();
+        $new = Product::withoutGlobalScopes()->where('source_url', 'https://x/c')->firstOrFail();
+
+        $this->assertSame('dryli', $light->category->slug);
+        $this->assertSame('Bosch', $light->brand->name);
+        $this->assertSame(Branch::count(), $light->branches()->count());
+        $this->assertTrue($heavy->branches->every(fn ($b) => $b->city->slug === 'kyiv'));
+        $this->assertSame(1, $heavy->branches->first()->pivot->qty);
+        $this->assertSame('Rubi', $new->brand->name);
+        $this->assertSame('rubi', $new->brand->slug);
+
+        // Повторний імпорт не чіпає складу, який уже є.
+        $heavy->branches()->updateExistingPivot($heavy->branches->first()->id, ['qty' => 4]);
+        $this->artisan('catalog:import', ['file' => 'import/stock.json'])->assertSuccessful();
+        $this->assertSame(4, $heavy->fresh()->branches->first()->pivot->qty);
     }
 }

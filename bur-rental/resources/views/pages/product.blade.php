@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Оренда: '.$product->brand->name.' '.$product->name.' — '.$city->name_locative)
+@section('title', 'Оренда: '.$product->full_name.' — '.$city->name_locative)
 {{-- Лід буває в пів рядка — тоді добираємо до повного опису першими реченнями
      тексту, інакше Google підставляє у видачу що заманеться. --}}
 @section('description', Str::limit(trim(strip_tags($product->lead).' '.Str::before((string) $product->description, "\n")), 155))
@@ -62,14 +62,14 @@
                 @endunless
 
                 {{-- LCP-елемент сторінки: статичне фото, не карусель і не відео --}}
-                <x-image-slot :src="$product->image_url" eager :label="$product->brand->name.' '.$product->name"
+                <x-image-slot :src="$product->image_url" eager :label="$product->full_name"
                               class="rounded-[12px] border border-border-1 max-sm:order-1" />
             </div>
 
             {{-- ——— Конверсійне ядро ——— --}}
             <div class="md:sticky md:top-[88px] md:self-start">
                 <a href="{{ route('brand', $product->brand) }}" class="text-[13px] text-text-3 hover:text-brand">
-                    {{ $product->brand->name }}
+                    {{ $product->brand_label }}
                 </a>
 
                 <h1 class="t-h1 mt-1">{{ $product->name }}</h1>
@@ -277,7 +277,7 @@
                 <button type="button"
                         @click="book({{ Js::from([
                             'id' => $product->id, 'slug' => $product->slug,
-                            'name' => $product->name, 'brand' => $product->brand->name,
+                            'name' => $product->name, 'brand' => $product->brand_label,
                         ]) }})"
                         class="mt-4 h-13 w-full cursor-pointer rounded-[6px] bg-brand text-base font-semibold text-white hover:bg-brand-hover">
                     Забронювати
@@ -443,7 +443,7 @@
             </div>
         </x-section>
 
-        <x-seo-text :title="'Оренда '.$product->brand->name.' '.$city->name_locative" :body="$product->seo_text" />
+        <x-seo-text :title="'Оренда '.$product->brand_label.' '.$city->name_locative" :body="$product->seo_text" />
 
         <x-district-links :city="$city" :title="'Оренда '.($product->category->name_genitive ?? 'інструменту').' у районах '.$city->name" />
 
@@ -457,7 +457,7 @@
                     </div>
                 </div>
                 <button type="button"
-                        @click="book({{ Js::from(['id' => $product->id, 'slug' => $product->slug, 'name' => $product->name, 'brand' => $product->brand->name]) }})"
+                        @click="book({{ Js::from(['id' => $product->id, 'slug' => $product->slug, 'name' => $product->name, 'brand' => $product->brand_label]) }})"
                         class="h-11 cursor-pointer rounded-[6px] bg-brand px-5 text-sm font-semibold text-white">
                     Забронювати
                 </button>
@@ -481,9 +481,9 @@
         $productSchema = array_filter([
             '@context' => 'https://schema.org',
             '@type' => 'Product',
-            'name' => $product->brand->name.' '.$product->name,
+            'name' => $product->full_name,
             'sku' => $product->sku,
-            'brand' => ['@type' => 'Brand', 'name' => $product->brand->name],
+            'brand' => $product->brand_label ? ['@type' => 'Brand', 'name' => $product->brand_label] : null,
             /*
             | Рейтинг віддаємо тільки тоді, коли за ним стоять справжні
             | опубліковані відгуки. Розмітка неіснуючих відгуків — порушення

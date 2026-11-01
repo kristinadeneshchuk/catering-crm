@@ -8,7 +8,7 @@
         $itemsData = $kit->items->map(fn ($item) => [
             'id' => $item->product->id,
             'name' => $item->product->name,
-            'brand' => $item->product->brand->name,
+            'brand' => $item->product->brand_label,
             'why' => $item->why,
             'optional' => $item->optional,
             'price' => $item->product->min_price,

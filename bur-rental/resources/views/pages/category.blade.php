@@ -230,7 +230,7 @@
                 '@type' => 'ListItem',
                 'position' => $products->firstItem() + $i,
                 'url' => route('product', $p),
-                'name' => $p->brand->name.' '.$p->name,
+                'name' => $p->full_name,
             ])->all(),
         ];
     @endphp

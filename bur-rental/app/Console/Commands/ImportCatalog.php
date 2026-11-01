@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Branch;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Product;
@@ -52,6 +53,16 @@ class ImportCatalog extends Command
             ['name' => 'Інші', 'about' => 'Позиції з імпорту, бренд яких ще не розібраний.', 'why' => ''],
         );
 
+        // Нові гілки дерева йдуть разом із товарами: без батьківської
+        // категорії позиція не має куди лягти.
+        foreach ($data['categories'] ?? [] as $i => $c) {
+            Category::firstOrCreate(['slug' => $c['slug']], [
+                'parent_id' => empty($c['parent']) ? null : Category::where('slug', $c['parent'])->firstOrFail()->id,
+                'name' => $c['name'], 'name_genitive' => $c['name_genitive'] ?? null,
+                'lead' => $c['lead'] ?? null, 'products_count' => 0, 'position' => 100 + $i,
+            ]);
+        }
+
         $created = $updated = 0;
 
         foreach ($data['products'] as $row) {
@@ -60,10 +71,12 @@ class ImportCatalog extends Command
 
             $payload = [
                 'category_id' => $category->id,
-                'brand_id' => $this->brand($row['name'], $brands) ?? $fallbackBrand->id,
+                'brand_id' => $this->brand($row['name'], $brands, $row['brand'] ?? null) ?? $fallbackBrand->id,
                 'name' => $row['name'],
                 'lead' => $row['description'] ?? null,
-                'specs' => $row['specs'] ?: null,
+                'specs' => ($row['specs'] ?? null) ?: null,
+                'key_specs' => $row['key_specs'] ?? null,
+                'weight_kg' => $row['weight'] ?? null,
                 'base_price' => $price,
                 // Застава: як на сторінці; якщо її там не було — типова для ніші
                 // кратна ціні заглушка, яку менеджер виправить при перевірці.
@@ -86,6 +99,8 @@ class ImportCatalog extends Command
                 $created++;
             }
 
+            $this->stock($product);
+
             // Сходинка за нашою моделлю: −17% від 3 днів, −31% від 7.
             $product->tiers()->delete();
 
@@ -101,6 +116,13 @@ class ImportCatalog extends Command
             }
         }
 
+        // Лічильники в меню й картках рахуються так само, як у сидах.
+        Category::query()->with('children')->get()->each(function (Category $category) {
+            $own = Product::withoutGlobalScopes()->where('published', true)->where('category_id', $category->id)->count();
+            $inChildren = Product::withoutGlobalScopes()->where('published', true)->whereIn('category_id', $category->children->pluck('id'))->count();
+            $category->update(['products_count' => $own + $inChildren]);
+        });
+
         $this->info("Створено: {$created}, оновлено: {$updated}.");
 
         if (! $this->option('publish')) {
@@ -110,8 +132,33 @@ class ImportCatalog extends Command
         return self::SUCCESS;
     }
 
+    /**
+     * Без наявності позиція на вітрині «немає на ваші дати». Імпорт кладе
+     * по одиниці в кожну філію; важке (від 60 кг) — лише в Київ, як і сиди.
+     * Те, що вже є на складі, не чіпаємо: кількість править менеджер.
+     */
+    private function stock(Product $product): void
+    {
+        if ($product->branches()->exists()) {
+            return;
+        }
+
+        foreach (Branch::with('city')->get() as $branch) {
+            if ($branch->city->slug !== 'kyiv' && $product->weight_kg >= 60) {
+                continue;
+            }
+
+            $product->branches()->attach($branch->id, ['qty' => 1]);
+        }
+    }
+
     private function category(array $row): Category
     {
+        // Коли категорію вже розкладено по нашому дереву — беремо її як є.
+        if (! empty($row['category_slug'])) {
+            return Category::where('slug', $row['category_slug'])->firstOrFail();
+        }
+
         $name = $row['category'] ?? 'Імпорт без категорії';
 
         return Category::firstOrCreate(
@@ -120,8 +167,17 @@ class ImportCatalog extends Command
         );
     }
 
-    private function brand(string $productName, $brands): ?int
+    private function brand(string $productName, $brands, ?string $explicit = null): ?int
     {
+        // Виробник зі сторінки надійніший за здогадку з назви: нового
+        // заводимо одразу, бо сторінка бренду без нього — 404.
+        if ($explicit) {
+            $brand = Brand::firstOrCreate(['slug' => $this->slug($explicit)], ['name' => $explicit]);
+            $brands[mb_strtolower($explicit)] = $brand->id;
+
+            return $brand->id;
+        }
+
         foreach ($brands as $needle => $id) {
             if (str_contains(mb_strtolower($productName), $needle)) {
                 return $id;

@@ -50,7 +50,7 @@
                                 @foreach ($stock as $product)
                                     <tr class="border-b border-surface-2 last:border-0">
                                         <th scope="row" class="p-4 text-left font-medium">
-                                            <span class="block text-[11px] font-normal text-text-3">{{ $product->brand->name }}</span>
+                                            <span class="block text-[11px] font-normal text-text-3">{{ $product->brand_label }}</span>
                                             {{ $product->name }}
                                         </th>
                                         <td class="p-4">
