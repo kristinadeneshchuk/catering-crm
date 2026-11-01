@@ -24,7 +24,8 @@ class FetchProductImages extends Command
 
     public function handle(ProductImageSources $sources): int
     {
-        $list = require ($this->option('list') ?: database_path('seeders/data/product-image-sources.php'));
+        $file = $this->option('list') ?: database_path('seeders/data/product-image-sources.php');
+        $list = require $file;
         $only = $this->option('slug');
 
         $products = Product::withoutGlobalScopes()

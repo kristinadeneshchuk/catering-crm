@@ -4,7 +4,7 @@
 # GitHub має. Тому Claude пушить коміт — а заливає раннер.
 #
 # Коли спрацьовує:
-#   · push у гілку розробки, якщо в повідомленні коміту є [deploy];
+#   · push у гілку розробки, якщо [deploy] стоїть у ПЕРШОМУ рядку коміту;
 #   · вручну: Actions → «Deploy Техпарк» → Run workflow.
 #
 # Що потрібно в Settings → Secrets and variables → Actions:
@@ -83,9 +83,28 @@ jobs:
           php artisan key:generate
           php artisan test --compact
 
+  # Позначка [deploy] рахується лише в ПЕРШОМУ рядку коміту: якщо шукати
+  # по всьому повідомленню, деплой запускає навіть опис того, як він працює.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.check.outputs.go }}
+    steps:
+      - id: check
+        env:
+          EVENT: ${{ github.event_name }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          subject=$(printf '%s\n' "$MESSAGE" | head -n 1)
+          if [ "$EVENT" = "workflow_dispatch" ] || printf '%s' "$subject" | grep -qF '[deploy]'; then
+            echo "go=true" >> "$GITHUB_OUTPUT"; echo "Деплой: так"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"; echo "Деплой: ні (у першому рядку коміту немає [deploy])"
+          fi
+
   deploy:
-    needs: tests
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[deploy]')
+    needs: [tests, gate]
+    if: needs.gate.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
