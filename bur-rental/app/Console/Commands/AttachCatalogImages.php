@@ -21,14 +21,15 @@ class AttachCatalogImages extends Command
     public function handle(): int
     {
         $disk = Storage::disk('public');
+        $sources = $this->sourcePages();
         $products = 0;
         $categories = 0;
 
-        Product::withoutGlobalScope('published')->orderBy('id')->each(function (Product $product) use ($disk, &$products) {
+        Product::withoutGlobalScope('published')->orderBy('id')->each(function (Product $product) use ($disk, $sources, &$products) {
             $path = "products/{$product->slug}.webp";
 
             if ($product->images->isEmpty() && $disk->exists($path)) {
-                $product->images()->create(['path' => $path, 'position' => 0]);
+                $product->images()->create(['path' => $path, 'position' => 0, 'source_url' => $sources[$product->slug] ?? null]);
                 $products++;
             }
         });
@@ -46,5 +47,20 @@ class AttachCatalogImages extends Command
         $this->info("Товарів: {$products}, категорій: {$categories}");
 
         return self::SUCCESS;
+    }
+
+    /** Звідки взяте кожне фото (slug → сторінка-джерело), щоб завжди можна було показати походження. */
+    private function sourcePages(): array
+    {
+        $file = database_path('seeders/data/product-image-sources.json');
+
+        if (! is_file($file)) {
+            return [];
+        }
+
+        return collect(json_decode(file_get_contents($file), true) ?: [])
+            ->pluck('source_page', 'slug')
+            ->filter()
+            ->all();
     }
 }

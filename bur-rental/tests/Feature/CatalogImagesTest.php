@@ -28,6 +28,7 @@ class CatalogImagesTest extends TestCase
         $this->artisan('catalog:attach-images')->assertSuccessful();
 
         $this->assertSame(["products/{$product->slug}.webp"], $product->fresh()->images->pluck('path')->all());
+        $this->assertNotEmpty($product->fresh()->images->first()->source_url, 'джерело береться з product-image-sources.json');
         $this->assertSame("products/{$product->slug}.webp", $product->category->fresh()->image);
         $parent = $product->category->parent_id ? Category::find($product->category->parent_id) : null;
         if ($parent) {
