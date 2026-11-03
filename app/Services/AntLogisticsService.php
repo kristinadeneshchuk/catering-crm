@@ -512,7 +512,11 @@ class AntLogisticsService
         // Заздалегідь зберігаємо OrderDay, які належать поточній доставці (можливо кілька дат їжі).
         // Це дозволяє при наявності маршруту проставити ant-поля у ВСІ дні (включно з подвійною доставкою).
         $dayCollections = $this->collectOrderDaysForDelivery($deliveryDate, $shift);
-        $daysByClient   = $dayCollections['days']->groupBy(fn ($d) => (int) ($d->order?->client_id ?? 0));
+        // Дні, яким маршрут уже дав RouteLogix, ANT не перезаписує: інакше
+        // пізніший синк повернув би на пакети чужий номер і водія.
+        $daysByClient   = $dayCollections['days']
+            ->reject(fn ($d) => $d->route_source === \App\Services\RouteLogixService::SOURCE)
+            ->groupBy(fn ($d) => (int) ($d->order?->client_id ?? 0));
 
         // 2. Для кожного маршруту завантажуємо точки і оновлюємо order_days
         $totalComps = 0;
@@ -997,9 +1001,21 @@ class AntLogisticsService
             ->orWhere(fn ($q) => $q->where('position', 'courier')->whereNull('archived_at'))
             ->get();
 
+        // Зміни, які вже веде RouteLogix: виїзди й оплату курʼєрів там рахуємо
+        // з його маршрутів. Маршрут ANT поруч дав би курʼєру другу ставку.
+        $routelogixShifts = \App\Support\SchemaReady::hasColumn('delivery_routes', 'source')
+            ? DeliveryRoute::whereDate('date', $date)
+                ->where('source', \App\Services\RouteLogixService::SOURCE)
+                ->pluck('shift')->flip()->all()
+            : [];
+
         foreach ($routes as $route) {
             $routeId  = $route['Route_Id'] ?? null;
             $driver   = $route['Driver'] ?? null;
+
+            if (isset($routelogixShifts[DeliveryRoute::shiftFromRouteTime($route['RouteTime_B'] ?? null)])) {
+                continue;
+            }
 
             // Фільтр по зміні якщо потрібно
             if ($shift !== 'all' && $driver) {
@@ -1085,6 +1101,9 @@ class AntLogisticsService
         $stale = DeliveryRoute::whereDate('date', $date)
             ->whereNotNull('ant_route_id')
             ->whereNotIn('ant_route_id', $antIds)
+            // Маршрути RouteLogix в ANT і не мали бути — це не «видалені».
+            ->when(\App\Support\SchemaReady::hasColumn('delivery_routes', 'source'),
+                fn ($q) => $q->where(fn ($w) => $w->whereNull('source')->orWhere('source', '!=', \App\Services\RouteLogixService::SOURCE)))
             ->get()
             // Зміну маршруту не визначили — не чіпаємо: краще зайвий рядок,
             // ніж мовчки стерта історія.

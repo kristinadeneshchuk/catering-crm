@@ -54,6 +54,15 @@ return [
     ],
 
     // Операційний ШІ (docs/tz-ops-agent.md). Ключ — лише в .env сервера.
+    // RouteLogix — наш планувальник маршрутів (logist.horenko-production.com).
+    // labels=false: CRM нічого не пише з RouteLogix, працює лише перегляд.
+    // Вмикає тільки власник, разом із CRM_HANDOFF=1 на боці RouteLogix.
+    'logist' => [
+        'url'    => env('LOGIST_URL', 'https://logist.horenko-production.com'),
+        'token'  => env('LOGIST_CRM_TOKEN'),
+        'labels' => (bool) env('LOGIST_LABELS', false),
+    ],
+
     'anthropic' => [
         'key'            => env('ANTHROPIC_API_KEY'),
         'model'          => env('ANTHROPIC_MODEL', 'claude-opus-5'),

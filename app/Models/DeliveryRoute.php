@@ -10,7 +10,7 @@ class DeliveryRoute extends Model
 {
     protected $fillable = [
         'date', 'shift',
-        'ant_route_id', 'ant_route_num',
+        'ant_route_id', 'ant_route_num', 'source',
         'driver_name', 'employee_id', 'auto_name', 'model_auto', 'registration_number',
         'count_comps', 'distance_calc', 'distance_fact', 'fuel_city',
         'route_time_b', 'route_time_e',

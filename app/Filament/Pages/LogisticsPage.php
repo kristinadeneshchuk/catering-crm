@@ -686,6 +686,49 @@ class LogisticsPage extends Page implements HasForms
                     }
                 }),
 
+            Action::make('pull_routelogix')
+                ->label('Маршрути з RouteLogix')
+                ->color('gray')
+                ->modalDescription(fn () => app(\App\Services\RouteLogixService::class)->enabled()
+                    ? 'Номери маршрутів на наліпках і виїзди курʼєрів цієї зміни братимуться з RouteLogix, маршрути ANT на неї буде прибрано.'
+                    : 'Перегляд: запис з RouteLogix вимкнено (LOGIST_LABELS), нічого не зміниться.')
+                ->form([
+                    Grid::make(2)->schema([
+                        DatePicker::make('date')
+                            ->label('Дата доставки')
+                            ->default(fn () => $this->data['date'] ?? now()->format('Y-m-d'))
+                            ->required(),
+                        Select::make('shift')
+                            ->label('Зміна')
+                            ->options(['morning' => 'Ранок', 'evening' => 'Вечір'])
+                            ->default(fn () => in_array($this->data['shift'] ?? null, ['morning', 'evening'], true) ? $this->data['shift'] : 'morning')
+                            ->required(),
+                    ]),
+                ])
+                ->action(function (array $data) {
+                    try {
+                        $r = app(\App\Services\RouteLogixService::class)->import($data['date'], $data['shift']);
+                    } catch (\Throwable $e) {
+                        Notification::make()->title('RouteLogix')->body($e->getMessage())->danger()->send();
+                        return;
+                    }
+
+                    $lines = ["Маршрутів {$r['routes']}, адрес {$r['stops']}, днів {$r['days']}."];
+                    if ($r['unknown_days']) {
+                        $lines[] = 'Не на цю дату/зміну: ' . count($r['unknown_days']) . ' днів.';
+                    }
+                    foreach ($r['unmatched_couriers'] as $num => $driver) {
+                        $lines[] = "№{$num}: курʼєра «{$driver}» не знайдено.";
+                    }
+                    $lines[] = $r['written']
+                        ? "Записано. Прибрано маршрутів ANT: {$r['ant_removed']}."
+                        : 'Лише перегляд — нічого не записано.';
+
+                    $this->loadRoutes();
+                    Notification::make()->title('RouteLogix')->body(implode("\n", $lines))
+                        ->{$r['written'] ? 'success' : 'info'}()->persistent()->send();
+                }),
+
             Action::make('send_client_sms')
                 ->label(fn () => $this->smsSentCount > 0
                     ? "Сповіщення вже відправлені ({$this->smsSentCount})"

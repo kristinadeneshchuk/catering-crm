@@ -37,6 +37,7 @@ class OrderDay extends Model
         'extra_delivery_fee',
         'fake_kcal', 'fake_prot', 'fake_fat', 'fake_carb',
         'ant_route_num', 'ant_route_id', 'ant_route_pos', 'ant_driver', 'ant_delivery_group',
+        'route_source',
     ];
 
     protected $casts = [
