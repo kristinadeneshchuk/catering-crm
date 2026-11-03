@@ -107,6 +107,7 @@ class RouteLogixImportTest extends TestCase
         $this->assertSame('morning', $route->shift);
         $this->assertSame('27.10.2026 08:40', $route->route_time_b);
         $this->assertSame(800.0, (float) $route->calculated_cost);
+        $this->assertSame('27.10.2026 09:15', $route->route_time_e);
 
         $this->assertDatabaseMissing('delivery_routes', ['id' => $antMorning]);
         $this->assertDatabaseHas('delivery_routes', ['id' => $antEvening]);

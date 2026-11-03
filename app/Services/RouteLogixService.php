@@ -219,8 +219,8 @@ class RouteLogixService
                     'driver_name'   => $route['driver'],
                     'employee_id'   => $route['courier']?->id,
                     'count_comps'   => count($route['stops']),
-                    'route_time_b'  => $this->routeTime($date, $route['etas'], 'min'),
-                    'route_time_e'  => $this->routeTime($date, $route['etas'], 'max'),
+                    'route_time_b'  => $this->routeTime($date, $shift, $route['etas'], 'min'),
+                    'route_time_e'  => $this->routeTime($date, $shift, $route['etas'], 'max'),
                 ]
             );
 
@@ -287,15 +287,24 @@ class RouteLogixService
         return (string) -(($shift === 'evening' ? 2000 : 1000) + $num);
     }
 
-    /** Перший/останній ETA маршруту у форматі ANT 'd.m.Y H:i'. */
-    private function routeTime(string $date, array $etas, string $edge): ?string
+    /**
+     * Перший/останній ETA маршруту у форматі ANT 'd.m.Y H:i'.
+     *
+     * ETA приходить як «HH:MM»; вечірня зміна буває після півночі («00:20»),
+     * і такий час належить уже наступній добі.
+     */
+    private function routeTime(string $date, string $shift, array $etas, string $edge): ?string
     {
         $times = collect($etas)
-            ->map(function ($eta) use ($date) {
+            ->map(function ($eta) use ($date, $shift) {
                 try {
-                    return preg_match('/^\d{1,2}:\d{2}$/', $eta)
-                        ? Carbon::parse("{$date} {$eta}")
-                        : Carbon::parse($eta);
+                    if (! preg_match('/^\d{1,2}:\d{2}$/', $eta)) {
+                        return Carbon::parse($eta);
+                    }
+
+                    $time = Carbon::parse("{$date} {$eta}");
+
+                    return $shift === 'evening' && $time->hour < 12 ? $time->addDay() : $time;
                 } catch (\Throwable) {
                     return null;
                 }
