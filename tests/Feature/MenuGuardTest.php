@@ -150,6 +150,74 @@ class MenuGuardTest extends AgentsTestCase
         $this->assertContains('[V9] 14.10: 2 рази — правило клієнта «паста раз на день»', $res->json('warnings'));
     }
 
+    /** Група «крупи» в тестовій базі + страви з крупою і без. @return array{int,int,int} [крупа, страва з крупою, страва без] */
+    private function grainsFixture(): array
+    {
+        $rice = $this->ingredient('рис басматі');
+        DB::table('ingredient_groups')->insert(['id' => 3, 'slug' => 'крупи', 'name' => 'Крупи (каші)']);
+        DB::table('ingredient_group_items')->insert(['ingredient_group_id' => 3, 'ingredient_id' => $rice]);
+        $withGrain = $this->dish('Курка з рисом', [['ing' => $rice], ['ing' => $this->ingredient('філе куряче')]]);
+        $noGrain = $this->dish('Курка з кабачком', [['ing' => $this->ingredient('кабачок')], ['ing' => $this->ingredient('філе куряче')]]);
+
+        return [$rice, $withGrain, $noGrain];
+    }
+
+    public function test_a_meal_that_must_not_contain_a_group_is_flagged(): void
+    {
+        [, $withGrain, $noGrain] = $this->grainsFixture();
+        ClientDietProfile::create(['client_id' => $this->order->client_id, 'rules' => [['kind' => 'meal_no_group', 'meal_type_id' => $this->breakfast, 'group_slug' => 'крупи', 'text' => 'сніданок без каші']]]);
+
+        $res = $this->propose([['date' => '2026-10-14', 'meals' => [['meal_type_id' => $this->breakfast, 'dish_id' => $withGrain], ['meal_type_id' => $this->lunch, 'dish_id' => $withGrain]]]])->assertCreated();
+        $warnings = $res->json('warnings');
+
+        $this->assertContains('[V9] 14.10 Сніданок: «Курка з рисом» містить «Крупи (каші)» — правило клієнта «сніданок без каші»', $warnings);
+        $this->assertCount(1, array_filter($warnings, fn ($w) => str_contains($w, 'сніданок без каші')), 'Обід під це правило не підпадає');
+
+        $ok = $this->propose([['date' => '2026-10-15', 'meals' => [['meal_type_id' => $this->breakfast, 'dish_id' => $noGrain]]]])->assertCreated();
+        $this->assertEmpty(array_filter($ok->json('warnings'), fn ($w) => str_contains($w, 'сніданок без каші')));
+    }
+
+    public function test_a_meal_that_must_come_from_a_group_is_flagged_when_it_does_not(): void
+    {
+        [, $withGrain, $noGrain] = $this->grainsFixture();
+        ClientDietProfile::create(['client_id' => $this->order->client_id, 'rules' => [['kind' => 'meal_only_group', 'meal_type_id' => $this->lunch, 'group_slug' => 'крупи', 'text' => 'обід завжди з кашею']]]);
+
+        $res = $this->propose([['date' => '2026-10-14', 'meals' => [['meal_type_id' => $this->lunch, 'dish_id' => $noGrain]]]])->assertCreated();
+        $this->assertContains('[V9] 14.10 Обід: «Курка з кабачком» не з групи «Крупи (каші)» — правило клієнта «обід завжди з кашею»', $res->json('warnings'));
+
+        $ok = $this->propose([['date' => '2026-10-15', 'meals' => [['meal_type_id' => $this->lunch, 'dish_id' => $withGrain]]]])->assertCreated();
+        $this->assertEmpty(array_filter($ok->json('warnings'), fn ($w) => str_contains($w, 'обід завжди з кашею')));
+    }
+
+    public function test_a_dish_repeated_sooner_than_the_minimum_gap_is_flagged_including_days_already_in_the_order(): void
+    {
+        $mussels = $this->ingredient('мідії');
+        $dish = $this->dish('Мідії з рисом', [['ing' => $mussels]]);
+        $other = $this->dish('Курка', [['ing' => $this->ingredient('філе куряче')]]);
+        ClientDietProfile::create(['client_id' => $this->order->client_id, 'rules' => [['kind' => 'min_gap_days', 'dish_id' => $dish, 'value' => 2, 'text' => 'мідії не щодня']]]);
+        // 13.10 уже в CRM — пропозиція на 14–16 його не замінює.
+        DB::table('order_day_dishes')->insert(['order_id' => $this->order->id, 'date' => '2026-10-13', 'meal_type_id' => $this->lunch, 'dish_id' => $dish]);
+
+        $res = $this->propose([
+            ['date' => '2026-10-14', 'meals' => [['meal_type_id' => $this->lunch, 'dish_id' => $dish]]],
+            ['date' => '2026-10-15', 'meals' => [['meal_type_id' => $this->lunch, 'dish_id' => $other]]],
+            ['date' => '2026-10-16', 'meals' => [['meal_type_id' => $this->lunch, 'dish_id' => $dish]]],
+        ])->assertCreated();
+        $warnings = array_values(array_filter($res->json('warnings'), fn ($w) => str_contains($w, 'мідії не щодня')));
+
+        $this->assertSame(['[V9] 14.10: «Мідії з рисом» знову через 1 дн. після 13.10 — правило клієнта «мідії не щодня»'], $warnings, '16.10 — через 2 дні після 14.10, це вже дозволено');
+    }
+
+    public function test_a_disliked_dish_is_flagged_softly(): void
+    {
+        $dish = $this->dish('Шакшука', [['ing' => $this->ingredient('яйце')]]);
+        ClientDietProfile::create(['client_id' => $this->order->client_id, 'avoid' => [['dish_id' => $dish, 'text' => 'томати з якоюсь спецією']]]);
+
+        $res = $this->propose($this->lunchOn('2026-10-14', $dish))->assertCreated();
+
+        $this->assertContains('[V9] 14.10 Обід: «Шакшука» — клієнту не сподобалось (томати з якоюсь спецією), краще іншу страву', $res->json('warnings'));
+    }
+
     public function test_two_agents_cannot_hold_the_same_days_and_a_new_version_replaces_the_old(): void
     {
         $dish = $this->dish('Омлет', [['ing' => $this->ingredient('яйце')]]);

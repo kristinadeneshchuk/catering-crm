@@ -5,6 +5,7 @@ namespace App\Filament\Actions;
 use App\Models\Client;
 use App\Models\ClientDietProfile;
 use App\Models\Dish;
+use App\Models\MealType;
 use App\Services\Agents\IngredientGroupCatalog;
 use Filament\Actions\Action;
 use Filament\Forms;
@@ -33,15 +34,30 @@ class DietProfileAction
                     ->helperText('Виключили групу — заборонені всі її продукти (кукурудза = зерно, крохмаль, мексиканські овочі). Окремі продукти — у виключеннях клієнта.'),
                 Forms\Components\Repeater::make('avoid')->label('Краще ні (мʼяко)')->schema([
                     Forms\Components\Select::make('group_slug')->label('Група')->options($groups),
-                    Forms\Components\TextInput::make('text')->label('Або текстом'),
-                ])->columns(2)->defaultItems(0)->addActionLabel('Додати'),
+                    Forms\Components\Select::make('dish_id')->label('Або страва (не сподобалась)')->searchable()
+                        ->getSearchResultsUsing(fn (string $search) => Dish::where('name', 'like', "%{$search}%")->limit(30)->pluck('name', 'id'))
+                        ->getOptionLabelUsing(fn ($value) => Dish::find($value)?->name),
+                    Forms\Components\TextInput::make('text')->label('Як сказав клієнт'),
+                ])->columns(3)->defaultItems(0)->addActionLabel('Додати')
+                    ->helperText('Група або страва — не блокує, але агент не ставить, а перевірка попереджає. Жорстке «не їм» — у виключеннях клієнта.'),
                 Forms\Components\TagsInput::make('want_more')->label('Більше / улюблене'),
                 Forms\Components\Repeater::make('rules')->label('Правила')->schema([
-                    Forms\Components\Select::make('kind')->label('Тип')->options(['max_per_day' => 'Не більше N на день', 'max_per_week' => 'Не більше N за меню', 'text' => 'Текстом'])->default('text')->required()->live(),
-                    Forms\Components\Select::make('group_slug')->label('Група')->options($groups)->visible(fn (Forms\Get $get) => $get('kind') !== 'text'),
-                    Forms\Components\TextInput::make('value')->label('N')->numeric()->visible(fn (Forms\Get $get) => $get('kind') !== 'text'),
+                    Forms\Components\Select::make('kind')->label('Тип')->options(ClientDietProfile::RULE_KINDS)->default('text')->required()->live(),
+                    Forms\Components\Select::make('group_slug')->label('Група')->options($groups)->searchable()
+                        ->visible(fn (Forms\Get $get) => in_array($get('kind'), ['max_per_day', 'max_per_week', 'min_gap_days', 'meal_no_group', 'meal_only_group'], true)),
+                    Forms\Components\Select::make('dish_id')->label('Або страва')->searchable()
+                        ->getSearchResultsUsing(fn (string $search) => Dish::where('name', 'like', "%{$search}%")->limit(30)->pluck('name', 'id'))
+                        ->getOptionLabelUsing(fn ($value) => Dish::find($value)?->name)
+                        ->visible(fn (Forms\Get $get) => $get('kind') === 'min_gap_days'),
+                    Forms\Components\Select::make('meal_type_id')->label('Прийом')->options(fn () => MealType::query()->orderBy('sort_order')->pluck('name', 'id'))
+                        ->visible(fn (Forms\Get $get) => in_array($get('kind'), ['meal_no_group', 'meal_only_group'], true)),
+                    Forms\Components\TextInput::make('value')->label('N')->numeric()->minValue(0)
+                        ->visible(fn (Forms\Get $get) => in_array($get('kind'), ['max_per_day', 'max_per_week', 'min_gap_days'], true)),
+                    Forms\Components\Select::make('serve')->label('Подача')->options(ClientDietProfile::SERVE_CODES)
+                        ->visible(fn (Forms\Get $get) => $get('kind') === 'serve'),
                     Forms\Components\TextInput::make('text')->label('Як сказав клієнт')->columnSpanFull(),
-                ])->columns(3)->defaultItems(0)->addActionLabel('Додати правило'),
+                ])->columns(3)->defaultItems(0)->addActionLabel('Додати правило')
+                    ->helperText('«Текстом» код не перевіряє — по змозі обирайте тип: «каша раз на день» = Не більше 1 на день + група «Крупи»; «вечеря без вуглеводів» = Прийом без групи + Вечеря + «Вуглеводний гарнір».'),
                 Forms\Components\Select::make('favorite_dish_ids')->label('Улюблені страви')->multiple()->searchable()
                     ->getSearchResultsUsing(fn (string $search) => Dish::where('name', 'like', "%{$search}%")->limit(30)->pluck('name', 'id'))
                     ->getOptionLabelsUsing(fn (array $values) => Dish::whereIn('id', $values)->pluck('name', 'id')),

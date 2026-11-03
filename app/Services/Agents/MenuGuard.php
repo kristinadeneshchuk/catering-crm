@@ -19,7 +19,8 @@ use Throwable;
  *  V3  дата — день доставки замовлення (не пауза, не поза замовленням);
  *  V4  «битий» продукт у довіднику: 0 ккал або ккал ≠ 4Б+9Ж+4В;
  *  V5  КБЖВ дня проти цілі замовлення;
- *  V9  правила профілю: «не частіше N на день/тиждень», «краще ні»;
+ *  V9  правила профілю: «не більше N на день/тиждень», «не частіше ніж раз на N днів»,
+ *      «прийом без групи», «прийом лише з групи», «краще ні» (продукт, група або страва);
  *  V10 дедлайн: меню на D — до 10:00 D−1;
  *  V6–V8 (собівартість, повтори, навантаження кухні) — з IndividualWeekMenu::warnings.
  *
@@ -75,6 +76,7 @@ class MenuGuard
             ->map(fn ($r) => substr((string) $r->date, 0, 10))->flip();
 
         $leavesByMeal = [];
+        $mealsMeta = [];
         foreach ($days as $day) {
             $date = (string) ($day['date'] ?? '');
             $label = $this->dateLabel($date);
@@ -97,6 +99,7 @@ class MenuGuard
                     ? $this->leavesWithReplacements($dishId, $replacements)
                     : $this->leavesOfDraft((array) ($newDishes[$m['dish_ref'] ?? '']['ingredients'] ?? []));
                 $leavesByMeal[$date][$j] = $leaves;
+                $mealsMeta[$date][$j] = ['meal_type_id' => (int) ($m['meal_type_id'] ?? 0), 'meal' => $meal, 'dish_id' => $dishId, 'name' => $name];
 
                 // V1/V2 — виключені продукти на будь-якій глибині.
                 foreach ($leaves as $ingId => $via) {
@@ -112,7 +115,7 @@ class MenuGuard
         $allLeaves = collect($leavesByMeal)->flatten(1)->flatMap(fn ($l) => array_keys($l))->unique()->values()->all();
         $checks = array_merge($checks, $this->brokenIngredients($allLeaves, $groups));
         $checks = array_merge($checks, $this->nutrition($p, $order));
-        if ($profile) $checks = array_merge($checks, $this->profileRules($profile, $days, $leavesByMeal, $groups));
+        if ($profile) $checks = array_merge($checks, $this->profileRules($profile, $order, $leavesByMeal, $mealsMeta, $groups));
         $checks = array_merge($checks, $this->deadlines($days));
 
         try {
@@ -320,33 +323,71 @@ class MenuGuard
     }
 
     /**
-     * V9 — правила профілю: rules [{kind: max_per_day|max_per_week, group_slug, value, text}]
-     * і «краще ні» avoid [{ingredient_id}|{group_slug}].
+     * V9 — правила профілю (ClientDietProfile::RULE_KINDS):
+     *  max_per_day / max_per_week  {group_slug, value}
+     *  min_gap_days                {group_slug|dish_id, value} — дивиться й на дні замовлення перед меню
+     *  meal_no_group               {meal_type_id, group_slug}
+     *  meal_only_group             {meal_type_id, group_slug}
+     * і «краще ні» avoid [{ingredient_id}|{group_slug}|{dish_id}].
+     *
+     * @param array<string, array<int, array{meal_type_id: int, meal: string, dish_id: ?int, name: string}>> $mealsMeta
      */
-    private function profileRules(ClientDietProfile $profile, array $days, array $leavesByMeal, array $groups): array
+    private function profileRules(ClientDietProfile $profile, Order $order, array $leavesByMeal, array $mealsMeta, array $groups): array
     {
         $out = [];
+        $groupNames = DB::table('ingredient_groups')->pluck('name', 'slug');
+        $hits = fn (array $leaves, array $ids) => (bool) array_intersect_key($leaves, $ids);
+
         foreach ((array) $profile->rules as $rule) {
-            $ids = array_flip($groups[$rule['group_slug'] ?? ''] ?? []);
-            $max = (int) ($rule['value'] ?? 0);
-            if (!$ids || $max < 0 || !in_array($rule['kind'] ?? '', ['max_per_day', 'max_per_week'], true)) continue;
-            $text = $rule['text'] ?? ($rule['group_slug'] . ' не більше ' . $max);
-            $perDay = [];
-            foreach ($leavesByMeal as $date => $meals) {
-                $perDay[$date] = count(array_filter($meals, fn ($leaves) => array_intersect_key($leaves, $ids)));
-            }
-            if (($rule['kind'] ?? '') === 'max_per_day') {
-                foreach ($perDay as $date => $n) {
-                    if ($n > $max) $out[] = $this->c('V9', 'warn', $this->dateLabel($date) . ": {$n} рази — правило клієнта «{$text}»");
+            $kind = (string) ($rule['kind'] ?? '');
+            $slug = (string) ($rule['group_slug'] ?? '');
+            $ids = array_flip($groups[$slug] ?? []);
+            $groupName = $groupNames[$slug] ?? $slug;
+            $value = (int) ($rule['value'] ?? 0);
+
+            if (in_array($kind, ['max_per_day', 'max_per_week'], true)) {
+                if (!$ids || $value < 0) continue;
+                $text = $rule['text'] ?? ($groupName . ' не більше ' . $value);
+                $perDay = [];
+                foreach ($leavesByMeal as $date => $meals) {
+                    $perDay[$date] = count(array_filter($meals, fn ($leaves) => $hits($leaves, $ids)));
                 }
-            } elseif (array_sum($perDay) > $max) {
-                $out[] = $this->c('V9', 'warn', 'За меню ' . array_sum($perDay) . " рази — правило клієнта «{$text}»");
+                if ($kind === 'max_per_day') {
+                    foreach ($perDay as $date => $n) {
+                        if ($n > $value) $out[] = $this->c('V9', 'warn', $this->dateLabel($date) . ": {$n} рази — правило клієнта «{$text}»");
+                    }
+                } elseif (array_sum($perDay) > $value) {
+                    $out[] = $this->c('V9', 'warn', 'За меню ' . array_sum($perDay) . " рази — правило клієнта «{$text}»");
+                }
+            } elseif ($kind === 'meal_no_group' || $kind === 'meal_only_group') {
+                $mt = (int) ($rule['meal_type_id'] ?? 0);
+                if (!$ids || !$mt) continue;
+                $text = $rule['text'] ?? ($kind === 'meal_no_group' ? "без «{$groupName}»" : "лише «{$groupName}»");
+                foreach ($mealsMeta as $date => $meals) {
+                    foreach ($meals as $j => $meta) {
+                        if ($meta['meal_type_id'] !== $mt) continue;
+                        $has = $hits($leavesByMeal[$date][$j] ?? [], $ids);
+                        if ($kind === 'meal_no_group' && $has) {
+                            $out[] = $this->c('V9', 'warn', $this->dateLabel($date) . " {$meta['meal']}: «{$meta['name']}» містить «{$groupName}» — правило клієнта «{$text}»");
+                        } elseif ($kind === 'meal_only_group' && !$has) {
+                            $out[] = $this->c('V9', 'warn', $this->dateLabel($date) . " {$meta['meal']}: «{$meta['name']}» не з групи «{$groupName}» — правило клієнта «{$text}»");
+                        }
+                    }
+                }
+            } elseif ($kind === 'min_gap_days') {
+                $dishId = (int) ($rule['dish_id'] ?? 0);
+                if ($value < 1 || (!$ids && !$dishId)) continue;
+                $what = $dishId ? ($this->dishNames[$dishId] ?? DB::table('dishes')->where('id', $dishId)->value('name') ?? "#{$dishId}") : $groupName;
+                $text = $rule['text'] ?? ("{$what} не частіше ніж раз на {$value} дн.");
+                $out = array_merge($out, $this->minGap($order, $leavesByMeal, $mealsMeta, $ids, $dishId, $value, $what, $text));
             }
         }
 
         $avoid = [];
+        $avoidDishes = [];
         foreach ((array) $profile->avoid as $a) {
             if (!empty($a['ingredient_id'])) $avoid[(int) $a['ingredient_id']] = $a['text'] ?? null;
+            if (!empty($a['dish_id'])) $avoidDishes[(int) $a['dish_id']] = $a['text'] ?? null;
             foreach ($groups[$a['group_slug'] ?? ''] ?? [] as $id) $avoid[$id] = $a['text'] ?? $a['group_slug'];
         }
         if ($avoid) {
@@ -357,6 +398,60 @@ class MenuGuard
                         $out[] = $this->c('V9', 'warn', $this->dateLabel($date) . ': «' . ($names[$id] ?? "#{$id}") . '» — клієнт просив краще без цього');
                     }
                 }
+            }
+        }
+        foreach ($mealsMeta as $date => $meals) {
+            foreach ($meals as $meta) {
+                if ($meta['dish_id'] && isset($avoidDishes[$meta['dish_id']])) {
+                    $why = $avoidDishes[$meta['dish_id']] ? " ({$avoidDishes[$meta['dish_id']]})" : '';
+                    $out[] = $this->c('V9', 'warn', $this->dateLabel($date) . " {$meta['meal']}: «{$meta['name']}» — клієнту не сподобалось{$why}, краще іншу страву");
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * min_gap_days: дати, коли страва/група трапляється в меню, плюс дні цього замовлення
+     * до першого дня меню (їх пропозиція не замінює). Дві появи ближче ніж N днів — попередження.
+     */
+    private function minGap(Order $order, array $leavesByMeal, array $mealsMeta, array $ids, int $dishId, int $gap, string $what, string $text): array
+    {
+        $dates = array_keys($leavesByMeal);
+        if (!$dates) return [];
+        sort($dates);
+        $seen = [];
+        foreach ($mealsMeta as $date => $meals) {
+            foreach ($meals as $j => $meta) {
+                $hit = $dishId ? $meta['dish_id'] === $dishId : (bool) array_intersect_key($leavesByMeal[$date][$j] ?? [], $ids);
+                if ($hit) $seen[$date] = true;
+            }
+        }
+
+        try {
+            $first = Carbon::parse($dates[0]);
+            $prior = DB::table('order_day_dishes')->where('order_id', $order->id)
+                ->whereDate('date', '<', $first->toDateString())->whereDate('date', '>=', $first->copy()->subDays($gap)->toDateString())
+                ->get(['date', 'dish_id']);
+            if ($prior->isNotEmpty()) {
+                $this->load($prior->pluck('dish_id')->map(fn ($id) => (int) $id)->all());
+                foreach ($prior as $r) {
+                    $hit = $dishId ? (int) $r->dish_id === $dishId : (bool) array_intersect_key($this->leaves((int) $r->dish_id), $ids);
+                    if ($hit) $seen[substr((string) $r->date, 0, 10)] = true;
+                }
+            }
+        } catch (Throwable $e) {
+            report($e);
+        }
+
+        $out = [];
+        $hitDates = array_keys($seen);
+        sort($hitDates);
+        for ($i = 1; $i < count($hitDates); $i++) {
+            $diff = Carbon::parse($hitDates[$i - 1])->diffInDays(Carbon::parse($hitDates[$i]));
+            if ($diff < $gap && in_array($hitDates[$i], $dates, true)) {
+                $out[] = $this->c('V9', 'warn', $this->dateLabel($hitDates[$i]) . ": «{$what}» знову через {$diff} дн. після " . $this->dateLabel($hitDates[$i - 1]) . " — правило клієнта «{$text}»");
             }
         }
 
