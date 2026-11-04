@@ -29,10 +29,10 @@ class KitchenNotifications extends Page
 
     public function getViewData(): array
     {
-        // Прочитані — лише останні: уся історія за місяці не влазить у памʼять сторінки.
+        // Прочитані — лише останні 50 (більше сторінка й не показувала): уся історія за місяці не влазить у памʼять сторінки.
         return [
             'unread' => KitchenNotification::latest()->with('client')->whereNull('read_at')->get(),
-            'read'   => KitchenNotification::latest()->with('client')->whereNotNull('read_at')->limit(200)->get(),
+            'read'   => KitchenNotification::latest()->with('client')->whereNotNull('read_at')->limit(50)->get(),
         ];
     }
 

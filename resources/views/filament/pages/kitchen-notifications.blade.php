@@ -1,7 +1,6 @@
 <x-filament-panels::page>
 @php
-    $unread = $this->getViewData()['unread'];
-    $read   = $this->getViewData()['read'];
+    ['unread' => $unread, 'read' => $read] = $this->getViewData();
 
     $typeConfig = [
         'new_client' => ['label' => 'Новий клієнт',  'accent' => '#4ade80', 'bg' => 'rgba(74,222,128,0.08)',  'border' => 'rgba(74,222,128,0.25)'],
@@ -119,9 +118,9 @@
     <div style="background:rgba(255,255,255,0.015);border:1px solid rgba(255,255,255,0.05);border-radius:0.875rem;overflow:hidden;">
         <div style="padding:0.75rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;align-items:center;gap:0.5rem;">
             <svg style="width:0.875rem;height:0.875rem;color:#374151;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-            <span style="font-size:0.75rem;font-weight:600;color:#4b5563;">Прочитані ({{ $read->count() }})</span>
+            <span style="font-size:0.75rem;font-weight:600;color:#4b5563;">Прочитані (останні {{ $read->count() }})</span>
         </div>
-        @foreach($read->take(50) as $n)
+        @foreach($read as $n)
         @php
             $cfg    = $typeConfig[$n->type] ?? $typeConfig['renewal'];
             $accent = $cfg['accent'];
