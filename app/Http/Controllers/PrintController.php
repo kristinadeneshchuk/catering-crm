@@ -484,7 +484,9 @@ class PrintController extends Controller
 
         // Формат паперу: малий 68×42 (21 на аркуші) або великий 70×99 (9) — той
         // самий, що для стікерів на пакети, коли малий папір закінчився.
-        $format = $request->input('format') === 'large' ? 'large' : 'small';
+        // Менюшки клеяться на пакет поряд з наліпкою курʼєра — тому за замовчуванням
+        // такого ж великого формату 70×99.
+        $format = $request->input('format', $mode === 'menus' ? 'large' : 'small') === 'large' ? 'large' : 'small';
 
         // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату
         return view('print.stickers', compact('stickers', 'date', 'format', 'hideIndividual', 'hiddenIndividual', 'isFriday', 'weekend', 'targets', 'personal', 'mode'));

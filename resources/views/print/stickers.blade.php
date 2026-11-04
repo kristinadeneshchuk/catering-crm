@@ -399,7 +399,7 @@
         <a class="opt {{ ($mode ?? 'changes') === 'changes' ? 'active' : '' }}" href="{{ $link(['mode' => 'changes']) }}">Заміни</a>
         <a class="opt {{ ($mode ?? '') === 'personal' ? 'active' : '' }}" href="{{ $link(['mode' => 'personal']) }}" title="Одна табличка на індивідуального клієнта — кладеться на стіл, біля неї бокси">Індивідуальні (на стіл)</a>
         <a class="opt {{ ($mode ?? '') === 'boxes' ? 'active' : '' }}" href="{{ $link(['mode' => 'boxes']) }}" title="Наліпка на кожен бокс індивідуального клієнта: прийом і страва">Індивідуальні (на бокс)</a>
-        <a class="opt {{ ($mode ?? '') === 'menus' ? 'active' : '' }}" href="{{ $link(['mode' => 'menus']) }}" title="Одна наліпка на пакет індивідуального клієнта: усі прийоми й страви дня">Менюшки (на пакет)</a>
+        <a class="opt {{ ($mode ?? '') === 'menus' ? 'active' : '' }}" href="{{ $link(['mode' => 'menus', 'format' => 'large']) }}" title="Одна наліпка на пакет індивідуального клієнта: усі прийоми й страви дня">Менюшки (на пакет)</a>
     </div>
     @unless($personal ?? false)
     <div class="group">
