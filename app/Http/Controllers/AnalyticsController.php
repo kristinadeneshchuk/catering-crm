@@ -81,6 +81,16 @@ class AnalyticsController extends Controller
         $cashExpensesByDay = $cashPnl['byDay'];
         $cashExpensesByCategory = $cashPnl['byCategory'];
 
+        // Генератор — окремим рядком: так видно, скільки коштують відключення світла.
+        // У прибуток іде разом з рештою через $cashExpensesByDay, тут лише показ.
+        $gen = \App\Services\Accounting\CashBook::GENERATOR;
+        $generatorByDay = $cashPnl['byCategoryDay'][$gen] ?? [];
+        unset($cashExpensesByCategory[$gen]);
+        $cashOtherByDay = [];
+        foreach ($cashExpensesByDay as $ymd => $sum) {
+            $cashOtherByDay[$ymd] = round($sum - ($generatorByDay[$ymd] ?? 0), 2);
+        }
+
         // 2. Завантаження даних
         // Включаємо всі необхідні зв'язки для FoodCostService та аналітики
         $validDays = OrderDay::whereBetween('date', [$startDate, $endDate])
@@ -892,7 +902,7 @@ class AnalyticsController extends Controller
             'discountCount', 'totalDiscount',  // 🔥 Знижки
             'spoilagePercent', 'otherExpenses', 'activeTab',
             'rentByDay', 'utilitiesByDay', 'monthlyRent', 'monthlyUtilities',
-            'cashExpensesByDay', 'cashExpensesByCategory',
+            'cashExpensesByDay', 'cashExpensesByCategory', 'cashOtherByDay', 'generatorByDay',
             'unitEconomics', 'marketingStats', 'retentionStats',
             'cashReceivedPeriod', 'cashReceivedByAccount', 'cashBalance', 'prepaidValue',
             'totalClientDebt', 'debtorClientsCount',

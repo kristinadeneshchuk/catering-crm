@@ -22,13 +22,14 @@ class CashBook
     public const CLIENT    = 'Оплата клієнта';
     public const TRANSFER  = 'Переказ між рахунками';
     public const RECOUNT   = 'Перерахунок каси';
+    public const GENERATOR = 'Генератор';
 
     /** Витрати, які йдуть у P&L рядком «Витрати з каси». */
     public const PNL_EXPENSES = [
         'Господарські',
         'Закупівля без накладної',
         'Транспорт і пальне',
-        'Генератор',
+        self::GENERATOR,
         'Обладнання та ремонт',
         'Реклама',
         'Податки та банк',
@@ -273,9 +274,12 @@ class CashBook
 
         $byCategory = $rows->groupBy('category')->map(fn ($g) => round((float) $g->sum('amount'), 2))->sortDesc()->all();
 
+        $sumByDay = fn ($rows) => $rows->groupBy(fn ($t) => $t->date->format('Y-m-d'))->map(fn ($g) => round((float) $g->sum('amount'), 2))->all();
+
         return [
-            'byDay'      => $rows->groupBy(fn ($t) => $t->date->format('Y-m-d'))->map(fn ($g) => round((float) $g->sum('amount'), 2))->all(),
-            'byCategory' => $byCategory,
+            'byDay'         => $sumByDay($rows),
+            'byCategory'    => $byCategory,
+            'byCategoryDay' => $rows->groupBy('category')->map($sumByDay)->all(),
         ];
     }
 }

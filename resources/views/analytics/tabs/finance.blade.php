@@ -163,9 +163,17 @@
                         @endif
                     </td>
                     @foreach($dates as $ymd => $dm)
-                        <td class="text-zinc-500 text-sm">{{ number_format($cashExpensesByDay[$ymd] ?? 0, 0, '.', ' ') }} ₴</td>
+                        <td class="text-zinc-500 text-sm">{{ number_format($cashOtherByDay[$ymd] ?? 0, 0, '.', ' ') }} ₴</td>
                     @endforeach
-                    <td class="text-zinc-400">{{ number_format(array_sum($cashExpensesByDay), 0, '.', ' ') }} ₴</td>
+                    <td class="text-zinc-400">{{ number_format(array_sum($cashOtherByDay), 0, '.', ' ') }} ₴</td>
+                </tr>
+
+                <tr class="row-hover text-zinc-300">
+                    <td class="font-medium text-sm">Генератор</td>
+                    @foreach($dates as $ymd => $dm)
+                        <td class="text-zinc-500 text-sm">{{ number_format($generatorByDay[$ymd] ?? 0, 0, '.', ' ') }} ₴</td>
+                    @endforeach
+                    <td class="text-zinc-400">{{ number_format(array_sum($generatorByDay), 0, '.', ' ') }} ₴</td>
                 </tr>
 
                 @if($monthlyRent > 0)
