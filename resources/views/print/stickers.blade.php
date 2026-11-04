@@ -359,7 +359,10 @@
                 margin: 0;
             }
         }
-        .menu-list { margin-top: 1mm; }
+        .menu-card > div { flex: 1; }
+        .menu-card .sticker-header { padding-bottom: 0; margin-bottom: 0.5mm; }
+        .menu-card .brand-logo { height: 7mm; }
+        .menu-list { margin-top: 0.5mm; }
         .menu-line { font-size: 1em; line-height: 1.2; margin-bottom: 0.6mm; }
         .menu-line b { font-weight: 900; }
         body.fmt-large .menu-line { font-size: 13px; margin-bottom: 1.5mm; }
@@ -468,8 +471,6 @@
                             @endforeach
                         </div>
                     </div>
-
-                    <div class="brand-watermark">{{ $project?->name ?? 'BRAND' }} DELIVERY</div>
                 </div>
                 @continue
             @endif
@@ -588,6 +589,17 @@
             while (inner.scrollHeight > maxHeightPx && fontSize > 6) {
                 fontSize -= 0.5;
                 inner.style.fontSize = fontSize + 'px';
+            }
+        });
+    });
+
+    // Менюшка: страв буває 6–7 — ужимаємо список, доки він не влізе в саму наліпку.
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.menu-card > div').forEach(function (inner) {
+            let size = parseFloat(getComputedStyle(inner).fontSize) || 10;
+            while (inner.scrollHeight > inner.clientHeight + 1 && size > 5.5) {
+                size -= 0.25;
+                inner.style.fontSize = size + 'px';
             }
         });
     });
