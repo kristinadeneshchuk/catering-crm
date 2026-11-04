@@ -407,11 +407,13 @@ class PrintController extends Controller
         $stickers = [];
         $anyOrders = false;
 
-        // Персональне меню: стікер на кожен бокс індивідуального клієнта (клієнт, доставка, прийом, страва).
-        $personal = $request->input('mode') === 'personal';
+        // Індивідуальні: табличка на стіл (одна на клієнта) або наліпка на кожен бокс —
+        // прийом і страва, щоб при збиранні не плутати, що вже готово.
+        $mode     = in_array($request->input('mode'), ['personal', 'boxes'], true) ? $request->input('mode') : 'changes';
+        $personal = $mode !== 'changes';
 
         foreach ($targets as $targetDate) {
-            $day = $personal ? $this->personalStickersFor($targetDate) : $this->stickersFor($targetDate);
+            $day = $personal ? $this->personalStickersFor($targetDate, $mode === 'boxes') : $this->stickersFor($targetDate);
             $anyOrders = $anyOrders || $day !== null;
             $stickers = array_merge($stickers, $day ?? []);
         }
@@ -484,14 +486,16 @@ class PrintController extends Controller
         $format = $request->input('format') === 'large' ? 'large' : 'small';
 
         // 🔥 ВИПРАВЛЕННЯ: Передаємо базову дату
-        return view('print.stickers', compact('stickers', 'date', 'format', 'hideIndividual', 'hiddenIndividual', 'isFriday', 'weekend', 'targets', 'personal'));
+        return view('print.stickers', compact('stickers', 'date', 'format', 'hideIndividual', 'hiddenIndividual', 'isFriday', 'weekend', 'targets', 'personal', 'mode'));
     }
 
     /**
-     * Стікери персонального меню на один день їжі: по одному на кожну страву
-     * індивідуального клієнта — №, клієнт, доставка (ранок/вечір і час), прийом, страва, вага.
+     * Наліпки індивідуальних на один день їжі.
+     *
+     * $perBox = false — табличка на стіл, одна на клієнта.
+     * $perBox = true  — наліпка на кожен бокс: №, клієнт, доставка, прийом, страва, вага.
      */
-    private function personalStickersFor(string $targetDate): ?array
+    private function personalStickersFor(string $targetDate, bool $perBox = false): ?array
     {
         $orders = Order::feedingOn($targetDate)
             ->with([
@@ -528,6 +532,34 @@ class PrintController extends Controller
             $items = collect($calc['items'] ?? [])->filter(fn ($it) => ! empty($it['dish_id']));
             $boxes = $items->count();
             if (! $boxes) continue;
+
+            if ($perBox) {
+                foreach ($items as $it) {
+                    $so = $mealSort[$it['meal_type_id']] ?? 99;
+                    $stickers[] = [
+                        'n'               => $c['n'] ?? null,
+                        'client'          => $order->client?->name ?? 'Без імені',
+                        'client_id'       => $order->client?->id ?? '---',
+                        'meal'            => $it['meal'] ?? 'Прийом',
+                        'meal_type_id'    => $it['meal_type_id'] ?? null,
+                        'meal_sort_order' => $so,
+                        'dish'            => trim(preg_replace('/^Інд\s*·\s*/u', '', (string) ($it['dish'] ?? ''))),
+                        'weight'          => (int) $it['weight'],
+                        'time'            => $so,
+                        'calories'        => (int) $order->calories,
+                        'project'         => $order->project,
+                        'is_individual'   => true,
+                        'changes'         => $ind->stickerChanges($order, $it),
+                        'date'            => $targetDate,
+                        'bundles'         => [],
+                        'is_evening'      => (bool) $isEvening,
+                        'delivery_time'   => $time,
+                        'delivery_slot'   => ($isEvening ? 'Вечір' : 'Ранок').($time ? ' '.$time : ''),
+                    ];
+                }
+                continue;
+            }
+
             $mealSorts = $items->map(fn ($it) => $mealSort[$it['meal_type_id']] ?? null)->filter()->unique()->sort()->values()->all();
             $stickers[] = [
                 'table'           => true,

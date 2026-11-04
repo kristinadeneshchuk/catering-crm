@@ -369,7 +369,7 @@
     // Посилання зберігають дату й інший перемикач — сторінка перебудовується
     // на сервері, щоб аркуші ділились під формат (21 чи 9) і лічильник був чесним.
     $link = fn (array $change) => route('print.stickers', array_merge(
-        ['date' => $date, 'format' => $format, 'no_ind' => $hideIndividual ? 1 : 0, 'weekend' => $weekend ? 1 : 0, 'mode' => ($personal ?? false) ? 'personal' : 'changes'],
+        ['date' => $date, 'format' => $format, 'no_ind' => $hideIndividual ? 1 : 0, 'weekend' => $weekend ? 1 : 0, 'mode' => $mode ?? 'changes'],
         $change,
     ));
     $perSheet = $format === 'large' ? 9 : 21;
@@ -389,8 +389,9 @@
         </div>
     @endif
     <div class="group">
-        <a class="opt {{ ($personal ?? false) ? '' : 'active' }}" href="{{ $link(['mode' => 'changes']) }}">Заміни</a>
-        <a class="opt {{ ($personal ?? false) ? 'active' : '' }}" href="{{ $link(['mode' => 'personal']) }}" title="Одна табличка на індивідуального клієнта — кладеться на стіл, біля неї бокси">Індивідуальні (на стіл)</a>
+        <a class="opt {{ ($mode ?? 'changes') === 'changes' ? 'active' : '' }}" href="{{ $link(['mode' => 'changes']) }}">Заміни</a>
+        <a class="opt {{ ($mode ?? '') === 'personal' ? 'active' : '' }}" href="{{ $link(['mode' => 'personal']) }}" title="Одна табличка на індивідуального клієнта — кладеться на стіл, біля неї бокси">Індивідуальні (на стіл)</a>
+        <a class="opt {{ ($mode ?? '') === 'boxes' ? 'active' : '' }}" href="{{ $link(['mode' => 'boxes']) }}" title="Наліпка на кожен бокс індивідуального клієнта: прийом і страва">Індивідуальні (на бокс)</a>
     </div>
     @unless($personal ?? false)
     <div class="group">
