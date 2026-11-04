@@ -68,6 +68,7 @@ abstract class AgentsTestCase extends TestCase
         (require database_path('migrations/2026_10_11_100000_create_ai_agents.php'))->up();
         (require database_path('migrations/2026_10_11_160000_create_ai_messages.php'))->up();
         foreach (glob(database_path('migrations/2026_10_24_1*.php')) as $m) (require $m)->up();
+        (require database_path('migrations/2026_11_04_100000_add_source_note_to_client_exclusions.php'))->up();
         // У проді й у моделі ReplacementBundle колонка — bundle_id (спільна тестова схема має іншу назву).
         Schema::hasColumn('replacement_bundle_items', 'bundle_id') || Schema::table('replacement_bundle_items', function (Blueprint $t) {
             $t->unsignedBigInteger('bundle_id')->nullable();

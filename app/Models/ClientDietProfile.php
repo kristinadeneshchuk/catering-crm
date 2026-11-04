@@ -50,4 +50,14 @@ class ClientDietProfile extends Model
     ];
 
     public function client(): BelongsTo { return $this->belongsTo(Client::class); }
+
+    /** Групи «не можна» розгортаємо у виключення продуктів при кожному збереженні (див. ProfileExclusionSync). */
+    protected static function booted(): void
+    {
+        static::saved(function (self $profile) {
+            if ($profile->wasRecentlyCreated || $profile->wasChanged('excluded_groups')) {
+                app(\App\Services\Agents\ProfileExclusionSync::class)->sync($profile->client_id, (array) $profile->excluded_groups);
+            }
+        });
+    }
 }

@@ -85,7 +85,16 @@ class MenuGuardTest extends AgentsTestCase
 
         $errors = implode("\n", $this->propose($this->lunchOn('2026-10-15', $dish))->assertStatus(422)->json('errors'));
 
-        $this->assertStringContainsString('[V2] 15.10 Обід: «Телятина з овочами» містить «Овочі мексиканські» — у групі «кукурудза»', $errors);
+        // Група при збереженні профілю розгорнулась у виключення продуктів, тож ловить уже V1.
+        $this->assertStringContainsString('[V1] 15.10 Обід: «Телятина з овочами» містить «Овочі мексиканські» — клієнт не їсть', $errors);
+        $this->assertSame('profile_group', DB::table('client_ingredient_exclusion')->where('ingredient_id', $mexican)->value('source'));
+
+        // Продукт, що потрапив у групу вже після збереження профілю, ловить V2 за групою.
+        $late = $this->ingredient('Кукурудзяне борошно');
+        DB::table('ingredient_group_items')->insert(['ingredient_group_id' => 1, 'ingredient_id' => $late]);
+        $dish2 = $this->dish('Тортилья', [['ing' => $late]]);
+        $errors = implode("\n", $this->propose($this->lunchOn('2026-10-16', $dish2))->assertStatus(422)->json('errors'));
+        $this->assertStringContainsString('[V2] 16.10 Обід: «Тортилья» містить «Кукурудзяне борошно» — у групі «кукурудза»', $errors);
     }
 
     public function test_a_menu_on_a_day_outside_the_order_is_refused(): void

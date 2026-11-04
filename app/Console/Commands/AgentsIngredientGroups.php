@@ -44,6 +44,18 @@ class AgentsIngredientGroups extends Command
         });
         $this->info('Записано груп: ' . count($matched));
 
+        // Склад груп змінився — перерозгортаємо групи «не можна» профілів у виключення продуктів.
+        $sync = app(\App\Services\Agents\ProfileExclusionSync::class);
+        $added = $removed = 0;
+        foreach (\App\Models\ClientDietProfile::whereNotNull('excluded_groups')->get() as $profile) {
+            if ($groups = (array) $profile->excluded_groups) {
+                $r = $sync->sync($profile->client_id, $groups);
+                $added += $r['added'];
+                $removed += $r['removed'];
+            }
+        }
+        $this->info("Виключення з груп профілів: +{$added} / −{$removed}");
+
         return self::SUCCESS;
     }
 }
