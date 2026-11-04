@@ -359,6 +359,10 @@
                 margin: 0;
             }
         }
+        .menu-list { margin-top: 1mm; }
+        .menu-line { font-size: 1em; line-height: 1.2; margin-bottom: 0.6mm; }
+        .menu-line b { font-weight: 900; }
+        body.fmt-large .menu-line { font-size: 13px; margin-bottom: 1.5mm; }
         .ind-num { display:inline-block; background:#111; color:#fff; font-weight:900; font-size:9px; padding:1px 5px; border-radius:3px; margin-right:3px; }
         body.fmt-large .ind-num { font-size:13px; padding:2px 7px; }
     </style>
@@ -392,6 +396,7 @@
         <a class="opt {{ ($mode ?? 'changes') === 'changes' ? 'active' : '' }}" href="{{ $link(['mode' => 'changes']) }}">Заміни</a>
         <a class="opt {{ ($mode ?? '') === 'personal' ? 'active' : '' }}" href="{{ $link(['mode' => 'personal']) }}" title="Одна табличка на індивідуального клієнта — кладеться на стіл, біля неї бокси">Індивідуальні (на стіл)</a>
         <a class="opt {{ ($mode ?? '') === 'boxes' ? 'active' : '' }}" href="{{ $link(['mode' => 'boxes']) }}" title="Наліпка на кожен бокс індивідуального клієнта: прийом і страва">Індивідуальні (на бокс)</a>
+        <a class="opt {{ ($mode ?? '') === 'menus' ? 'active' : '' }}" href="{{ $link(['mode' => 'menus']) }}" title="Одна наліпка на пакет індивідуального клієнта: усі прийоми й страви дня">Менюшки (на пакет)</a>
     </div>
     @unless($personal ?? false)
     <div class="group">
@@ -435,6 +440,39 @@
                     ? 'data:image/png;base64,' . base64_encode(file_get_contents(storage_path('app/public/' . $project->logo)))
                     : null;
             @endphp
+
+            @if(!empty($sticker['menu']))
+                {{-- Менюшка на пакет: клієнт бачить, що в нього сьогодні. --}}
+                <div class="sticker menu-card">
+                    <div>
+                        <div class="sticker-header">
+                            <div>
+                                <div class="client-name">{{ $sticker['client'] }}</div>
+                                @if(!empty($sticker['n']))<span class="ind-num">№{{ $sticker['n'] }}</span>@endif<span class="client-id">ID: {{ $sticker['client_id'] }}</span><span class="ind-tag">ІНД</span>
+                            </div>
+                            @if($logoBase64)
+                                <img src="{{ $logoBase64 }}" class="brand-logo" alt="logo">
+                            @endif
+                        </div>
+
+                        <div class="meal-row">
+                            <span class="meal-type" style="color: {{ $brandColor }};">Меню</span>
+                            <span class="meal-date">{{ \Carbon\Carbon::parse($sticker['date'])->format('d.m') }}</span>
+                            <span class="meal-slot {{ $sticker['is_evening'] ? 'evening' : 'morning' }}">{{ $sticker['delivery_slot'] }}</span>
+                            <span class="calories">{{ $sticker['calories'] }}</span>
+                        </div>
+
+                        <div class="menu-list">
+                            @foreach($sticker['menu'] as $line)
+                                <div class="menu-line"><b>{{ $line['meal'] }}:</b> {{ $line['dish'] }}</div>
+                            @endforeach
+                        </div>
+                    </div>
+
+                    <div class="brand-watermark">{{ $project?->name ?? 'BRAND' }} DELIVERY</div>
+                </div>
+                @continue
+            @endif
 
             @if(!empty($sticker['table']))
                 {{-- Наліпка на стіл у форматі наліпки заміни: біля неї кухня складає всі бокси клієнта. --}}

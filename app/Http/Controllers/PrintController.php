@@ -408,12 +408,13 @@ class PrintController extends Controller
         $anyOrders = false;
 
         // Індивідуальні: табличка на стіл (одна на клієнта) або наліпка на кожен бокс —
-        // прийом і страва, щоб при збиранні не плутати, що вже готово.
-        $mode     = in_array($request->input('mode'), ['personal', 'boxes'], true) ? $request->input('mode') : 'changes';
+        // прийом і страва, щоб при збиранні не плутати, що вже готово. «Менюшка» —
+        // одна наліпка на пакет клієнта з усіма прийомами й стравами дня.
+        $mode     = in_array($request->input('mode'), ['personal', 'boxes', 'menus'], true) ? $request->input('mode') : 'changes';
         $personal = $mode !== 'changes';
 
         foreach ($targets as $targetDate) {
-            $day = $personal ? $this->personalStickersFor($targetDate, $mode === 'boxes') : $this->stickersFor($targetDate);
+            $day = $personal ? $this->personalStickersFor($targetDate, $mode) : $this->stickersFor($targetDate);
             $anyOrders = $anyOrders || $day !== null;
             $stickers = array_merge($stickers, $day ?? []);
         }
@@ -492,10 +493,11 @@ class PrintController extends Controller
     /**
      * Наліпки індивідуальних на один день їжі.
      *
-     * $perBox = false — табличка на стіл, одна на клієнта.
-     * $perBox = true  — наліпка на кожен бокс: №, клієнт, доставка, прийом, страва, вага.
+     * personal — табличка на стіл, одна на клієнта.
+     * boxes    — наліпка на кожен бокс: №, клієнт, доставка, прийом, страва, вага.
+     * menus    — менюшка на пакет, одна на клієнта: усі прийоми й страви дня.
      */
-    private function personalStickersFor(string $targetDate, bool $perBox = false): ?array
+    private function personalStickersFor(string $targetDate, string $mode = 'personal'): ?array
     {
         $orders = Order::feedingOn($targetDate)
             ->with([
@@ -533,7 +535,36 @@ class PrintController extends Controller
             $boxes = $items->count();
             if (! $boxes) continue;
 
-            if ($perBox) {
+            if ($mode === 'menus') {
+                $stickers[] = [
+                    'menu'            => $items
+                        ->map(fn ($it) => [
+                            'meal' => $it['meal'] ?? 'Прийом',
+                            'dish' => trim(preg_replace('/^Інд\s*·\s*/u', '', (string) ($it['dish'] ?? ''))),
+                            'so'   => $mealSort[$it['meal_type_id']] ?? 99,
+                        ])
+                        ->sortBy('so')->values()->all(),
+                    'n'               => $c['n'] ?? null,
+                    'client'          => $order->client?->name ?? 'Без імені',
+                    'client_id'       => $order->client?->id ?? '---',
+                    'meal_sort_orders'=> [],
+                    'meal_sort_order' => null,
+                    'time'            => 0,
+                    'calories'        => (int) $order->calories,
+                    'project'         => $order->project,
+                    'is_individual'   => true,
+                    'changes'         => [],
+                    'date'            => $targetDate,
+                    'bundles'         => [],
+                    'is_evening'      => (bool) $isEvening,
+                    'delivery_time'   => $time,
+                    'delivery_slot'   => ($isEvening ? 'Вечір' : 'Ранок').($time ? ' '.$time : ''),
+                    'weight'          => 0,
+                ];
+                continue;
+            }
+
+            if ($mode === 'boxes') {
                 foreach ($items as $it) {
                     $so = $mealSort[$it['meal_type_id']] ?? 99;
                     $stickers[] = [
