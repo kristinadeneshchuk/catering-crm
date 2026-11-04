@@ -4,8 +4,21 @@
     {
       "name": "crm",
       "runtimeExecutable": "php",
-      "runtimeArgs": ["artisan", "serve", "--port=8090"],
+      "runtimeArgs": [
+        "artisan",
+        "serve",
+        "--port=8090"
+      ],
       "port": 8090
+    },
+    {
+      "name": "nutrix-demo-280",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "APP_ENV=nutrix280 PHP_CLI_SERVER_WORKERS=4 exec php artisan serve --port=8093"
+      ],
+      "port": 8093
     }
   ]
 }
