@@ -469,7 +469,7 @@ class IndividualPacking
     {
         $c = $this->clients[$order->id];
 
-        return ['n' => $c['n'], 'name' => $c['name'], 'brand' => $c['brand'], 'eve' => $c['eve'], 'time' => mb_substr($c['time'], 0, 5), 'weight' => $weight];
+        return ['n' => $c['n'], 'name' => $c['name'], 'brand' => $c['brand'], 'kcal' => $c['kcal'], 'eve' => $c['eve'], 'time' => mb_substr($c['time'], 0, 5), 'weight' => $weight];
     }
 
     /**
