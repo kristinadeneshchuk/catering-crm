@@ -1091,6 +1091,12 @@ class NutrixDemo280Seeder extends Seeder
         foreach ([['Каса (готівка)', 'cash'], ['Рахунок ФОП', 'online'], ['Картка monobank', 'card']] as [$name, $type]) {
             $this->accounts[$type] = Account::create(['name' => $name, 'type' => $type, 'balance' => 0, 'is_default' => $type === 'card'])->id;
         }
+
+        // P&L бере оренду й комунальні з налаштувань (датована ставка — з початку історії).
+        Carbon::setTestNow($this->today->copy()->subDays(self::HISTORY_DAYS + 30));
+        \App\Models\Setting::updateOrCreate(['key' => 'monthly_rent'], ['value' => '140000']);
+        \App\Models\Setting::updateOrCreate(['key' => 'monthly_utilities'], ['value' => '40000']);
+        Carbon::setTestNow();
     }
 
     // ------------------------------------------------------------------

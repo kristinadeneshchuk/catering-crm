@@ -16,7 +16,7 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": [
         "-lc",
-        "APP_ENV=nutrix280 PHP_CLI_SERVER_WORKERS=4 exec php artisan serve --port=8093"
+        "cd public && APP_ENV=nutrix280 PHP_CLI_SERVER_WORKERS=4 exec php -d memory_limit=1024M -d max_execution_time=120 -S 127.0.0.1:8093 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php"
       ],
       "port": 8093
     }
