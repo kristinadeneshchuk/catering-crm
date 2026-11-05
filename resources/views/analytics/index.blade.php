@@ -10,7 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
     
     <script>
         tailwind.config = {
@@ -211,14 +211,14 @@
                             },
                             total: { show: true, label: 'Всього', color: '#71717a',
                                 formatter: function (w) {
-                                    return w.globals.seriesNumbers.reduce((a, b) => a + b, 0);
+                                    return w.globals.seriesTotals.reduce((a, b) => a + b, 0);
                                 }
                             }
                         }
                     }
                 }
             },
-            stroke: { show: true, colors: '#18181b', width: 3 },
+            stroke: { show: true, colors: ['#18181b'], width: 3 },
             dataLabels: { enabled: false },
             legend: { position: 'bottom', labels: { colors: '#71717a' } },
             theme: { mode: 'dark' }

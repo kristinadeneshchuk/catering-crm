@@ -194,7 +194,7 @@ if (document.querySelector("#projectsChart")) {
             pie: { donut: { size: '70%', labels: {
                 show: true,
                 total: { show: true, label: 'Загальна виручка', color: '#71717a',
-                    formatter: w => w.globals.seriesNumbers.reduce((a,b)=>a+b,0).toLocaleString() + ' ₴'
+                    formatter: w => w.globals.seriesTotals.reduce((a,b)=>a+b,0).toLocaleString() + ' ₴'
                 },
                 value: { color: '#fff', fontSize: '22px', fontWeight: '900',
                     formatter: v => Number(v).toLocaleString() + ' ₴'

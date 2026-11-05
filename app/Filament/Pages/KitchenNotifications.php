@@ -24,7 +24,8 @@ class KitchenNotifications extends Page
 
     public static function canAccess(): bool
     {
-        return auth()->check() && (auth()->user()->isCook() || auth()->user()->isAdmin());
+        // Дзвіночок у шапці бачать усі ролі — і менеджер не має впиратись у 403.
+        return auth()->check() && (auth()->user()->isCook() || auth()->user()->isAdmin() || auth()->user()->isManager());
     }
 
     public function getViewData(): array

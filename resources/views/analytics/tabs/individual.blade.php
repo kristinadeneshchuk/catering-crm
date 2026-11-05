@@ -335,7 +335,7 @@ if (document.querySelector("#individualCalChart")) {
             pie: { donut: { size: '70%', labels: {
                 show: true,
                 total: { show: true, label: 'Раціонів', color: '#71717a',
-                    formatter: w => w.globals.seriesNumbers.reduce((a,b)=>a+b,0)
+                    formatter: w => w.globals.seriesTotals.reduce((a,b)=>a+b,0)
                 },
                 value: { color: '#fff', fontSize: '22px', fontWeight: '900' }
             }}}
