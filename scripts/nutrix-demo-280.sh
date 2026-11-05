@@ -38,4 +38,4 @@ echo "→ сідер"
 time APP_ENV=nutrix280 php -d memory_limit=2G artisan db:seed --class=NutrixDemo280Seeder --force --no-interaction
 
 APP_ENV=nutrix280 php artisan optimize:clear >/dev/null
-echo "Готово: APP_ENV=nutrix280 php artisan serve --port=8093"
+echo "Готово. Запуск сервера — див. docs/demo.md (порт 8093)"
