@@ -45,6 +45,32 @@
                 .sticker-box { page-break-inside: avoid; }
             }
 
+        @elseif($layout === 'a5')
+            /* 📄 А5 — одна сторінка на клієнта: аркуш кладеться в пакет */
+            .sticker-grid { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+            .sticker-box {
+                width: 148mm; height: 210mm; padding: 9mm 9mm 7mm 11mm;
+                border: 1px solid #cbd5e1 !important; overflow: hidden;
+            }
+            .sticker-box .logo-wrap { width: 40mm !important; min-height: 16mm !important; }
+            .sticker-box .mf-date    { font-size: 15px !important; padding: 3px 10px !important; }
+            .sticker-box .mf-label   { font-size: 12px !important; }
+            .sticker-box h2.client-name { font-size: 28px !important; line-height: 1.1 !important; margin: 4px 0 6px !important; }
+            .sticker-box .mf-id      { font-size: 13px !important; padding: 3px 8px !important; }
+            .sticker-box .mf-addr    { font-size: 12px !important; }
+            .sticker-box .mf-nutr    { font-size: 14px !important; }
+            .sticker-box .mf-kcal    { font-size: 22px !important; }
+            .sticker-box .mf-item    { font-size: 16px !important; padding: 9px 12px !important; line-height: 1.3 !important; }
+            .sticker-box .mf-meal    { display: block !important; font-size: 11px; font-weight: 900; text-transform: uppercase; color: #94a3b8; letter-spacing: .05em; }
+            .sticker-box .mf-small   { font-size: 12px !important; }
+            .sticker-box .mf-comment { font-size: 12px !important; }
+            .sticker-box .mf-foot    { font-size: 11px !important; }
+            @media print {
+                @page { size: A5; margin: 0; }
+                .sticker-grid { display: block !important; }
+                .sticker-box { border: none !important; break-after: page; page-break-after: always; }
+            }
+
         @else
             /* 📄 СТАНДАРТНИЙ А4 */
             .sticker-grid { display: grid; grid-template-columns: repeat(2, 480px); gap: 15px; justify-content: center; margin: 0 auto; }
@@ -66,6 +92,7 @@
         <select onchange="window.location.href=this.value" class="bg-gray-50 border border-gray-300 text-slate-800 font-bold px-4 py-3 rounded-xl outline-none focus:border-slate-900 cursor-pointer transition">
             <option value="?date={{ $date }}&weekend={{ (int) $weekend }}&layout=default" {{ $layout === 'default' ? 'selected' : '' }}>Стандартний вигляд (А4)</option>
             <option value="?date={{ $date }}&weekend={{ (int) $weekend }}&layout=105x99" {{ $layout === '105x99' ? 'selected' : '' }}>Фіксований: 105 x 99 мм</option>
+            <option value="?date={{ $date }}&weekend={{ (int) $weekend }}&layout=a5" {{ $layout === 'a5' ? 'selected' : '' }}>А5 — аркуш на клієнта</option>
         </select>
     </div>
 
@@ -75,6 +102,13 @@
         <button onclick="filterSlot('all')"     id="btn-all"     class="mf-filter active">Всі (<span id="count-all">{{ count($manifests) }}</span>)</button>
         <button onclick="filterSlot('morning')" id="btn-morning" class="mf-filter">Ранок (<span id="count-morning">{{ collect($manifests)->where('is_evening', false)->count() }}</span>)</button>
         <button onclick="filterSlot('evening')" id="btn-evening" class="mf-filter evening-btn">Вечір (<span id="count-evening">{{ collect($manifests)->where('is_evening', true)->count() }}</span>)</button>
+    </div>
+
+    {{-- Хто в друці: індивідуальні й циклічні друкують окремими пачками. --}}
+    <div style="display:flex;gap:6px;background:#1e293b;padding:6px;border-radius:12px;">
+        <button onclick="filterKind('all')"        id="kind-all"        class="mf-filter mf-kind active">Усі</button>
+        <button onclick="filterKind('individual')" id="kind-individual" class="mf-filter mf-kind">Індивідуальні ({{ collect($manifests)->where('is_individual', true)->count() }})</button>
+        <button onclick="filterKind('cyclic')"     id="kind-cyclic"     class="mf-filter mf-kind">Циклічні ({{ collect($manifests)->where('is_individual', false)->count() }})</button>
     </div>
 
     <button onclick="window.print()" class="bg-slate-900 text-white px-10 py-3 rounded-xl font-black uppercase tracking-widest shadow-xl hover:bg-slate-800 transition">
@@ -116,14 +150,14 @@
             $isCompact = $itemCount >= 5 || ($itemCount == 4 && strlen($man['comment'] ?? '') > 40);
         @endphp
         
-        <div class="sticker-box {{ $layout === '105x99' && $isCompact ? 'is-compact' : '' }}" data-slot="{{ $man['is_evening'] ? 'evening' : 'morning' }}" style="border-color: {{ $brandColor }} !important;">
+        <div class="sticker-box {{ $layout === '105x99' && $isCompact ? 'is-compact' : '' }}" data-slot="{{ $man['is_evening'] ? 'evening' : 'morning' }}" data-kind="{{ !empty($man['is_individual']) ? 'individual' : 'cyclic' }}" style="border-color: {{ $brandColor }} !important;">
             <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background-color: {{ $brandColor }};"></div>
             
             <div class="pl-3 flex flex-col h-full w-full justify-between">
                 
                 <div>
                     <div class="flex justify-between items-start mb-1.5">
-                        <span class="text-xs font-black bg-yellow-300 px-2 py-0.5 rounded shadow-sm inline-block text-black">
+                        <span class="mf-date text-xs font-black bg-yellow-300 px-2 py-0.5 rounded shadow-sm inline-block text-black">
                             {{ \Carbon\Carbon::parse($man['date'])->format('d.m.Y') }}
                         </span>
                         <div class="w-24 logo-wrap min-h-[35px] flex items-center justify-end">
@@ -134,28 +168,28 @@
                     </div>
 
                     <div class="border-b-2 border-slate-900 pb-1.5 mb-2">
-                        <span class="text-[9px] text-gray-400 font-bold uppercase block tracking-tighter mb-0.5">Отримувач:</span>
+                        <span class="mf-label text-[9px] text-gray-400 font-bold uppercase block tracking-tighter mb-0.5">Отримувач:</span>
                         <h2 class="client-name text-[17px] font-black uppercase leading-none tracking-tighter mb-1">{{ $man['client'] }}</h2>
                         <div class="flex items-center text-[10px] font-bold uppercase">
-                            <span class="bg-slate-900 text-white px-1.5 py-0.5 rounded font-black shrink-0">ID: {{ $man['client_id'] }}</span>
+                            <span class="mf-id bg-slate-900 text-white px-1.5 py-0.5 rounded font-black shrink-0">ID: {{ $man['client_id'] }}</span>
                         </div>
-                        <div class="text-[9px] italic text-slate-500 mt-0.5 leading-tight">{{ $man['address'] ?? 'Самовивіз' }}</div>
+                        <div class="mf-addr text-[9px] italic text-slate-500 mt-0.5 leading-tight">{{ $man['address'] ?? 'Самовивіз' }}</div>
                     </div>
                 </div>
 
                 <div class="flex-grow flex flex-col justify-start">
                     <div class="flex justify-between items-end mb-1">
-                        <span class="text-[9px] font-black uppercase text-slate-400 italic">Склад раціону:</span>
+                        <span class="mf-label text-[9px] font-black uppercase text-slate-400 italic">Склад раціону:</span>
                         <div class="flex items-baseline gap-2">
-                            <span class="text-[10px] font-bold text-slate-500">Б:{{ $man['nutrition']['b'] ?? 0 }} Ж:{{ $man['nutrition']['j'] ?? 0 }} В:{{ $man['nutrition']['u'] ?? 0 }}</span>
-                            <span class="text-[13px] font-black" style="color: {{ $brandColor }};">{{ $man['calories'] }} ккал</span>
+                            <span class="mf-nutr text-[10px] font-bold text-slate-500">Б:{{ $man['nutrition']['b'] ?? 0 }} Ж:{{ $man['nutrition']['j'] ?? 0 }} В:{{ $man['nutrition']['u'] ?? 0 }}</span>
+                            <span class="mf-kcal text-[13px] font-black" style="color: {{ $brandColor }};">{{ $man['calories'] }} ккал</span>
                         </div>
                     </div>
 
                     <div class="border border-slate-100 rounded-lg overflow-hidden bg-slate-50/50">
                         @foreach($man['items'] as $item)
-                            <div class="flex justify-between py-1 px-2.5 border-b border-white last:border-0 text-[11px] leading-tight">
-                                <span class="font-bold text-slate-800">{{ $item['dish'] }}</span>
+                            <div class="mf-item flex justify-between py-1 px-2.5 border-b border-white last:border-0 text-[11px] leading-tight">
+                                <span class="font-bold text-slate-800">@if($layout === 'a5' && !empty($item['meal']))<span class="mf-meal hidden">{{ $item['meal'] }}</span>@endif{{ $item['dish'] }}</span>
                                 <span class="font-black text-slate-300 shrink-0 ml-3">{{ $item['weight'] }}г</span>
                             </div>
                         @endforeach
@@ -164,7 +198,7 @@
 
                 <div class="flex flex-col mt-auto pt-1">
                     <div class="flex items-center gap-2 mb-1 flex-wrap">
-                        <span class="text-[10px] font-bold text-slate-500 uppercase">
+                        <span class="mf-small text-[10px] font-bold text-slate-500 uppercase">
                             {{ $man['has_cutlery'] ? 'З приборами' : 'Без приборів' }}
                         </span>
                         @if(!empty($man['water_option']))
@@ -186,12 +220,12 @@
 
                     @if($hasComment)
                         <div class="px-2 py-1 bg-red-50 border border-red-200 rounded mb-1">
-                            <div class="text-[9px] font-black leading-tight uppercase text-red-700 italic">{{ $man['comment'] }}</div>
+                            <div class="mf-comment text-[9px] font-black leading-tight uppercase text-red-700 italic">{{ $man['comment'] }}</div>
                         </div>
                     @endif
 
                     <div class="pt-1.5 border-t border-slate-100 mt-1">
-                        <p class="text-[8px] font-black text-slate-300 uppercase tracking-[0.2em]">Смачного від {{ $project?->name ?? 'BRAND' }}!</p>
+                        <p class="mf-foot text-[8px] font-black text-slate-300 uppercase tracking-[0.2em]">Смачного від {{ $project?->name ?? 'BRAND' }}!</p>
                     </div>
                 </div>
 
@@ -201,18 +235,31 @@
 </div>
 @endforeach
 <script>
-function filterSlot(slot) {
-    var boxes = document.querySelectorAll('.sticker-box');
+var mfSlot = 'all', mfKind = 'all';
+function applyFilters() {
     var visible = 0;
-    boxes.forEach(function(b) {
-        var show = slot === 'all' || b.dataset.slot === slot;
+    document.querySelectorAll('.sticker-box').forEach(function(b) {
+        var show = (mfSlot === 'all' || b.dataset.slot === mfSlot) && (mfKind === 'all' || b.dataset.kind === mfKind);
         b.style.display = show ? '' : 'none';
         if (show) visible++;
     });
     document.getElementById('print-count').textContent = visible;
-    document.querySelectorAll('.mf-filter').forEach(function(b) { b.classList.remove('active'); });
-    document.getElementById('btn-' + slot).classList.add('active');
 }
+function filterSlot(slot) {
+    mfSlot = slot;
+    document.querySelectorAll('.mf-filter:not(.mf-kind)').forEach(function(b) { b.classList.remove('active'); });
+    document.getElementById('btn-' + slot).classList.add('active');
+    applyFilters();
+}
+function filterKind(kind) {
+    mfKind = kind;
+    document.querySelectorAll('.mf-kind').forEach(function(b) { b.classList.remove('active'); });
+    document.getElementById('kind-' + kind).classList.add('active');
+    applyFilters();
+}
+@if(in_array(request('kind'), ['individual', 'cyclic'], true))
+    filterKind('{{ request('kind') }}');
+@endif
 </script>
 </body>
 </html>

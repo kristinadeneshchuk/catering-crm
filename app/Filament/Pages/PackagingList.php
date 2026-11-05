@@ -86,11 +86,11 @@ class PackagingList extends Page implements HasForms
                     ->openUrlInNewTab(),
 
                 Action::make('print_manifest')
-                    ->label('3. В пакет (з меню)')
-                    ->tooltip('Аркуш, що кладеться ВСЕРЕДИНУ пакета для клієнта: його меню на день з вагами і КБЖУ.')
+                    ->label('3. Меню в пакет (А5)')
+                    ->tooltip('Аркуш А5, що кладеться ВСЕРЕДИНУ пакета: меню клієнта на день з вагами і КБЖУ. Індивідуальних і циклічних можна друкувати окремо.')
                     ->icon('heroicon-o-shopping-bag')
                     ->color('warning')
-                    ->url(fn () => route('print.manifest', ['date' => $this->data['date'] ?? now()->format('Y-m-d')]))
+                    ->url(fn () => route('print.manifest', ['date' => $this->data['date'] ?? now()->format('Y-m-d'), 'layout' => 'a5']))
                     ->openUrlInNewTab(),
             ])
             ->label('Друк маркування')

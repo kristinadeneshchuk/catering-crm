@@ -484,10 +484,10 @@
             ▬▬ Великий
         </button>
     </div>
-    {{-- Менюшки індивідуальних: окремий друк, клеїться на пакет поруч із цією наліпкою. --}}
-    <a href="{{ route('print.stickers', ['date' => $date, 'weekend' => $weekend ? 1 : 0, 'mode' => 'menus']) }}" target="_blank"
+    {{-- Меню клієнта на аркуші А5 — кладеться в пакет. --}}
+    <a href="{{ route('print.manifest', ['date' => $date, 'weekend' => $weekend ? 1 : 0, 'layout' => 'a5']) }}" target="_blank"
        style="background:#f97316;color:white;text-decoration:none;padding:14px 24px;border-radius:12px;font-size:15px;font-weight:900;letter-spacing:1px;text-transform:uppercase;">
-        🍽 Надрукувати менюшки
+        🍽 Меню А5
     </a>
     <button onclick="window.print()" style="background:#334155;color:white;border:none;padding:14px 36px;border-radius:12px;font-size:15px;font-weight:900;cursor:pointer;letter-spacing:2px;text-transform:uppercase;">
         ДРУКУВАТИ (<span id="print-count">{{ count($manifests) }}</span> шт.)

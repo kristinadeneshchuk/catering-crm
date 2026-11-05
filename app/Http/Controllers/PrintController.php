@@ -176,6 +176,7 @@ class PrintController extends Controller
                 'address'      => $address,
                 'calories'     => (int) $order->calories,
                 'comment'      => $order->client?->production_comment,
+                'is_individual'=> $order->menu_type === 'individual',
                 'items'        => $items,
                 'date'         => $targetDate,
                 'menu_token'   => $order->menu_token,
