@@ -9,6 +9,8 @@ use Illuminate\Support\Collection;
 
 trait CalculatesOrderPlan
 {
+    private array $dishTotalsCache = [];
+
     private function calculateOrderPlan(Order $order, DailyMenu $menu, ?string $date = null): array
     {
         $empty = ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
@@ -87,7 +89,7 @@ trait CalculatesOrderPlan
                     ? (int)round(($kcalPerDish / $kcalPer100) * 100.0 * $weightMultiplier)
                     : 0;
 
-                $dt    = $dish->calculated_totals;
+                $dt    = $this->dishTotals($dish);
                 $outW  = (float)($dt['output_weight'] ?? ($dish->base_weight_g ?? 0));
                 $outW  = $outW > 0 ? $outW : 1.0;
 
@@ -162,7 +164,7 @@ trait CalculatesOrderPlan
         foreach ($itemsOut as $idx => $it) {
             $dish = \App\Models\Dish::find($it['dish_id']);
             if (!$dish) { continue; }
-            $dt   = $dish->calculated_totals;
+            $dt   = $this->dishTotals($dish);
             $outW = (float)($dt['output_weight'] ?? ($dish->base_weight_g ?? 0));
             $outW = $outW > 0 ? $outW : 1.0;
 
@@ -434,7 +436,7 @@ trait CalculatesOrderPlan
                     : 0;
             }
 
-            $dt   = $dish->calculated_totals;
+            $dt   = $this->dishTotals($dish);
             $outW = (float)($dt['output_weight'] ?? ($dish->base_weight_g ?? 0));
             $outW = $outW > 0 ? $outW : 1.0;
 
@@ -487,10 +489,20 @@ trait CalculatesOrderPlan
         return $total > 0 ? $own / $total : 0.0;
     }
 
+    /**
+     * КБЖВ і вихід страви — один раз на страву за запит. Об'єкти страв приходять
+     * окремі для кожного замовлення (персональні меню, заміни), і кожен рахував
+     * свій склад заново з довантаженням інгредієнтів.
+     */
+    private function dishTotals($dish): array
+    {
+        return $this->dishTotalsCache[$dish->id] ??= $dish->calculated_totals;
+    }
+
     private function dishKcalPer100g($dish): float
     {
         $baseW     = (float)($dish->base_weight_g ?? 0);
-        $totalKcal = (float)($dish->total_kcal ?? 0);
+        $totalKcal = round((float)($this->dishTotals($dish)['kcal'] ?? 0), 1);
         if ($baseW <= 0 || $totalKcal <= 0) return 0.0;
         return ($totalKcal / $baseW) * 100.0;
     }

@@ -14,6 +14,8 @@ class PackagingService
     // упаковка підбирається під РЕАЛЬНО перерахований грамаж, а не під стандарт.
     use CalculatesOrderPlan;
 
+    private array $dishCache = [];
+
 
     /**
      * Вартість пакування для одного раціону (для аналітики).
@@ -97,7 +99,9 @@ class PackagingService
         $boxesInMeal          = []; // meal_type_id => скільки боксів уже в цьому прийомі (для «Вечеря 2»)
 
         foreach ($plan['items'] as $planItem) {
-            $originalDish = Dish::with('dishIngredients.childDish')->find($planItem['dish_id']);
+            // Одна страва — один запит на весь звіт: інакше аналітика за місяць робить
+            // десятки тисяч однакових find() і падає по часу й памʼяті.
+            $originalDish = $this->dishCache[$planItem['dish_id']] ??= Dish::with('dishIngredients.ingredient', 'dishIngredients.childDish')->find($planItem['dish_id']);
             if (!$originalDish) continue;
 
             // Обробка повного виключення / заміни страви для цього клієнта.
