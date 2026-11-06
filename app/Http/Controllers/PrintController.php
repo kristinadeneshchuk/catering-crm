@@ -259,6 +259,7 @@ class PrintController extends Controller
             // Будуємо кружечки замін
             $circles = [];
             $addedCircleMealTypes = [];
+            $menuLines = []; // меню клієнта для наліпки 105×148
 
             $menu = $menusByPlan[$order->effectiveMenuPlan()?->id]['menu'] ?? null;
             if ($menu) {
@@ -267,6 +268,16 @@ class PrintController extends Controller
                     $dishId     = $item['dish_id'] ?? null;
                     $mealTypeId = $item['meal_type_id'] ?? null;
                     if (!$dishId) continue;
+
+                    $lineRep = $order->replacements
+                        ->where('dish_id', $dishId)
+                        ->whereNull('original_product_id')
+                        ->first();
+                    $menuLines[] = [
+                        'meal' => $item['meal'] ?? 'Прийом',
+                        'dish' => trim(preg_replace('/^Інд\s*·\s*/u', '', (string) ($lineRep?->replacementDish?->name ?? $item['dish'] ?? ''))),
+                        'so'   => $mealPalette[$mealTypeId]['sort_order'] ?? 99,
+                    ];
 
                     $menuItem = $menu->menuItems->first(
                         fn($mi) => (int)$mi->dish_id === $dishId && (int)$mi->meal_type_id === $mealTypeId
@@ -294,9 +305,11 @@ class PrintController extends Controller
                     }
                 }
                 usort($circles, fn($a, $b) => $a['sort_order'] <=> $b['sort_order']);
+                usort($menuLines, fn($a, $b) => $a['so'] <=> $b['so']);
             }
 
             $manifests[] = [
+                'menu'               => $menuLines,
                 'client_id'          => $order->client?->id ?? '---',
                 'project'            => $order->project,
                 'client'             => $order->client?->name ?? 'Без імені',

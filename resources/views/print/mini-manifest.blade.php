@@ -447,6 +447,30 @@
         body.fmt-large .qr-placeholder canvas { width: 80px !important; height: 80px !important; }
         body.fmt-large .qr-placeholder.print-ready img { width: 80px !important; height: 80px !important; }
 
+
+        /* ===== НАЛІПКА + МЕНЮ 105×148,5мм (2×2 = 4/аркуш, самоклейка А4/4) ===== */
+        /* Вмикається разом з fmt-large: верх (маршрут, лого, клієнт) як у великій, знизу — меню. */
+        .sticker-menu { display: none; }
+        body.fmt-menu .label-sheet {
+            grid-template-columns: repeat(2, 105mm);
+            grid-template-rows: repeat(2, 148.5mm);
+        }
+        body.fmt-menu .sticker { width: 105mm; height: 148.5mm; }
+        body.fmt-menu .sticker-route { height: 22mm; }
+        body.fmt-menu .sticker-body { padding: 2.5mm 5mm 2mm 5mm; }
+        body.fmt-menu .project-logo { height: 12mm; max-width: 30mm; }
+        body.fmt-menu .client-name { font-size: 20pt; }
+        body.fmt-menu .sticker-menu {
+            display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden;
+            border-top: 2px solid var(--brand-color, #1e293b); margin-top: 1.5mm; padding-top: 1.5mm;
+        }
+        .sticker-menu-title { font-size: 7pt; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; margin-bottom: 1mm; }
+        .sticker-menu-list { font-size: 11.5pt; line-height: 1.25; color: #0f172a; }
+        .sticker-menu-line { padding: 0.8mm 0; border-bottom: 1px dotted #e2e8f0; }
+        .sticker-menu-line:last-child { border-bottom: none; }
+        .sticker-menu-line b { font-weight: 900; text-transform: uppercase; font-size: .78em; color: var(--brand-color, #1e293b); margin-right: 1.5mm; }
+        body.fmt-menu .sticker-footer { margin-top: 1mm; }
+
         /* Друк */
         @media print {
             body { background: white !important; }
@@ -482,6 +506,9 @@
         </button>
         <button onclick="switchFormat('large')" id="btn-fmt-large" class="filter-btn" title="70×99мм — 9 шт/аркуш">
             ▬▬ Великий
+        </button>
+        <button onclick="switchFormat('menu')" id="btn-fmt-menu" class="filter-btn" title="105×148,5мм — 4 шт/аркуш, з меню клієнта">
+            🍽 З меню (А4/4)
         </button>
     </div>
     {{-- Меню клієнта на аркуші А5 — кладеться в пакет. --}}
@@ -615,6 +642,18 @@
                 @endif
             </div>
 
+            {{-- Меню клієнта — лише у форматі 105×148 --}}
+            @if(!empty($man['menu']))
+                <div class="sticker-menu">
+                    <div class="sticker-menu-title">Ваше меню на {{ \Carbon\Carbon::parse($man['date'])->format('d.m') }}</div>
+                    <div class="sticker-menu-list">
+                        @foreach($man['menu'] as $line)
+                            <div class="sticker-menu-line"><b>{{ $line['meal'] }}</b>{{ $line['dish'] }}</div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
             {{-- Кружечки та іконки — окремий flex-елемент, не стискається --}}
             @php
                 $noCutlery = !($man['has_cutlery'] ?? true);
@@ -690,7 +729,7 @@ var currentFormat = 'small';
 // Наступний день — з нового аркуша: доповнюємо попередній порожніми клітинками.
 function padDays() {
     document.querySelectorAll('.sticker.filler').forEach(function (f) { f.remove(); });
-    var perSheet = currentFormat === 'large' ? 9 : 21;
+    var perSheet = {small: 21, large: 9, menu: 4}[currentFormat] || 21;
     var lastByDay = {}, countByDay = {}, days = [];
     document.querySelectorAll('.sticker[data-day]').forEach(function (s) {
         var d = s.dataset.day;
@@ -725,7 +764,8 @@ function filterSlot(slot) {
 
 function switchFormat(fmt) {
     currentFormat = fmt;
-    if (fmt === 'large') {
+    document.body.classList.toggle('fmt-menu', fmt === 'menu');
+    if (fmt === 'large' || fmt === 'menu') {
         document.body.classList.add('fmt-large');
         // Перемалювати QR більшого розміру
         document.querySelectorAll('.qr-placeholder').forEach(function(el) {
@@ -750,8 +790,23 @@ function switchFormat(fmt) {
     }
     document.getElementById('btn-fmt-small').classList.toggle('active', fmt === 'small');
     document.getElementById('btn-fmt-large').classList.toggle('active', fmt === 'large');
+    document.getElementById('btn-fmt-menu').classList.toggle('active', fmt === 'menu');
     padDays();
-    setTimeout(fitClientNames, 50);
+    setTimeout(function () { fitClientNames(); fitMenus(); }, 50);
+}
+
+// Довге меню — зменшуємо шрифт, поки не влізе в наліпку.
+function fitMenus() {
+    document.querySelectorAll('.sticker-menu').forEach(function (box) {
+        var list = box.querySelector('.sticker-menu-list');
+        list.style.fontSize = '';
+        if (currentFormat !== 'menu') return;
+        var size = 11.5;
+        while (box.scrollHeight > box.clientHeight + 1 && size > 6) {
+            size -= 0.5;
+            list.style.fontSize = size + 'pt';
+        }
+    });
 }
 
 function fitClientNames() {
@@ -771,11 +826,12 @@ function fitClientNames() {
 
 window.addEventListener('load', function () {
     // За замовчуванням — великий формат (70×99, 9 шт/аркуш); ?format=small — малий.
-    switchFormat(new URLSearchParams(location.search).get('format') === 'small' ? 'small' : 'large');
+    var f = new URLSearchParams(location.search).get('format');
+    switchFormat(f === 'small' || f === 'menu' ? f : 'large');
 });
 
 window.addEventListener('beforeprint', function () {
-    var size = currentFormat === 'large' ? '80px' : '50px';
+    var size = currentFormat === 'small' ? '50px' : '80px';
     document.querySelectorAll('.qr-placeholder').forEach(function (el) {
         var canvas = el.querySelector('canvas');
         if (!canvas) return;
