@@ -448,28 +448,37 @@
         body.fmt-large .qr-placeholder.print-ready img { width: 80px !important; height: 80px !important; }
 
 
-        /* ===== НАЛІПКА + МЕНЮ 105×148,5мм (2×2 = 4/аркуш, самоклейка А4/4) ===== */
-        /* Вмикається разом з fmt-large: верх (маршрут, лого, клієнт) як у великій, знизу — меню. */
+        /* ===== НАЛІПКА + МЕНЮ на стандартній великій 70×99мм (3×3 = 9/аркуш) ===== */
+        /* Вмикається разом з fmt-large: сітка та маршрут ті самі, верх компактніший, під ним — меню. */
         .sticker-menu { display: none; }
-        body.fmt-menu .label-sheet {
-            grid-template-columns: repeat(2, 105mm);
-            grid-template-rows: repeat(2, 148.5mm);
-        }
-        body.fmt-menu .sticker { width: 105mm; height: 148.5mm; }
-        body.fmt-menu .sticker-route { height: 22mm; }
-        body.fmt-menu .sticker-body { padding: 2.5mm 5mm 2mm 5mm; }
-        body.fmt-menu .project-logo { height: 12mm; max-width: 30mm; }
-        body.fmt-menu .client-name { font-size: 20pt; }
+        body.fmt-menu .sticker-route { height: 16mm; padding: 2mm 3mm 1.5mm 3mm; }
+        body.fmt-menu .route-badge { font-size: 13pt; }
+        body.fmt-menu .route-driver { font-size: 10pt; }
+        body.fmt-menu .sticker-body { padding: 1.5mm 2.5mm 1mm 2.5mm; gap: 0.6mm; }
+        body.fmt-menu .project-logo { height: 6mm; max-width: 16mm; }
+        body.fmt-menu .date-badge { font-size: 7.5pt; padding: 1px 5px; }
+        body.fmt-menu .label-receiver { display: none; }
+        body.fmt-menu .client-name { font-size: 12pt; }
+        body.fmt-menu .sticker-tags { gap: 1mm; margin-top: 0.8mm; }
+        body.fmt-menu .tag-id, body.fmt-menu .tag-kcal, body.fmt-menu .tag-slot, body.fmt-menu .tag-individual { font-size: 6.5pt; padding: 1px 4px; }
+        body.fmt-menu .tag-address { font-size: 6.5pt; margin-top: 0.6mm; }
+        body.fmt-menu .meal-circle { width: 13px; height: 13px; font-size: 6.5px; }
+        body.fmt-menu .no-icon-badge { width: 16px; height: 16px; }
+        body.fmt-menu .no-icon-badge svg { width: 11px; height: 11px; }
+        body.fmt-menu .circles-row, body.fmt-menu .no-icons-row { gap: 3px; }
         body.fmt-menu .sticker-menu {
             display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden;
-            border-top: 2px solid var(--brand-color, #1e293b); margin-top: 1.5mm; padding-top: 1.5mm;
+            border-top: 1.5px solid var(--brand-color, #1e293b); padding-top: 0.8mm;
         }
-        .sticker-menu-title { font-size: 7pt; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; margin-bottom: 1mm; }
-        .sticker-menu-list { font-size: 11.5pt; line-height: 1.25; color: #0f172a; }
-        .sticker-menu-line { padding: 0.8mm 0; border-bottom: 1px dotted #e2e8f0; }
+        .sticker-menu-title { font-size: 5.5pt; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; margin-bottom: 0.3mm; }
+        .sticker-menu-list { font-size: 8pt; line-height: 1.15; color: #0f172a; }
+        .sticker-menu-line { padding: 0.35mm 0; border-bottom: 1px dotted #e2e8f0; }
         .sticker-menu-line:last-child { border-bottom: none; }
-        .sticker-menu-line b { font-weight: 900; text-transform: uppercase; font-size: .78em; color: var(--brand-color, #1e293b); margin-right: 1.5mm; }
-        body.fmt-menu .sticker-footer { margin-top: 1mm; }
+        .sticker-menu-line b { font-weight: 900; text-transform: uppercase; font-size: .75em; color: var(--brand-color, #1e293b); margin-right: 1mm; }
+        body.fmt-menu .qr-callout, body.fmt-menu .qr-arrow { display: none; }
+        body.fmt-menu .sticker-footer { margin-top: 0.5mm; }
+        body.fmt-menu .qr-placeholder canvas, body.fmt-menu .qr-placeholder.print-ready img { width: 44px !important; height: 44px !important; }
+        body.fmt-menu .qr-placeholder { width: 44px !important; height: 44px !important; margin-bottom: 0 !important; }
 
         /* Друк */
         @media print {
@@ -507,8 +516,8 @@
         <button onclick="switchFormat('large')" id="btn-fmt-large" class="filter-btn" title="70×99мм — 9 шт/аркуш">
             ▬▬ Великий
         </button>
-        <button onclick="switchFormat('menu')" id="btn-fmt-menu" class="filter-btn" title="105×148,5мм — 4 шт/аркуш, з меню клієнта">
-            🍽 З меню (А4/4)
+        <button onclick="switchFormat('menu')" id="btn-fmt-menu" class="filter-btn" title="70×99мм — 9 шт/аркуш, з меню клієнта">
+            🍽 Великий + меню
         </button>
     </div>
     {{-- Меню клієнта на аркуші А5 — кладеться в пакет. --}}
@@ -729,7 +738,7 @@ var currentFormat = 'small';
 // Наступний день — з нового аркуша: доповнюємо попередній порожніми клітинками.
 function padDays() {
     document.querySelectorAll('.sticker.filler').forEach(function (f) { f.remove(); });
-    var perSheet = {small: 21, large: 9, menu: 4}[currentFormat] || 21;
+    var perSheet = {small: 21, large: 9, menu: 9}[currentFormat] || 21;
     var lastByDay = {}, countByDay = {}, days = [];
     document.querySelectorAll('.sticker[data-day]').forEach(function (s) {
         var d = s.dataset.day;
@@ -801,8 +810,8 @@ function fitMenus() {
         var list = box.querySelector('.sticker-menu-list');
         list.style.fontSize = '';
         if (currentFormat !== 'menu') return;
-        var size = 11.5;
-        while (box.scrollHeight > box.clientHeight + 1 && size > 6) {
+        var size = 8;
+        while (box.scrollHeight > box.clientHeight + 1 && size > 5) {
             size -= 0.5;
             list.style.fontSize = size + 'pt';
         }
