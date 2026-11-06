@@ -454,11 +454,12 @@
         .ms { display: none; }
         body.fmt-menu .sticker-body { display: none; }
         body.fmt-menu .ms { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
-        body.fmt-menu .sticker-route { height: 13mm; padding: 2mm 4mm 1.5mm 4mm; }
+        body.fmt-menu .sticker-route { height: 11mm; padding: 1.5mm 4mm 1mm 4mm; }
         body.fmt-menu .sticker-route.no-route { display: none; }
+        body.fmt-menu .sticker-route.no-route + .sticker-body + .ms .ms-cz { padding-top: 3.5mm; }
         body.fmt-menu .route-badge { font-size: 13pt; }
         body.fmt-menu .route-driver { font-size: 10pt; }
-        .ms-cz { padding: 3.5mm 4mm 1.5mm 4mm; flex-shrink: 0; }
+        .ms-cz { padding: 2mm 4mm 1.5mm 4mm; flex-shrink: 0; }
         .ms-row { display: flex; align-items: center; gap: 1.5mm; }
         .ms-tags .ms-date { background: #fde047; color: #000; font-weight: 900; }
         .ms-name { font-weight: 900; text-transform: uppercase; font-size: 11.5pt; line-height: 1.05; letter-spacing: -0.02em; overflow-wrap: anywhere; }
@@ -610,7 +611,7 @@
                     @if(!empty($man['ant_route_num']))
                         <span class="route-badge">М{{ $man['ant_route_num'] }}{{ !empty($man['ant_route_pos']) ? '-'.$man['ant_route_pos'] : '' }}</span>
                         @if(!empty($man['ant_driver']))
-                            <span class="route-driver">{{ $man['ant_driver'] }}</span>
+                            <span class="route-driver">{{ trim(preg_replace('/\s*кур[\'ʼ’`]?єр\S*\s*$/iu', '', $man['ant_driver'])) }}</span>
                         @endif
                     @endif
                 </div>
