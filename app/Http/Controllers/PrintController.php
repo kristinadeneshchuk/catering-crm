@@ -212,6 +212,16 @@ class PrintController extends Controller
         return view('print.mini-manifest', compact('manifests', 'date', 'isFriday', 'weekend', 'targets'));
     }
 
+    /** «50/2, вулиця X, Теремки-ІІ, Теремки, … район, Київ, 03189, Україна» → «50/2, вул. X, Теремки-ІІ». */
+    private static function shortAddress(?string $address): string
+    {
+        $parts = array_filter(array_map('trim', explode(',', (string) $address)), fn ($p) => $p !== ''
+            && !preg_match('/Україна|^\d{5}$|район|^(м\.\s*)?Київ$|громада|область/u', $p));
+        $short = implode(', ', array_slice(array_values($parts), 0, 3));
+
+        return strtr($short, ['вулиця' => 'вул.', 'проспект' => 'просп.', 'бульвар' => 'бул.', 'провулок' => 'пров.', 'площа' => 'пл.']) ?: (string) $address;
+    }
+
     /** Наліпки «на пакет» на один день їжі. */
     private function miniManifestsFor(string $targetDate): array
     {
@@ -269,15 +279,6 @@ class PrintController extends Controller
                     $mealTypeId = $item['meal_type_id'] ?? null;
                     if (!$dishId) continue;
 
-                    $lineRep = $order->replacements
-                        ->where('dish_id', $dishId)
-                        ->whereNull('original_product_id')
-                        ->first();
-                    $menuLines[] = [
-                        'meal' => $item['meal'] ?? 'Прийом',
-                        'dish' => trim(preg_replace('/^Інд\s*·\s*/u', '', (string) ($lineRep?->replacementDish?->name ?? $item['dish'] ?? ''))),
-                        'so'   => $mealPalette[$mealTypeId]['sort_order'] ?? 99,
-                    ];
 
                     $menuItem = $menu->menuItems->first(
                         fn($mi) => (int)$mi->dish_id === $dishId && (int)$mi->meal_type_id === $mealTypeId
@@ -303,6 +304,27 @@ class PrintController extends Controller
                         $circles[]              = $mealPalette[$mealTypeId];
                         $addedCircleMealTypes[] = $mealTypeId;
                     }
+
+                    // Рядок меню для наліпки «Великий + меню»: страва (з урахуванням заміни)
+                    // і що саме змінено — щоб фасувальник бачив, який прийом особливий.
+                    $lineChanges = [];
+                    if ($dishRep && $dishRep->replacementDish && !$dishForceApproved) {
+                        $lineChanges[] = 'заміна страви';
+                    } elseif ($hasChanges && $dish) {
+                        $lineChanges = array_map(
+                            fn ($t) => preg_replace('/^НЕ ЇСТЬ ЦЮ СТРАВУ$/u', 'не їсть цю страву', preg_replace('/^БЕЗ:\s*/u', 'без ', $t)),
+                            $this->dishChangeTexts($order, $dish)
+                        );
+                    } elseif ($hasChanges) {
+                        $lineChanges[] = 'є зміни';
+                    }
+                    $menuLines[] = [
+                        'meal'    => $item['meal'] ?? 'Прийом',
+                        'dish'    => trim(preg_replace('/^Інд\s*·\s*/u', '', (string) ($dishRep?->replacementDish?->name ?? $item['dish'] ?? ''))),
+                        'so'      => $mealPalette[$mealTypeId]['sort_order'] ?? 99,
+                        'circle'  => $hasChanges ? ($mealPalette[$mealTypeId] ?? null) : null,
+                        'changes' => array_values(array_unique($lineChanges)),
+                    ];
                 }
                 usort($circles, fn($a, $b) => $a['sort_order'] <=> $b['sort_order']);
                 usort($menuLines, fn($a, $b) => $a['so'] <=> $b['so']);
@@ -310,6 +332,7 @@ class PrintController extends Controller
 
             $manifests[] = [
                 'menu'               => $menuLines,
+                'address_short'      => self::shortAddress($address),
                 'client_id'          => $order->client?->id ?? '---',
                 'project'            => $order->project,
                 'client'             => $order->client?->name ?? 'Без імені',

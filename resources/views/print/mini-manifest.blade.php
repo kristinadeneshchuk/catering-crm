@@ -449,36 +449,51 @@
 
 
         /* ===== НАЛІПКА + МЕНЮ на стандартній великій 70×99мм (3×3 = 9/аркуш) ===== */
-        /* Вмикається разом з fmt-large: сітка та маршрут ті самі, верх компактніший, під ним — меню. */
-        .sticker-menu { display: none; }
-        body.fmt-menu .sticker-route { height: 16mm; padding: 2mm 3mm 1.5mm 3mm; }
+        /* Вмикається разом з fmt-large. Зверху — перевернута смуга маршруту (загинається
+           через край пакета), далі зона курʼєра, пунктир і зона клієнта з меню. */
+        .ms { display: none; }
+        body.fmt-menu .sticker-body { display: none; }
+        body.fmt-menu .ms { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+        body.fmt-menu .sticker-route { height: 13mm; padding: 2mm 4mm 1.5mm 4mm; }
+        body.fmt-menu .sticker-route.no-route { display: none; }
         body.fmt-menu .route-badge { font-size: 13pt; }
         body.fmt-menu .route-driver { font-size: 10pt; }
-        body.fmt-menu .sticker-body { padding: 1.5mm 2.5mm 1mm 2.5mm; gap: 0.6mm; }
-        body.fmt-menu .project-logo { height: 6mm; max-width: 16mm; }
-        body.fmt-menu .date-badge { font-size: 7.5pt; padding: 1px 5px; }
-        body.fmt-menu .label-receiver { display: none; }
-        body.fmt-menu .client-name { font-size: 12pt; }
-        body.fmt-menu .sticker-tags { gap: 1mm; margin-top: 0.8mm; }
-        body.fmt-menu .tag-id, body.fmt-menu .tag-kcal, body.fmt-menu .tag-slot, body.fmt-menu .tag-individual { font-size: 6.5pt; padding: 1px 4px; }
-        body.fmt-menu .tag-address { font-size: 6.5pt; margin-top: 0.6mm; }
-        body.fmt-menu .meal-circle { width: 13px; height: 13px; font-size: 6.5px; }
-        body.fmt-menu .no-icon-badge { width: 16px; height: 16px; }
-        body.fmt-menu .no-icon-badge svg { width: 11px; height: 11px; }
-        body.fmt-menu .circles-row, body.fmt-menu .no-icons-row { gap: 3px; }
-        body.fmt-menu .sticker-menu {
-            display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden;
-            border-top: 1.5px solid var(--brand-color, #1e293b); padding-top: 0.8mm;
-        }
-        .sticker-menu-title { font-size: 5.5pt; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; margin-bottom: 0.3mm; }
-        .sticker-menu-list { font-size: 8pt; line-height: 1.15; color: #0f172a; }
-        .sticker-menu-line { padding: 0.35mm 0; border-bottom: 1px dotted #e2e8f0; }
-        .sticker-menu-line:last-child { border-bottom: none; }
-        .sticker-menu-line b { font-weight: 900; text-transform: uppercase; font-size: .75em; color: var(--brand-color, #1e293b); margin-right: 1mm; }
-        body.fmt-menu .qr-callout, body.fmt-menu .qr-arrow { display: none; }
-        body.fmt-menu .sticker-footer { margin-top: 0.5mm; }
-        body.fmt-menu .qr-placeholder canvas, body.fmt-menu .qr-placeholder.print-ready img { width: 44px !important; height: 44px !important; }
-        body.fmt-menu .qr-placeholder { width: 44px !important; height: 44px !important; margin-bottom: 0 !important; }
+        .ms-cz { padding: 3.5mm 4mm 1.5mm 4mm; flex-shrink: 0; }
+        .ms-row { display: flex; align-items: center; gap: 1.5mm; }
+        .ms-tags .ms-date { background: #fde047; color: #000; font-weight: 900; }
+        .ms-name { font-weight: 900; text-transform: uppercase; font-size: 11.5pt; line-height: 1.05; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+        .ms-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 1mm; margin-top: 0.9mm; }
+        .ms-tags > span { font-size: 6.5pt; font-weight: 800; padding: 0.2mm 1.2mm; border-radius: 0.8mm; }
+        .ms-tags .t-id { background: #0f172a; color: #fff; }
+        .ms-tags .t-kc { background: #16a34a; color: #fff; }
+        .ms-tags .t-mo { background: #fde047; color: #000; }
+        .ms-tags .t-ev { background: #1e3a5f; color: #cbd5e1; }
+        .ms-tags .t-ind { background: #7c3aed; color: #fff; }
+        .ms-tags .t-bag { background: #ffedd5; color: #9a3412; border: 1px solid #fdba74; }
+        .ms-tags .t-pass { background: #dc2626; color: #fff; }
+        .ms-tags .t-bundle { background: #e0e7ff; color: #3730a3; }
+        body.fmt-menu .ms-tags .no-icon-badge { width: 4mm; height: 4mm; border-radius: 0.8mm; }
+        body.fmt-menu .ms-tags .no-icon-badge svg { width: 3mm; height: 3mm; }
+        .ms-addr { font-size: 7.5pt; font-weight: 700; color: #334155; margin-top: 0.9mm; line-height: 1.15; }
+        .ms-cut { border-top: 1.5px dashed #94a3b8; margin: 0 2mm; flex-shrink: 0; }
+        .ms-cl { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1.8mm 4mm 2.5mm 4mm; }
+        .ms-hd { display: flex; align-items: center; gap: 2mm; margin-bottom: 1mm; flex-shrink: 0; }
+        .ms-hd img { height: 6mm; max-width: 24mm; object-fit: contain; }
+        .ms-ttl { font-weight: 900; font-size: 9.5pt; line-height: 1.05; color: var(--brand-color, #1e293b); }
+        .ms-ttl i { font-style: normal; font-weight: 600; font-size: 6.5pt; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
+        .ms-menu { flex: 1; min-height: 0; overflow: hidden; font-size: 9.5pt; }
+        .ms-line { line-height: 1.12; padding: 0.45mm 0; border-bottom: 1px dotted #e2e8f0; }
+        .ms-line:last-child { border-bottom: none; }
+        .ms-meal { display: flex; align-items: center; gap: 1mm; font-size: 5.6pt; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; color: var(--brand-color, #1e293b); }
+        .ms-circle { width: 2.8mm; height: 2.8mm; border-radius: 50%; color: #fff; font-size: 5.5pt; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; letter-spacing: 0; }
+        .ms-chg { display: block; font-size: 0.8em; line-height: 1.1; font-weight: 800; color: #b91c1c; }
+        .ms-ft { display: flex; align-items: center; gap: 1.2mm; margin-top: 1.2mm; flex-shrink: 0; }
+        .ms-cta { flex: 1; color: #fff; background: var(--brand-color, #1e293b); border-radius: 1.5mm; padding: 1.2mm 2mm; display: flex; flex-direction: column; line-height: 1.1; }
+        .ms-cta b { font-weight: 900; font-size: 9pt; letter-spacing: .02em; }
+        .ms-cta span { font-size: 6pt; font-weight: 600; opacity: .9; }
+        .ms-arr { font-size: 15pt; font-weight: 900; line-height: 1; color: var(--brand-color, #1e293b); }
+        body.fmt-menu .ms .qr-placeholder, body.fmt-menu .ms .qr-placeholder canvas, body.fmt-menu .ms .qr-placeholder.print-ready img { width: 15mm !important; height: 15mm !important; }
+        body.fmt-menu .ms .qr-placeholder { flex-shrink: 0; margin: 0 !important; }
 
         /* Друк */
         @media print {
@@ -590,7 +605,7 @@
             <div class="sticker-border"></div>
 
             {{-- Маршрут зверху (перевернутий) — тільки великий формат --}}
-            <div class="sticker-route">
+            <div class="sticker-route{{ empty($man['ant_route_num']) ? ' no-route' : '' }}">
                 <div class="sticker-route-inner">
                     @if(!empty($man['ant_route_num']))
                         <span class="route-badge">М{{ $man['ant_route_num'] }}{{ !empty($man['ant_route_pos']) ? '-'.$man['ant_route_pos'] : '' }}</span>
@@ -650,18 +665,6 @@
                     <span class="tag-address" style="color:#94a3b8;">Самовивіз</span>
                 @endif
             </div>
-
-            {{-- Меню клієнта — лише у форматі 105×148 --}}
-            @if(!empty($man['menu']))
-                <div class="sticker-menu">
-                    <div class="sticker-menu-title">Ваше меню на {{ \Carbon\Carbon::parse($man['date'])->format('d.m') }}</div>
-                    <div class="sticker-menu-list">
-                        @foreach($man['menu'] as $line)
-                            <div class="sticker-menu-line"><b>{{ $line['meal'] }}</b>{{ $line['dish'] }}</div>
-                        @endforeach
-                    </div>
-                </div>
-            @endif
 
             {{-- Кружечки та іконки — окремий flex-елемент, не стискається --}}
             @php
@@ -728,6 +731,58 @@
             </div>
 
             </div>{{-- /sticker-body --}}
+
+            {{-- Формат «Великий + меню»: зона курʼєра / зона клієнта --}}
+            <div class="ms">
+                <div class="ms-cz">
+                    <div class="ms-name">{{ $man['client'] }}</div>
+                    <div class="ms-tags">
+                        <span class="ms-date">{{ \Carbon\Carbon::parse($man['date'])->format('d.m') }}</span>
+                        <span class="t-id">ID {{ $man['client_id'] }}</span>
+                        <span class="t-kc">{{ $man['calories'] ?? 0 }} ккал</span>
+                        <span class="{{ $man['is_evening'] ? 't-ev' : 't-mo' }}">{{ $man['delivery_slot'] }}</span>
+                        @if($man['is_individual'])<span class="t-ind">ІНД</span>@endif
+                        @foreach($man['bundles'] ?? [] as $bundleName)<span class="t-bundle">{{ $bundleName }}</span>@endforeach
+                        @if(!empty($man['same_address']))<span class="t-bag">📦 {{ $man['same_address']['pos'] }}/{{ $man['same_address']['total'] }}</span>@endif
+                        @if(!empty($man['needs_pass']))<span class="t-pass">🎫 ПЕРЕПУСТКА</span>@endif
+                        @if(!($man['has_cutlery'] ?? true))
+                            <div class="no-icon-badge" title="Без приборів"><svg viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="21" y1="15" x2="21" y2="22"/><path d="M21 2v4a4 4 0 0 1-4 4h0v9"/><line x1="2" y1="2" x2="22" y2="22" stroke="#dc2626" stroke-width="2.5"/></svg></div>
+                        @endif
+                        @if(($man['water_option'] ?? '') === 'without_water')
+                            <div class="no-icon-badge" title="Без води"><svg viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/><line x1="2" y1="2" x2="22" y2="22" stroke="#dc2626" stroke-width="2.5"/></svg></div>
+                        @elseif(($man['water_option'] ?? '') === 'water_without_lemon')
+                            <div class="no-icon-badge" title="Вода без лимону"><svg viewBox="0 0 24 24" fill="none" stroke="#ca8a04" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="3.5" y1="7.5" x2="20.5" y2="16.5"/><line x1="3.5" y1="16.5" x2="20.5" y2="7.5"/><line x1="2" y1="2" x2="22" y2="22" stroke="#dc2626" stroke-width="2.5"/></svg></div>
+                        @endif
+                    </div>
+                    <div class="ms-addr">{{ $man['address_short'] ?? $man['address'] }}</div>
+                </div>
+                <div class="ms-cut"></div>
+                <div class="ms-cl">
+                    <div class="ms-hd">
+                        @if($projectLogo)<img src="{{ $projectLogo }}" alt="">@endif
+                        <span class="ms-ttl">Ваше меню <i>на {{ \Carbon\Carbon::parse($man['date'])->format('d.m') }}</i></span>
+                    </div>
+                    <div class="ms-menu">
+                        @foreach($man['menu'] ?? [] as $line)
+                            <div class="ms-line">
+                                <div class="ms-meal">
+                                    @if(!empty($line['circle']))<span class="ms-circle" style="background:{{ $line['circle']['color'] }}">{{ $line['circle']['letter'] }}</span>@endif
+                                    {{ $line['meal'] }}
+                                </div>
+                                {{ $line['dish'] }}
+                                @if(!empty($line['changes']))<span class="ms-chg">↺ {{ implode(' · ', $line['changes']) }}</span>@endif
+                            </div>
+                        @endforeach
+                    </div>
+                    @if(!empty($man['menu_token']))
+                        <div class="ms-ft">
+                            <div class="ms-cta"><b>СКАНУЙ МЕНЮ ТУТ</b><span>склад страв і оцінка ⭐</span></div>
+                            <span class="ms-arr">➜</span>
+                            <div class="qr-placeholder" data-url="{{ url('/menu/' . $man['menu_token']) }}"></div>
+                        </div>
+                    @endif
+                </div>
+            </div>
         </div>
     @endforeach
 </div>
@@ -806,14 +861,13 @@ function switchFormat(fmt) {
 
 // Довге меню — зменшуємо шрифт, поки не влізе в наліпку.
 function fitMenus() {
-    document.querySelectorAll('.sticker-menu').forEach(function (box) {
-        var list = box.querySelector('.sticker-menu-list');
-        list.style.fontSize = '';
+    document.querySelectorAll('.ms-menu').forEach(function (box) {
+        box.style.fontSize = '';
         if (currentFormat !== 'menu') return;
-        var size = 8;
+        var size = 9.5;
         while (box.scrollHeight > box.clientHeight + 1 && size > 5) {
-            size -= 0.5;
-            list.style.fontSize = size + 'pt';
+            size -= 0.25;
+            box.style.fontSize = size + 'pt';
         }
     });
 }
