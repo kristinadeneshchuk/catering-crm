@@ -888,8 +888,8 @@ function fitClientNames() {
     });
 }
 
+window.addEventListener('load', function () {
     // За замовчуванням — «Великий + меню» (70×99 з меню клієнта); ?format=small|large — інші.
-    // За замовчуванням — великий формат (70×99, 9 шт/аркуш); ?format=small — малий.
     var f = new URLSearchParams(location.search).get('format');
     switchFormat(f === 'small' || f === 'large' ? f : 'menu');
 });
