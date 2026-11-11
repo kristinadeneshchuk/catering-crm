@@ -38,7 +38,9 @@ Schedule::command('stock:debit-norm')->dailyAt('06:00')->withoutOverlapping()
 Schedule::command('stock:low-packaging')->dailyAt('06:20')->withoutOverlapping();
 
 // Telegram аналітика
-Schedule::command('telegram:morning-pulse')->dailyAt('11:00');
+// «Операційний пульс» об 11:00 тимчасово вимкнено на прохання власника (11.11.2026).
+// Щоб повернути — розкоментувати рядок нижче. Команду можна запускати вручну з --dry.
+// Schedule::command('telegram:morning-pulse')->dailyAt('11:00');
 Schedule::command('telegram:evening-summary')->dailyAt('18:00');
 Schedule::command('telegram:weekly-digest')->weeklyOn(1, '09:00'); // 1 = понеділок
 Schedule::command('telegram:kitchen-daily-summary')->dailyAt('20:00');
