@@ -244,6 +244,14 @@ class LunchApiController extends Controller
             'companies.*.delivery_window'   => ['nullable', 'string', 'max:255'],
             'companies.*.contact'           => ['nullable', 'string', 'max:255'],
             'companies.*.comment'           => ['nullable', 'string', 'max:2000'],
+            // Розбивка по людях — лише для наліпок з іменами; кількості рахуємо з lines.
+            'companies.*.people'                    => ['nullable', 'array'],
+            'companies.*.people.*.name'             => ['required', 'string', 'max:255'],
+            'companies.*.people.*.lines'            => ['required', 'array', 'min:1'],
+            'companies.*.people.*.lines.*.dish_id'  => ['nullable', 'integer'],
+            'companies.*.people.*.lines.*.name'     => ['nullable', 'string', 'max:255'],
+            'companies.*.people.*.lines.*.kind'     => ['nullable', 'in:main,light,extra'],
+            'companies.*.people.*.lines.*.weight_g' => ['nullable', 'integer', 'min:1'],
             'companies.*.lines'             => ['required', 'array', 'min:1'],
             'companies.*.lines.*.dish_id'   => ['nullable', 'integer'],
             'companies.*.lines.*.name'      => ['required', 'string', 'max:255'],
@@ -275,6 +283,7 @@ class LunchApiController extends Controller
                     'delivery_window' => $c['delivery_window'] ?? null,
                     'contact'         => $c['contact'] ?? null,
                     'comment'         => $c['comment'] ?? null,
+                    'people'          => $c['people'] ?? null,
                     'received_at'     => $now,
                 ]);
 

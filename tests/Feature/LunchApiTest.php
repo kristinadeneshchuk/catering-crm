@@ -128,6 +128,7 @@ class LunchApiTest extends TestCase
             $t->string('delivery_window')->nullable();
             $t->string('contact')->nullable();
             $t->text('comment')->nullable();
+            $t->json('people')->nullable();
             $t->timestamp('received_at')->nullable();
             $t->timestamps();
             $t->unique(['date', 'company_id']);
@@ -413,6 +414,23 @@ class LunchApiTest extends TestCase
         // Попередній знімок лишився як був.
         $this->assertSame(1, \App\Models\LunchOrder::count());
         $this->assertEquals(12, \App\Models\LunchOrder::first()->sets);
+    }
+
+    public function test_people_are_kept_for_name_labels(): void
+    {
+        $company = $this->company(1, 1) + ['people' => [
+            ['name' => 'Олена К.', 'lines' => [
+                ['dish_id' => 450, 'kind' => 'main', 'weight_g' => 320],
+                ['dish_id' => 448, 'kind' => 'light', 'weight_g' => 200],
+            ]],
+        ]];
+
+        $this->sendOrders([$company])->assertOk();
+
+        $people = \App\Models\LunchOrder::first()->people;
+        $this->assertSame('Олена К.', $people[0]['name']);
+        $this->assertSame(450, $people[0]['lines'][0]['dish_id']);
+        $this->assertNull(\App\Models\LunchOrder::first()->fresh()->comment);
     }
 
     public function test_orders_need_a_token(): void

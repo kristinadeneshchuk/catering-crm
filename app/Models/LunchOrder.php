@@ -18,6 +18,7 @@ class LunchOrder extends Model
         'date'        => 'date',
         'amount'      => 'decimal:2',
         'received_at' => 'datetime',
+        'people'      => 'array',
     ];
 
     public function lines(): HasMany

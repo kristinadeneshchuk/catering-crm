@@ -27,6 +27,7 @@ return new class extends Migration
             $t->string('delivery_window')->nullable();
             $t->string('contact')->nullable();
             $t->text('comment')->nullable();
+            $t->json('people')->nullable();                 // хто що замовив — для наліпок з іменами
             $t->timestamp('received_at')->nullable();
             $t->timestamps();
 
