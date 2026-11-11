@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Api\Lunch;
 use App\Http\Controllers\Controller;
 use App\Models\Dish;
 use App\Models\Ingredient;
+use App\Models\LunchOrder;
 use App\Models\MenuPlan;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -19,8 +21,8 @@ use Illuminate\Support\Facades\Storage;
  * собівартість обіду. Тому звідси він тягне каталог страв і довідник
  * інгредієнтів, а назад віддає зведення «скільки чого готувати».
  *
- * Тільки читання. У каталог не пишемо, моделі не міняємо, таблиць не заводимо —
- * інтеграція не має залежати від внутрішньої схеми CRM.
+ * Каталог — тільки читання: у страви й інгредієнти не пишемо. Єдине, що
+ * записується, — обіди по компаніях у власні таблиці lunch_orders (orders()).
  */
 class LunchApiController extends Controller
 {
@@ -214,6 +216,95 @@ class LunchApiController extends Controller
         return response()->json([
             'ok'    => true,
             'lines' => count($data['lines']),
+        ]);
+    }
+
+    /**
+     * Обіди по компаніях на день — знімок після дедлайну.
+     *
+     * На відміну від kitchen-plan (загальне зведення у файл), це лягає в базу:
+     * кухні, інфопанелі й обліку треба знати, скільки обідів якій компанії.
+     *
+     * Запит — повний знімок дня. Компанії, яких у новому знімку немає,
+     * видаляються: якщо Lunch Hub після правки надіслав день без компанії,
+     * значить, її обіди скасовано, і кухня не має їх готувати. Порожній список
+     * компаній очищає день.
+     */
+    public function orders(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'date'                          => ['required', 'date'],
+            'companies'                     => ['present', 'array'],
+            'companies.*.id'                => ['required', 'integer', 'distinct'],
+            'companies.*.name'              => ['required', 'string', 'max:255'],
+            'companies.*.crm_client_id'     => ['nullable', 'integer'],
+            'companies.*.sets'              => ['required', 'integer', 'min:0'],
+            'companies.*.amount'            => ['nullable', 'numeric', 'min:0'],
+            'companies.*.address'           => ['nullable', 'string', 'max:255'],
+            'companies.*.delivery_window'   => ['nullable', 'string', 'max:255'],
+            'companies.*.contact'           => ['nullable', 'string', 'max:255'],
+            'companies.*.comment'           => ['nullable', 'string', 'max:2000'],
+            'companies.*.lines'             => ['required', 'array', 'min:1'],
+            'companies.*.lines.*.dish_id'   => ['nullable', 'integer'],
+            'companies.*.lines.*.name'      => ['required', 'string', 'max:255'],
+            'companies.*.lines.*.kind'      => ['nullable', 'in:main,light,extra'],
+            'companies.*.lines.*.qty'       => ['required', 'integer', 'min:1'],
+            'companies.*.lines.*.weight_g'  => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        $date = \Carbon\Carbon::parse($data['date'])->format('Y-m-d');
+        $now  = now();
+
+        $sets = DB::transaction(function () use ($data, $date, $now) {
+            // Рядки чистимо явно, не покладаючись на каскад зовнішнього ключа.
+            $old = LunchOrder::whereDate('date', $date)->pluck('id');
+            \App\Models\LunchOrderLine::whereIn('lunch_order_id', $old)->delete();
+            LunchOrder::whereIn('id', $old)->delete();
+
+            $sets = 0;
+
+            foreach ($data['companies'] as $c) {
+                $order = LunchOrder::create([
+                    'date'            => $date,
+                    'company_id'      => $c['id'],
+                    'company_name'    => $c['name'],
+                    'client_id'       => $c['crm_client_id'] ?? null,
+                    'sets'            => $c['sets'],
+                    'amount'          => $c['amount'] ?? 0,
+                    'address'         => $c['address'] ?? null,
+                    'delivery_window' => $c['delivery_window'] ?? null,
+                    'contact'         => $c['contact'] ?? null,
+                    'comment'         => $c['comment'] ?? null,
+                    'received_at'     => $now,
+                ]);
+
+                foreach ($c['lines'] as $l) {
+                    $order->lines()->create([
+                        'dish_id'  => $l['dish_id'] ?? null,
+                        'name'     => $l['name'],
+                        'kind'     => $l['kind'] ?? null,
+                        'qty'      => $l['qty'],
+                        'weight_g' => $l['weight_g'] ?? null,
+                    ]);
+                }
+
+                $sets += $c['sets'];
+            }
+
+            return $sets;
+        });
+
+        Log::info('[Lunch] Orders received', [
+            'date'      => $date,
+            'companies' => count($data['companies']),
+            'sets'      => $sets,
+        ]);
+
+        return response()->json([
+            'ok'        => true,
+            'date'      => $date,
+            'companies' => count($data['companies']),
+            'sets'      => $sets,
         ]);
     }
 }

@@ -48,6 +48,20 @@ class ProductionLoadList extends Widget
             }
         }
 
+        // Корпоративні обіди з Lunch Hub — окремо від раціонів, у загальне число не входять.
+        $lunch = [];
+        if (\App\Support\SchemaReady::has('lunch_orders')) {
+            $lunch = \App\Models\LunchOrder::query()
+                ->whereBetween('date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
+                ->get(['date', 'sets', 'company_name'])
+                ->groupBy(fn ($o) => $o->date->format('Y-m-d'))
+                ->map(fn ($rows) => [
+                    'sets' => (int) $rows->sum('sets'),
+                    'companies' => $rows->map(fn ($o) => $o->company_name.' — '.$o->sets)->implode(', '),
+                ])
+                ->all();
+        }
+
         $list = [];
         $daysOfWeek = [
             0 => 'Неділя', 1 => 'Понеділок', 2 => 'Вівторок', 3 => 'Середа',
@@ -63,6 +77,8 @@ class ProductionLoadList extends Widget
                 'day_name' => $daysOfWeek[$currentDate->dayOfWeek],
                 'total' => $daysData[$dateString]['total'] ?? 0,
                 'individual' => $daysData[$dateString]['individual'] ?? 0,
+                'lunch' => $lunch[$dateString]['sets'] ?? 0,
+                'lunch_companies' => $lunch[$dateString]['companies'] ?? '',
                 'projects' => collect(self::PROJECTS)
                     ->map(fn ($label, $code) => [
                         'label' => $label,

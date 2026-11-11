@@ -116,6 +116,34 @@ class LunchApiTest extends TestCase
             $t->timestamps();
         });
 
+        Schema::create('lunch_orders', function (Blueprint $t) {
+            $t->id();
+            $t->date('date');
+            $t->unsignedBigInteger('company_id');
+            $t->string('company_name');
+            $t->unsignedBigInteger('client_id')->nullable();
+            $t->unsignedInteger('sets')->default(0);
+            $t->decimal('amount', 10, 2)->default(0);
+            $t->string('address')->nullable();
+            $t->string('delivery_window')->nullable();
+            $t->string('contact')->nullable();
+            $t->text('comment')->nullable();
+            $t->timestamp('received_at')->nullable();
+            $t->timestamps();
+            $t->unique(['date', 'company_id']);
+        });
+
+        Schema::create('lunch_order_lines', function (Blueprint $t) {
+            $t->id();
+            $t->unsignedBigInteger('lunch_order_id');
+            $t->unsignedBigInteger('dish_id')->nullable();
+            $t->string('name');
+            $t->string('kind', 20)->nullable();
+            $t->unsignedInteger('qty')->default(0);
+            $t->unsignedInteger('weight_g')->nullable();
+            $t->timestamps();
+        });
+
         Schema::create('stock_document_items', function (Blueprint $t) {
             $t->id();
             $t->unsignedBigInteger('stock_document_id')->nullable();
@@ -320,6 +348,77 @@ class LunchApiTest extends TestCase
         $this->postJson('/api/lunch/kitchen-plan', ['date' => '2026-09-10', 'lines' => []],
             ['Authorization' => 'Bearer test-lunch-token'])
             ->assertStatus(422);
+    }
+
+    // --- обіди по компаніях ------------------------------------------------------
+
+    private function sendOrders(array $companies, string $date = '2026-11-13')
+    {
+        return $this->postJson('/api/lunch/orders', ['date' => $date, 'companies' => $companies],
+            ['Authorization' => 'Bearer test-lunch-token']);
+    }
+
+    private function company(int $id, int $sets, ?array $lines = null): array
+    {
+        return [
+            'id' => $id, 'name' => "Компанія {$id}", 'sets' => $sets, 'amount' => $sets * 350,
+            'address' => 'вул. Тестова, 1', 'delivery_window' => '12:00–13:00',
+            'lines' => $lines ?? [
+                ['dish_id' => 450, 'name' => 'Курка з рисом', 'kind' => 'main', 'qty' => $sets, 'weight_g' => 320],
+                ['dish_id' => 448, 'name' => 'Млинці', 'kind' => 'light', 'qty' => $sets, 'weight_g' => 200],
+            ],
+        ];
+    }
+
+    public function test_orders_are_stored_per_company(): void
+    {
+        $this->sendOrders([$this->company(1, 12), $this->company(2, 5)])
+            ->assertOk()->assertJson(['ok' => true, 'companies' => 2, 'sets' => 17]);
+
+        $this->assertSame(2, \App\Models\LunchOrder::count());
+        $first = \App\Models\LunchOrder::where('company_id', 1)->first();
+        $this->assertSame('2026-11-13', $first->date->format('Y-m-d'));
+        $this->assertEquals(12, $first->sets);
+        $this->assertEquals(4200, $first->amount);
+        $this->assertSame(2, $first->lines()->count());
+        $this->assertEquals(320, $first->lines()->where('kind', 'main')->first()->weight_g);
+    }
+
+    public function test_resending_a_day_replaces_it_and_drops_cancelled_companies(): void
+    {
+        $this->sendOrders([$this->company(1, 12), $this->company(2, 5)])->assertOk();
+        $this->sendOrders([$this->company(1, 9)])->assertOk()->assertJson(['sets' => 9]);
+
+        $this->assertSame(1, \App\Models\LunchOrder::count());
+        $this->assertEquals(9, \App\Models\LunchOrder::first()->sets);
+        $this->assertSame(2, \App\Models\LunchOrderLine::count());
+    }
+
+    public function test_resending_one_day_leaves_other_days_alone(): void
+    {
+        $this->sendOrders([$this->company(1, 12)], '2026-11-13')->assertOk();
+        $this->sendOrders([$this->company(1, 7)], '2026-11-14')->assertOk();
+        $this->sendOrders([], '2026-11-14')->assertOk()->assertJson(['companies' => 0, 'sets' => 0]);
+
+        $this->assertSame(1, \App\Models\LunchOrder::count());
+        $this->assertSame('2026-11-13', \App\Models\LunchOrder::first()->date->format('Y-m-d'));
+    }
+
+    public function test_orders_with_a_broken_company_are_refused_whole(): void
+    {
+        $this->sendOrders([$this->company(1, 12)])->assertOk();
+
+        $this->sendOrders([$this->company(1, 3), $this->company(2, 5, [])])->assertStatus(422);
+
+        // Попередній знімок лишився як був.
+        $this->assertSame(1, \App\Models\LunchOrder::count());
+        $this->assertEquals(12, \App\Models\LunchOrder::first()->sets);
+    }
+
+    public function test_orders_need_a_token(): void
+    {
+        $this->postJson('/api/lunch/orders', ['date' => '2026-11-13', 'companies' => []])->assertStatus(401);
+        $this->assertSame(0, \App\Models\LunchOrder::count());
     }
 
     public function test_a_plan_without_a_token_is_refused(): void

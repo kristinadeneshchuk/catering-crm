@@ -58,7 +58,8 @@ Route::prefix('inbox/v1')
 | але рахує їх з наших закупівельних цін, тож тягне звідси каталог страв і
 | довідник інгредієнтів. Назад віддає зведення «скільки чого готувати».
 |
-| Тільки читання; зведення лягає у файл, не в базу.
+| Каталог — тільки читання. Загальне зведення (kitchen-plan) лягає у файл;
+| обіди по компаніях (orders) — у власні таблиці lunch_orders.
 |
 */
 
@@ -69,6 +70,7 @@ Route::prefix('lunch')
         Route::get('ingredients', [LunchApiController::class, 'ingredients']);
         Route::get('cycle-menu', [LunchApiController::class, 'cycleMenu']);
         Route::post('kitchen-plan', [LunchApiController::class, 'kitchenPlan']);
+        Route::post('orders', [LunchApiController::class, 'orders']);
     });
 
 /*

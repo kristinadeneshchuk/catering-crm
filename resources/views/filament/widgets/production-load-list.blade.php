@@ -92,6 +92,14 @@
                         </div>
                         @endif
 
+                        @if($row['lunch'] > 0)
+                        <div style="display:flex; justify-content:space-between; gap:0.25rem; font-size:0.62rem; line-height:1.45; margin-bottom:0.55rem; padding-top:0.3rem; border-top:1px dashed rgba(107,114,128,0.5);"
+                             title="Корпоративні обіди: {{ $row['lunch_companies'] }}">
+                            <span style="color:#5eead4;">Обіди</span>
+                            <span style="color:#5eead4; font-weight:700;">{{ $row['lunch'] }}</span>
+                        </div>
+                        @endif
+
                         <div style="height:3px; background:rgba(55,65,81,0.6); border-radius:9999px; overflow:hidden;">
                             <div style="height:100%; width:{{ $pct }}%; background:{{ $countColor }}; border-radius:9999px;"></div>
                         </div>
