@@ -56,7 +56,7 @@
                         }
                     @endphp
 
-                    <div style="width:90px; flex-shrink:0; background:{{ $bgColor }}; border:1px solid {{ $borderColor }}; border-radius:0.625rem; padding:0.875rem 0.5rem 0.625rem; text-align:center; position:relative; cursor:default; transition:transform 0.15s, box-shadow 0.15s;"
+                    <div style="width:118px; flex-shrink:0; background:{{ $bgColor }}; border:1px solid {{ $borderColor }}; border-radius:0.625rem; padding:0.875rem 0.5rem 0.625rem; text-align:center; position:relative; cursor:default; transition:transform 0.15s, box-shadow 0.15s;"
                          onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.3)'"
                          onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
 
@@ -76,7 +76,21 @@
                         <p style="font-size:1.75rem; font-weight:900; color:{{ $countColor }}; margin:0; line-height:1;">
                             {{ $total }}
                         </p>
-                        <p style="font-size:0.55rem; color:#6b7280; margin:0.125rem 0 0.625rem; text-transform:uppercase; letter-spacing:0.05em;">шт</p>
+                        <p style="font-size:0.55rem; color:#6b7280; margin:0.125rem 0 0.5rem; text-transform:uppercase; letter-spacing:0.05em;">шт</p>
+
+                        @if($total > 0)
+                        <div style="display:inline-block; font-size:0.6rem; font-weight:700; color:#f0abfc; background:rgba(192,38,211,0.15); border:1px solid rgba(192,38,211,0.35); border-radius:9999px; padding:1px 7px; margin-bottom:0.45rem;"
+                             title="Індивідуальних раціонів">інд {{ $row['individual'] }}</div>
+
+                        <div style="font-size:0.62rem; line-height:1.45; margin-bottom:0.55rem; text-align:left;">
+                            @foreach($row['projects'] as $p)
+                            <div style="display:flex; justify-content:space-between; gap:0.25rem;" title="{{ $p['label'] }}: усього {{ $p['all'] }}, з них індивідуальних {{ $p['ind'] }}">
+                                <span style="color:#9ca3af;">{{ $p['label'] }}</span>
+                                <span style="color:#e5e7eb; font-weight:600; white-space:nowrap;">{{ $p['all'] }}@if($p['ind'])<span style="color:#f0abfc; font-weight:600;"> · {{ $p['ind'] }}і</span>@endif</span>
+                            </div>
+                            @endforeach
+                        </div>
+                        @endif
 
                         <div style="height:3px; background:rgba(55,65,81,0.6); border-radius:9999px; overflow:hidden;">
                             <div style="height:100%; width:{{ $pct }}%; background:{{ $countColor }}; border-radius:9999px;"></div>
