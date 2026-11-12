@@ -153,6 +153,7 @@ return [
         'manager_chat_id' => env('TELEGRAM_MANAGER_CHAT_ID'),
         'cook_chat_id'    => env('TELEGRAM_COOK_CHAT_ID'),
         'kitchen_chat_id' => env('TELEGRAM_KITCHEN_CHAT_ID'),
+        'pulse_unit'      => (float) env('TELEGRAM_PULSE_UNIT', 1),
         // Група «Бухгалтерія»: накладні й квитанції. Підтверджують кнопками лише
         // ці люди (через кому; порожньо — власники). Непрофільні оплати бот
         // питає в особистих лише власників (accounting_owner_ids; порожньо — усіх).

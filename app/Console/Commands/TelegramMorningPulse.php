@@ -20,13 +20,13 @@ class TelegramMorningPulse extends Command
         $tomorrow = Carbon::tomorrow();
 
         // Порції
-        $portionsToday    = OrderDay::whereDate('date', $today)->count();
-        $portionsTomorrow = OrderDay::whereDate('date', $tomorrow)->count();
 
         // Розбивка по брендах: у дужках — скільки з них індивідуальних.
         $brandNames    = \App\Models\Project::pluck('name', 'slug')->all();
-        $brandsToday    = $this->portionsByBrand($today);
-        $brandsTomorrow = $this->portionsByBrand($tomorrow);
+        $brandsToday    = $this->scaled($this->portionsByBrand($today));
+        $brandsTomorrow = $this->scaled($this->portionsByBrand($tomorrow));
+        $portionsToday    = (int) $brandsToday->sum('total');
+        $portionsTomorrow = (int) $brandsTomorrow->sum('total');
 
         // Підписки що закінчуються завтра
         $expiringOrders = Order::whereDate('end_date', $tomorrow)
@@ -156,6 +156,45 @@ class TelegramMorningPulse extends Command
             ->selectRaw('COUNT(*) as total')
             ->selectRaw("SUM(CASE WHEN orders.menu_type = 'individual' THEN 1 ELSE 0 END) as individual")
             ->get();
+    }
+
+    /**
+     * Зведення до одиниць обліку пульсу. Сума по брендах завжди дорівнює
+     * загальній цифрі: залишок від округлення дістається найбільшим дробам.
+     */
+    protected function scaled($brands)
+    {
+        $k = (float) config('services.telegram.pulse_unit', 1);
+        if ($k <= 0 || abs($k - 1) < 0.001) {
+            return $brands;
+        }
+
+        $target = (int) round($brands->sum('total') / $k);
+        $rows = $brands->map(function ($b) use ($k) {
+            $exact = (int) $b->total / $k;
+
+            return (object) [
+                'project'    => $b->project,
+                'total'      => (int) floor($exact),
+                'frac'       => $exact - floor($exact),
+                'individual' => (int) round((int) $b->individual / $k),
+            ];
+        })->values();
+
+        $left = $target - (int) $rows->sum('total');
+        foreach ($rows->sortByDesc('frac')->keys() as $i) {
+            if ($left <= 0) {
+                break;
+            }
+            $rows[$i]->total++;
+            $left--;
+        }
+
+        return $rows
+            ->each(fn ($r) => $r->individual = min($r->individual, $r->total))
+            ->filter(fn ($r) => $r->total > 0)
+            ->sortByDesc('total')
+            ->values();
     }
 
     /**
