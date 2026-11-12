@@ -23,8 +23,8 @@ class TelegramMorningPulse extends Command
 
         // Розбивка по брендах: у дужках — скільки з них індивідуальних.
         $brandNames    = \App\Models\Project::pluck('name', 'slug')->all();
-        $brandsToday    = $this->scaled($this->portionsByBrand($today));
-        $brandsTomorrow = $this->scaled($this->portionsByBrand($tomorrow));
+        $brandsToday    = $this->scaled($this->portionsByBrand($today), $today);
+        $brandsTomorrow = $this->scaled($this->portionsByBrand($tomorrow), $tomorrow);
         $portionsToday    = (int) $brandsToday->sum('total');
         $portionsTomorrow = (int) $brandsTomorrow->sum('total');
 
@@ -162,10 +162,11 @@ class TelegramMorningPulse extends Command
      * Зведення до одиниць обліку пульсу. Сума по брендах завжди дорівнює
      * загальній цифрі: залишок від округлення дістається найбільшим дробам.
      */
-    protected function scaled($brands)
+    protected function scaled($brands, Carbon $date)
     {
-        $k = (float) config('services.telegram.pulse_unit', 1);
-        if ($k <= 0 || abs($k - 1) < 0.001) {
+        $k    = (float) config('services.telegram.pulse_unit', 1);
+        $from = config('services.telegram.pulse_unit_from');
+        if ($k <= 0 || abs($k - 1) < 0.001 || ($from && $date->lt(Carbon::parse($from)))) {
             return $brands;
         }
 
