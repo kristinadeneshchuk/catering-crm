@@ -73,6 +73,12 @@
                             ⚠ Алергени/виключення
                         </span>
                     @endif
+                    {{-- Хто оформив — бачить лише власник --}}
+                    @if(is_array($authors ?? null) && $n->order_id)
+                        <span style="font-size:0.65rem;font-weight:700;padding:0.1rem 0.5rem;border-radius:100px;background:rgba(96,165,250,0.15);color:#93c5fd;" title="Хто оформив це замовлення">
+                            👤 {{ $authors[$n->order_id] ?? 'не з адмінки' }}
+                        </span>
+                    @endif
                 </div>
 
                 {{-- Ім'я клієнта --}}
@@ -138,6 +144,9 @@
                 <span style="font-size:0.7rem;color:#374151;margin-left:0.5rem;">· {{ $cfg['label'] }}</span>
                 @if($n->calories)
                     <span style="font-size:0.7rem;color:#374151;margin-left:0.375rem;">· {{ $n->calories }} ккал</span>
+                @endif
+                @if(is_array($authors ?? null) && $n->order_id)
+                    <span style="font-size:0.7rem;color:#60a5fa;margin-left:0.375rem;" title="Хто оформив це замовлення">· 👤 {{ $authors[$n->order_id] ?? 'не з адмінки' }}</span>
                 @endif
             </div>
             <span style="font-size:0.7rem;color:#374151;flex-shrink:0;">{{ $n->created_at->format('d.m H:i') }}</span>

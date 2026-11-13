@@ -30,10 +30,53 @@ class KitchenNotifications extends Page
     public function getViewData(): array
     {
         // Прочитані — лише останні 50 (більше сторінка й не показувала): уся історія за місяці не влазить у памʼять сторінки.
+        $unread = KitchenNotification::latest()->with('client')->whereNull('read_at')->get();
+        $read   = KitchenNotification::latest()->with('client')->whereNotNull('read_at')->limit(50)->get();
+
         return [
-            'unread' => KitchenNotification::latest()->with('client')->whereNull('read_at')->get(),
-            'read'   => KitchenNotification::latest()->with('client')->whereNotNull('read_at')->limit(50)->get(),
+            'unread'  => $unread,
+            'read'    => $read,
+            'authors' => $this->authorsFor($unread->concat($read)),
         ];
+    }
+
+    /**
+     * Хто оформив замовлення — лише для власника (супер-адміна), щоб бачити,
+     * хто з менеджерів продовжив клієнта. Кухні цю позначку не показуємо.
+     *
+     * Автора беремо з журналу змін замовлення (подія «created»). Замовлення,
+     * створене не людиною в адмінці (чат Inbox, кабінет, агент), автора не має.
+     *
+     * @return array<int, string>|null order_id => імʼя; null — позначку не показувати
+     */
+    private function authorsFor($notifications): ?array
+    {
+        if (! auth()->user()?->isSuperAdmin()) {
+            return null;
+        }
+
+        $orderIds = $notifications->pluck('order_id')->filter()->unique()->values();
+        if ($orderIds->isEmpty()) {
+            return [];
+        }
+
+        try {
+            return \Spatie\Activitylog\Models\Activity::query()
+                ->where('subject_type', \App\Models\Order::class)
+                ->whereIn('subject_id', $orderIds)
+                ->where('event', 'created')
+                ->whereNotNull('causer_id')
+                ->with('causer')
+                ->orderBy('id')
+                ->get()
+                ->mapWithKeys(fn ($a) => [(int) $a->subject_id => (string) ($a->causer?->name ?? '')])
+                ->filter()
+                ->all();
+        } catch (\Throwable $e) {
+            report($e);
+
+            return [];
+        }
     }
 
     public function markAllRead(): void
