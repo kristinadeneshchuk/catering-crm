@@ -98,6 +98,9 @@ Route::prefix('cabinet/{token}')->name('cabinet.')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('/print/stickers', [PrintController::class, 'stickers'])->name('print.stickers');
     Route::get('/print/manifest', [PrintController::class, 'manifest'])->name('print.manifest');
+    // Корпоративні обіди (Lunch Hub): наліпки на бокси й зборочний по компаніях.
+    Route::get('/print/lunch-stickers', [\App\Http\Controllers\LunchPrintController::class, 'stickers'])->name('print.lunch-stickers');
+    Route::get('/print/lunch-assembly', [\App\Http\Controllers\LunchPrintController::class, 'assembly'])->name('print.lunch-assembly');
     Route::get('/print/packaging-list', [PrintController::class, 'packagingList'])->name('print.packaging-list');
 });
 
