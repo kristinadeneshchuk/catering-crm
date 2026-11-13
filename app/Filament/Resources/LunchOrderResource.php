@@ -71,6 +71,9 @@ class LunchOrderResource extends Resource
                 Tables\Columns\TextColumn::make('delivery_window')->label('Доставка')->placeholder('—')
                     ->description(fn (LunchOrder $o) => $o->contact),
                 Tables\Columns\TextColumn::make('amount')->label('Сума')->money('UAH')->alignEnd()
+                    ->description(fn (LunchOrder $o) => $o->company_amount !== null && abs($o->companyDue() - (float) $o->amount) > 0.005
+                        ? 'компанія '.number_format($o->companyDue(), 0, '.', ' ').' ₴ · співробітники '.number_format((float) $o->employees_amount, 0, '.', ' ').' ₴'
+                        : null)
                     ->visible(fn () => (bool) auth()->user()?->isAdmin())
                     ->summarize(Tables\Columns\Summarizers\Sum::make()->label('Разом')->money('UAH')),
                 Tables\Columns\TextColumn::make('received_at')->label('Отримано')->dateTime('d.m H:i')

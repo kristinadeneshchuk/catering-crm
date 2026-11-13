@@ -36,6 +36,7 @@ class LunchMoneyTest extends TestCase
         }
         (require database_path('migrations/2026_11_11_100000_create_lunch_orders.php'))->up();
         (require database_path('migrations/2026_11_13_100000_create_lunch_company_links.php'))->up();
+        (require database_path('migrations/2026_11_13_200000_add_company_amount_to_lunch_orders.php'))->up();
 
         $this->catalog   = $this->seedCatalog(pricePerDay: 1000);
         $this->company   = Client::find($this->makeClient());
@@ -152,6 +153,36 @@ class LunchMoneyTest extends TestCase
         // Компанія зняла всі обіди дня — борг за цей день зникає.
         $send([], '2026-11-17');
         $this->assertSame(-4200.0, $this->balance($this->company));
+    }
+
+    public function test_with_split_payment_only_the_company_share_is_its_debt(): void
+    {
+        config()->set('services.lunch.token', 'test-lunch-token');
+        LunchCompanyLink::link(12, 'ТЕСТ від ХП', $this->company->id);
+        $line = [['dish_id' => null, 'name' => 'Страва', 'kind' => 'main', 'qty' => 1, 'weight_g' => 300]];
+
+        // 50/50: половину платить компанія, половину — співробітники самі.
+        $this->postJson('/api/lunch/orders', ['date' => '2026-11-16', 'companies' => [[
+            'id' => 12, 'name' => 'ТЕСТ від ХП', 'sets' => 2, 'amount' => 440, 'company_amount' => 220, 'employees_amount' => 220, 'lines' => $line,
+        ]]], ['Authorization' => 'Bearer test-lunch-token'])->assertOk();
+        // День без поділу — компанія винна всю суму.
+        $this->postJson('/api/lunch/orders', ['date' => '2026-11-17', 'companies' => [[
+            'id' => 12, 'name' => 'ТЕСТ від ХП', 'sets' => 1, 'amount' => 350, 'lines' => $line,
+        ]]], ['Authorization' => 'Bearer test-lunch-token'])->assertOk();
+
+        $this->assertSame(-570.0, $this->balance($this->company));
+        $this->assertSame(570.0, $this->company->fresh()->lunchCharged());
+
+        $day = LunchOrder::whereDate('date', '2026-11-16')->first();
+        $this->assertSame(440.0, (float) $day->amount);
+        $this->assertSame(220.0, $day->companyDue());
+        $this->assertSame(220.0, (float) $day->employees_amount);
+
+        // Компанія платить за все сама, а не навпіл: частина компанії нуль — боргу немає.
+        $this->postJson('/api/lunch/orders', ['date' => '2026-11-16', 'companies' => [[
+            'id' => 12, 'name' => 'ТЕСТ від ХП', 'sets' => 2, 'amount' => 440, 'company_amount' => 0, 'employees_amount' => 440, 'lines' => $line,
+        ]]], ['Authorization' => 'Bearer test-lunch-token'])->assertOk();
+        $this->assertSame(-350.0, $this->balance($this->company));
     }
 
     public function test_lunch_payment_needs_a_cash_account_and_a_client(): void

@@ -124,6 +124,8 @@ class LunchApiTest extends TestCase
             $t->unsignedBigInteger('client_id')->nullable();
             $t->unsignedInteger('sets')->default(0);
             $t->decimal('amount', 10, 2)->default(0);
+            $t->decimal('company_amount', 10, 2)->nullable();
+            $t->decimal('employees_amount', 10, 2)->nullable();
             $t->string('address')->nullable();
             $t->string('delivery_window')->nullable();
             $t->string('contact')->nullable();

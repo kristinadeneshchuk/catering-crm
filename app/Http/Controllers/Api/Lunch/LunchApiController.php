@@ -240,6 +240,9 @@ class LunchApiController extends Controller
             'companies.*.crm_client_id'     => ['nullable', 'integer'],
             'companies.*.sets'              => ['required', 'integer', 'min:0'],
             'companies.*.amount'            => ['nullable', 'numeric', 'min:0'],
+            // Часткова оплата: частина компанії й частина, яку платять самі співробітники.
+            'companies.*.company_amount'   => ['nullable', 'numeric', 'min:0'],
+            'companies.*.employees_amount' => ['nullable', 'numeric', 'min:0'],
             'companies.*.address'           => ['nullable', 'string', 'max:255'],
             'companies.*.delivery_window'   => ['nullable', 'string', 'max:255'],
             'companies.*.contact'           => ['nullable', 'string', 'max:255'],
@@ -281,6 +284,10 @@ class LunchApiController extends Controller
                     'client_id'       => \App\Models\LunchCompanyLink::clientIdFor((int) $c['id']) ?? ($c['crm_client_id'] ?? null),
                     'sets'            => $c['sets'],
                     'amount'          => $c['amount'] ?? 0,
+                    ...(\App\Support\SchemaReady::hasColumn('lunch_orders', 'company_amount') ? [
+                        'company_amount'   => $c['company_amount'] ?? null,
+                        'employees_amount' => $c['employees_amount'] ?? null,
+                    ] : []),
                     'address'         => $c['address'] ?? null,
                     'delivery_window' => $c['delivery_window'] ?? null,
                     'contact'         => $c['contact'] ?? null,

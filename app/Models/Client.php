@@ -198,14 +198,20 @@ class Client extends Authenticatable
         return $this->hasMany(LunchOrder::class);
     }
 
-    /** Скільки нараховано за обіди: сума знімків усіх днів компанії. */
+    /** Скільки нараховано компанії за обіди: її частина у знімках усіх днів. */
     public function lunchCharged(): float
     {
         if (! \App\Support\SchemaReady::has('lunch_orders')) {
             return 0.0;
         }
 
-        return (float) $this->lunchOrders()->sum('amount');
+        // Часткова оплата: борг компанії — лише її частина (company_amount);
+        // решту співробітники платять самі в Lunch Hub. Без поля — уся сума дня.
+        if (! \App\Support\SchemaReady::hasColumn('lunch_orders', 'company_amount')) {
+            return (float) $this->lunchOrders()->sum('amount');
+        }
+
+        return (float) $this->lunchOrders()->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(company_amount, amount)'));
     }
 
     /** Скільки компанія оплатила за обіди. */
