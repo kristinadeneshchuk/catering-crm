@@ -24,6 +24,9 @@ class CashBook
     public const RECOUNT   = 'Перерахунок каси';
     public const GENERATOR = 'Генератор';
 
+    /** Оплата компанії за корпоративні обіди (Lunch Hub): привʼязана до клієнта, без замовлення. */
+    public const LUNCH     = 'Оплата обідів';
+
     /** Витрати, які йдуть у P&L рядком «Витрати з каси». */
     public const PNL_EXPENSES = [
         'Господарські',

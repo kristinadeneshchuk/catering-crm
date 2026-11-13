@@ -183,7 +183,45 @@ class Client extends Authenticatable
         $refund     = (float) $this->transactions()->where('type', 'refund')->sum('amount');
         $ordersCost = (float) $this->orders()->sum('final_price');
 
-        $this->updateQuietly(['balance' => $income - $refund - $ordersCost]);
+        $this->updateQuietly(['balance' => $income - $refund - $ordersCost + $this->lunchBalance()]);
+    }
+
+    // === КОРПОРАТИВНІ ОБІДИ (Lunch Hub) ===
+    //
+    // Обіди — не замовлення: у них немає днів, тарифу й статусів. Тому в боргу
+    // клієнта вони йдуть окремим доданком: нараховане за знімками Lunch Hub мінус
+    // «Оплата обідів». Для клієнта без привʼязаної компанії обидві суми — нуль,
+    // і баланс рахується рівно так, як до появи обідів.
+
+    public function lunchOrders(): HasMany
+    {
+        return $this->hasMany(LunchOrder::class);
+    }
+
+    /** Скільки нараховано за обіди: сума знімків усіх днів компанії. */
+    public function lunchCharged(): float
+    {
+        if (! \App\Support\SchemaReady::has('lunch_orders')) {
+            return 0.0;
+        }
+
+        return (float) $this->lunchOrders()->sum('amount');
+    }
+
+    /** Скільки компанія оплатила за обіди. */
+    public function lunchPaid(): float
+    {
+        return (float) Transaction::where('client_id', $this->id)
+            ->whereNull('order_id')
+            ->where('type', 'income')
+            ->where('category', \App\Services\Accounting\CashBook::LUNCH)
+            ->sum('amount');
+    }
+
+    /** Внесок обідів у баланс: оплачено мінус нараховано (борг — відʼємний). */
+    public function lunchBalance(): float
+    {
+        return $this->lunchPaid() - $this->lunchCharged();
     }
 
     // === ЛОГІКА АВТОМАТИЧНОЇ ОПЛАТИ ===

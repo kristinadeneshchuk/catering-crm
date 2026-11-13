@@ -30,7 +30,8 @@ class RecalculateClientBalances extends Command
                 $refund     = (float) Transaction::whereIn('order_id', $orderIds)->where('type', 'refund')->sum('amount');
                 $ordersCost = (float) $client->orders()->sum('final_price');
 
-                $expected = round($income - $refund - $ordersCost, 2);
+                // Корпоративні обіди — окремий доданок (див. Client::lunchBalance()).
+                $expected = round($income - $refund - $ordersCost + $client->lunchBalance(), 2);
                 $current  = round((float) $client->balance, 2);
 
                 if (abs($expected - $current) < 0.01) {

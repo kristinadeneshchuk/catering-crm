@@ -110,6 +110,18 @@ class Transaction extends Model
         return $this->type === 'income' && $this->order_id !== null;
     }
 
+    /**
+     * Оплата компанії за корпоративні обіди: гроші клієнта без замовлення.
+     * Обіди не мають замовлень, тому «income + order_id» тут не підходить —
+     * ознака — стаття «Оплата обідів».
+     */
+    public function isLunchPayment(): bool
+    {
+        return $this->type === 'income'
+            && $this->order_id === null
+            && $this->category === \App\Services\Accounting\CashBook::LUNCH;
+    }
+
     // === ЛОГІКА БАЛАНСУ ТА АВТО-ОПЛАТИ ===
     protected static function booted()
     {
@@ -124,6 +136,29 @@ class Transaction extends Model
         // підтвердження заяви. Ловити кожен у своєму місці — значить колись
         // пропустити шостий. Тож правило живе тут, де його не обійти.
         static::creating(function (Transaction $t) {
+            // Оплата обідів — ті самі правила, що й для оплати замовлення:
+            // каса обовʼязкова, вносить менеджер або власник, клієнт відомий.
+            if ($t->isLunchPayment()) {
+                if (! $t->account_id) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'account_id' => 'Оберіть касу, куди прийшли гроші.',
+                    ]);
+                }
+                if (! $t->client_id) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'client_id' => 'Оплата обідів має бути привʼязана до клієнта-компанії.',
+                    ]);
+                }
+                $user = auth()->user();
+                if ($user && ! in_array($user->role, self::PAYMENT_ROLES, true)) {
+                    throw new \Illuminate\Auth\Access\AuthorizationException(
+                        'Підтверджувати оплату може лише менеджер або власник.'
+                    );
+                }
+
+                return;
+            }
+
             if (! $t->isClientPayment()) {
                 return;
             }
@@ -159,6 +194,15 @@ class Transaction extends Model
             if ($transaction->order && $transaction->order->client) {
                 $transaction->order->client->syncBalance();
                 $transaction->order->client->recalculateOrderPaymentStatus();
+            }
+
+            // Оплата обідів замовлення не має — рахуємо баланс клієнта напряму.
+            // Перевіряємо і старі значення: суму чи клієнта могли виправити.
+            $lunchNow = $transaction->category === \App\Services\Accounting\CashBook::LUNCH;
+            $lunchWas = $transaction->getOriginal('category') === \App\Services\Accounting\CashBook::LUNCH;
+            if ($lunchNow || $lunchWas) {
+                $ids = array_filter(array_unique([(int) $transaction->client_id, (int) $transaction->getOriginal('client_id')]));
+                Client::whereIn('id', $ids)->get()->each->syncBalance();
             }
         };
 

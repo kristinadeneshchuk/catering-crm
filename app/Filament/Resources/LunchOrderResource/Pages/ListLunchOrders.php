@@ -8,4 +8,9 @@ use Filament\Resources\Pages\ListRecords;
 class ListLunchOrders extends ListRecords
 {
     protected static string $resource = LunchOrderResource::class;
+
+    protected function getHeaderWidgets(): array
+    {
+        return [LunchOrderResource\Widgets\LunchSettlements::class];
+    }
 }

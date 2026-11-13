@@ -266,6 +266,7 @@ class LunchApiController extends Controller
         $sets = DB::transaction(function () use ($data, $date, $now) {
             // Рядки чистимо явно, не покладаючись на каскад зовнішнього ключа.
             $old = LunchOrder::whereDate('date', $date)->pluck('id');
+            $touched = LunchOrder::whereIn('id', $old)->whereNotNull('client_id')->pluck('client_id')->all();
             \App\Models\LunchOrderLine::whereIn('lunch_order_id', $old)->delete();
             LunchOrder::whereIn('id', $old)->delete();
 
@@ -299,7 +300,11 @@ class LunchApiController extends Controller
                 }
 
                 $sets += $c['sets'];
+                $touched[] = $order->client_id;
             }
+
+            // Сума дня змінилась — борг привʼязаних компаній рахуємо заново.
+            \App\Models\LunchCompanyLink::syncClients($touched);
 
             return $sets;
         });

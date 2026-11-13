@@ -104,12 +104,48 @@ class LunchOrderResource extends Resource
                         LunchCompanyLink::link((int) $o->company_id, $o->company_name, (int) $data['client_id']);
                         Notification::make()->title('Компанію привʼязано до клієнта')->success()->send();
                     }),
+                Tables\Actions\Action::make('pay')->label('Оплата обідів')->icon('heroicon-o-banknotes')->color('success')
+                    ->visible(fn (LunchOrder $o) => (bool) $o->client_id
+                        && in_array(auth()->user()?->role, \App\Models\Transaction::PAYMENT_ROLES, true))
+                    ->modalHeading(fn (LunchOrder $o) => 'Оплата обідів — '.($o->client?->name ?? $o->company_name))
+                    ->modalDescription('Оплата йде на баланс компанії загалом, а не на окремий день.')
+                    ->fillForm(fn (LunchOrder $o) => [
+                        'amount' => max(0, round(-1 * ($o->client?->lunchBalance() ?? 0), 2)) ?: null,
+                        'date'   => now()->toDateString(),
+                    ])
+                    ->form([
+                        Forms\Components\TextInput::make('amount')->label('Сума, ₴')->numeric()->minValue(0.01)->required()
+                            ->helperText('Підставлено поточний борг компанії за обіди.'),
+                        Forms\Components\Select::make('account_id')->label('Каса / рахунок')->required()
+                            ->options(fn () => \App\Models\Account::orderBy('name')->pluck('name', 'id')->all()),
+                        Forms\Components\DatePicker::make('date')->label('Дата оплати')->required()->maxDate(now()),
+                        Forms\Components\TextInput::make('comment')->label('Коментар')->maxLength(255)
+                            ->placeholder('№ рахунку, період'),
+                    ])
+                    ->action(function (LunchOrder $o, array $data) {
+                        \App\Models\Transaction::create([
+                            'type'       => 'income',
+                            'category'   => \App\Services\Accounting\CashBook::LUNCH,
+                            'client_id'  => $o->client_id,
+                            'account_id' => $data['account_id'],
+                            'amount'     => $data['amount'],
+                            'date'       => $data['date'],
+                            'comment'    => trim('Обіди — '.$o->company_name.'. '.($data['comment'] ?? '')),
+                            'user_id'    => auth()->id(),
+                        ]);
+                        Notification::make()->title('Оплату обідів внесено')->success()->send();
+                    }),
                 Tables\Actions\Action::make('unlink')->label('Відвʼязати')->icon('heroicon-o-x-mark')->color('gray')
                     ->visible(fn (LunchOrder $o) => (bool) $o->client_id && \App\Support\SchemaReady::has('lunch_company_links'))
                     ->requiresConfirmation()
                     ->action(fn (LunchOrder $o) => LunchCompanyLink::unlink((int) $o->company_id)),
             ])
             ->bulkActions([]);
+    }
+
+    public static function getWidgets(): array
+    {
+        return [LunchOrderResource\Widgets\LunchSettlements::class];
     }
 
     public static function getPages(): array

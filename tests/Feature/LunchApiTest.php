@@ -145,6 +145,10 @@ class LunchApiTest extends TestCase
             $t->timestamps();
         });
 
+        if (! Schema::hasTable('clients')) {
+            Schema::create('clients', fn (Blueprint $t) => $t->id());
+        }
+
         Schema::create('lunch_company_links', function (Blueprint $t) {
             $t->id();
             $t->unsignedBigInteger('company_id')->unique();
