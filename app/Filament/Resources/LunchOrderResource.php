@@ -3,7 +3,11 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\LunchOrderResource\Pages;
+use App\Models\Client;
+use App\Models\LunchCompanyLink;
 use App\Models\LunchOrder;
+use Filament\Forms;
+use Filament\Notifications\Notification;
 use App\Models\LunchOrderLine;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -43,12 +47,16 @@ class LunchOrderResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with('lines'))
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['lines', 'client']))
             ->defaultSort('date', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('date')->label('День')->date('d.m.Y')->sortable(),
                 Tables\Columns\TextColumn::make('company_name')->label('Компанія')->searchable()
                     ->description(fn (LunchOrder $o) => $o->address),
+                Tables\Columns\TextColumn::make('client.name')->label('Клієнт CRM')
+                    ->placeholder('не привʼязано')
+                    ->color(fn (LunchOrder $o) => $o->client_id ? 'primary' : 'gray')
+                    ->url(fn (LunchOrder $o) => $o->client_id ? ClientResource::getUrl('edit', ['record' => $o->client_id]) : null),
                 Tables\Columns\TextColumn::make('sets')->label('Обідів')->alignCenter()->weight('bold')
                     ->summarize(Tables\Columns\Summarizers\Sum::make()->label('Разом')),
                 Tables\Columns\TextColumn::make('dishes')->label('Страви')->wrap()
@@ -74,7 +82,33 @@ class LunchOrderResource extends Resource
                 Tables\Filters\SelectFilter::make('company_id')->label('Компанія')
                     ->options(fn () => LunchOrder::query()->orderBy('company_name')->pluck('company_name', 'company_id')->all()),
             ])
-            ->actions([])
+            ->actions([
+                Tables\Actions\Action::make('link')
+                    ->label(fn (LunchOrder $o) => $o->client_id ? 'Змінити клієнта' : 'Привʼязати клієнта')
+                    ->icon('heroicon-o-link')
+                    ->visible(fn () => \App\Support\SchemaReady::has('lunch_company_links'))
+                    ->modalHeading(fn (LunchOrder $o) => 'Клієнт CRM для «'.$o->company_name.'»')
+                    ->modalDescription('Привʼязка діє на всі дні цієї компанії — минулі й майбутні.')
+                    ->fillForm(fn (LunchOrder $o) => ['client_id' => $o->client_id])
+                    ->form([
+                        Forms\Components\Select::make('client_id')->label('Клієнт')
+                            ->searchable()->required()
+                            ->getSearchResultsUsing(fn (string $search) => Client::query()
+                                ->where(fn ($q) => $q->where('name', 'like', "%{$search}%")->orWhere('phone', 'like', "%{$search}%"))
+                                ->orderBy('name')->limit(20)->get()
+                                ->mapWithKeys(fn (Client $c) => [$c->id => $c->name.($c->phone ? ' · '.$c->phone : '')])->all())
+                            ->getOptionLabelUsing(fn ($value) => ($c = Client::find($value)) ? $c->name.($c->phone ? ' · '.$c->phone : '') : null)
+                            ->helperText('Шукайте за назвою або телефоном. Якщо компанії ще немає серед клієнтів — спершу створіть її в «Клієнтах».'),
+                    ])
+                    ->action(function (LunchOrder $o, array $data) {
+                        LunchCompanyLink::link((int) $o->company_id, $o->company_name, (int) $data['client_id']);
+                        Notification::make()->title('Компанію привʼязано до клієнта')->success()->send();
+                    }),
+                Tables\Actions\Action::make('unlink')->label('Відвʼязати')->icon('heroicon-o-x-mark')->color('gray')
+                    ->visible(fn (LunchOrder $o) => (bool) $o->client_id && \App\Support\SchemaReady::has('lunch_company_links'))
+                    ->requiresConfirmation()
+                    ->action(fn (LunchOrder $o) => LunchCompanyLink::unlink((int) $o->company_id)),
+            ])
             ->bulkActions([]);
     }
 

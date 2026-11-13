@@ -145,6 +145,15 @@ class LunchApiTest extends TestCase
             $t->timestamps();
         });
 
+        Schema::create('lunch_company_links', function (Blueprint $t) {
+            $t->id();
+            $t->unsignedBigInteger('company_id')->unique();
+            $t->string('company_name')->nullable();
+            $t->unsignedBigInteger('client_id');
+            $t->unsignedBigInteger('user_id')->nullable();
+            $t->timestamps();
+        });
+
         Schema::create('stock_document_items', function (Blueprint $t) {
             $t->id();
             $t->unsignedBigInteger('stock_document_id')->nullable();
@@ -431,6 +440,34 @@ class LunchApiTest extends TestCase
         $this->assertSame('Олена К.', $people[0]['name']);
         $this->assertSame(450, $people[0]['lines'][0]['dish_id']);
         $this->assertNull(\App\Models\LunchOrder::first()->fresh()->comment);
+    }
+
+    public function test_company_link_survives_new_snapshots(): void
+    {
+        $this->sendOrders([$this->company(12, 14), $this->company(13, 6)])->assertOk();
+        $this->assertNull(\App\Models\LunchOrder::where('company_id', 12)->value('client_id'));
+
+        \App\Models\LunchCompanyLink::link(12, 'ТЕСТ від ХП', 501);
+        $this->assertSame(501, (int) \App\Models\LunchOrder::where('company_id', 12)->value('client_id'));
+        $this->assertNull(\App\Models\LunchOrder::where('company_id', 13)->value('client_id'));
+
+        // Знімок перезаписали і прислали наступний день — привʼязка на місці.
+        $this->sendOrders([$this->company(12, 9)])->assertOk();
+        $this->sendOrders([$this->company(12, 3)], '2026-11-14')->assertOk();
+        $this->assertSame([501, 501], \App\Models\LunchOrder::where('company_id', 12)->orderBy('date')->pluck('client_id')->map(fn ($v) => (int) $v)->all());
+
+        \App\Models\LunchCompanyLink::unlink(12);
+        $this->assertSame(0, \App\Models\LunchOrder::whereNotNull('client_id')->count());
+    }
+
+    public function test_crm_link_wins_over_client_id_from_lunch_hub(): void
+    {
+        \App\Models\LunchCompanyLink::link(12, 'ТЕСТ від ХП', 501);
+
+        $this->sendOrders([['crm_client_id' => 777] + $this->company(12, 4), ['crm_client_id' => 888] + $this->company(13, 2)])->assertOk();
+
+        $this->assertSame(501, (int) \App\Models\LunchOrder::where('company_id', 12)->value('client_id'));
+        $this->assertSame(888, (int) \App\Models\LunchOrder::where('company_id', 13)->value('client_id'));
     }
 
     public function test_orders_need_a_token(): void

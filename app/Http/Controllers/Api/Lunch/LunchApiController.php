@@ -276,7 +276,8 @@ class LunchApiController extends Controller
                     'date'            => $date,
                     'company_id'      => $c['id'],
                     'company_name'    => $c['name'],
-                    'client_id'       => $c['crm_client_id'] ?? null,
+                    // Привʼязка, зроблена в CRM, головніша за те, що прислав Lunch Hub.
+                    'client_id'       => \App\Models\LunchCompanyLink::clientIdFor((int) $c['id']) ?? ($c['crm_client_id'] ?? null),
                     'sets'            => $c['sets'],
                     'amount'          => $c['amount'] ?? 0,
                     'address'         => $c['address'] ?? null,
