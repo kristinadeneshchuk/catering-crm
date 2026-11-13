@@ -399,7 +399,9 @@ class PackagingList extends Page implements HasForms
 
             $orders = $planOrders; // alias для існуючого нижче коду
 
-        $sortedMenuItems = $menu->menuItems->sortBy(fn ($i) => $i->mealType?->sort_order ?? 99);
+        $lunch ??= \App\Services\Kitchen\LunchKitchen::forDate($targetDate);
+        $sortedMenuItems = $menu->menuItems->sortBy(fn ($i) => $i->mealType?->sort_order ?? 99)
+            ->concat($lunch->extraItems($planId, $ordersByPlan, $menu));
 
         // Накопичувачі — у межах плану:
         // $replacementDishData: клієнти з повною замiною страви (dishExclusion + replacementDish),
@@ -567,6 +569,9 @@ class PackagingList extends Page implements HasForms
                 }
                 $tableData['columns'][$colKey]['projects'][$projSlug]['count'] += $order->kits();
             }
+
+            // Корпоративні обіди — окремою колонкою з розбивкою по компаніях.
+            $lunch->addPackingColumn($tableData, $dish);
 
             if (empty($tableData['columns'])) {
                 if (!empty($tableData['individual_notes'])) {

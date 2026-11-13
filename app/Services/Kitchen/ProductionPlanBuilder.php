@@ -78,6 +78,9 @@ class ProductionPlanBuilder
         // Групуємо замовлення по планах меню
         $ordersByPlan = $activeOrders->groupBy(fn ($o) => $o->effectiveMenuPlan()?->id ?? 0);
 
+        // Корпоративні обіди — порції тих самих страв, у загальний котел.
+        $lunch = LunchKitchen::forDate($targetDate);
+
         $debugLines = [];
 
         foreach ($ordersByPlan as $planId => $planOrders) {
@@ -113,7 +116,8 @@ class ProductionPlanBuilder
 
             $planMeals = [];
             $separate = []; // «order_id:dish_id» — циклова страва індивідуального із замінами
-            $sortedMenuItems = $menu->menuItems->sortBy(fn ($item) => $item->mealType?->sort_order ?? 99);
+            $sortedMenuItems = $menu->menuItems->sortBy(fn ($item) => $item->mealType?->sort_order ?? 99)
+                ->concat($lunch->extraItems($planId, $ordersByPlan, $menu));
 
             foreach ($sortedMenuItems as $item) {
                 if (!$item->dish) continue;
@@ -162,6 +166,8 @@ class ProductionPlanBuilder
                     }
                 }
 
+                $lunchCount = $lunch->pushStandard($standard, $dish);
+
                 if (empty($standard) && empty($custom)) continue;
 
                 $standardScales = array_map(fn ($x) => (float)$x['scale'], $standard);
@@ -186,6 +192,7 @@ class ProductionPlanBuilder
                     'custom_cards' => $customCards,
                     'comment_clients' => $commentClients,
                     'ind_in_standard' => $indInStandard,
+                    'lunch_count' => $lunchCount,
                 ];
             }
 

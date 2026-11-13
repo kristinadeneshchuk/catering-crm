@@ -225,7 +225,7 @@
                         {{ $dish['dish_name'] }}
                         <span class="font-normal text-sm text-gray-500 ml-2">
                             (Всього: {{ $dish['standard_count'] }} шт
-                            @if($customCount > 0), з них {{ $customCount }} інд.@endif)
+                            @if($customCount > 0), з них {{ $customCount }} інд.@endif@if(!empty($dish['lunch_count'])), з них обіди {{ $dish['lunch_count'] }}@endif)
                             @if(!empty($dish['ind_in_standard']))<span style="color:#6d28d9; font-weight:700;"> · у котлі індивідуальні №{{ implode(', №', collect($dish['ind_in_standard'])->sort()->all()) }}</span>@endif
                         </span>
                     </div>

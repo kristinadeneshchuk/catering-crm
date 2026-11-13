@@ -178,6 +178,17 @@ class ShoppingList extends Page implements HasForms
             }
         }
 
+        // === КОРПОРАТИВНІ ОБІДИ — ті самі страви, купуємо разом із раціонами ===
+        foreach (\App\Services\Kitchen\LunchKitchen::forDate($date)->all() as $lunchDishId => $lunchLines) {
+            $lunchDish = \App\Models\Dish::with(
+                'dishIngredients.ingredient',
+                'dishIngredients.childDish.dishIngredients.ingredient'
+            )->find($lunchDishId);
+            if (!$lunchDish) continue;
+
+            $this->collectBrutto($lunchDish, \App\Services\Kitchen\LunchKitchen::totalScale($lunchDish, $lunchLines), 1.0, null, (int) $lunchDishId, $bruttoByIngredient);
+        }
+
         // Порівнюємо з залишками на складі
         $finalList = [];
         foreach ($bruttoByIngredient as $id => $info) {

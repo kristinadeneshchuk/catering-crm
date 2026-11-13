@@ -895,7 +895,9 @@ class PrintController extends Controller
             }
 
             $report = [];
-            $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType?->sort_order ?? 99);
+            $lunch ??= \App\Services\Kitchen\LunchKitchen::forDate(\Carbon\Carbon::parse($targetDate)->format('Y-m-d'));
+            $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType?->sort_order ?? 99)
+                ->concat($lunch->extraItems($planId, $ordersByPlan, $menu));
             $orders = $planOrders; // alias для існуючого нижче коду
 
             // Ті самі накопичувачі, що у Filament-версії (PackagingList::calculate).
@@ -1040,6 +1042,9 @@ class PrintController extends Controller
                 }
                 $tableData['columns'][$colKey]['projects'][$projSlug]['count'] += $order->kits();
             }
+
+            // Корпоративні обіди — окремою колонкою з розбивкою по компаніях.
+            $lunch->addPackingColumn($tableData, $dish);
 
             if (empty($tableData['columns'])) continue;
 
@@ -1225,7 +1230,9 @@ class PrintController extends Controller
 
             $planMeals = [];
             $separate = []; // «order_id:dish_id» — циклова страва індивідуального із замінами
-            $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType?->sort_order ?? 99);
+            $lunch ??= \App\Services\Kitchen\LunchKitchen::forDate(\Carbon\Carbon::parse($targetDate)->format('Y-m-d'));
+            $sortedMenuItems = $menu->menuItems->sortBy(fn($item) => $item->mealType?->sort_order ?? 99)
+                ->concat($lunch->extraItems($planId, $ordersByPlan, $menu));
 
             foreach ($sortedMenuItems as $item) {
                 if (!$item->dish) continue;
@@ -1293,6 +1300,8 @@ class PrintController extends Controller
                     }
                 }
 
+                $lunchCount = $lunch->pushStandard($standard, $dish);
+
                 if (empty($standard) && empty($custom)) continue;
 
                 $standardScales = array_map(fn($x) => (float)$x['scale'], $standard);
@@ -1315,6 +1324,7 @@ class PrintController extends Controller
                     'custom_cards' => $customCards,
                     'comment_clients' => $commentClients,
                     'ind_in_standard' => $indInStandard,
+                    'lunch_count' => $lunchCount,
                 ];
             }
 
@@ -1469,6 +1479,17 @@ class PrintController extends Controller
                         $this->collectBruttoForShopping($dish, $scale, 1.0, null, (int)$dish->id, $bruttoByIng);
                     }
                 }
+            }
+
+            // === КОРПОРАТИВНІ ОБІДИ — ті самі страви, купуємо разом із раціонами ===
+            foreach (\App\Services\Kitchen\LunchKitchen::forDate(\Carbon\Carbon::parse($date)->format('Y-m-d'))->all() as $lunchDishId => $lunchLines) {
+                $lunchDish = \App\Models\Dish::with(
+                    'dishIngredients.ingredient',
+                    'dishIngredients.childDish.dishIngredients.ingredient'
+                )->find($lunchDishId);
+                if (!$lunchDish) continue;
+
+                $this->collectBruttoForShopping($lunchDish, \App\Services\Kitchen\LunchKitchen::totalScale($lunchDish, $lunchLines), 1.0, null, (int) $lunchDishId, $bruttoByIng);
             }
 
             foreach ($bruttoByIng as $id => $info) {

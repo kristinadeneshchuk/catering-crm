@@ -321,7 +321,7 @@
                             @if($dishRow['standard_count'] > 0)
                                 <div style="margin-bottom: 15px; border-left: 4px solid #22c55e; background-color: #f0fdf4; padding: 10px; border-radius: 0 8px 8px 0;">
                                     <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom:15px;">
-                                        <div style="font-weight: 800; font-size: 15px;">СТАНДАРТ: {{ $dishRow['standard_count'] }} порцій</div>
+                                        <div style="font-weight: 800; font-size: 15px;">СТАНДАРТ: {{ $dishRow['standard_count'] }} порцій@if(!empty($dishRow['lunch_count'])) <span style="font-weight:700; font-size:12px; color:#0369a1;">· з них обіди {{ $dishRow['lunch_count'] }}</span>@endif</div>
                                         <div style="font-weight: 800; font-size: 14px; color: #166534;">Б: {{ number_format($dishRow['standard_total_brutto'], 0) }}г | Н: {{ number_format($dishRow['standard_total_netto'], 0) }}г</div>
                                     </div>
                                     <div style="display: flex; flex-direction: column; gap: 8px;">

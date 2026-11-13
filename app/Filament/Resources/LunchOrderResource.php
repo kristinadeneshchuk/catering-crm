@@ -56,7 +56,8 @@ class LunchOrderResource extends Resource
                         ->sortBy(fn (LunchOrderLine $l) => array_search($l->kind, ['main', 'light', 'extra'], true))
                         ->map(fn (LunchOrderLine $l) => e($l->name).' — <b>'.$l->qty.'</b>'
                             .($l->weight_g ? ' × '.$l->weight_g.' г' : '')
-                            .($l->kind === 'extra' ? ' <span style="opacity:.6">(доплата)</span>' : ''))
+                            .($l->kind === 'extra' ? ' <span style="opacity:.6">(доплата)</span>' : '')
+                            .(! $l->dish_id || ! $l->weight_g ? ' <span style="color:#dc2626;font-weight:700">— без '.(! $l->dish_id ? 'страви CRM' : 'ваги').', у кухонні документи не потрапляє</span>' : ''))
                         ->implode('<br>')))
                     ->html(),
                 Tables\Columns\TextColumn::make('delivery_window')->label('Доставка')->placeholder('—')
