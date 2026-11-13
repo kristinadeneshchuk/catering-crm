@@ -621,12 +621,18 @@ class LogisticsPage extends Page implements HasForms
 
                         if (!empty($skipped)) {
                             $lines[] = '';
-                            $lines[] = '⚠️ Пропущено (кілька адрес без основної):';
+                            $reasons = [
+                                'multiple_addresses_no_default' => 'кілька адрес без основної — виставте основну в картці клієнта',
+                                'lunch_company_not_linked'      => 'компанію не привʼязано до клієнта CRM — привʼяжіть на сторінці «Обіди (компанії)»',
+                                'lunch_client_without_address'  => 'у клієнта-компанії немає адреси',
+                            ];
+                            $lines[] = '⚠️ Пропущено — у маршрут не потрапили:';
                             foreach ($skipped as $s) {
-                                $lines[] = "• {$s['client_name']} (id={$s['client_id']})";
+                                $lines[] = "• {$s['client_name']}".(! empty($s['client_id']) ? " (id={$s['client_id']})" : '')
+                                    .' — '.($reasons[$s['reason'] ?? ''] ?? ($s['reason'] ?? 'причина невідома'));
                             }
                             $lines[] = '';
-                            $lines[] = 'Виставте основну адресу в картці клієнта і повторіть відправку.';
+                            $lines[] = 'Виправте дані й повторіть відправку.';
                         }
 
                         $body  = implode("\n", $lines);

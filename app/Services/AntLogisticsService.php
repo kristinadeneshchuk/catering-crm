@@ -74,9 +74,15 @@ class AntLogisticsService
     {
         $this->ensureAuthenticated();
 
+        // Компанії з корпоративними обідами: звичайних замовлень у них може не бути,
+        // але адреса в довіднику ANT потрібна — туди їде курʼєр.
+        $lunchWindows = $this->lunchClientWindows();
+
         $clients = Client::query()
             ->with(['addresses', 'orders' => fn ($q) => $q->whereIn('status', ['active', 'new'])])
-            ->whereHas('orders', fn ($q) => $q->whereIn('status', ['active', 'new']))
+            ->where(fn ($q) => $q
+                ->whereHas('orders', fn ($o) => $o->whereIn('status', ['active', 'new']))
+                ->orWhereIn('id', array_keys($lunchWindows)))
             ->get();
 
         if ($clients->isEmpty()) {
@@ -91,7 +97,7 @@ class AntLogisticsService
 
         foreach ($clients as $client) {
             $activeOrder = $client->orders->sortByDesc('id')->first();
-            [$workBeg, $workEnd] = $this->parseDeliveryTimeWindow($activeOrder?->delivery_time ?? '');
+            [$workBeg, $workEnd] = $this->parseDeliveryTimeWindow($activeOrder?->delivery_time ?? ($lunchWindows[$client->id] ?? ''));
 
             $addresses = $client->addresses;
             if ($addresses->isEmpty()) {
@@ -225,13 +231,17 @@ class AntLogisticsService
         // Якщо в CRM на цю дату не залишилось жодного дня доставки — зачищаємо стару
         // заявку в ANT цілком через DELETE /Request/delete. Інакше залишиться "хвіст"
         // від попередніх push-ів, і кур'єр поїде за скасованим клієнтом.
-        if ($orderDays->isEmpty()) {
+        // Корпоративні обіди на цю доставку — окремі точки (або +комплекти до точки
+        // клієнта, якщо він того ж дня отримує й раціон). Збій тут не має зачепити раціони.
+        $lunch = $this->lunchPoints($deliveryDate, $shift);
+
+        if ($orderDays->isEmpty() && empty($lunch['points'])) {
             Log::info('[AntLogistics] No orders to push, wiping ANT request', [
                 'date'  => $deliveryDate,
                 'shift' => $shift,
             ]);
             $this->tryDeleteRequest($dateFmt, $extIdent, 'no_local_orders');
-            return ['pushed' => 0, 'failed' => 0, 'total' => 0, 'skipped' => []];
+            return ['pushed' => 0, 'failed' => 0, 'total' => 0, 'skipped' => $lunch['skipped']];
         }
 
         // --- 2. Групуємо OrderDay по client_id + час ---
@@ -340,6 +350,10 @@ class AntLogisticsService
 
             $compRows[] = $row;
         }
+
+        // --- 3б. Корпоративні обіди ---
+        $compRows = $this->appendLunchRows($compRows, $lunch['points'], $rationProductId);
+        $skipped  = array_merge($skipped, $lunch['skipped']);
 
         // --- 4. Якщо жоден клієнт не пройшов валідацію (наприклад, у всіх кілька адрес
         // без default) — теж зачищаємо стару заявку в ANT. Notification зі списком
@@ -694,6 +708,88 @@ class AntLogisticsService
     /**
      * @return array{days: \Illuminate\Support\Collection}
      */
+    /**
+     * Корпоративні обіди як точки доставки. Будь-яка помилка тут — лише запис у лог:
+     * відправка раціонів від обідів залежати не повинна.
+     *
+     * @return array{points: array<int, array>, skipped: array<int, array>}
+     */
+    private function lunchPoints(string $deliveryDate, string $shift): array
+    {
+        try {
+            return \App\Services\Kitchen\LunchDelivery::forDelivery($deliveryDate, $shift);
+        } catch (\Throwable $e) {
+            Log::error('[AntLogistics] Lunch points failed, pushing rations only', ['date' => $deliveryDate, 'error' => $e->getMessage()]);
+            report($e);
+
+            return ['points' => [], 'skipped' => []];
+        }
+    }
+
+    /** @return array<int, string> client_id => 'HH:MM-HH:MM' */
+    private function lunchClientWindows(): array
+    {
+        try {
+            return \App\Services\Kitchen\LunchDelivery::upcomingClientWindows();
+        } catch (\Throwable $e) {
+            report($e);
+
+            return [];
+        }
+    }
+
+    /**
+     * Додає обіди до точок заявки. Якщо клієнт того ж дня вже має точку з
+     * раціоном (той самий Comp_Id) — не дублюємо її, а дописуємо обіди в примітку
+     * й додаємо комплекти до кількості.
+     */
+    private function appendLunchRows(array $compRows, array $points, ?string $rationProductId): array
+    {
+        foreach ($points as $p) {
+            try {
+                $compId = (string) ($p['address']?->ant_comp_id ?: $p['client']->id);
+                $note   = trim('🍱 ОБІДИ: '.$p['sets'].' компл. · '.$p['company']
+                    .' · '.$p['window'][0].'–'.$p['window'][1]
+                    .($p['contact'] ? ' · '.$p['contact'] : '')
+                    .($p['comment'] ? ' · '.$p['comment'] : ''));
+
+                $existing = null;
+                foreach ($compRows as $i => $row) {
+                    if ((string) $row['Comp_Id'] === $compId) {
+                        $existing = $i;
+                        break;
+                    }
+                }
+
+                if ($existing !== null) {
+                    $compRows[$existing]['Note'] = trim($compRows[$existing]['Note'].' | '.$note, ' |');
+                    if (isset($compRows[$existing]['Products'][0]['Qty'])) {
+                        $compRows[$existing]['Products'][0]['Qty'] += (float) $p['sets'];
+                    }
+
+                    continue;
+                }
+
+                $row = [
+                    'Comp_Id'          => $compId,
+                    'Note'             => $note,
+                    'TimeWork_Beg_Req' => $p['window'][0].':00',
+                    'TimeWork_End_Req' => $p['window'][1].':00',
+                    'Unload_Time_Qty'  => 7,
+                ];
+                if ($rationProductId !== null) {
+                    $row['Products'] = [['Product_Id' => $rationProductId, 'Qty' => (float) $p['sets']]];
+                }
+                $compRows[] = $row;
+            } catch (\Throwable $e) {
+                Log::error('[AntLogistics] Lunch row failed', ['company' => $p['company'] ?? '?', 'error' => $e->getMessage()]);
+                report($e);
+            }
+        }
+
+        return $compRows;
+    }
+
     public function collectOrderDaysForDelivery(string $deliveryDate, string $shift): array
     {
         $delivery = Carbon::parse($deliveryDate)->startOfDay();
