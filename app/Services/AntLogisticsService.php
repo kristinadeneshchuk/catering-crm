@@ -562,7 +562,7 @@ class AntLogisticsService
                 // PosType_Id=1 — старт (кухня), PosType_Id=3 — фініш; нам потрібні тільки =2 (точки доставки)
                 if ((int) ($comp['PosType_Id'] ?? 0) !== 2) continue;
 
-                $clientId = (int) ($comp['Comp_Id'] ?? 0);
+                $clientId = $this->clientIdFromCompId($comp['Comp_Id'] ?? null);
                 if (!$clientId) continue;
 
                 $routePos = (int) ($comp['Pos_Id'] ?? 0) ?: null;
@@ -799,6 +799,49 @@ class AntLogisticsService
         }
 
         return $compRows;
+    }
+
+    /** @var array<string, int> */
+    private array $compClientCache = [];
+
+    /**
+     * Клієнт CRM за Comp_Id точки з ANT.
+     *
+     * Для основної адреси Comp_Id = id клієнта. Для додаткової — складений номер
+     * «клієнт + адреса (4 цифри)», напр. 7270687. Раніше його читали як id клієнта,
+     * не знаходили — і доставка на неосновну адресу лишалась у CRM без маршруту.
+     */
+    public function clientIdFromCompId(mixed $compId): int
+    {
+        $key = trim((string) $compId);
+        if ($key === '' || ! ctype_digit($key)) {
+            return 0;
+        }
+
+        return $this->compClientCache[$key] ??= (function () use ($key) {
+            try {
+            // 1. Номер, який ми самі записали адресі при синхронізації клієнтів.
+            $byAddress = \App\Models\ClientAddress::where('ant_comp_id', $key)->value('client_id');
+            if ($byAddress) {
+                return (int) $byAddress;
+            }
+
+            // 2. Складений номер адреси, яку згодом зробили основною (ant_comp_id уже перезаписано).
+            if (strlen($key) > 4) {
+                $clientId  = (int) substr($key, 0, -4);
+                $addressId = (int) substr($key, -4);
+                if ($clientId && \App\Models\ClientAddress::where('id', $addressId)->where('client_id', $clientId)->exists()) {
+                    return $clientId;
+                }
+            }
+
+            } catch (\Throwable $e) {
+                report($e);
+            }
+
+            // 3. Клієнт без збережених адрес: Comp_Id = id клієнта.
+            return (int) $key;
+        })();
     }
 
     public function collectOrderDaysForDelivery(string $deliveryDate, string $shift): array
