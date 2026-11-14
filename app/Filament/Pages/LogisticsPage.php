@@ -41,6 +41,9 @@ class LogisticsPage extends Page implements HasForms
     public ?array $data = [];
     public array $routes = [];
 
+    /** Замовлення, додані чи зняті після відправки зміни в ANT (по змінах). */
+    public array $lateChanges = [];
+
     // Підсумки маршрутів
     public int   $totalRoutes   = 0;
     public int   $totalStops    = 0;
@@ -136,7 +139,25 @@ class LogisticsPage extends Page implements HasForms
         $this->totalCost   = round((float) $routeCollection->sum('calculated_cost'), 2);
         $this->totalAntCost = round((float) $routeCollection->sum('ant_cost_route'), 2);
 
+        $this->loadLateChanges();
         $this->loadSmsState();
+    }
+
+    /** Що змінилось у CRM після відправки зміни в ANT. Минулі дати не дивимось. */
+    public function loadLateChanges(): void
+    {
+        $this->lateChanges = [];
+        $date = $this->data['date'] ?? now()->format('Y-m-d');
+
+        if (\Carbon\Carbon::parse($date)->lt(today())) {
+            return;
+        }
+
+        try {
+            $this->lateChanges = app(\App\Services\Logistics\LatePushWatch::class)->diff($date);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     /**
@@ -607,6 +628,7 @@ class LogisticsPage extends Page implements HasForms
                 ->action(function (array $data) {
                     try {
                         $result = app(AntLogisticsService::class)->pushDailyOrders($data['date'], $data['shift']);
+                        $this->loadLateChanges();
 
                         $pushed  = (int) ($result['pushed'] ?? 0);
                         $total   = (int) ($result['total']  ?? 0);

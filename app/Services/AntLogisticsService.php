@@ -260,6 +260,7 @@ class AntLogisticsService
         $rationProductId = $this->ensureRationProduct();
 
         $compRows = [];
+        $sentDays = collect(); // дні, що справді пішли в заявку — для знімка відправки
 
         foreach ($grouped as $group) {
             /** @var \App\Models\OrderDay $mainDay */
@@ -349,6 +350,7 @@ class AntLogisticsService
             }
 
             $compRows[] = $row;
+            $sentDays = $sentDays->merge($group);
         }
 
         // --- 3б. Корпоративні обіди ---
@@ -479,6 +481,15 @@ class AntLogisticsService
                 'failed' => $failed,
             ]);
             $this->tryDeleteRequest($dateFmt, $extIdent, 'all_comps_failed_safety_wipe');
+        }
+
+        // Знімок відправки: за ним «Логістика» показує замовлення, додані чи зняті пізніше.
+        if ($pushed > 0) {
+            try {
+                (new \App\Services\Logistics\LatePushWatch($this))->record($deliveryDate, $shift, $sentDays);
+            } catch (\Throwable $e) {
+                report($e);
+            }
         }
 
         Log::info('[AntLogistics] pushDailyOrders done', [

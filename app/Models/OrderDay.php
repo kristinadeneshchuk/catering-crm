@@ -59,6 +59,13 @@ class OrderDay extends Model
             $day->discount_amount = $day->calculateDiscountAmount();
         });
 
+        // Зміну вже відправили в ANT, а день додали пізніше — менеджери мають знати одразу.
+        static::created(function ($day) {
+            \Illuminate\Support\Facades\DB::afterCommit(
+                fn () => app(\App\Services\Logistics\LatePushWatch::class)->dayCreated($day)
+            );
+        });
+
         static::saved(function ($day) {
             if ($day->wasChanged('discount_amount')) {
                 $day->order?->syncFinalPrice();

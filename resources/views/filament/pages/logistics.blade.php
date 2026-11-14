@@ -13,6 +13,36 @@
         <p style="font-size:13px;color:#71717a;margin-top:2px;">Маршрути та витрати</p>
     </div>
 
+    {{-- ПІСЛЯ ВІДПРАВКИ В ANT: що додали чи зняли в CRM, а в маршруті цього ще немає --}}
+    @foreach($lateChanges as $shiftKey => $late)
+        <div wire:key="late-{{ $shiftKey }}" style="background:#2a1215;border:1px solid #b91c1c;border-radius:16px;padding:16px 20px;">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                <div style="font-size:15px;font-weight:800;color:#fca5a5;">
+                    ⚠️ Після відправки в ANT ({{ $late['label'] }}, {{ $late['pushed_at'] }}) змінилось:
+                    @if($late['added']) додано {{ count($late['added']) }} @endif
+                    @if($late['added'] && $late['removed']) · @endif
+                    @if($late['removed']) знято {{ count($late['removed']) }} @endif
+                </div>
+                <div style="flex:1;"></div>
+                <button wire:click="mountAction('push_orders')"
+                    style="padding:8px 14px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#b91c1c;color:#fff;border:none;">
+                    Відправити зміну повторно →
+                </button>
+            </div>
+            <div style="margin-top:10px;font-size:13px;color:#fecaca;line-height:1.7;">
+                @foreach($late['added'] as $row)
+                    <div>➕ <b>{{ $row['name'] }}</b> — немає в маршруті · замовлення №{{ implode(', №', $row['orders']) }} · раціонів: {{ $row['kits'] }} ({{ $row['food'] }})</div>
+                @endforeach
+                @foreach($late['removed'] as $row)
+                    <div>➖ <b>{{ $row['name'] }}</b> — у маршруті є, а в CRM доставку знято · замовлення №{{ implode(', №', $row['orders']) }} · раціонів: {{ $row['kits'] }}</div>
+                @endforeach
+            </div>
+            <div style="margin-top:8px;font-size:12px;color:#fca5a5;opacity:.8;">
+                Після повторної відправки перебудуйте маршрут в ANT і натисніть «Курʼєри ↓» та «Точки ↓».
+            </div>
+        </div>
+    @endforeach
+
     {{-- ПАНЕЛЬ КЕРУВАННЯ --}}
     <div style="background: linear-gradient(135deg, #18181b 0%, #1c1c1f 100%); border: 1px solid #3f3f46; border-radius: 16px; padding: 20px 24px;">
         <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
