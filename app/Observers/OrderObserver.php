@@ -95,6 +95,31 @@ class OrderObserver
     }
 
     /**
+     * Замовлення з персональним меню на сьогодні чи наперед видаляти не можна:
+     * страви стираються разом із ним (каскад), а нове замовлення на ті самі дні
+     * лишається без меню й випадає з листів кухні. Так 12.11.2026 зникло меню
+     * на цілий тиждень. Дати міняються в самому замовленні, без перестворення.
+     */
+    public function deleting(Order $order): bool
+    {
+        $dishes = $order->personalDishes()->whereDate('date', '>=', now()->toDateString())->count();
+        if ($dishes === 0) {
+            return true;
+        }
+
+        if (class_exists(\Filament\Notifications\Notification::class) && ! app()->runningInConsole()) {
+            \Filament\Notifications\Notification::make()
+                ->danger()
+                ->title('Замовлення не видалено: у ньому є персональне меню')
+                ->body("На сьогодні й наступні дні прописано страв: {$dishes}. Змініть дати в цьому замовленні або спершу приберіть меню на сторінці «Персональні меню».")
+                ->persistent()
+                ->send();
+        }
+
+        return false;
+    }
+
+    /**
      * Handle the Order "deleted" event.
      */
     public function deleted(Order $order): void

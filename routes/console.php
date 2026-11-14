@@ -43,6 +43,11 @@ Schedule::command('telegram:evening-summary')->dailyAt('18:00');
 Schedule::command('telegram:weekly-digest')->weeklyOn(1, '09:00'); // 1 = понеділок
 Schedule::command('telegram:kitchen-daily-summary')->dailyAt('20:00');
 
+// Індивідуальні замовлення без прописаного меню на найближчі 3 дні — до дедлайну кухні (10:00)
+// і ще раз по обіді, щоб встигнути внести до наступного ранку.
+Schedule::command('orders:individual-menu-gaps')->dailyAt('08:30');
+Schedule::command('orders:individual-menu-gaps')->dailyAt('15:00');
+
 // Після ранкових відміток «+»: чи не забагато людей на кухні сьогодні.
 Schedule::command('kitchen:payroll-check')->dailyAt('10:30');
 

@@ -920,7 +920,8 @@ class PrintController extends Controller
             ];
 
             foreach ($orders as $order) {
-                if ($order->menu_type === 'individual') continue; // індивідуальні — окремо
+                // Індивідуальні з меню на дату — окремим блоком; без меню — у циклічному.
+                if ($indPacking->has($order->id)) continue;
 
                 $calc = $this->calculateOrderPlan($order, $menu, $targetDate);
 
