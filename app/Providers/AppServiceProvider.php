@@ -13,6 +13,8 @@ use App\Observers\OrderObserver;
 use App\Observers\OrderDayObserver;
 use App\Observers\DeliveryRouteObserver;
 use App\Observers\StockDocumentItemObserver;
+use App\Observers\ClientAddressObserver;
+use App\Models\ClientAddress;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Support\Facades\Blade;
@@ -46,6 +48,9 @@ class AppServiceProvider extends ServiceProvider
 
         // Маршрут курʼєра створився/змінився з ANT → переоцінюємо ставку зміни у Табелі
         DeliveryRoute::observe(DeliveryRouteObserver::class);
+
+        // Адреса без координат не потрапляє в маршрути — підставляємо lat/lng з Nominatim
+        ClientAddress::observe(ClientAddressObserver::class);
 
         // Kitchen notification bell — show for all roles in top bar
         FilamentView::registerRenderHook(

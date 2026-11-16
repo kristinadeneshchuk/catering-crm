@@ -246,4 +246,9 @@ return [
         'default_auth_token' => env('VIBER_AUTH_TOKEN'),
     ],
 
+
+    'geocoder' => [
+        'enabled' => env('GEOCODER_ENABLED', true),
+    ],
+
 ];
