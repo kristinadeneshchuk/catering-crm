@@ -172,7 +172,7 @@ class OrderCreator
             $lines[] = 'Домофон: '.$address['intercom'];
         }
 
-        $handoff = $address['handoff'] ?? $address['delivery_comment'] ?? null;
+        $handoff = \App\Support\CourierNote::clean($address['handoff'] ?? $address['delivery_comment'] ?? null);
         if (! empty($handoff)) {
             $lines[] = 'Передача: '.$handoff;
         }

@@ -1112,9 +1112,10 @@ class AntLogisticsService
             $parts[] = 'Інфо: ' . $deliveryComment;
         }
 
-        if (!empty($order->comment)) {
-            $parts[] = $order->comment;
-        }
+        // Коментар замовлення ($order->comment) — внутрішній: дієта, калораж, «Оформлено
+        // через Telegram Inbox», номер діалогу. Курʼєру він не потрібен і лише заважає
+        // (власник 16.11): у мурашку — тільки як передати (консьєрж, з рук у руки,
+        // під дверима) і орієнтир, а це живе в delivery_comment адреси чи дня.
 
         return implode('; ', array_filter($parts));
     }

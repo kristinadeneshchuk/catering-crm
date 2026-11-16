@@ -137,11 +137,8 @@ class LogisticsExport implements FromCollection, WithHeadings, WithStyles, WithC
                 array_unshift($infoParts, \App\Services\AntLogisticsService::PASS_NOTE);
             }
 
-            foreach ($uniqueOrders as $o) {
-                if (!empty($o->comment)) {
-                    $infoParts[] = 'Комент (' . ($o->client?->name ?? '') . '): ' . $o->comment;
-                }
-            }
+            // Коментар замовлення внутрішній (дієта, калораж, джерело) — курʼєрам не віддаємо,
+            // як і в мурашку (AntLogisticsService::buildAdditionalInfo).
 
             $additionalInfo = implode("\n", $infoParts);
 
