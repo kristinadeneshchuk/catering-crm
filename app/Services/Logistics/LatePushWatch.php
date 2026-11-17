@@ -252,6 +252,70 @@ class LatePushWatch
         }
     }
 
+    /**
+     * Графік замовлення змінили (ранок ↔ вечір). Дні, які вже пішли в ANT, нікуди
+     * не переїжджають: їх везуть так, як відправили, — на день записуємо стару дату
+     * й час доставки. Новий графік діє з першого ще не відправленого дня.
+     * Ніколи не кидає винятків.
+     *
+     * @return int скільки днів залишено у відправлених маршрутах
+     */
+    public function keepSentDays(Order $order, ?string $oldSchedule, ?string $oldTime): int
+    {
+        try {
+            if (! SchemaReady::has('ant_pushes') || ! in_array($order->status, ['active', 'new'], true)) {
+                return 0;
+            }
+
+            $wasEvening = \App\Services\ScheduleService::isEvening($oldSchedule);
+            if ($wasEvening === \App\Services\ScheduleService::isEvening($order->schedule_type)) {
+                return 0;
+            }
+
+            $kept = [];
+            foreach (AntPush::whereDate('delivery_date', '>=', today()->format('Y-m-d'))->orderByDesc('pushed_at')->get() as $push) {
+                foreach (collect($push->points)->where('order_id', (int) $order->id) as $point) {
+                    $day = OrderDay::find($point['day_id']);
+                    if (! $day || isset($kept[$day->id]) || $day->delivery_date_override || $day->delivery_time) {
+                        continue;
+                    }
+
+                    $evening = ($point['shift'] ?? '') === 'evening';
+                    $time    = ($oldTime && ((int) explode(':', $oldTime)[0] >= 12) === $evening)
+                        ? $oldTime
+                        : ($evening ? '18:00-22:00' : '06:00-10:00');
+
+                    $day->delivery_date_override = Carbon::parse($push->delivery_date)->format('Y-m-d');
+                    $day->delivery_time          = $time;
+                    $day->save();
+
+                    $kept[$day->id] = '• раціон '.$this->dayLabel(Carbon::parse($day->date)).' — '
+                        .$this->dayLabel(Carbon::parse($push->delivery_date)).', '.self::SHIFTS[$evening ? 'evening' : 'morning'];
+                }
+            }
+
+            if (! $kept) {
+                return 0;
+            }
+
+            $name = $order->client?->name ?? 'Клієнт';
+            $who  = auth()->user()?->name ?? 'не через CRM (скрипт/API)';
+            $to   = \App\Services\ScheduleService::isEvening($order->schedule_type) ? 'вечірню' : 'ранкову';
+            app(TelegramService::class)->sendToManager(implode("\n", [
+                "ℹ️ {$name} (замовлення №{$order->id}): доставку змінено на {$to} ({$who}).",
+                'Уже відправлене в маршрут їде без змін:',
+                ...array_values($kept),
+                'Новий графік діє з наступних днів. Якщо клієнту обіцяли інакше — змініть день вручну й відправте зміну ще раз.',
+            ]));
+
+            return count($kept);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return 0;
+        }
+    }
+
     private function dayLabel(Carbon $d): string
     {
         $map = ['Mon' => 'пн', 'Tue' => 'вт', 'Wed' => 'ср', 'Thu' => 'чт', 'Fri' => 'пт', 'Sat' => 'сб', 'Sun' => 'нд'];

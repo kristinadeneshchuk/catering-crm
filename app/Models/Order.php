@@ -301,6 +301,11 @@ class Order extends Model
             // Графік чи час доставки змінили після відправки маршруту в ANT:
             // точка лишається в старій зміні, у новій її немає.
             if ($o->wasChanged(['schedule_type', 'delivery_time'])) {
+                // Уже відправлені дні лишаються у своїх маршрутах — зсуву немає.
+                if ($o->wasChanged('schedule_type')) {
+                    app(\App\Services\Logistics\LatePushWatch::class)
+                        ->keepSentDays($o, $o->getOriginal('schedule_type'), $o->getOriginal('delivery_time'));
+                }
                 \Illuminate\Support\Facades\DB::afterCommit(
                     fn () => app(\App\Services\Logistics\LatePushWatch::class)->orderMoved($o)
                 );

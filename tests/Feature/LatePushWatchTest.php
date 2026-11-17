@@ -208,6 +208,36 @@ class LatePushWatchTest extends TestCase
         $this->assertSame([], $this->telegramTexts());
     }
 
+    public function test_schedule_change_keeps_already_sent_day_in_its_route(): void
+    {
+        $o  = $this->order('ТЕСТ від ХП без зсуву');
+        $d1 = $this->day($o, $this->day);          // сб 14.11 — зміну відправлено
+        $d2 = $this->day($o, '2026-11-17');        // вт 17.11 — ще ні
+        $this->day($this->order('ТЕСТ від ХП вечір', 'every_day_evening'), $this->day);
+        app(AntLogisticsService::class)->pushDailyOrders('2026-11-13', 'evening');
+        app(AntLogisticsService::class)->pushDailyOrders($this->day, 'morning');
+
+        DB::table('orders')->where('id', $o)->update(['schedule_type' => 'every_day_evening', 'delivery_time' => '18:00-22:00']);
+        $order = \App\Models\Order::find($o);
+        $kept  = app(LatePushWatch::class)->keepSentDays($order, 'every_day_morning', '07:30-09:00');
+        app(LatePushWatch::class)->orderMoved($order);
+
+        $this->assertSame(1, $kept);
+        $d1->refresh();
+        $this->assertSame('2026-11-14', \Carbon\Carbon::parse($d1->delivery_date_override)->format('Y-m-d'));
+        $this->assertSame('07:30-09:00', $d1->delivery_time);
+        $this->assertNull($d2->fresh()->delivery_time);
+
+        // Маршрути й «Логістика» розбіжностей не бачать: день лишився в ранковій зміні 14.11.
+        $this->assertSame([], app(LatePushWatch::class)->diff($this->day));
+        $this->assertSame([], app(LatePushWatch::class)->diff('2026-11-13'));
+
+        $texts = $this->telegramTexts();
+        $this->assertCount(1, $texts);
+        $this->assertStringContainsString('доставку змінено на вечірню', $texts[0]);
+        $this->assertStringContainsString('раціон сб 14.11 — сб 14.11, ранок', $texts[0]);
+    }
+
     public function test_without_the_table_nothing_breaks(): void
     {
         Schema::drop('ant_pushes');
