@@ -3,6 +3,7 @@
 namespace App\Services\Logistics;
 
 use App\Models\AntPush;
+use App\Models\Order;
 use App\Models\OrderDay;
 use App\Services\AntLogisticsService;
 use App\Services\TelegramService;
@@ -154,6 +155,97 @@ class LatePushWatch
                 'Доставка: '.$this->dayLabel($delivery).', '.self::SHIFTS[$shift].'.',
                 "Цю зміну вже відправлено в ANT {$push->pushed_at->format('d.m о H:i')} — точки в маршруті немає.",
                 'Логістика → «Замовлення →» ще раз на цю зміну, потім перебудувати маршрут.',
+            ]));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * У замовленні змінили графік, час чи дату доставки. День міг переїхати в іншу
+     * зміну: у старому відправленому маршруті точка лишилась, а в новому її немає.
+     * Кажемо менеджерам одразу (раз на однаковий стан). Ніколи не кидає винятків.
+     */
+    public function orderMoved(Order $order): void
+    {
+        try {
+            if (! SchemaReady::has('ant_pushes')) {
+                return;
+            }
+            if (! in_array($order->status, ['active', 'new'], true) || $order->separate_courier) {
+                return;
+            }
+
+            $pushes = AntPush::whereDate('delivery_date', '>=', today()->format('Y-m-d'))->get();
+            if ($pushes->isEmpty()) {
+                return;
+            }
+
+            $days = $order->orderDays()->whereDate('date', '>=', today()->format('Y-m-d'))
+                ->orderBy('date')->limit(14)->get();
+
+            $lines = [];
+            foreach ($days as $day) {
+                $day->setRelation('order', $order);
+                $delivery = $day->resolveDeliveryDate()->startOfDay();
+                $shift    = $this->ant->orderDayIsEvening($day) ? 'evening' : 'morning';
+                $now      = $this->dayLabel($delivery).', '.self::SHIFTS[$shift];
+                $food     = $this->dayLabel(Carbon::parse($day->date));
+
+                // Де день стоїть у вже відправлених маршрутах, хоча туди більше не належить.
+                $old = [];
+                foreach ($pushes as $p) {
+                    $point = collect($p->points)->firstWhere('day_id', (int) $day->id);
+                    if (! $point) {
+                        continue;
+                    }
+                    $pDate = Carbon::parse($p->delivery_date)->startOfDay();
+                    if (! $pDate->equalTo($delivery) || ($point['shift'] ?? '') !== $shift) {
+                        $old[] = $this->dayLabel($pDate).', '.(self::SHIFTS[$point['shift'] ?? ''] ?? '');
+                    }
+                }
+
+                // Чи нову зміну вже відправлено без цієї точки.
+                $missing = null;
+                if ($delivery->gte(today())) {
+                    $push = $this->pushFor($delivery->format('Y-m-d'), $shift);
+                    if ($push && ! collect($push->points)->contains('day_id', (int) $day->id)) {
+                        $missing = $push;
+                    }
+                }
+
+                if (! $old && ! $missing) {
+                    continue;
+                }
+
+                $line = "• раціон {$food}: ";
+                $line .= $old ? 'у відправленому маршруті '.implode(' і ', $old)." → тепер {$now}." : "доставка {$now}.";
+                if ($delivery->lt(today())) {
+                    $line .= ' Ця доставка вже минула — раціон ніхто не повезе.';
+                } elseif ($missing) {
+                    $line .= " Цю зміну вже відправлено {$missing->pushed_at->format('d.m о H:i')} — точки там немає.";
+                } else {
+                    $line .= ' Нову зміну ще не відправляли.';
+                }
+                $lines[] = $line;
+            }
+
+            if (! $lines) {
+                return;
+            }
+
+            $key = 'late-move:'.$order->id.':'.md5(implode('|', $lines));
+            if (! Cache::add($key, 1, now()->addHours(18))) {
+                return;
+            }
+
+            $name = $order->client?->name ?? 'Клієнт';
+            $who  = auth()->user()?->name ?? 'не через CRM (скрипт/API)';
+            app(TelegramService::class)->sendToManager(implode("\n", [
+                '⚠️ Доставку змінено після відправки маршруту',
+                "{$name} (замовлення №{$order->id}), змінив: {$who}",
+                ...$lines,
+                'Логістика → «Замовлення →» ще раз на обидві зміни, потім перебудувати маршрути. Перевірте наліпки.',
             ]));
         } catch (\Throwable $e) {
             report($e);

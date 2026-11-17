@@ -66,6 +66,15 @@ class OrderDay extends Model
             );
         });
 
+        // День переїхав в іншу зміну чи дату після відправки маршруту — так само.
+        static::updated(function ($day) {
+            if ($day->wasChanged(['date', 'delivery_time', 'delivery_date_override']) && $day->order) {
+                \Illuminate\Support\Facades\DB::afterCommit(
+                    fn () => app(\App\Services\Logistics\LatePushWatch::class)->orderMoved($day->order)
+                );
+            }
+        });
+
         static::saved(function ($day) {
             if ($day->wasChanged('discount_amount')) {
                 $day->order?->syncFinalPrice();

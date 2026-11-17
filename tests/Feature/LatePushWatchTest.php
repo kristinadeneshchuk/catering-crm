@@ -165,6 +165,49 @@ class LatePushWatchTest extends TestCase
         $this->assertSame([], $this->telegramTexts());
     }
 
+    public function test_schedule_change_after_push_tells_managers_where_the_point_is_stuck(): void
+    {
+        // Випадок 16.11: вечір на сьогодні відправлено без клієнта, ранок на завтра — з ним,
+        // потім графік міняють на вечірній.
+        $o = $this->order('ТЕСТ від ХП переїзд');
+        $d = $this->day($o, $this->day);
+        $this->day($this->order('ТЕСТ від ХП вечір', 'every_day_evening'), $this->day);
+        $this->day($this->order('ТЕСТ від ХП ранок'), $this->day);
+        app(AntLogisticsService::class)->pushDailyOrders('2026-11-13', 'evening');
+        app(AntLogisticsService::class)->pushDailyOrders($this->day, 'morning');
+
+        Carbon::setTestNow('2026-11-13 13:56:00');
+        DB::table('orders')->where('id', $o)->update(['schedule_type' => 'every_day_evening', 'delivery_time' => '18:00-22:00']);
+        $order = \App\Models\Order::find($o);
+        app(LatePushWatch::class)->orderMoved($order);
+        app(LatePushWatch::class)->orderMoved($order);   // повтор того самого стану мовчить
+
+        $texts = $this->telegramTexts();
+        $this->assertCount(1, $texts);
+        $this->assertStringContainsString('ТЕСТ від ХП переїзд', $texts[0]);
+        $this->assertStringContainsString('раціон сб 14.11: у відправленому маршруті сб 14.11, ранок → тепер пт 13.11, вечір', $texts[0]);
+        $this->assertStringContainsString('точки там немає', $texts[0]);
+
+        // Після повторної відправки обох змін розбіжності немає.
+        Cache::flush();
+        app(AntLogisticsService::class)->pushDailyOrders('2026-11-13', 'evening');
+        app(AntLogisticsService::class)->pushDailyOrders($this->day, 'morning');
+        app(LatePushWatch::class)->orderMoved($order);
+        $this->assertCount(1, $this->telegramTexts());
+        $this->assertSame([$d->id], collect(AntPush::whereDate('delivery_date', '2026-11-13')->first()->points)->where('order_id', $o)->pluck('day_id')->values()->all());
+    }
+
+    public function test_schedule_change_without_pushed_shifts_is_silent(): void
+    {
+        $o = $this->order('ТЕСТ від ХП 1');
+        $this->day($o, '2026-11-17');
+        DB::table('orders')->where('id', $o)->update(['schedule_type' => 'every_day_evening']);
+
+        app(LatePushWatch::class)->orderMoved(\App\Models\Order::find($o));
+
+        $this->assertSame([], $this->telegramTexts());
+    }
+
     public function test_without_the_table_nothing_breaks(): void
     {
         Schema::drop('ant_pushes');

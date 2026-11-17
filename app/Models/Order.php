@@ -298,6 +298,14 @@ class Order extends Model
         static::updated(function ($o) {
             self::syncClient($o);
 
+            // Графік чи час доставки змінили після відправки маршруту в ANT:
+            // точка лишається в старій зміні, у новій її немає.
+            if ($o->wasChanged(['schedule_type', 'delivery_time'])) {
+                \Illuminate\Support\Facades\DB::afterCommit(
+                    fn () => app(\App\Services\Logistics\LatePushWatch::class)->orderMoved($o)
+                );
+            }
+
             // Пауза з майбутніми днями доставки: кухня й логістика його більше не бачать
             // (feedingOn бере лише new/active), а дні лишились — так клієнт без раціону.
             // Сигнал власнику й менеджеру одразу, хто б не поставив паузу.
