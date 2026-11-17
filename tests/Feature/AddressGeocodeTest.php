@@ -90,4 +90,40 @@ class AddressGeocodeTest extends TestCase
 
         Http::assertNothingSent();
     }
+
+    public function test_address_left_without_coordinates_is_reported_to_managers_once(): void
+    {
+        \Illuminate\Support\Facades\Cache::flush();
+        config(['services.telegram.bot_token' => 'test', 'services.telegram.manager_chat_id' => '-100']);
+        Http::fake([
+            'nominatim.openstreetmap.org/*' => Http::response([], 200),
+            '*'                             => Http::response(['ok' => true]),
+        ]);
+
+        $a = ClientAddress::create(['client_id' => 1, 'label' => 'Адреса', 'address' => 'Київ, Ніженська 7']);
+        $a->update(['delivery_comment' => 'з рук в руки']);   // текст той самий — мовчимо
+
+        $texts = collect(Http::recorded())
+            ->filter(fn ($pair) => str_contains($pair[0]->url(), 'api.telegram.org'))
+            ->map(fn ($pair) => (string) ($pair[0]->data()['text'] ?? ''))->values();
+
+        $this->assertNull($a->fresh()->lat);
+        $this->assertCount(1, $texts);
+        $this->assertStringContainsString('Адреса без координат', $texts[0]);
+        $this->assertStringContainsString('Київ, Ніженська 7', $texts[0]);
+    }
+
+    public function test_found_address_is_not_reported(): void
+    {
+        \Illuminate\Support\Facades\Cache::flush();
+        config(['services.telegram.bot_token' => 'test', 'services.telegram.manager_chat_id' => '-100']);
+        Http::fake([
+            'nominatim.openstreetmap.org/*' => Http::response([['lat' => '50.44', 'lon' => '30.43']], 200),
+            '*'                             => Http::response(['ok' => true]),
+        ]);
+
+        ClientAddress::create(['client_id' => 1, 'label' => 'Адреса', 'address' => 'Київ, вул. Ніжинська, 7']);
+
+        Http::assertNotSent(fn ($r) => str_contains($r->url(), 'api.telegram.org'));
+    }
 }

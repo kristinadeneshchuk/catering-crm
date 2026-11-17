@@ -32,7 +32,12 @@ class LatePushWatchTest extends TestCase
         $this->day = '2026-11-14';
 
         $this->buildSmsSchema();
-        Schema::table('client_addresses', fn ($t) => $t->string('ant_comp_id')->nullable());
+        Schema::table('client_addresses', function ($t) {
+            $t->string('ant_comp_id')->nullable();
+            $t->string('address')->nullable();
+            $t->decimal('lat', 10, 7)->nullable();
+            $t->decimal('lng', 10, 7)->nullable();
+        });
         Schema::table('order_days', function ($t) {
             $t->string('address')->nullable();
             $t->string('discount_type')->nullable();
@@ -236,6 +241,31 @@ class LatePushWatchTest extends TestCase
         $this->assertCount(1, $texts);
         $this->assertStringContainsString('доставку змінено на вечірню', $texts[0]);
         $this->assertStringContainsString('раціон сб 14.11 — сб 14.11, ранок', $texts[0]);
+    }
+
+    public function test_push_sends_clients_first_and_page_lists_addresses_without_coordinates(): void
+    {
+        $o = $this->order('ТЕСТ від ХП без координат');
+        $this->day($o, $this->day);
+        $withCoords = $this->order('ТЕСТ від ХП з координатами');
+        $this->day($withCoords, $this->day);
+        DB::table('client_addresses')->where('client_id', DB::table('orders')->where('id', $withCoords)->value('client_id'))
+            ->update(['lat' => 50.44, 'lng' => 30.43, 'address' => 'Київ, вул. Ніжинська, 7']);
+        DB::table('client_addresses')->where('client_id', DB::table('orders')->where('id', $o)->value('client_id'))
+            ->update(['address' => 'Київ, Ніженська 7']);
+
+        $rows = app(AntLogisticsService::class)->clientsWithoutCoords($this->day, 'morning');
+        $this->assertSame(['ТЕСТ від ХП без координат'], array_column($rows, 'name'));
+        $this->assertSame('Київ, Ніженська 7', $rows[0]['address']);
+
+        app(AntLogisticsService::class)->pushDailyOrders($this->day, 'morning');
+
+        $urls = collect(Http::recorded())->map(fn ($pair) => $pair[0]->url())->values();
+        $dir  = $urls->search(fn ($u) => str_contains($u, '/Directory/Comps/edit'));
+        $req  = $urls->search(fn ($u) => str_contains($u, '/Request/Comps/edit'));
+        $this->assertNotFalse($dir, 'довідник клієнтів має піти в ANT разом із відправкою');
+        $this->assertNotFalse($req);
+        $this->assertLessThan($req, $dir);
     }
 
     public function test_without_the_table_nothing_breaks(): void

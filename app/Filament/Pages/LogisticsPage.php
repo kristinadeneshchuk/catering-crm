@@ -44,6 +44,9 @@ class LogisticsPage extends Page implements HasForms
     /** Замовлення, додані чи зняті після відправки зміни в ANT (по змінах). */
     public array $lateChanges = [];
 
+    /** Клієнти з доставкою на обрану дату без координат адреси. */
+    public array $noCoords = [];
+
     // Підсумки маршрутів
     public int   $totalRoutes   = 0;
     public int   $totalStops    = 0;
@@ -140,6 +143,7 @@ class LogisticsPage extends Page implements HasForms
         $this->totalAntCost = round((float) $routeCollection->sum('ant_cost_route'), 2);
 
         $this->loadLateChanges();
+        $this->loadNoCoords();
         $this->loadSmsState();
     }
 
@@ -155,6 +159,23 @@ class LogisticsPage extends Page implements HasForms
 
         try {
             $this->lateChanges = app(\App\Services\Logistics\LatePushWatch::class)->diff($date);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /** Адреси без координат на обрану дату: у маршрут такі точки не стають. */
+    public function loadNoCoords(): void
+    {
+        $this->noCoords = [];
+        $date = $this->data['date'] ?? now()->format('Y-m-d');
+
+        if (\Carbon\Carbon::parse($date)->lt(today())) {
+            return;
+        }
+
+        try {
+            $this->noCoords = app(AntLogisticsService::class)->clientsWithoutCoords($date, $this->data['shift'] ?? 'all');
         } catch (\Throwable $e) {
             report($e);
         }
@@ -597,7 +618,7 @@ class LogisticsPage extends Page implements HasForms
                 ->label('Синхронізувати клієнтів')
                 ->requiresConfirmation()
                 ->modalHeading('Синхронізація клієнтів в ANT Logistics')
-                ->modalDescription('Всі активні клієнти будуть відправлені в ANT як Торгові точки. Продовжити?')
+                ->modalDescription('Всі активні клієнти будуть відправлені в ANT як Торгові точки. «Відправити замовлення» робить це й сама — окремо натискати не обовʼязково. Продовжити?')
                 ->action(function () {
                     try {
                         app(AntLogisticsService::class)->syncAllClients();
@@ -629,6 +650,7 @@ class LogisticsPage extends Page implements HasForms
                     try {
                         $result = app(AntLogisticsService::class)->pushDailyOrders($data['date'], $data['shift']);
                         $this->loadLateChanges();
+                        $this->loadNoCoords();
 
                         $pushed  = (int) ($result['pushed'] ?? 0);
                         $total   = (int) ($result['total']  ?? 0);

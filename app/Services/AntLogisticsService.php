@@ -183,6 +183,36 @@ class AntLogisticsService
         return $synced;
     }
 
+    /**
+     * Клієнти з доставкою на цю дату, чия адреса без координат (або адреси немає):
+     * у маршрут така точка не стає. Для блоку на «Логістиці».
+     *
+     * @return array<int, array{client_id:int, name:string, address:string}>
+     */
+    public function clientsWithoutCoords(string $deliveryDate, string $shift = 'all'): array
+    {
+        $days = $this->collectOrderDaysForDelivery($deliveryDate, $shift)['days'];
+        $days->loadMissing('order.client.addresses');
+
+        $out = [];
+        foreach ($days as $day) {
+            $client = $day->order?->client;
+            if (! $client || isset($out[$client->id]) || $day->order?->separate_courier) {
+                continue;
+            }
+            $addr = $client->addresses->firstWhere('is_default', true)
+                ?? ($client->addresses->count() === 1 ? $client->addresses->first() : null);
+
+            if ($client->addresses->isEmpty()) {
+                $out[$client->id] = ['client_id' => (int) $client->id, 'name' => (string) $client->name, 'address' => 'адреси немає'];
+            } elseif ($addr && (empty($addr->lat) || empty($addr->lng))) {
+                $out[$client->id] = ['client_id' => (int) $client->id, 'name' => (string) $client->name, 'address' => (string) $addr->address];
+            }
+        }
+
+        return array_values($out);
+    }
+
     // -------------------------------------------------------------------------
     // Ensure "Раціон" product exists in ANT, return its Product_Id
     // -------------------------------------------------------------------------
@@ -211,6 +241,15 @@ class AntLogisticsService
     public function pushDailyOrders(string $date, string $shift = 'all'): array
     {
         $this->ensureAuthenticated();
+
+        // Спершу довідник клієнтів: нового клієнта ANT ще не знає, і його точка
+        // відпадає з заявки («Comp_Id is absent in the directory»). Раніше це була
+        // окрема кнопка, яку легко забути. Збій тут не зупиняє відправку замовлень.
+        try {
+            $this->syncAllClients();
+        } catch (\Throwable $e) {
+            Log::warning('[AntLogistics] Client sync before push failed', ['error' => $e->getMessage()]);
+        }
 
         // Дата доставки (фізично везуть)
         $deliveryDate = Carbon::parse($date)->format('Y-m-d');

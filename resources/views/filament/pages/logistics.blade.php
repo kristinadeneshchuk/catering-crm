@@ -43,6 +43,26 @@
         </div>
     @endforeach
 
+    {{-- АДРЕСИ БЕЗ КООРДИНАТ: така точка в маршрут не стає --}}
+    @if($noCoords)
+        <div style="background:#2a2112;border:1px solid #b45309;border-radius:16px;padding:16px 20px;">
+            <div style="font-size:15px;font-weight:800;color:#fcd34d;">
+                📍 Адреси без координат на цю дату: {{ count($noCoords) }} — у маршрут ці точки не стануть
+            </div>
+            <div style="margin-top:10px;font-size:13px;color:#fde68a;line-height:1.7;">
+                @foreach($noCoords as $row)
+                    <div>
+                        <a href="{{ \App\Filament\Resources\ClientResource::getUrl('edit', ['record' => $row['client_id']]) }}" target="_blank" style="color:#fff;font-weight:700;text-decoration:underline;">{{ $row['name'] }}</a>
+                        — {{ $row['address'] }}
+                    </div>
+                @endforeach
+            </div>
+            <div style="margin-top:8px;font-size:12px;color:#fcd34d;opacity:.8;">
+                У картці клієнта виберіть адресу з пошуку або поставте точку на карті, потім відправте зміну ще раз.
+            </div>
+        </div>
+    @endif
+
     {{-- ПАНЕЛЬ КЕРУВАННЯ --}}
     <div style="background: linear-gradient(135deg, #18181b 0%, #1c1c1f 100%); border: 1px solid #3f3f46; border-radius: 16px; padding: 20px 24px;">
         <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
