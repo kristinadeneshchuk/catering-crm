@@ -284,6 +284,7 @@ class Order extends Model
 
         static::created(function ($o) {
             self::syncClient($o);
+            self::ensureClientMealTypes($o);
             app(\App\Services\Orders\ReplacementInheritance::class)->inherit($o);
             Transaction::create([
                 'type'     => 'income',
@@ -381,6 +382,32 @@ class Order extends Model
      * та оновлює FIFO-статуси оплати замовлень.
      * Викликається після будь-якої зміни замовлення замість incrementing/decrementing.
      */
+    /**
+     * Клієнт без жодного прийому їжі (створений через API, бота чи скрипт — у формі
+     * адмінки прийоми ставляться самі) не потрапляє ні у виробничий, ні у фасувальний
+     * лист, а на наліпці в нього порожнє меню. Ставимо набір під калораж замовлення.
+     * Уже відмічені прийоми не чіпаємо: «без перекусів» — свідомий вибір.
+     */
+    public static function ensureClientMealTypes(self $order): void
+    {
+        try {
+            $client = $order->client;
+            if (! $client || $client->mealTypes()->exists()) {
+                return;
+            }
+
+            $ids = MealPlan::getAllowedMealTypeIds((int) $order->calories)
+                ?: MealType::pluck('id')->all();
+
+            if ($ids) {
+                $client->mealTypes()->sync($ids);
+                $client->unsetRelation('mealTypes');
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
     private static function syncClient($order)
     {
         if ($order->client) {
