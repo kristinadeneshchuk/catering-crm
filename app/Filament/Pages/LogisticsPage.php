@@ -747,8 +747,8 @@ class LogisticsPage extends Page implements HasForms
                             ->body($points === null
                                 ? 'Точки для наліпок оновити не вдалося — натисніть «Курʼєри ↓».'
                                 : "Курʼєрів на наліпках оновлено, точок: {$points}")
-                            ->color($points === null ? 'warning' : 'success')
-                            ->success()->send();
+                            ->status($points === null ? 'warning' : 'success')
+                            ->send();
                     } catch (\Throwable $e) {
                         Notification::make()->title('Помилка: ' . $e->getMessage())->danger()->send();
                     }
