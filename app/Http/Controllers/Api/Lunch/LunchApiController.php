@@ -321,7 +321,15 @@ class LunchApiController extends Controller
             return $sets;
         });
 
-        app(\App\Services\Logistics\LatePushWatch::class)->lunchReceived($date, $before);
+        // Досилання в ANT — після відповіді: Lunch Hub не має чекати на чужий сервіс.
+        $done = false;
+        app()->terminating(function () use ($date, $before, &$done) {
+            if ($done) {
+                return; // callback живе довше за запит там, де застосунок не перестворюється
+            }
+            $done = true;
+            app(\App\Services\Logistics\LatePushWatch::class)->lunchReceived($date, $before);
+        });
 
         Log::info('[Lunch] Orders received', [
             'date'      => $date,

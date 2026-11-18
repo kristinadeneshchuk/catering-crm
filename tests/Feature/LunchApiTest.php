@@ -427,34 +427,49 @@ class LunchApiTest extends TestCase
             ->map(fn ($pair) => (string) ($pair[0]->data()['text'] ?? ''))->values()->all();
     }
 
-    public function test_lunches_arriving_after_the_route_was_sent_alert_the_managers(): void
+    public function test_lunches_arriving_after_the_route_was_sent_are_resent_by_themselves(): void
     {
         \Carbon\Carbon::setTestNow('2026-11-12 11:15:00');
         $this->fakeTelegramAndPush('2026-11-13', 'morning');
+        $ant = \Mockery::mock(\App\Services\AntLogisticsService::class);
+        $ant->shouldReceive('pushDailyOrders')->once()->with('2026-11-13', 'morning')->andReturn(['pushed' => 1]);
+        $this->app->instance(\App\Services\AntLogisticsService::class, $ant);
 
         $this->sendOrders([$this->company(1, 7)])->assertOk();
-
-        $texts = $this->telegramTexts();
-        $this->assertCount(1, $texts);
-        $this->assertStringContainsString('Обіди на пт 13.11 прийшли після відправки маршруту', $texts[0]);
-        $this->assertStringContainsString('Компанія 1: 7 компл.', $texts[0]);
-
-        // Той самий знімок ще раз — мовчимо.
+        // Той самий знімок ще раз — нічого не змінилось, не досилаємо.
         $this->sendOrders([$this->company(1, 7)])->assertOk();
-        $this->assertCount(1, $this->telegramTexts());
 
+        $this->assertSame([], $this->telegramTexts());
         \Carbon\Carbon::setTestNow();
     }
 
-    public function test_lunches_arriving_before_the_route_is_sent_stay_quiet(): void
+    public function test_lunches_arriving_before_the_route_is_sent_trigger_nothing(): void
     {
         \Carbon\Carbon::setTestNow('2026-11-12 09:00:00');
         // Відправлено лише вечірню зміну — обід 12:00 їде ранковою.
         $this->fakeTelegramAndPush('2026-11-13', 'evening');
+        $ant = \Mockery::mock(\App\Services\AntLogisticsService::class);
+        $ant->shouldNotReceive('pushDailyOrders');
+        $this->app->instance(\App\Services\AntLogisticsService::class, $ant);
 
         $this->sendOrders([$this->company(1, 7)])->assertOk();
 
         $this->assertSame([], $this->telegramTexts());
+        \Carbon\Carbon::setTestNow();
+    }
+
+    public function test_a_failed_resend_tells_the_managers(): void
+    {
+        \Carbon\Carbon::setTestNow('2026-11-12 11:15:00');
+        $this->fakeTelegramAndPush('2026-11-13', 'morning');
+        $ant = \Mockery::mock(\App\Services\AntLogisticsService::class);
+        $ant->shouldReceive('pushDailyOrders')->andThrow(new \RuntimeException('ANT down'));
+        $this->app->instance(\App\Services\AntLogisticsService::class, $ant);
+
+        $this->sendOrders([$this->company(1, 7)])->assertOk();
+
+        $this->assertCount(1, $this->telegramTexts());
+        $this->assertStringContainsString('не вдалося дослати', $this->telegramTexts()[0]);
         \Carbon\Carbon::setTestNow();
     }
 
