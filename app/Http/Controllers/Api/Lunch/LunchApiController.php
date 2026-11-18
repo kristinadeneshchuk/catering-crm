@@ -266,6 +266,11 @@ class LunchApiController extends Controller
         $date = \Carbon\Carbon::parse($data['date'])->format('Y-m-d');
         $now  = now();
 
+        // Стан дня до нового знімка — щоб помітити обіди, які прийшли після відправки маршруту.
+        $before = LunchOrder::whereDate('date', $date)->get()
+            ->mapWithKeys(fn (LunchOrder $o) => [(string) $o->company_id => ((int) $o->sets).'|'.$o->delivery_window])
+            ->all();
+
         $sets = DB::transaction(function () use ($data, $date, $now) {
             // Рядки чистимо явно, не покладаючись на каскад зовнішнього ключа.
             $old = LunchOrder::whereDate('date', $date)->pluck('id');
@@ -315,6 +320,8 @@ class LunchApiController extends Controller
 
             return $sets;
         });
+
+        app(\App\Services\Logistics\LatePushWatch::class)->lunchReceived($date, $before);
 
         Log::info('[Lunch] Orders received', [
             'date'      => $date,

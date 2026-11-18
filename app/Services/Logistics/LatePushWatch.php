@@ -316,6 +316,74 @@ class LatePushWatch
         }
     }
 
+    /**
+     * Lunch Hub прислав обіди на день, а зміну, якою їх везуть, уже відправили в ANT.
+     * Точка обідів у заявку сама не потрапить — кажемо менеджерам перевідправити.
+     * Мовчимо, якщо після відправки нічого не змінилось. Ніколи не кидає винятків.
+     *
+     * @param  array<string, string>  $before  компанія => «комплекти|вікно» до нового знімка
+     */
+    public function lunchReceived(string $date, array $before): void
+    {
+        try {
+            if (Carbon::parse($date)->lt(now()->startOfDay())) {
+                return;
+            }
+
+            $after = \App\Models\LunchOrder::whereDate('date', $date)->get();
+            $lines = [];
+            $seen  = [];
+
+            foreach ($after as $o) {
+                $key        = (string) $o->company_id;
+                $seen[$key] = true;
+                $sets       = (int) $o->sets;
+                $state      = $sets.'|'.$o->delivery_window;
+                if (($before[$key] ?? '0|') === $state || ($sets === 0 && ! isset($before[$key]))) {
+                    continue;
+                }
+
+                $window = \App\Services\Kitchen\LunchDelivery::window($o->delivery_window);
+                $shift  = \App\Services\Kitchen\LunchDelivery::shiftOf($window);
+                $push   = $this->pushFor($date, $shift);
+                if (! $push?->pushed_at) {
+                    continue;
+                }
+
+                $was     = isset($before[$key]) ? (int) explode('|', $before[$key])[0] : 0;
+                $lines[] = '• '.$o->company_name.': '.($was > 0 && $was !== $sets ? "було {$was}, стало {$sets}" : "{$sets}").' компл., '
+                    .$window[0].'–'.$window[1].' — '.($shift === 'evening' ? 'вечірню' : 'ранкову').' зміну відправлено о '.$push->pushed_at->format('H:i d.m');
+            }
+
+            foreach ($before as $key => $state) {
+                if (isset($seen[$key]) || (int) explode('|', $state)[0] === 0) {
+                    continue;
+                }
+                $window = \App\Services\Kitchen\LunchDelivery::window(explode('|', $state, 2)[1] ?? null);
+                $shift  = \App\Services\Kitchen\LunchDelivery::shiftOf($window);
+                if ($this->pushFor($date, $shift)?->pushed_at) {
+                    $lines[] = '• обіди компанії скасовано ('.((int) explode('|', $state)[0]).' компл.), а точка лишилась у відправленому маршруті';
+                }
+            }
+
+            if (! $lines) {
+                return;
+            }
+
+            if (! Cache::add('late-lunch:'.$date.':'.md5(implode('|', $lines)), 1, now()->addHours(18))) {
+                return;
+            }
+
+            app(TelegramService::class)->sendToManager(implode("\n", [
+                '🍱 Обіди на '.$this->dayLabel(Carbon::parse($date)).' прийшли після відправки маршруту',
+                ...$lines,
+                'У маршруті цієї точки немає. Логістика → «Замовлення →» ще раз на цю зміну, потім перебудувати маршрути.',
+            ]));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
     private function dayLabel(Carbon $d): string
     {
         $map = ['Mon' => 'пн', 'Tue' => 'вт', 'Wed' => 'ср', 'Thu' => 'чт', 'Fri' => 'пт', 'Sat' => 'сб', 'Sun' => 'нд'];

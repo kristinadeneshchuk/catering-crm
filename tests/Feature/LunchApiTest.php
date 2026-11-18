@@ -410,6 +410,54 @@ class LunchApiTest extends TestCase
         $this->assertSame(2, \App\Models\LunchOrderLine::count());
     }
 
+    private function fakeTelegramAndPush(string $date, string $shift): void
+    {
+        (require database_path('migrations/2026_11_14_100000_create_ant_pushes.php'))->up();
+        \App\Support\SchemaReady::flush();
+        \Illuminate\Support\Facades\Cache::flush();
+        config(['services.telegram.bot_token' => 'test', 'services.telegram.manager_chat_id' => '-100']);
+        \Illuminate\Support\Facades\Http::fake(['*' => \Illuminate\Support\Facades\Http::response(['ok' => true])]);
+        \App\Models\AntPush::create(['delivery_date' => $date, 'shift' => $shift, 'pushed_at' => now(), 'points' => []]);
+    }
+
+    private function telegramTexts(): array
+    {
+        return \Illuminate\Support\Facades\Http::recorded()
+            ->filter(fn ($pair) => str_contains($pair[0]->url(), 'api.telegram.org'))
+            ->map(fn ($pair) => (string) ($pair[0]->data()['text'] ?? ''))->values()->all();
+    }
+
+    public function test_lunches_arriving_after_the_route_was_sent_alert_the_managers(): void
+    {
+        \Carbon\Carbon::setTestNow('2026-11-12 11:15:00');
+        $this->fakeTelegramAndPush('2026-11-13', 'morning');
+
+        $this->sendOrders([$this->company(1, 7)])->assertOk();
+
+        $texts = $this->telegramTexts();
+        $this->assertCount(1, $texts);
+        $this->assertStringContainsString('Обіди на пт 13.11 прийшли після відправки маршруту', $texts[0]);
+        $this->assertStringContainsString('Компанія 1: 7 компл.', $texts[0]);
+
+        // Той самий знімок ще раз — мовчимо.
+        $this->sendOrders([$this->company(1, 7)])->assertOk();
+        $this->assertCount(1, $this->telegramTexts());
+
+        \Carbon\Carbon::setTestNow();
+    }
+
+    public function test_lunches_arriving_before_the_route_is_sent_stay_quiet(): void
+    {
+        \Carbon\Carbon::setTestNow('2026-11-12 09:00:00');
+        // Відправлено лише вечірню зміну — обід 12:00 їде ранковою.
+        $this->fakeTelegramAndPush('2026-11-13', 'evening');
+
+        $this->sendOrders([$this->company(1, 7)])->assertOk();
+
+        $this->assertSame([], $this->telegramTexts());
+        \Carbon\Carbon::setTestNow();
+    }
+
     public function test_resending_one_day_leaves_other_days_alone(): void
     {
         $this->sendOrders([$this->company(1, 12)], '2026-11-13')->assertOk();
