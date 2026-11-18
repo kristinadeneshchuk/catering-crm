@@ -727,10 +727,28 @@ class LogisticsPage extends Page implements HasForms
                     $date  = $this->data['date']  ?? now()->format('Y-m-d');
                     $shift = $this->data['shift'] ?? 'all';
                     try {
-                        $count = app(AntLogisticsService::class)->pullRouteDetails($date, $shift);
+                        $ant   = app(AntLogisticsService::class);
+                        $count = $ant->pullRouteDetails($date, $shift);
+
+                        // Заодно розкладаємо точки по днях: без цього на наліпках немає
+                        // ні курʼєра, ні номера маршруту. Раніше це була лише окрема
+                        // кнопка «Курʼєри ↓», і маршрути вантажили без неї.
+                        $points = null;
+                        try {
+                            $points = $ant->pullRouteAssignments($date, $shift);
+                        } catch (\Throwable $e) {
+                            report($e);
+                        }
+
                         $this->loadRoutes();
                         $this->loadMileage();
-                        Notification::make()->title("Завантажено маршрутів: {$count}")->success()->send();
+                        Notification::make()
+                            ->title("Завантажено маршрутів: {$count}")
+                            ->body($points === null
+                                ? 'Точки для наліпок оновити не вдалося — натисніть «Курʼєри ↓».'
+                                : "Курʼєрів на наліпках оновлено, точок: {$points}")
+                            ->color($points === null ? 'warning' : 'success')
+                            ->success()->send();
                     } catch (\Throwable $e) {
                         Notification::make()->title('Помилка: ' . $e->getMessage())->danger()->send();
                     }
