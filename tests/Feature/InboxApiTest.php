@@ -342,6 +342,47 @@ class InboxApiTest extends TestCase
         $this->assertStringContainsString('Передача: Залишити у консьєржа', $address->delivery_comment);
     }
 
+    public function test_it_creates_and_finds_a_client_from_instagram(): void
+    {
+        $ids = $this->seedCatalog();
+
+        $payload = [
+            'project_id'       => $ids['project_id'],
+            'full_name'        => 'Олена Коваль',
+            'phone'            => '0671112233',
+            'channel_type'     => 'instagram',
+            'external_user_id' => '9876543210123456',
+            'channel_username' => '@olena.fit',
+        ];
+        $clientId = $this->postJson('/api/inbox/v1/clients', $payload, $this->authHeaders())
+            ->assertStatus(201)
+            ->assertJsonPath('client.telegram_user_id', null)
+            ->assertJsonPath('client.channels.0.channel_type', 'instagram')
+            ->json('client.id');
+
+        $this->assertDatabaseHas('clients', [
+            'id' => $clientId, 'instagram_url' => 'https://instagram.com/olena.fit', 'sales_source' => 'instagram_inbox',
+        ]);
+        $this->assertDatabaseHas('client_channels', [
+            'client_id' => $clientId, 'channel' => 'instagram', 'external_id' => '9876543210123456', 'username' => 'olena.fit',
+        ]);
+
+        $this->getJson('/api/inbox/v1/clients/by-channel/instagram/9876543210123456', $this->authHeaders())
+            ->assertOk()->assertJsonPath('client.id', $clientId);
+        // Instagram-id не плутається з телеграмним.
+        $this->getJson('/api/inbox/v1/clients/by-channel/telegram/9876543210123456', $this->authHeaders())
+            ->assertJsonPath('found', false);
+
+        // Той самий Instagram з іншим телефоном — це той самий клієнт, а не дубль.
+        $this->postJson('/api/inbox/v1/clients', ['phone' => '0509998877'] + $payload, $this->authHeaders())
+            ->assertJsonPath('client.id', $clientId);
+        $this->assertSame(1, DB::table('clients')->where('name', 'Олена Коваль')->count());
+
+        // Тип каналу без id співрозмовника — помилка запиту.
+        $this->postJson('/api/inbox/v1/clients', ['external_user_id' => null] + $payload, $this->authHeaders())
+            ->assertStatus(422);
+    }
+
     public function test_it_reuses_an_existing_client_instead_of_duplicating(): void
     {
         $existing = $this->makeClient(['phone' => '0955532677']);

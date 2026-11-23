@@ -138,6 +138,10 @@ class ClientController extends Controller
             'phone'                     => ['required', 'string', 'max:32'],
             'telegram_user_id'          => ['nullable', 'string', 'max:64'],
             'telegram_username'         => ['nullable', 'string', 'max:64'],
+            // Клієнт з іншого каналу Inbox (instagram, viber…): id співрозмовника в каналі та його нік.
+            'channel_type'              => ['nullable', 'string', 'max:32', 'required_with:external_user_id'],
+            'external_user_id'          => ['nullable', 'string', 'max:64', 'required_with:channel_type'],
+            'channel_username'          => ['nullable', 'string', 'max:64'],
             'allergies'                 => ['nullable', 'string'],
             'address'                   => ['nullable', 'array'],
             'address.address'           => ['nullable', 'string'],
@@ -155,20 +159,38 @@ class ClientController extends Controller
         if (! empty($data['telegram_user_id'])) {
             $client = $this->clientByChannel('telegram', $data['telegram_user_id']);
         }
+        $channelType = ! empty($data['channel_type']) ? mb_strtolower($data['channel_type']) : null;
+        if (! $client && $channelType) {
+            $client = $this->clientByChannel($channelType, $data['external_user_id']);
+        }
         $client ??= $this->clientByPhone($data['phone']);
+
+        // Нік в Instagram — це й посилання на профіль: менеджеру зручно відкрити з картки.
+        $instagramUrl = $channelType === 'instagram' && ! empty($data['channel_username'])
+            ? 'https://instagram.com/'.ltrim($data['channel_username'], '@')
+            : null;
 
         if ($client) {
             $client->fill(array_filter([
                 'telegram_username' => $data['telegram_username'] ?? null,
                 'allergies'         => $data['allergies'] ?? null,
+                'instagram_url'     => $client->instagram_url ? null : $instagramUrl,
             ]))->save();
         } else {
-            $client = Client::create([
+            $client = Client::create(array_filter([
                 'name'              => $data['full_name'],
                 'phone'             => $data['phone'],
                 'telegram_username' => $data['telegram_username'] ?? null,
                 'allergies'         => $data['allergies'] ?? null,
-                'sales_source'      => 'telegram_inbox',
+                'instagram_url'     => $instagramUrl,
+                'sales_source'      => $channelType && $channelType !== 'telegram' ? $channelType.'_inbox' : 'telegram_inbox',
+            ], fn ($value) => $value !== null));
+        }
+
+        if ($channelType) {
+            $this->linkChannel($client, $channelType, $data['external_user_id'], [
+                'username' => isset($data['channel_username']) ? ltrim($data['channel_username'], '@') : null,
+                'project'  => $project?->slug,
             ]);
         }
 
@@ -364,6 +386,13 @@ class ClientController extends Controller
                 'telegram_user_id'  => $client->channels()
                     ->where('channel', 'telegram')
                     ->value('external_id'),
+                // Усі канали клієнта: Inbox за ними бачить, що людина з Instagram — той самий клієнт, що в Telegram.
+                'channels'          => $client->channels()->get(['channel', 'external_id', 'username'])
+                    ->map(fn ($channel) => [
+                        'channel_type'     => $channel->channel,
+                        'external_user_id' => $channel->external_id,
+                        'username'         => $channel->username,
+                    ])->values(),
                 'allergies'         => $client->allergies,
                 'exclusions'        => $this->exclusions($client),
                 'target_kcal'       => $client->target_kcal ? (int) $client->target_kcal : null,
