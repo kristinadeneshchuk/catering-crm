@@ -56,6 +56,34 @@ class AddressGeocodeTest extends TestCase
         Http::assertSent(fn ($r) => str_contains($r->url(), 'nominatim') && str_contains(urldecode($r->url()), 'Оболонський'));
     }
 
+    public function test_typed_address_is_found_by_street_and_house_when_free_text_fails(): void
+    {
+        // Рядком Nominatim нічого не віддає, окремо вулицею й будинком — знаходить.
+        Http::fake(function ($request) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $q);
+
+            return Http::response(isset($q['street']) && $q['street'] === '26 вулиця Джона Маккейна' && $q['city'] === 'Київ'
+                ? [['lat' => '50.4182562', 'lon' => '30.5392310']]
+                : [], 200);
+        });
+
+        $this->assertSame(
+            [50.4182562, 30.539231],
+            app(\App\Services\Geo\AddressGeocoder::class)->geocode('м. Київ, вулиця Джона Маккейна, 26'),
+        );
+    }
+
+    public function test_street_and_house_are_parsed_from_typed_addresses(): void
+    {
+        $g = \App\Services\Geo\AddressGeocoder::class;
+
+        $this->assertSame(['вулиця Ніжинська', '7', null], $g::streetAndHouse('вул. Ніжинська буд. 7'));
+        $this->assertSame(['вулиця Зої Бутенко', '10к1', null], $g::streetAndHouse('м. Київ, вулиця Зої Бутенко, 10к1 (Голосіївський р-н)'));
+        $this->assertSame(['бульвар Лесі Українки', '30', null], $g::streetAndHouse('бульвар Лесі Українки 30'));
+        $this->assertSame(['вулиця Зелена', '6', 'Софіївська Борщагівка'], $g::streetAndHouse('Софіївська Борщагівка, вул. Зелена, 6'));
+        $this->assertNull($g::streetAndHouse('Київ'));
+    }
+
     public function test_chosen_coordinates_are_kept(): void
     {
         $this->fakeNominatim();
