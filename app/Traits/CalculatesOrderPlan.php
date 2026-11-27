@@ -82,13 +82,17 @@ trait CalculatesOrderPlan
                 $dish = $item->dish;
                 if (!$dish) continue;
 
-                $kcalPer100 = $this->dishKcalPer100g($dish);
+                // Страва-заміна з шаблону («Пакет: Спорт»): порцію рахуємо за її
+                // калорійністю, а не стандартної страви — інакше нежирна заміна
+                // у тій самій вазі зрізає клієнту калораж дня.
+                $served     = $this->servedDish($order, $dish);
+                $kcalPer100 = $this->dishKcalPer100g($served);
                 $weight     = ($kcalPer100 > 0)
                     ? (int)round(($kcalPerDish / $kcalPer100) * 100.0 * $weightMultiplier)
                     : 0;
 
-                $dt    = $dish->calculated_totals;
-                $outW  = (float)($dt['output_weight'] ?? ($dish->base_weight_g ?? 0));
+                $dt    = $served->calculated_totals;
+                $outW  = (float)($dt['output_weight'] ?? ($served->base_weight_g ?? 0));
                 $outW  = $outW > 0 ? $outW : 1.0;
 
                 $totals['kcal'] += $weight * $kcalPer100 / 100.0;
@@ -98,6 +102,7 @@ trait CalculatesOrderPlan
 
                 $itemsOut[] = [
                     'dish_id'      => (int)$dish->id,
+                    'served_dish_id' => (int)$served->id,
                     'meal_type_id' => (int)$mealTypeId,
                     'weight'       => $weight,
                     'meal'         => $mealType?->name ?? '-',
@@ -160,7 +165,7 @@ trait CalculatesOrderPlan
         $densities = []; // рядок на страву: [kcal, prot, fat, carb] на 1 грам
         $baseW     = []; // початковий грамаж (з kcal-only гілки)
         foreach ($itemsOut as $idx => $it) {
-            $dish = \App\Models\Dish::find($it['dish_id']);
+            $dish = \App\Models\Dish::find($it['served_dish_id'] ?? $it['dish_id']);
             if (!$dish) { continue; }
             $dt   = $dish->calculated_totals;
             $outW = (float)($dt['output_weight'] ?? ($dish->base_weight_g ?? 0));
@@ -485,6 +490,28 @@ trait CalculatesOrderPlan
         $total = array_sum($pct);
 
         return $total > 0 ? $own / $total : 0.0;
+    }
+
+    /**
+     * Що клієнт реально отримає замість страви меню, якщо на неї є заміна страви
+     * з шаблону клієнта. Ручні заміни менеджера лишаються у вазі стандартної
+     * страви, як і були. Заміна без техкарти (0 ккал) — теж стандартна вага.
+     */
+    private function servedDish(Order $order, $dish)
+    {
+        $rep = $order->replacements
+            ->where('dish_id', $dish->id)
+            ->whereNull('original_product_id')
+            ->where('force_approved', false)
+            ->first();
+
+        if (! $rep || ! str_starts_with((string) $rep->comment, \App\Services\Orders\BundleDishSwaps::MARK)) {
+            return $dish;
+        }
+
+        $replacement = $rep->replacementDish;
+
+        return ($replacement && $this->dishKcalPer100g($replacement) > 0) ? $replacement : $dish;
     }
 
     private function dishKcalPer100g($dish): float
