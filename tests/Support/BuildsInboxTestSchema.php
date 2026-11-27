@@ -63,6 +63,7 @@ trait BuildsInboxTestSchema
         Schema::create('tariffs', function (Blueprint $t) {
             $t->id();
             $t->unsignedBigInteger('default_menu_plan_id')->nullable();
+            $t->unsignedBigInteger('replacement_bundle_id')->nullable();
             $t->string('name');
             $t->unsignedSmallInteger('min_days')->nullable();
             $t->string('project')->nullable();
@@ -321,6 +322,9 @@ trait BuildsInboxTestSchema
         Schema::create('replacement_bundles', function (Blueprint $t) {
             $t->id();
             $t->string('name')->nullable();
+            $t->text('description')->nullable();
+            $t->boolean('show_on_menu')->default(false);
+            $t->unsignedSmallInteger('menu_sort')->default(0);
             $t->timestamps();
         });
 

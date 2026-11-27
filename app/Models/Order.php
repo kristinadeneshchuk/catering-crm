@@ -282,6 +282,13 @@ class Order extends Model
             $order->final_price = max(0, (float) $order->total_price - (float) $order->discount_amount - $dayDiscounts);
         });
 
+        // Змінили тариф — лінійка меню (заміни страв тарифу) міняється разом із ним.
+        static::updated(function ($o) {
+            if ($o->wasChanged('tariff_id')) {
+                app(\App\Services\Orders\BundleDishSwaps::class)->sync($o);
+            }
+        });
+
         static::created(function ($o) {
             self::syncClient($o);
             self::ensureClientMealTypes($o);

@@ -9,7 +9,7 @@ use App\Models\OrderReplacement;
 /**
  * Заміни страв із шаблонів клієнта («Спорт» тощо) → записи заміни в замовленні.
  *
- * Шаблон прив'язують до клієнта один раз; тут його правила «страва → страва»
+ * Шаблон прив'язують до клієнта або до тарифу (лінійка меню); тут його правила «страва → страва»
  * розкладаються в order_replacements живих циклових замовлень, а далі їх бачать
  * виробничий, фасувальний, наліпки й меню клієнта — тим самим шляхом, що й
  * заміну, поставлену менеджером уручну.
@@ -83,8 +83,14 @@ class BundleDishSwaps
     private function wantedFor(Order $order): array
     {
         $client = Client::with('replacementBundles.dishSwaps')->find($order->client_id);
+        // Лінійка тарифу головніша за шаблони клієнта: за неї заплачено саме в цьому замовленні.
+        $tariffBundle = $order->tariff_id
+            ? \App\Models\Tariff::withTrashed()->with('replacementBundle.dishSwaps')->find($order->tariff_id)?->replacementBundle
+            : null;
+        $bundles = collect([$tariffBundle])->filter()->concat($client?->replacementBundles ?? [])->unique('id');
+
         $wanted = [];
-        foreach ($client?->replacementBundles ?? [] as $bundle) {
+        foreach ($bundles as $bundle) {
             foreach ($bundle->dishSwaps as $swap) {
                 if (! $swap->replacement_dish_id || $swap->replacement_dish_id === $swap->original_dish_id) {
                     continue;

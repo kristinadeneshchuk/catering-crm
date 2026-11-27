@@ -154,6 +154,39 @@ class BundleDishSwapsTest extends TestCase
         $this->assertSame([], $this->swapsOf($order));
     }
 
+    public function test_a_tariff_with_a_menu_line_puts_its_swaps_into_the_order(): void
+    {
+        DB::table('tariffs')->where('id', $this->catalog['tariff_id'])->update(['replacement_bundle_id' => $this->bundleId]);
+
+        $order = $this->order('2026-11-30', '2026-12-04'); // шаблон до клієнта не прив'язано
+
+        $this->assertSame([461 => 779, 826 => 998], $this->swapsOf($order));
+    }
+
+    public function test_changing_the_tariff_switches_the_menu_line(): void
+    {
+        $order = $this->order('2026-11-30', '2026-12-04');
+        $sport = DB::table('tariffs')->insertGetId(['name' => 'Спорт', 'project' => 'afood', 'replacement_bundle_id' => $this->bundleId]);
+
+        $order->update(['tariff_id' => $sport]);
+        $this->assertSame([461 => 779, 826 => 998], $this->swapsOf($order));
+
+        $order->update(['tariff_id' => $this->catalog['tariff_id']]);
+        $this->assertSame([], $this->swapsOf($order));
+    }
+
+    public function test_the_tariff_line_wins_over_a_client_template(): void
+    {
+        $pro = DB::table('replacement_bundles')->insertGetId(['name' => 'Спорт Про']);
+        DB::table('replacement_bundle_items')->insert(['bundle_id' => $pro, 'original_dish_id' => 461, 'replacement_dish_id' => 655]);
+        DB::table('tariffs')->where('id', $this->catalog['tariff_id'])->update(['replacement_bundle_id' => $pro]);
+        $this->attach(); // на клієнті ще й «Спорт»
+
+        $order = $this->order('2026-11-30', '2026-12-04');
+
+        $this->assertSame([461 => 655, 826 => 998], $this->swapsOf($order));
+    }
+
     public function test_ingredient_rules_and_dish_swaps_do_not_mix(): void
     {
         DB::table('replacement_bundle_items')->insert([

@@ -68,6 +68,15 @@ class TariffResource extends Resource
                             ->preload()
                             ->columnSpan(2),
 
+                        Forms\Components\Select::make('replacement_bundle_id')
+                            ->label('Лінійка меню (шаблон замін страв)')
+                            ->helperText('Наприклад «Спорт». Замовлення з цим тарифом отримує заміни страв із шаблону саме; порожньо — звичайне циклове меню.')
+                            ->options(fn () => \App\Models\ReplacementBundle::has('dishSwaps')->orderBy('name')->pluck('name', 'id'))
+                            ->placeholder('— без замін —')
+                            ->searchable()
+                            ->preload()
+                            ->columnSpan(2),
+
                     ])->columns(2),
 
                 Forms\Components\Section::make('Ціни по діапазонах калорій')

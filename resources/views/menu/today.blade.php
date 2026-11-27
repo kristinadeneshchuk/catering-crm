@@ -83,10 +83,20 @@
         <p>Оберіть свій калораж — граммовка та КБЖУ підрахуються автоматично</p>
     </div>
 
+    @if ($lines->isNotEmpty())
+        <div class="tiers-label">Меню</div>
+        <div class="tiers">
+            <a class="tier {{ $line ? '' : 'active' }}" href="{{ route('menu.today', ['kcal' => $kcal]) }}">Стандарт</a>
+            @foreach ($lines as $l)
+                <a class="tier {{ $line && $line->id === $l->id ? 'active' : '' }}" href="{{ route('menu.today', ['line' => $l->id, 'kcal' => $kcal]) }}">{{ $l->name }}</a>
+            @endforeach
+        </div>
+    @endif
+
     <div class="tiers-label">Калораж</div>
     <div class="tiers">
         @foreach ($tiers as $t)
-            <a class="tier {{ $t === $kcal ? 'active' : '' }}" href="{{ route('menu.today', ['kcal' => $t]) }}">
+            <a class="tier {{ $t === $kcal ? 'active' : '' }}" href="{{ route('menu.today', array_filter(['line' => $line?->id, 'kcal' => $t])) }}">
                 {{ $t }}<small>ккал</small>
             </a>
         @endforeach

@@ -13,11 +13,12 @@ use App\Models\MealPlan;
  * замовлення/клієнта: показуємо повне меню дня, а не персональне.
  *  - цільові калорії задаються ззовні (стандартні калоражі 900…3400);
  *  - набір прийомів їжі під калораж береться з MealPlan (низькі калоражі — менше прийомів);
- *  - вага страви = (ккал на страву / ккал у 100 г) × 100 × денний множник.
+ *  - вага страви = (ккал на страву / ккал у 100 г) × 100 × денний множник;
+ *  - $swaps [dish_id => Dish] — лінійка меню: страви-заміни із шаблону замін.
  */
 class PublicMenuBuilder
 {
-    public static function build(DailyMenu $menu, int $targetKcal, ?string $date = null): array
+    public static function build(DailyMenu $menu, int $targetKcal, ?string $date = null, array $swaps = []): array
     {
         $empty = ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
         if ($targetKcal <= 0) {
@@ -73,6 +74,12 @@ class PublicMenuBuilder
                 $dish = $item->dish;
                 if (! $dish) continue;
 
+                // Лінійка («Спорт»): замість страви меню — страва-заміна, порція за її калорійністю.
+                $swap = $swaps[$dish->id] ?? null;
+                if ($swap && (float) ($swap->base_weight_g ?? 0) > 0 && (float) ($swap->total_kcal ?? 0) > 0) {
+                    $dish = $swap;
+                }
+
                 $baseW      = (float) ($dish->base_weight_g ?? 0);
                 $totalKcal  = (float) ($dish->total_kcal ?? 0);
                 $kcalPer100 = ($baseW > 0 && $totalKcal > 0) ? ($totalKcal / $baseW) * 100.0 : 0;
@@ -95,7 +102,8 @@ class PublicMenuBuilder
                 $resultItems[] = [
                     'meal'      => $mealType?->name ?? '-',
                     'meal_sort' => $mealType?->sort_order ?? 99,
-                    'dish_name' => $dish->name,
+                    'dish_name' => trim(preg_replace('/^Інд\s*·\s*/u', '', (string) $dish->name)),
+                    'swapped'   => $dish !== $item->dish,
                     'weight'    => $weight,
                     'kcal'      => $dishKcal,
                     'prot'      => $weight * $protPerG,

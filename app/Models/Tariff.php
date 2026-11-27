@@ -47,6 +47,12 @@ class Tariff extends Model
         return $this->hasMany(TariffPrice::class);
     }
 
+    /** Лінійка меню цього тарифу («Спорт»): її заміни страв стають у замовлення. */
+    public function replacementBundle(): BelongsTo
+    {
+        return $this->belongsTo(ReplacementBundle::class, 'replacement_bundle_id');
+    }
+
     public function projectData(): BelongsTo
     {
         return $this->belongsTo(Project::class, 'project', 'slug');

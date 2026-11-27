@@ -21,7 +21,7 @@ class EditReplacementBundle extends EditRecord
     protected function afterSave(): void
     {
         $swaps = app(\App\Services\Orders\BundleDishSwaps::class);
-        foreach ($this->record->clients as $client) {
+        foreach ($this->record->affectedClients() as $client) {
             $swaps->syncClient($client);
         }
     }

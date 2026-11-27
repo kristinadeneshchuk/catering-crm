@@ -51,6 +51,15 @@ class ReplacementBundleResource extends Resource
                             ->placeholder('Коли застосовувати цей шаблон...')
                             ->rows(2),
 
+                        Forms\Components\Toggle::make('show_on_menu')
+                            ->label('Показувати лінійкою на «Меню на сьогодні»')
+                            ->helperText('Клієнт бачить на публічній сторінці меню окрему вкладку з назвою шаблону — цикл уже із замінами страв.'),
+
+                        TextInput::make('menu_sort')
+                            ->label('Порядок лінійки')
+                            ->numeric()
+                            ->default(0),
+
                         Repeater::make('items')
                             ->relationship()
                             ->label('Правила замін')

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DailyMenu;
 use App\Models\MenuPlan;
+use App\Models\ReplacementBundle;
 use App\Support\PublicMenuBuilder;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -14,6 +15,7 @@ use Illuminate\Http\Request;
  *
  * Показує меню на 3 дні (сьогодні / завтра / післязавтра) з граммовкою та КБЖУ
  * під обраний калораж. Калораж перемикається (900…3400), дефолт 1800.
+ * Лінійка (?line=) — той самий цикл із замінами страв шаблону («Спорт», «Спорт Про»).
  */
 class PublicMenuController extends Controller
 {
@@ -28,6 +30,12 @@ class PublicMenuController extends Controller
         if (! in_array($kcal, self::TIERS, true)) {
             $kcal = self::DEFAULT_TIER;
         }
+
+        // Лінійки: звичайний цикл + шаблони замін страв, позначені «показувати на меню».
+        $lines = ReplacementBundle::where('show_on_menu', true)->has('dishSwaps')
+            ->orderBy('menu_sort')->orderBy('id')->get(['id', 'name']);
+        $line  = $lines->firstWhere('id', (int) $request->integer('line'));
+        $swaps = $line ? $line->dishSwapMap() : [];
 
         $plan = MenuPlan::default();
 
@@ -46,7 +54,7 @@ class PublicMenuController extends Controller
                     ->first();
 
                 $built = $menu
-                    ? PublicMenuBuilder::build($menu, $kcal, $ymd)
+                    ? PublicMenuBuilder::build($menu, $kcal, $ymd, $swaps)
                     : ['items' => [], 'totals' => ['kcal' => 0, 'prot' => 0, 'fat' => 0, 'carb' => 0]];
 
                 $days[] = [
@@ -62,6 +70,8 @@ class PublicMenuController extends Controller
             'days'  => $days,
             'kcal'  => $kcal,
             'tiers' => self::TIERS,
+            'lines' => $lines,
+            'line'  => $line,
         ]);
     }
 
