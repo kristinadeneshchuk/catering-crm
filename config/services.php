@@ -159,6 +159,8 @@ return [
         // ці люди (через кому; порожньо — власники). Непрофільні оплати бот
         // питає в особистих лише власників (accounting_owner_ids; порожньо — усіх).
         'accounting_chat_id'   => env('TELEGRAM_ACCOUNTING_CHAT_ID'),
+        // Група «Накладні»: накладні вносяться одразу, без кнопки «➕ Додати».
+        'invoices_chat_id'     => env('TELEGRAM_INVOICES_CHAT_ID'),
         'accounting_approvers' => env('TELEGRAM_ACCOUNTING_APPROVER_IDS', ''),
         'accounting_owner_ids' => env('TELEGRAM_ACCOUNTING_OWNER_IDS', ''),
 

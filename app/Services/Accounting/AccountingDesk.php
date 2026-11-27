@@ -57,9 +57,20 @@ class AccountingDesk
         return (string) config('services.telegram.accounting_chat_id');
     }
 
+    /** Група «Накладні»: та сама обробка, що й «Бухгалтерія», але накладні — без кнопки. */
+    public static function invoicesChatId(): string
+    {
+        return (string) config('services.telegram.invoices_chat_id');
+    }
+
+    public static function isInvoicesChat(string $chatId): bool
+    {
+        return self::invoicesChatId() !== '' && $chatId === self::invoicesChatId();
+    }
+
     public static function isAccountingChat(string $chatId): bool
     {
-        return self::chatId() !== '' && $chatId === self::chatId();
+        return (self::chatId() !== '' && $chatId === self::chatId()) || self::isInvoicesChat($chatId);
     }
 
     /** Фото, зображення файлом або PDF. */
@@ -189,6 +200,15 @@ class AccountingDesk
             ."\n"
             .(isset($inv['total']) ? 'Сума: '.$this->money($inv['total']).' ₴' : '')
             .(! empty($inv['lines']) ? ' · рядків: '.(int) $inv['lines'] : '');
+
+        // «Накладні»: туди кидають лише накладні — одразу в розбір, без кнопки.
+        if (self::isInvoicesChat((string) $item->chat_id)) {
+            $this->reply($item, $text."\n\n✅ Додаю в CRM — звіт нижче");
+            $item->update(['status' => 'proposed']);
+            $this->add($item, 'auto');
+
+            return;
+        }
 
         $id = $this->reply($item, $text, [[
             ['text' => '➕ Додати в CRM', 'callback_data' => self::CALLBACK.":add:{$item->id}"],

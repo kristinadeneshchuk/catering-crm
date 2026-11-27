@@ -69,13 +69,13 @@ class AccountingChatTest extends TestCase
         });
     }
 
-    private function photo(int $messageId, string $uniqueId = 'u1', ?string $group = null, int $from = 300): void
+    private function photo(int $messageId, string $uniqueId = 'u1', ?string $group = null, int $from = 300, string $chat = self::GROUP): void
     {
         $this->postJson('/webhooks/telegram-bot', [
             'update_id' => $messageId,
             'message'   => array_filter([
                 'message_id'     => $messageId,
-                'chat'           => ['id' => (int) self::GROUP, 'type' => 'supergroup', 'title' => 'Бухгалтерія'],
+                'chat'           => ['id' => (int) $chat, 'type' => 'supergroup', 'title' => 'Бухгалтерія'],
                 'from'           => ['id' => $from],
                 'media_group_id' => $group,
                 'photo'          => [['file_id' => 'small', 'file_unique_id' => 's'.$uniqueId], ['file_id' => 'big', 'file_unique_id' => $uniqueId]],
@@ -96,9 +96,9 @@ class AccountingChatTest extends TestCase
         ], ['X-Telegram-Bot-Api-Secret-Token' => 'sec'])->assertOk();
     }
 
-    private function classify(array $answer, int $messageId = 10, string $uniqueId = 'u1'): AccountingItem
+    private function classify(array $answer, int $messageId = 10, string $uniqueId = 'u1', string $chat = self::GROUP): AccountingItem
     {
-        $this->photo($messageId, $uniqueId);
+        $this->photo($messageId, $uniqueId, chat: $chat);
         $this->fakeAi($answer);
         $item = AccountingItem::latest('id')->first();
         app()->call([new ClassifyAccountingDocument($item->id), 'handle']);
@@ -178,6 +178,33 @@ class AccountingChatTest extends TestCase
         $this->assertSame('added', $item->fresh()->status);
         Queue::assertPushed(ReadKitchenInvoice::class);
         $this->assertSame($item->paths(), Cache::get('accounting-invoice:'.$item->id));
+    }
+
+    public function test_invoice_in_invoices_group_is_added_without_button(): void
+    {
+        $invoices = '-1005550001111';
+        config()->set('services.telegram.invoices_chat_id', $invoices);
+
+        $item = $this->classify($this->invoiceAnswer(), chat: $invoices);
+
+        $this->assertSame($invoices, $item->chat_id);
+        $this->assertSame('added', $item->status);
+        $this->assertSame('auto', $item->decided_by);
+        Queue::assertPushed(ReadKitchenInvoice::class);
+        $this->assertTrue($this->sent($invoices, 'Додаю в CRM'));
+        Http::assertNotSent(fn ($r) => str_contains($r->url(), 'sendMessage') && isset($r['reply_markup']));
+    }
+
+    public function test_duplicate_in_invoices_group_is_not_added_again(): void
+    {
+        $invoices = '-1005550001111';
+        config()->set('services.telegram.invoices_chat_id', $invoices);
+        $this->draft(30351.56)->update(['invoice_number' => 'XB00127160']);
+
+        $item = $this->classify($this->invoiceAnswer(), chat: $invoices);
+
+        $this->assertSame('duplicate', $item->status);
+        Queue::assertNotPushed(ReadKitchenInvoice::class);
     }
 
     public function test_stranger_cannot_add(): void
