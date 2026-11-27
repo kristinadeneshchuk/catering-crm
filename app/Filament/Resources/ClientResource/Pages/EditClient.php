@@ -25,6 +25,12 @@ class EditClient extends EditRecord
         ];
     }
 
+    /** Шаблон замін додали чи зняли — заміни страв одразу доходять до живих замовлень. */
+    protected function afterSave(): void
+    {
+        app(\App\Services\Orders\BundleDishSwaps::class)->syncClient($this->record);
+    }
+
     protected function getRedirectUrl(): string
 {
     return $this->getResource()::getUrl('index');

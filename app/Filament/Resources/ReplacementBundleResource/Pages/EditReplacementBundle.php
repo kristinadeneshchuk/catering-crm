@@ -17,6 +17,15 @@ class EditReplacementBundle extends EditRecord
         ];
     }
 
+    /** Правила шаблону змінили — оновлюємо живі замовлення всіх його клієнтів. */
+    protected function afterSave(): void
+    {
+        $swaps = app(\App\Services\Orders\BundleDishSwaps::class);
+        foreach ($this->record->clients as $client) {
+            $swaps->syncClient($client);
+        }
+    }
+
     protected function getRedirectUrl(): string
 {
     return $this->getResource()::getUrl('index');

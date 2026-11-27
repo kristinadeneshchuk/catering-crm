@@ -333,9 +333,12 @@ trait BuildsInboxTestSchema
 
         Schema::create('replacement_bundle_items', function (Blueprint $t) {
             $t->id();
-            $t->unsignedBigInteger('replacement_bundle_id');
+            $t->unsignedBigInteger('replacement_bundle_id')->nullable();
+            $t->unsignedBigInteger('bundle_id')->nullable();
             $t->unsignedBigInteger('original_ingredient_id')->nullable();
             $t->unsignedBigInteger('replacement_ingredient_id')->nullable();
+            $t->unsignedBigInteger('original_dish_id')->nullable();
+            $t->unsignedBigInteger('replacement_dish_id')->nullable();
             $t->timestamps();
         });
 

@@ -286,6 +286,7 @@ class Order extends Model
             self::syncClient($o);
             self::ensureClientMealTypes($o);
             app(\App\Services\Orders\ReplacementInheritance::class)->inherit($o);
+            app(\App\Services\Orders\BundleDishSwaps::class)->sync($o); // заміни страв із шаблонів клієнта («Спорт»)
             Transaction::create([
                 'type'     => 'income',
                 'category' => 'Нове замовлення',

@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Traits\RestrictCookAccess;
 
 use App\Filament\Resources\ReplacementBundleResource\Pages;
+use App\Models\Dish;
 use App\Models\ReplacementBundle;
 use App\Models\Ingredient;
 use Filament\Forms;
@@ -68,6 +69,29 @@ class ReplacementBundleResource extends Resource
                             ->columns(2)
                             ->addActionLabel('+ Додати правило')
                             ->reorderable(false),
+
+                        Repeater::make('dishSwaps')
+                            ->relationship()
+                            ->label('Заміни страв')
+                            ->helperText('Страва з циклу → інша страва цілком. Клієнтам із цим шаблоном заміна ставиться в замовлення сама; вага порції лишається як у стандартної страви.')
+                            ->schema([
+                                Select::make('original_dish_id')
+                                    ->label('Страва з меню')
+                                    ->options(fn () => Dish::where('is_semi_finished', false)->orderBy('name')->pluck('name', 'id'))
+                                    ->searchable()
+                                    ->distinct()
+                                    ->required(),
+                                Select::make('replacement_dish_id')
+                                    ->label('Давати замість неї')
+                                    ->options(fn () => Dish::where('is_semi_finished', false)->orderBy('name')->pluck('name', 'id'))
+                                    ->searchable()
+                                    ->different('original_dish_id')
+                                    ->required(),
+                            ])
+                            ->columns(2)
+                            ->defaultItems(0)
+                            ->addActionLabel('+ Додати заміну страви')
+                            ->reorderable(false),
                     ]),
             ]);
     }
@@ -91,6 +115,11 @@ class ReplacementBundleResource extends Resource
                     ->counts('items')
                     ->badge()
                     ->color('info'),
+                Tables\Columns\TextColumn::make('dish_swaps_count')
+                    ->label('Замін страв')
+                    ->counts('dishSwaps')
+                    ->badge()
+                    ->color('success'),
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Створено')
                     ->date('d.m.Y')
