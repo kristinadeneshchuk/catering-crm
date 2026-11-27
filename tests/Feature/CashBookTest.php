@@ -188,16 +188,18 @@ class CashBookTest extends TestCase
     public function test_editing_the_amount_moves_the_balance_by_the_difference(): void
     {
         $this->login('admin');
-        $t = $this->expense(900, '2026-10-01');
+        // Дати від «сьогодні»: сторінка за замовчуванням показує поточний місяць.
+        $this->travelTo(now()->startOfMonth()->addDays(9));
+        $t = $this->expense(900, now()->subDay()->toDateString());
 
         $this->page()
-            ->callTableAction('edit', $t, ['date' => '2026-10-02', 'amount' => 1200, 'category' => 'Обладнання та ремонт', 'comment' => 'Ремонт плити'])
+            ->callTableAction('edit', $t, ['date' => now()->toDateString(), 'amount' => 1200, 'category' => 'Обладнання та ремонт', 'comment' => 'Ремонт плити'])
             ->assertHasNoTableActionErrors();
 
         $t->refresh();
         $this->assertEquals(1200, (float) $t->amount);
         $this->assertSame('Обладнання та ремонт', $t->category);
-        $this->assertSame('2026-10-02', $t->date->toDateString());
+        $this->assertSame(now()->toDateString(), $t->date->toDateString());
         $this->assertEquals(5000 - 1200, (float) $this->cash->fresh()->balance);
     }
 
@@ -295,5 +297,32 @@ class CashBookTest extends TestCase
         Transaction::create(['type' => 'income', 'category' => 'Нове замовлення', 'amount' => 5000, 'date' => now()]);
 
         $this->assertSame(0, \Spatie\Activitylog\Models\Activity::count());
+    }
+
+    public function test_balance_follows_account_and_type_changes_not_only_the_amount(): void
+    {
+        $this->login('admin');
+
+        // Оплата без рахунку (так буває з накладною), рахунок вказали пізніше.
+        $t = Transaction::create(['type' => 'expense', 'category' => 'Закупівля', 'amount' => 3000, 'date' => now()]);
+        $this->assertEquals(10000, (float) $this->card->fresh()->balance);
+        $t->update(['account_id' => $this->card->id]);
+        $this->assertEquals(7000, (float) $this->card->fresh()->balance);
+
+        // Перенесли на інший рахунок і заодно змінили суму.
+        $t->update(['account_id' => $this->cash->id, 'amount' => 3500]);
+        $this->assertEquals(10000, (float) $this->card->fresh()->balance);
+        $this->assertEquals(1500, (float) $this->cash->fresh()->balance);
+
+        // Помилились типом: була витрата, а це надходження.
+        $t->update(['type' => 'income']);
+        $this->assertEquals(8500, (float) $this->cash->fresh()->balance);
+
+        // Правка коментаря залишок не чіпає.
+        $t->update(['comment' => 'уточнення']);
+        $this->assertEquals(8500, (float) $this->cash->fresh()->balance);
+
+        $t->delete();
+        $this->assertEquals(5000, (float) $this->cash->fresh()->balance);
     }
 }

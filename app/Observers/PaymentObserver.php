@@ -27,29 +27,28 @@ class PaymentObserver
     }
 
     /**
-     * Спрацьовує при зміні (наприклад, змінили суму або рахунок).
+     * Зміна суми, типу або рахунку: знімаємо старий вплив на залишок і кладемо новий.
+     * Раніше рахувалась лише зміна суми — оплата, якій рахунок вказали пізніше
+     * (або перенесли на інший), у залишок не потрапляла.
      */
     public function updated(Transaction $transaction): void
     {
-        // Логіка перерахунку при зміні рахунку або суми
-        // Для спрощення, якщо сума змінилась - просто оновимо баланс
-        // (Тут можна розширити логіку, але для початку цього вистачить)
-        if ($transaction->isDirty('amount') && $transaction->account_id) {
-            $diff = $transaction->amount - $transaction->getOriginal('amount');
-            $account = Account::find($transaction->account_id);
-            
-            if ($account) {
-                if ($transaction->type === 'income') {
-                    $diff >= 0
-                        ? $account->increment('balance', $diff)
-                        : $account->decrement('balance', abs($diff));
-                } else {
-                    $diff >= 0
-                        ? $account->decrement('balance', $diff)
-                        : $account->increment('balance', abs($diff));
-                }
-            }
+        if (! $transaction->wasChanged(['amount', 'type', 'account_id'])) {
+            return;
         }
+
+        $this->apply($transaction->getOriginal('account_id'), $transaction->getOriginal('type'), -(float) $transaction->getOriginal('amount'));
+        $this->apply($transaction->account_id, $transaction->type, (float) $transaction->amount);
+    }
+
+    /** Надходження збільшує залишок, усе інше зменшує; $amount < 0 — відкат. */
+    private function apply($accountId, ?string $type, float $amount): void
+    {
+        if (! $accountId || abs($amount) < 0.005) {
+            return;
+        }
+        $signed = $type === 'income' ? $amount : -$amount;
+        Account::whereKey($accountId)->increment('balance', $signed);
     }
 
     /**
