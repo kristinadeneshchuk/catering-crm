@@ -2058,7 +2058,7 @@ class PrintController extends Controller
         $replacementDishName = null;
         if ($dishReplacement && $dishReplacement->replacementDish) {
             $replacementDishName = $dishReplacement->replacementDish->name;
-            $components = $this->getHierarchicalIngredients($dishReplacement->replacementDish, $scale, 1.0, $dishReplacement->replacementDish->id, true, $order);
+            $components = $this->getHierarchicalIngredients($dishReplacement->replacementDish, \App\Support\ReplacementScale::for($dish, $dishReplacement->replacementDish, $scale), 1.0, $dishReplacement->replacementDish->id, true, $order);
         } else {
             $components = $this->getHierarchicalIngredients($dish, $scale, 1.0, $dish->id, true, $order);
         }

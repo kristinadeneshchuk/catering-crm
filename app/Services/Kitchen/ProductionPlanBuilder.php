@@ -384,7 +384,7 @@ class ProductionPlanBuilder
 
             $components = $this->getHierarchicalIngredients(
                 $dishReplacement->replacementDish,
-                $scale,
+                \App\Support\ReplacementScale::for($dish, $dishReplacement->replacementDish, $scale),
                 1.0,
                 $dishReplacement->replacementDish->id,
                 true,
